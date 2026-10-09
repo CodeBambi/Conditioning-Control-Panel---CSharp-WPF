@@ -1,4 +1,13 @@
 {
+  "deeper_submission_badge_published": "Veröffentlicht",
+  "deeper_submission_badge_published_tip": "Diese Erweiterung ist im Community-Katalog live.",
+  "deeper_submission_badge_pending": "Ausstehend",
+  "deeper_submission_badge_pending_tip": "Eingereicht: wartet auf Prüfung für den Katalog.",
+  "deeper_submission_badge_rejected": "Abgelehnt",
+  "deeper_submission_badge_rejected_tip": "Diese Einreichung wurde nicht angenommen. Bearbeite sie und reiche sie erneut ein.",
+  "deeper_welcome_card_open_demo": "Demo öffnen",
+  "deeper_library_delete_confirm_fmt": "\"{0}\" löschen? Die .ccpenh.json-Datei kommt in den Papierkorb.",
+  "deeper_library_delete_title": "Erweiterung löschen",
   "companion_v2_open_activity": "{0} öffnen",
   "companion_ask_watch_q_1": "Lust, das zu schauen und für mich abzudriften? \"{0}\"",
   "companion_ask_watch_q_2": "ich hab was ausgesucht. du, das hier, ein schöner langsamer Drop. \"{0}\"",

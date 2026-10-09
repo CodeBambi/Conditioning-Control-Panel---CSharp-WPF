@@ -1,4 +1,13 @@
 {
+  "deeper_submission_badge_published": "Publicado",
+  "deeper_submission_badge_published_tip": "Esta mejora está publicada en el catálogo de la comunidad.",
+  "deeper_submission_badge_pending": "Pendiente",
+  "deeper_submission_badge_pending_tip": "Enviado: pendiente de revisión para el catálogo.",
+  "deeper_submission_badge_rejected": "Rechazado",
+  "deeper_submission_badge_rejected_tip": "Este envío no fue aceptado. Edítalo y vuelve a enviarlo.",
+  "deeper_welcome_card_open_demo": "Abrir la demo",
+  "deeper_library_delete_confirm_fmt": "¿Eliminar \"{0}\"? El archivo .ccpenh.json irá a la papelera.",
+  "deeper_library_delete_title": "Eliminar mejora",
   "companion_v2_open_activity": "Abrir {0}",
   "companion_ask_watch_q_1": "¿lo vemos y te dejas caer por mí? \"{0}\"",
   "companion_ask_watch_q_2": "te elegí uno. tú, esto y una caída lenta y rica. \"{0}\"",

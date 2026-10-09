@@ -1,4 +1,13 @@
 {
+  "deeper_submission_badge_published": "Опубликовано",
+  "deeper_submission_badge_published_tip": "Это улучшение доступно в каталоге сообщества.",
+  "deeper_submission_badge_pending": "На проверке",
+  "deeper_submission_badge_pending_tip": "Отправлено: ожидает проверки для каталога.",
+  "deeper_submission_badge_rejected": "Отклонено",
+  "deeper_submission_badge_rejected_tip": "Эта отправка не принята. Отредактируй и отправь снова.",
+  "deeper_welcome_card_open_demo": "Открыть демо",
+  "deeper_library_delete_confirm_fmt": "Удалить «{0}»? Файл .ccpenh.json будет перемещён в корзину.",
+  "deeper_library_delete_title": "Удалить улучшение",
   "companion_v2_open_activity": "Открыть {0}",
   "companion_ask_watch_q_1": "посмотрим это, и ты погрузишься для меня? \"{0}\"",
   "companion_ask_watch_q_2": "есть кое-что для тебя. ты, это и медленное сладкое погружение. \"{0}\"",

@@ -1644,3 +1644,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/programs-run-1: +346
 - Avalonia builds ProgramService at startup in load-only, read-only mode (CHECKPOINT A). It never writes programs.json, does no rollover and runs no timers, and it is disposed on exit. WPF's ctor path is unchanged.
 - 7 tests, all fail-proven: a byte round-trip of a WPF-shape fixture under a pinned time zone, plus no-write, temp-recovery, corrupt-file, no-lapse, startup-audit-skipped and startup-scan checks.
+
+## avalonia-port/rows-deeper-hub: +883
+- Deeper hub: open/play/context menu/keyboard selection/two-step delete with undo + trash, submission badge, welcome Demo/Tour/Dismiss, row hover lift; shell-deeper-fx now wired.
+- Still stub: import, watcher, duration probe, demo seeding, tutorial, webcam card, sticky accepted toast.
