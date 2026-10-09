@@ -197,6 +197,21 @@ internal static class KeywordTriggerHead
         }
     }
 
+    /// <summary>WPF KeywordTriggerService.FindLinkedAudio: the active mod's clip, then Resources/sub_audio
+    /// (Core's SubliminalWhisper lookup, the same one the subliminal whisper uses).</summary>
+    internal static string? FindLinkedAudio(string keyword)
+    {
+        if (string.IsNullOrWhiteSpace(keyword)) return null;
+        try
+        {
+            return SubliminalWhisper.FindLinkedAudio(keyword,
+                SubliminalWhisper.ModAudioDir(App.Mods?.ActiveMod?.InstalledPath),
+                Path.Combine(AppContext.BaseDirectory, "Resources", "sub_audio"),
+                App.Mods?.ActiveModId);
+        }
+        catch { return null; }
+    }
+
     /// <summary>WPF ResolveAudioPath: rooted passes through, else Resources/, else Resources/sub_audio/.</summary>
     internal static string ResolveAudioPath(string path)
     {
