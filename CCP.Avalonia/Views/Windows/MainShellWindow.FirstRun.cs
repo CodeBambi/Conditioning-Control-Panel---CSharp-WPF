@@ -58,6 +58,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 else if (CoreSettings.Service != null && CoreSettings.Current.Welcomed
                          && !CoreSettings.Current.HasAcceptedAgeVerification)
                     Opened += OnAgeGateShellOpened;
+                // WPF's else branch: a returning user on a new version gets What's New, once.
+                else if (CoreSettings.Service != null)
+                    Opened += OnWhatsNewShellOpened;
             }
             catch (Exception ex)
             {
@@ -86,6 +89,45 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 CoreSettings.Current.HasAcceptedAgeVerification = true;
                 CoreSettings.Save();
             }, DispatcherPriority.Normal);
+        }
+
+        private void OnWhatsNewShellOpened(object? sender, EventArgs e)
+        {
+            Opened -= OnWhatsNewShellOpened;
+            Dispatcher.UIThread.Post(() => _ = ShowWhatsNewIfNeededAsync(), DispatcherPriority.Normal);
+        }
+
+        /// <summary>Test seam: stands in for the dialog (title, notes).</summary>
+        internal Func<string, string, System.Threading.Tasks.Task>? WhatsNewPresenter;
+
+        /// <summary>WPF ShowWhatsNewIfNeeded (MainWindow.Marquee.cs:290): a fresh install is stamped and
+        /// told nothing; a changed version shows the notes once, then is stamped. No tour button: the
+        /// tour service is not on this head. An unseeded version ("0.0.0") or empty notes never open
+        /// a window (a render or a test run), and never stamp either.</summary>
+        internal async System.Threading.Tasks.Task ShowWhatsNewIfNeededAsync()
+        {
+            try
+            {
+                var current = CoreReleaseContent.AppVersion;
+                if (string.IsNullOrEmpty(current) || current == "0.0.0") return;
+                var s = CoreSettings.Current;
+                var last = s.LastSeenVersion ?? "";
+                if (last == current) return;
+                if (last.Length > 0)
+                {
+                    var notes = CoreReleaseContent.PatchNotes;
+                    if (string.IsNullOrWhiteSpace(notes)) return;
+                    Log.Information("Version changed from {Old} to {New}, showing What's New", last, current);
+                    var title = $"What's New in v{current}";
+                    if (WhatsNewPresenter != null) await WhatsNewPresenter(title, notes);
+                    else if (IsVisible) await new Dialogs.WhatsNewDialog(title, notes).ShowDialogSafe(this);
+                    else return;   // never on screen: ask again next launch
+                }
+                else Log.Information("Fresh install (no last-seen version): stamping v{Version} without What's New", current);
+                s.LastSeenVersion = current;
+                CoreSettings.Save();
+            }
+            catch (Exception ex) { Log.Warning(ex, "ShowWhatsNewIfNeeded failed"); }
         }
 
         private void OnFirstRunShellOpened(object? sender, EventArgs e)

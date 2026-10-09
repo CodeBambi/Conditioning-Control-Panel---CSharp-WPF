@@ -187,7 +187,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // ponytail: WPF falls back to App.Patreon/App.Discord DisplayName when the unified
             // name is blank. Neither provider exists on this head, so a user who linked an
             // account but has no UserDisplayName written back gets the generic line.
+            // WPF falls back to the signed-in provider's name; on this head that is the account seam.
             var displayName = s.UserDisplayName;
+            if (string.IsNullOrWhiteSpace(displayName)) displayName = CoreAccount.DisplayName;
             secondary.Text = string.IsNullOrEmpty(displayName)
                 ? Loc.Get("label_welcome_consider_logging_in_with_patreon_for")
                 : Loc.GetF("label_welcome_back_0", displayName!);

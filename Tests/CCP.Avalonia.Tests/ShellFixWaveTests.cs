@@ -164,6 +164,94 @@ public sealed class ShellFixWaveTests
     });
 
     [Fact]
+    public Task StatPillsShowOnlyWithTheirSkill() => AvaloniaTestDispatcher.RunAsync(() =>
+    {
+        var s = CoreSettings.Current;
+        bool hadTime = s.UnlockedSkills.Contains("pink_hours"), hadFire = s.UnlockedSkills.Contains("good_girl_streak");
+        var w = Open();
+        try
+        {
+            s.UnlockedSkills.Remove("pink_hours");
+            s.UnlockedSkills.Remove("good_girl_streak");
+            w.UpdateStatPills();
+            Assert.False(w.Named<Border>("PillConditioningTime")!.IsVisible);
+            Assert.False(w.Named<Border>("StreakFirePill")!.IsVisible);
+
+            s.UnlockedSkills.Add("pink_hours");
+            s.UnlockedSkills.Add("good_girl_streak");
+            w.UpdateStatPills();
+            Assert.True(w.Named<Border>("PillConditioningTime")!.IsVisible);
+            Assert.True(w.Named<Border>("StreakFirePill")!.IsVisible);
+            Assert.EndsWith("s", w.Named<TextBlock>("TxtPillConditioningTime")!.Text);
+        }
+        finally
+        {
+            if (!hadTime) s.UnlockedSkills.Remove("pink_hours");
+            if (!hadFire) s.UnlockedSkills.Remove("good_girl_streak");
+            w.Close();
+        }
+        return Task.CompletedTask;
+    });
+
+    [Fact]
+    public Task WhatsNewShowsOnceForAChangedVersionAndStampsIt() => AvaloniaTestDispatcher.RunAsync(async () =>
+    {
+        var s = CoreSettings.Current;
+        var oldSeen = s.LastSeenVersion;
+        var oldVersion = CoreReleaseContent.AppVersionProvider;
+        var oldNotes = CoreReleaseContent.PatchNotesProvider;
+        var w = Open();
+        try
+        {
+            CoreReleaseContent.AppVersionProvider = () => "9.9.9";
+            CoreReleaseContent.PatchNotesProvider = () => "notes";
+            int shown = 0;
+            w.WhatsNewPresenter = (_, _) => { shown++; return Task.CompletedTask; };
+
+            s.LastSeenVersion = "";          // fresh install: stamped, told nothing
+            await w.ShowWhatsNewIfNeededAsync();
+            Assert.Equal(0, shown);
+            Assert.Equal("9.9.9", s.LastSeenVersion);
+
+            s.LastSeenVersion = "9.9.8";     // an update: shown once, then stamped
+            await w.ShowWhatsNewIfNeededAsync();
+            await w.ShowWhatsNewIfNeededAsync();
+            Assert.Equal(1, shown);
+            Assert.Equal("9.9.9", s.LastSeenVersion);
+        }
+        finally
+        {
+            s.LastSeenVersion = oldSeen;
+            CoreReleaseContent.AppVersionProvider = oldVersion;
+            CoreReleaseContent.PatchNotesProvider = oldNotes;
+            w.Close();
+        }
+    });
+
+    [Fact]
+    public Task TheModPickerEndsWithTheManagerRow() => AvaloniaTestDispatcher.RunAsync(() =>
+    {
+        MainShellWindow.SuppressModManagerForTest = true;
+        var w = Open();
+        try
+        {
+            w.InitializeModSelector();
+            if (global::ConditioningControlPanel.Avalonia.App.Mods is null || w.AvailableMods.Count == 0) return Task.CompletedTask;   // no mod service in this run
+            var last = w.AvailableMods[^1];
+            Assert.Equal(MainShellWindow.ModManagerEntryId, last.Id);
+
+            var combo = w.Named<ComboBox>("ModSelectorCombo")!;
+            int before = w.ModManagerRowPicks;
+            combo.SelectedItem = last;
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(before + 1, w.ModManagerRowPicks);
+            Assert.NotSame(last, combo.SelectedItem);   // the chip went back to a real mod
+        }
+        finally { MainShellWindow.SuppressModManagerForTest = false; w.Close(); }
+        return Task.CompletedTask;
+    });
+
+    [Fact]
     public Task RichPresenceRefusesWithoutALinkedDiscord() => AvaloniaTestDispatcher.RunAsync(() =>
     {
         var s = CoreSettings.Current;
