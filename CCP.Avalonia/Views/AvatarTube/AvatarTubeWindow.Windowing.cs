@@ -8,8 +8,8 @@
 // The mirrored art on a right dock and the Win32 owner pairing live in AvatarTubeWindow.Flip.cs.
 //
 // ponytail: skipped from WPF - make-room (moving main so she fits), measured mod-art insets (stock
-// 239/353 are used), Ctrl+scroll zoom (so AvatarTubeScale is neither applied nor written) and the
-// floating bob. Add each when a user misses it.
+// 239/353 are used), Ctrl+scroll zoom and the floating bob. Add each when a user misses it.
+// The detached menu's Shrink / Grow / Dismiss are ported at the foot of this file.
 
 using System;
 using System.Linq;
@@ -29,6 +29,10 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
         private const double DockDaylight = 3;           // WPF Windowing.cs:1079
 
         private double _scaleFactor = 1.0;
+        // WPF Windowing.cs:106-108: the user's own size for the free tube, 50%..150% in 25% steps.
+        internal const double MinScale = 0.5, MaxScale = 1.5, ScaleStep = 0.25;
+        private double _currentScale = 1.0;
+        internal double CurrentScale => _currentScale;
         private bool _restoringPlacement;
         private bool _restorePending = true;
 
@@ -49,6 +53,12 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             else Log.Warning("AvatarTubeWindow: MenuItemDetach not found");
             if (this.FindControl<MenuItem>("MenuItemAttach") is { } attach) attach.Click += (_, _) => AttachFromMenu();
             else Log.Warning("AvatarTubeWindow: MenuItemAttach not found");
+            if (this.FindControl<MenuItem>("MenuItemShrink") is { } shrink) shrink.Click += (_, _) => StepScale(-ScaleStep);
+            if (this.FindControl<MenuItem>("MenuItemGrow") is { } grow) grow.Click += (_, _) => StepScale(+ScaleStep);
+            if (this.FindControl<MenuItem>("MenuItemDismiss") is { } dismiss) dismiss.Click += (_, _) => DismissFromMenu();
+            // WPF Windowing.cs:2716: the saved scale comes back with her (#669).
+            var saved = CoreSettings.Current.AvatarTubeScale;
+            if (!double.IsNaN(saved) && saved > 0) _currentScale = Math.Clamp(saved, MinScale, MaxScale);
             foreach (var c in DragSurfaces()) c.PointerPressed += OnDragPointerPressed;
             // The WM owns the drag, so the release may never reach us: the first pointer event
             // after it (release, or the next enter/move) saves where she ended up.
@@ -108,6 +118,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             RefreshTubeGlass();
             RefreshTubeLayout();
             ApplyModeChrome();
+            ApplyTubeSize();   // the user's scale applies to the free tube only; docked she is stock size
             if (!attached) ApplyTubeArtFlip(false);   // WPF Detach: the free tube reads unmirrored
             UpdatePosition();
             ApplyNativeOwner(attached);
@@ -120,7 +131,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
         }
 
         /// <summary>Topmost, drag cursors, frame hit-testing and the menu, per WPF's mode switch and
-        /// UpdateContextMenuForState. Shrink/Grow/Dismiss stay hidden: zoom and dismiss did not port.</summary>
+        /// UpdateContextMenuForState: Shrink, Grow and Dismiss belong to the free tube only.</summary>
         private void ApplyModeChrome()
         {
             Topmost = !_isAttached;
@@ -129,6 +140,10 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             _imgTubeFrame.IsHitTestVisible = !_isAttached;
             if (this.FindControl<MenuItem>("MenuItemDetach") is { } d) d.IsVisible = _isAttached;
             if (this.FindControl<MenuItem>("MenuItemAttach") is { } a) a.IsVisible = !_isAttached;
+            if (this.FindControl<MenuItem>("MenuItemShrink") is { } sh) sh.IsVisible = !_isAttached;
+            if (this.FindControl<MenuItem>("MenuItemGrow") is { } gr) gr.IsVisible = !_isAttached;
+            if (this.FindControl<MenuItem>("MenuItemDismiss") is { } di) di.IsVisible = !_isAttached;
+            UpdateResizeMenuState();
         }
 
         /// <summary>WPF starts a manual drag only on her visible parts; BeginMoveDrag hands it to the WM.</summary>
@@ -160,8 +175,85 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             if (screen == null) return;
             var wa = screen.WorkingArea;
             _scaleFactor = TubeWindowMath.FitScale(wa.Width / screen.Scaling, wa.Height / screen.Scaling);
-            Width = DesignWidth * _scaleFactor;
-            Height = DesignHeight * _scaleFactor;
+            ApplyTubeSize(force: true);
+        }
+
+        private double _appliedUserScale = 1.0;
+
+        /// <summary>The window is the art: stock fit when docked, times the user's scale when free.
+        /// A mode change with nothing to change leaves the fitted size alone.</summary>
+        private void ApplyTubeSize(bool force = false)
+        {
+            var user = _isAttached ? 1.0 : _currentScale;
+            if (!force && Math.Abs(user - _appliedUserScale) < 0.001) return;
+            _appliedUserScale = user;
+            Width = DesignWidth * _scaleFactor * user;
+            Height = DesignHeight * _scaleFactor * user;
+        }
+
+        /// <summary>WPF UpdateResizeMenuState (Windowing.cs:2513): the end stops grey out and say so.</summary>
+        private void UpdateResizeMenuState()
+        {
+            if (this.FindControl<MenuItem>("MenuItemShrink") is { } shrink)
+            {
+                shrink.IsEnabled = _currentScale > MinScale;
+                shrink.Header = global::ConditioningControlPanel.Localization.Loc.Get(shrink.IsEnabled ? "menu_shrink" : "menu_shrink_min");
+                shrink.Foreground = shrink.IsEnabled ? global::Avalonia.Media.Brushes.White : global::Avalonia.Media.Brushes.Gray;
+            }
+            if (this.FindControl<MenuItem>("MenuItemGrow") is { } grow)
+            {
+                grow.IsEnabled = _currentScale < MaxScale;
+                grow.Header = global::ConditioningControlPanel.Localization.Loc.Get(grow.IsEnabled ? "menu_grow" : "menu_grow_max");
+                grow.Foreground = grow.IsEnabled ? global::Avalonia.Media.Brushes.White : global::Avalonia.Media.Brushes.Gray;
+            }
+        }
+
+        /// <summary>WPF MenuItemShrink_Click / MenuItemGrow_Click (ChatInput.cs:1021, :1040): one step,
+        /// free tube only, saved (#669), and she is nudged back on screen if the new size left it.</summary>
+        internal void StepScale(double delta)
+        {
+            try
+            {
+                if (_isAttached) return;
+                var next = Math.Clamp(_currentScale + delta, MinScale, MaxScale);
+                if (Math.Abs(next - _currentScale) < 0.001) return;
+                _currentScale = next;
+                ApplyTubeSize();
+                UpdateResizeMenuState();
+                CoreSettings.Current.AvatarTubeScale = _currentScale;
+                CoreSettings.Save();
+                KeepOnScreenAfterResize();
+            }
+            catch (Exception ex) { Log.Warning(ex, "AvatarTubeWindow: resize from the menu failed"); }
+        }
+
+        private void KeepOnScreenAfterResize()
+        {
+            var screen = Screens.ScreenFromWindow(this) ?? Screens.Primary;
+            if (screen == null) return;
+            var wa = screen.WorkingArea;
+            var size = TubePixelSize;
+            int x = Math.Max(wa.X, Math.Min(Position.X, wa.Right - size.Width));
+            int y = Math.Max(wa.Y, Math.Min(Position.Y, wa.Bottom - size.Height));
+            if (x != Position.X || y != Position.Y) Position = new PixelPoint(x, y);
+        }
+
+        /// <summary>WPF MenuItemDismiss_Click (ChatInput.cs:400): dismissing is a decision, so
+        /// AvatarEnabled is saved off (#888), she re-attaches and hides, and the Companion room's
+        /// switch re-reads. The shell's SetAvatarEnabled does the save, the hide and the sync.</summary>
+        internal void DismissFromMenu()
+        {
+            try
+            {
+                Log.Information("User dismissed avatar - hiding and reattaching");
+                CoreSettings.Current.AvatarEnabled = false;
+                CoreSettings.Save();
+                if (!_isAttached) SetAttached(true);
+                var shell = _parentWindow as Windows.MainShellWindow ?? Windows.MainShellWindow.Current;
+                if (shell != null) { shell.HideAvatarTube(); shell.SyncHero(); }
+                else Hide();
+            }
+            catch (Exception ex) { Log.Warning(ex, "AvatarTubeWindow: dismiss failed"); }
         }
 
         private PixelSize TubePixelSize => PixelSize.FromSize(new Size(Width, Height), DesktopScaling);

@@ -250,6 +250,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             _btnPrevAvatar.PointerPressed += (_, _) => StepAvatarSet(-1);   // WPF BtnPrevAvatar_Click
             _btnNextAvatar.PointerPressed += (_, _) => StepAvatarSet(+1);
             this.FindControl<ContextMenu>("AvatarContextMenu")!.Opened += (_, _) => { UpdateQuickMenuState(); PopulatePersonalityMenu(); };
+            WireQuickMenu();   // every item's Click + the first state paint (AvatarTubeWindow.QuickMenu.cs)
 
             // Pose switching for static avatars. ApplyAvatarSet below starts it only when more than
             // one pose actually loaded - a set that ships one PNG has nothing to rotate between.
@@ -1466,36 +1467,6 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             var all = (CoreMods.GetPhrases("Generic") ?? Array.Empty<string>())
                 .Concat(CoreMods.GetPhrases("RandomFloating") ?? Array.Empty<string>()).ToArray();
             return all.Length == 0 ? "*giggles*" : all[Random.Shared.Next(all.Length)];
-        }
-
-        /// <summary>Refresh the context menu's checkmarks and the remote-emote item swap.</summary>
-        private void UpdateQuickMenuState()
-        {
-            // Deliberately inert, and the reason is NOT the one an earlier note gave. Settings and
-            // two seams would in fact answer several of WPF's labels today - CoreSession.IsEngineRunning
-            // for the Engine item (WPF proxies it off App.Flash.IsRunning), CoreAi.IsAvailable for the
-            // "talk to" item, TriggerModeEnabled / AutonomyModeEnabled / AvatarMuted / SubAudioMuted
-            // for the rest, and RemoteEmotePresets for the emote swap.
-            //
-            // What is missing is the OTHER half: not one of these MenuItems has a Click handler on
-            // this head, because every action behind them - MainWindow's engine start/stop, the
-            // Takeover gate, the browser pause, App.RemoteControl's emote
-            // send - is head-side. Retitling an item to "STOP ENGINE" in red while clicking it does
-            // nothing is strictly worse than the static label it carries now: the menu would report
-            // live state it cannot act on. Restore the labels WITH their handlers, not before.
-            //
-            // ponytail: needs MainWindow.StartEngine / StopEngine with ChatInput.cs's #479 guards
-            // (IsEngineStopLocked plus App.Lockdown.NotifyEscapeAttempt - the tube's Stop is the
-            // same escape as main's and must count the same), App.Patreon.HasPremiumAccess,
-            // App.RemoteControl.ControllerConnected. (The personality submenu is live: AvatarTubeWindow.ContentGates.cs.)
-            //
-            // The Mute item is the one that LOOKS free - IsMuted already reads
-            // CoreSettings.Current.AvatarMuted and GigglePriority honours it, so a two-line flip
-            // would work. It is left out anyway: WPF's MenuItemMute_Click ends with
-            // MainWindow.SyncQuickControlsUI, and the companion room's own mute switch
-            // (MainShellWindow.CompanionRoom.cs SetAvatarMuted) reads the setting once at load. A
-            // flip here would leave that switch showing the opposite of the truth until the shell
-            // is rebuilt, which is a control lying about state in a file this layer does not own.
         }
     }
 }

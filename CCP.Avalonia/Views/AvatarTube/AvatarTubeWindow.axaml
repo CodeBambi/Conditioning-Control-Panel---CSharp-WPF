@@ -340,17 +340,17 @@
                     <ContextMenu x:Name="AvatarContextMenu">
                         <MenuItem x:Name="MenuItemTalkToBambi" Header="{loc:Str section_talk_to_companion}" Foreground="{DynamicResource PinkBrush}" FontWeight="Bold"/>
                         <Separator/>
-                        <MenuItem x:Name="MenuItemDetach" Header="{loc:Str section_detach}"/>
-                        <MenuItem x:Name="MenuItemAttach" Header="{loc:Str section_attach_to_main_window}" IsVisible="False"/>
-                        <MenuItem x:Name="MenuItemShrink" Header="{loc:Str section_shrink}" IsVisible="False"/>
-                        <MenuItem x:Name="MenuItemGrow" Header="{loc:Str section_grow}" IsVisible="False"/>
-                        <MenuItem x:Name="MenuItemDismiss" Header="{loc:Str section_dismiss}" IsVisible="False"/>
+                        <MenuItem x:Name="MenuItemDetach" Foreground="White" Header="{loc:Str section_detach}"/>
+                        <MenuItem x:Name="MenuItemAttach" Foreground="White" Header="{loc:Str section_attach_to_main_window}" IsVisible="False"/>
+                        <MenuItem x:Name="MenuItemShrink" Foreground="White" Header="{loc:Str section_shrink}" IsVisible="False"/>
+                        <MenuItem x:Name="MenuItemGrow" Foreground="White" Header="{loc:Str section_grow}" IsVisible="False"/>
+                        <MenuItem x:Name="MenuItemDismiss" Foreground="White" Header="{loc:Str section_dismiss}" IsVisible="False"/>
                         <Separator/>
                         <MenuItem x:Name="MenuItemEngine" Header="{loc:Str section_start_engine}" Foreground="#90EE90"/>
-                        <MenuItem x:Name="MenuItemTriggerMode" Header="{loc:Str section_trigger_mode}"/>
-                        <MenuItem x:Name="MenuItemBambiTakeover" Header="{loc:Str section_takeover}"/>
+                        <MenuItem x:Name="MenuItemTriggerMode" Foreground="White" Header="{loc:Str section_trigger_mode}"/>
+                        <MenuItem x:Name="MenuItemBambiTakeover" Foreground="White" Header="{loc:Str section_takeover}"/>
                         <MenuItem x:Name="MenuItemPersonality" Header="{loc:Str section_personality}" Foreground="{DynamicResource PinkBrush}"/>
-                        <MenuItem x:Name="MenuItemMute" Header="{loc:Str section_mute_avatar}"/>
+                        <MenuItem x:Name="MenuItemMute" Foreground="White" Header="{loc:Str section_mute_avatar}"/>
                         <!-- Emote MenuItems replace the 5 items above (Engine, TriggerMode, BambiTakeover,
                              Personality, Mute) whenever a remote controller is connected. On WPF their
                              headers are filled in AvatarContextMenu_Opened from RemoteEmotePresets.
@@ -363,9 +363,9 @@
                         <MenuItem x:Name="MenuItemEmote4" Header="" IsVisible="False"/>
                         <MenuItem x:Name="MenuItemEmote5" Header="" IsVisible="False"/>
                         <Separator/>
-                        <MenuItem x:Name="MenuItemShowChatHistory" Header="{loc:Str section_show_chat_history}"/>
-                        <MenuItem x:Name="MenuItemMuteWhispers" Header="{loc:Str section_mute_whispers}"/>
-                        <MenuItem x:Name="MenuItemPauseBrowser" Header="{loc:Str section_pause_browser}"/>
+                        <MenuItem x:Name="MenuItemShowChatHistory" Foreground="White" Header="{loc:Str section_show_chat_history}"/>
+                        <MenuItem x:Name="MenuItemMuteWhispers" Foreground="White" Header="{loc:Str section_mute_whispers}"/>
+                        <MenuItem x:Name="MenuItemPauseBrowser" Foreground="White" Header="{loc:Str section_pause_browser}"/>
                     </ContextMenu>
                 </Border.ContextMenu>
                 <!-- ponytail: AvatarBounceScale (click-squash), AvatarScale/AvatarRotate/AvatarTranslate
