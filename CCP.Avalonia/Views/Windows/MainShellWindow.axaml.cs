@@ -339,13 +339,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 //   private static ImageSource? LoadModImageDecoded(…)
 //   private static void ApplyArtFraming(…)
 //   private static ModArtFraming? ActiveModFraming(…)
-//   private readonly List<(…)
-//   private void RefreshHypnotubeLinksUI(…)
-//   private static bool IsListingUrl(…)
-//   internal void BtnAddVideoLink_Click(…)
-//   private TextBox MakePoolTextBox(…)
-//   private void PersistVideoLinks(…)
-//   private void UpdateNoVideoLinksPlaceholder(…)
+//   (the video link pool members - _videoLinkRows, RefreshHypnotubeLinksUI, IsListingUrl,
+//    BtnAddVideoLink_Click, MakePoolTextBox, PersistVideoLinks, UpdateNoVideoLinksPlaceholder -
+//    are PORTED: Views/Controls/Companion/Runtime/WorkshopLibraryCell + Core Helpers/VideoLinkPool)
 //   private string GetModeAwareQuestImagePath(…)
 //   private System.Windows.Media.Imaging.BitmapImage? LoadQuestImage(…)
 //   private void CenterOnPrimaryScreen(…)

@@ -356,9 +356,9 @@ public sealed class PresetsSessionCatalogueTests
                 {
                     var rowGrid = Assert.IsType<Grid>(row.Child);
                     var actions = Assert.IsType<StackPanel>(rowGrid.Children[8]);
-                    // WPF SessionIO.cs:451-457: edit + export everywhere, delete off the built-ins.
+                    // WPF SessionIO.cs:451-457: edit + export everywhere, share + delete off the built-ins.
                     var builtIn = (row.Tag as Session)!.Source == SessionSource.BuiltIn;
-                    Assert.Equal(builtIn ? 2 : 3, actions.Children.Count);
+                    Assert.Equal(builtIn ? 2 : 4, actions.Children.Count);
                     Assert.All(actions.Children.OfType<Button>(), button => Assert.True(button.IsEnabled));
                 });
 
