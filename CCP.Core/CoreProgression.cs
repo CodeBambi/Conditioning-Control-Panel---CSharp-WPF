@@ -76,6 +76,11 @@ namespace ConditioningControlPanel
         public static volatile Action? TrackMantraCompletedProvider;
         public static void TrackMantraCompleted() { try { TrackMantraCompletedProvider?.Invoke(); } catch { } }
 
+        /// <summary>WPF AchievementService.TrackSessionComplete's quest half (App.Quests?.TrackSessionCompleted,
+        /// AchievementService.cs:999), for <c>SessionRunner</c> on a completed session.</summary>
+        public static volatile Action? TrackSessionCompletedProvider;
+        public static void TrackSessionCompleted() { try { TrackSessionCompletedProvider?.Invoke(); } catch { } }
+
         /// <summary>A mandatory video's attention checks passed (true) or failed (false).</summary>
         public static volatile Action<bool>? TrackAttentionCheckProvider;
 

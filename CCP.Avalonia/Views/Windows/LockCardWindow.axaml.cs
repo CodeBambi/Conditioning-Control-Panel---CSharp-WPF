@@ -579,6 +579,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 var xpAmount = (50 * _requiredRepeats) + 200;
                 if (_strictMode) xpAmount = (int)(xpAmount * 1.5);
                 CoreProgression.AddXP(xpAmount, "LockCard");
+                // WPF AchievementService.TrackLockCardCompletion's quest call (:759), same !_isTest gate (progression#41).
+                try { App.Quests?.TrackLockCardCompleted(); } catch (Exception ex) { Log.Debug("lock card quest credit: {E}", ex.Message); }
             }
 
             // ponytail: the other two calls stay stubbed and have no Core seam to reach through.

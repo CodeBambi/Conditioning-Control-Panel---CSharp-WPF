@@ -383,6 +383,9 @@ namespace ConditioningControlPanel.Avalonia
                 // Lock back from lockdown_recovery.json before anything reads them.
                 LockdownService.RecoverIfNeeded();
                 LockdownService.Current = new LockdownService();
+                // WPF App.xaml.cs:2662: a served Lockdown credits the Lockdown quests (progression#41).
+                var lockdown = LockdownService.Current;
+                lockdown.LockdownDeactivated += () => { try { Quests?.TrackLockdownCompleted(lockdown.LastActiveDuration); } catch (Exception ex) { Serilog.Log.Debug("lockdown quest credit: {E}", ex.Message); } };
 
                 // Mod art: the same Core chain WPF's ModResourceResolver walks. Answers from the
                 // active mod once StartMods (below) seeds CoreMods; before that every answer is "no override".
@@ -654,6 +657,7 @@ namespace ConditioningControlPanel.Avalonia
                 CoreProgression.TrackBubbleCountCompletedProvider = () => Quests?.TrackBubbleCountCompleted();
                 // WPF MantraService's App.Quests / App.Chaster reads (seeded in WPF App.xaml.cs the same way).
                 CoreProgression.TrackMantraCompletedProvider = () => Quests?.TrackMantraCompleted();
+                CoreProgression.TrackSessionCompletedProvider = () => Quests?.TrackSessionCompleted();   // progression#41
                 MantraService.ChasterNote = reps => { try { Platform.ChasterHead.Service?.Note("mantra", reps); } catch (Exception ex) { Serilog.Log.Debug(ex, "[Chaster] mantra hook"); } };
                 // WPF AchievementService.TrackVideoWatched -> App.Quests.TrackVideoMinutes.
                 CoreProgression.TrackVideoWatchedProvider = sec => Quests?.TrackVideoMinutes(Achievements?.TrackVideoWatched(sec) ?? sec / 60.0);
