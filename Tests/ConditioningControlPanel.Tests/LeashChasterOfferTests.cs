@@ -39,7 +39,7 @@ public class LeashChasterOfferTests
         if (leashRowOn) rows.Add("leash");
         WithAppChaster(new ChasterOptions(true, "lock1", rows), linked: true, service =>
         {
-            var offered = LeashService.AppDayInputs()!.Value.ChasterLinked;
+            var offered = LeashServiceApp.AppDayInputs()!.Value.ChasterLinked;
             var booked = service.NoteSeconds("leash", LeashChasterRule.PunishSeconds(900, LeashIntensity.Strict)).AppliedSeconds;
 
             Assert.Equal(leashRowOn, offered);
@@ -52,14 +52,14 @@ public class LeashChasterOfferTests
     public void The_tab_switched_off_offers_no_chaster_time()
     {
         WithAppChaster(new ChasterOptions(false, "lock1", new HashSet<string> { "leash" }), linked: true,
-            _ => Assert.False(LeashService.AppDayInputs()!.Value.ChasterLinked));
+            _ => Assert.False(LeashServiceApp.AppDayInputs()!.Value.ChasterLinked));
     }
 
     [Fact]
     public void An_unlinked_tab_offers_no_chaster_time()
     {
         WithAppChaster(new ChasterOptions(true, "lock1", new HashSet<string> { "leash" }), linked: false,
-            _ => Assert.False(LeashService.AppDayInputs()!.Value.ChasterLinked));
+            _ => Assert.False(LeashServiceApp.AppDayInputs()!.Value.ChasterLinked));
     }
 
     /// <summary>Runs <paramref name="body"/> with a real, linked (or not) ChasterService standing in

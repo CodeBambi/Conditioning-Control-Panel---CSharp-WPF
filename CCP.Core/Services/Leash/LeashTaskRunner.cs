@@ -1,5 +1,5 @@
 using System;
-using System.Windows.Threading;
+using ConditioningControlPanel.Services.Friends;
 
 namespace ConditioningControlPanel.Services.Leash;
 
@@ -114,7 +114,11 @@ public sealed class LeashTaskRunner : ConditioningControlPanel.Controls.Leash.IL
 
     private readonly ILeashTaskHost _host;
     private readonly Func<DateTimeOffset> _now;
-    private DispatcherTimer? _timer;
+    private IUiTimer? _timer;
+
+    /// <summary>The head's 1 s UI timer (WPF DispatcherTimer Normal, Avalonia DispatcherTimer). Null (tests, no app):
+    /// the runner never ticks by itself and the suite calls Tick.</summary>
+    public static Func<IUiTimer?>? TimerFactory { get; set; }
 
     private Punishment? _task;
     private Assignment? _watchAssignment;
@@ -336,7 +340,7 @@ public sealed class LeashTaskRunner : ConditioningControlPanel.Controls.Leash.IL
     {
         Reset(keep: !assignment);
         try { Stopped?.Invoke(new LeashTaskStopped(id, assignment, why)); }
-        catch (Exception ex) { App.Logger?.Debug("Leash stop handler failed: {E}", ex.Message); }
+        catch (Exception ex) { Serilog.Log.Debug("Leash stop handler failed: {E}", ex.Message); }
     }
 
     private bool ShowCard()
@@ -463,14 +467,15 @@ public sealed class LeashTaskRunner : ConditioningControlPanel.Controls.Leash.IL
 
     private void EnsureTimer()
     {
-        if (System.Windows.Application.Current == null) return;
         if (_timer == null)
         {
-            _timer = new DispatcherTimer(DispatcherPriority.Normal) { Interval = TimeSpan.FromSeconds(1) };
+            _timer = TimerFactory?.Invoke();
+            if (_timer == null) return;
+            _timer.Interval = TimeSpan.FromSeconds(1);
             _timer.Tick += (_, _) =>
             {
                 try { Tick(); }
-                catch (Exception ex) { App.Logger?.Debug("Leash task tick failed: {E}", ex.Message); }
+                catch (Exception ex) { Serilog.Log.Debug("Leash task tick failed: {E}", ex.Message); }
             };
         }
         _timer.Start();

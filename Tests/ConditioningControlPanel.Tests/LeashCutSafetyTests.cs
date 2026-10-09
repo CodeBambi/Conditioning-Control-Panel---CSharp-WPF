@@ -124,7 +124,7 @@ public class LeashCutSafetyTests
     {
         // Pinned in source: the real targets must not wait on the network for the remote end, and
         // must end Lockdown through Deactivate (which is what restores + deletes the recovery file).
-        var src = ReadSource("ConditioningControlPanel", "Services", "Leash", "LeashCutSafety.cs");
+        var src = ReadSource("ConditioningControlPanel", "Services", "Leash", "LeashCutSafetyApp.cs");
         Assert.Contains("App.RemoteControl?.EndSessionNow()", src);
         Assert.Contains("App.Lockdown?.Deactivate()", src);
         Assert.Contains("LockdownService.DiscardRecovery()", src);

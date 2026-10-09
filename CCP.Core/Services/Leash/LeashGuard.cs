@@ -23,7 +23,7 @@ public static class LeashGuard
         try { return (IsLeashed ?? (() => false))(); }
         catch (Exception ex)
         {
-            App.Logger?.Warning("[Leash] IsLeashed check threw, treating as leashed: {Error}", ex.Message);
+            Serilog.Log.Warning("[Leash] IsLeashed check threw, treating as leashed: {Error}", ex.Message);
             return true;
         }
     }

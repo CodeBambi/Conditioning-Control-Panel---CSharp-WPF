@@ -1,9 +1,9 @@
 // PORTED from WPF 7.1.5 ConditioningControlPanel/Views/Tabs/LeashTabView.xaml(.cs): Social > Leash.
 // WPF hosts a LeashDrawerSection (offers, your own card with the cut, one card per account you
-// hold) over an empty state. The Leash SERVICE is not on this head (only Core LeashPollRule is), so
-// the section never has anything to draw and the page shows exactly what 7.1.5 shows with no
+// hold) over an empty state. The cards live in LeashTabView.Cards.cs (Core LeashService via LeashHead);
+// with no leash, no offer and no one held, the page shows exactly what 7.1.5 shows with no
 // leash: one line and a button to Friends, where offers start.
-// ponytail: LeashDrawerSection + LeashLook.Help (the "?" explainer) when Services/Leash moves to Core.
+// ponytail: LeashLook.Help (the "?" explainer).
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
@@ -13,8 +13,8 @@ using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel.Avalonia.Views.Tabs
 {
-    /// <summary>Social &gt; Leash: the leash cards as a page; on this head always the empty state.</summary>
-    public sealed class LeashTabView : UserControl
+    /// <summary>Social &gt; Leash: the leash cards as a page; cards, or the empty state.</summary>
+    public sealed partial class LeashTabView : UserControl
     {
         /// <summary>Where the leash cards go once the service exists (WPF SectionHost).</summary>
         internal StackPanel SectionHost { get; } = new();
@@ -69,7 +69,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             Grid.SetRow(scroll, 1);
             grid.Children.Add(scroll);
             Content = grid;
-            SyncEmpty();
+            Rebuild();
         }
 
         /// <summary>True while there is nothing leash-shaped to show (always, on this head).</summary>
@@ -83,7 +83,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         {
             _emptyLine.Text = Loc.Get("social_leash_empty");
             if (EmptyButton.Content is TextBlock label) label.Text = Loc.Get("social_leash_empty_open");
-            SyncEmpty();
+            Rebuild();
         }
     }
 }
