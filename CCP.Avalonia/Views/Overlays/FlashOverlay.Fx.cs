@@ -126,7 +126,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         /// its spawn screen). A pendulum breaks at the angle it had, about its pivot. False keeps
         /// the exit style: switch off, no v2 grant, Motion Off, no picture, platform refused.
         /// </summary>
-        internal static bool TryShatter(FlashOverlayWindow w)
+        /// <param name="shown">Runs once the pieces are on screen: the flash closes there, so the
+        /// picture never blinks out between its own window and the burst's.</param>
+        internal static bool TryShatter(FlashOverlayWindow w, Action? shown = null)
         {
             var s = CoreSettings.Current;
             if (!s.FlashShatterEnabled || !OwnsFlashV2() || s.MotionLevel == MotionLevel.Off) return false;
@@ -134,7 +136,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             if (state == null) return false;
             if (w.Snapshot() is not { } snap) return false;
             var monitor = new PixelRect((int)state.BoundsX, (int)state.BoundsY, (int)state.BoundsW, (int)state.BoundsH);
-            return FlashBurstWindow.ShowShatter(state, snap, monitor);
+            return FlashBurstWindow.ShowShatter(state, snap, monitor, shown);
         }
 
         /// <summary>The break for <paramref name="w"/> as drawn right now, or null for no shards.</summary>

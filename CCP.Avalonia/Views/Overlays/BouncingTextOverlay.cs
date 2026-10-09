@@ -272,7 +272,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
     /// </summary>
     internal sealed class BouncingTextOverlayWindow : Window
     {
-        private sealed record Logo(Control Element, TextBlock? Tb, OutlinedTextBlock? Ot, ScaleTransform Scale, RotateTransform Rotate);
+        private sealed record Logo(Control Element, TextBlock? Tb, OutlinedTextBlock? Ot, ScaleTransform Scale, RotateTransform Rotate, TranslateTransform At);
 
         private readonly List<Logo> _logos = new();
         private readonly List<(Ellipse Ring, ScaleTransform Scale, double Age)> _bursts = new();
@@ -318,7 +318,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             {
                 var scale = new ScaleTransform(1, 1);
                 var rotate = new RotateTransform(0);
-                var transform = new TransformGroup { Children = { scale, rotate } };
+                // Placed by a translate after the scale/rotate, not Canvas.Left/Top: a Canvas
+                // attached property re-runs layout (measure + arrange) on every frame; a transform
+                // is a render-only change (WPF used Canvas.Left; same picture, no layout pass).
+                var at = new TranslateTransform();
+                var transform = new TransformGroup { Children = { scale, rotate, at } };
                 TextBlock? tb = null;
                 OutlinedTextBlock? ot = null;
                 if (outline)
@@ -337,7 +341,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                 e.RenderTransform = transform;
                 e.IsHitTestVisible = false;
                 Canvas.Children.Add(e);
-                _logos.Add(new Logo(e, tb, ot, scale, rotate));
+                _logos.Add(new Logo(e, tb, ot, scale, rotate, at));
             }
         }
 
@@ -377,8 +381,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             var p = BouncingTextOverlay.ToLocal(x, y, _screen, _k);
             // OutlinedText's glyphs are inset by its padding; shift so they land where the engine measured.
             var pad = l.Ot?.Pad ?? 0;
-            Canvas.SetLeft(l.Element, p.X - pad);
-            Canvas.SetTop(l.Element, p.Y - pad);
+            l.At.X = p.X - pad;
+            l.At.Y = p.Y - pad;
             l.Scale.ScaleX = sx;
             l.Scale.ScaleY = sy;
             l.Rotate.Angle = angle;

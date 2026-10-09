@@ -237,4 +237,93 @@ public class FlashBurstTests
         }
         finally { PrizeOwnership.IsGranted = seam; }
     }
+
+    // ---- perf pass (owner desk run 2026-10-09: pops flicker and lag) ----
+
+    [Fact]
+    public void Shatter_window_covers_the_reach_of_the_break_not_the_whole_monitor()
+    {
+        var monitor = new PixelRect(0, 0, 2560, 1440);
+        foreach (var level in new[] { MotionLevel.Full, MotionLevel.Reduced })
+            for (var seed = 0; seed < 40; seed++)
+            {
+                var s = FlashShatter.Create(1000, 400, 420, 300, 0, 0, 2560, 1440, level, new Random(seed));
+                var b = FlashBurstWindow.ShatterBounds(s, monitor);
+                Assert.True((long)b.Width * b.Height < (long)monitor.Width * monitor.Height / 2,
+                    $"burst window {b} is not much smaller than the monitor");
+                // Every visible piece, turned about its centre, stays inside the window.
+                while (!s.Done)
+                {
+                    FlashShatter.Step(s, 1 / 60.0);
+                    foreach (var sh in s.Shards)
+                    {
+                        if (sh.Alpha <= 0) continue;
+                        var w = (sh.U1 - sh.U0) * s.RectW;
+                        var h = (sh.V1 - sh.V0) * s.RectH;
+                        var cx = s.RectX + sh.U0 * s.RectW + sh.Dx + w / 2;
+                        var cy = s.RectY + sh.V0 * s.RectH + sh.Dy + h / 2;
+                        var r = Math.Sqrt(w * w + h * h) / 2;
+                        Assert.True(cx - r >= b.X - 0.5 && cx + r <= b.Right + 0.5 && cy - r >= b.Y - 0.5
+                                    && (cy + r <= b.Bottom + 0.5 || b.Bottom == monitor.Bottom),
+                            $"{level} seed {seed}: a piece at ({cx:F0},{cy:F0}) r {r:F0} left {b}");
+                    }
+                }
+            }
+    }
+
+    [Fact]
+    public void Shatter_window_keeps_the_monitor_for_a_pendulum_break_and_never_leaves_it()
+    {
+        var monitor = new PixelRect(1920, 0, 1920, 1080);
+        var s = FlashShatter.Create(1940, 900, 400, 300, 1920, 0, 1920, 1080, MotionLevel.Full, new Random(1));
+        var b = FlashBurstWindow.ShatterBounds(s, monitor);
+        Assert.True(b.X >= monitor.X && b.Right <= monitor.Right && b.Y >= monitor.Y && b.Bottom <= monitor.Bottom);
+        s.FrozenAngleRad = 0.3;
+        Assert.Equal(monitor, FlashBurstWindow.ShatterBounds(s, monitor));
+    }
+
+    [Fact]
+    public async Task Shatter_hands_off_once_after_its_first_frame_or_when_it_dies_first()
+    {
+        await AvaloniaTestDispatcher.RunAsync(() =>
+        {
+            EnsureApp();
+            var state = FlashShatter.Create(100, 100, 90, 60, 0, 0, 400, 400, MotionLevel.Full, new Random(4));
+            var shown = 0;
+            var w = FlashBurstWindow.CreateShatter(state, new RenderTargetBitmap(new PixelSize(90, 60)), new PixelRect(0, 0, 400, 400), () => shown++)!;
+            Assert.Equal(0, shown);   // the flash stays up until the pieces are drawn
+            w.FireFirstFrame();
+            w.FireFirstFrame();
+            w.Close();
+            Assert.Equal(1, shown);
+
+            var dying = 0;
+            var w2 = FlashBurstWindow.CreateShatter(state, new RenderTargetBitmap(new PixelSize(90, 60)), new PixelRect(0, 0, 400, 400), () => dying++)!;
+            w2.Close();   // panic before the first frame: the flash it replaces still goes
+            Assert.Equal(1, dying);
+            return Task.CompletedTask;
+        });
+    }
+
+    [Fact]
+    public async Task Bouncing_text_moves_by_transform_without_a_layout_pass()
+    {
+        await AvaloniaTestDispatcher.RunAsync(() =>
+        {
+            EnsureApp();
+            var w = new BouncingTextOverlayWindow(new PixelRect(0, 0, 1280, 720), 1, 72, 100, 1, false);
+            var logo = (Control)w.Canvas.Children[0];
+            w.Canvas.Measure(Size.Infinity);
+            w.Canvas.Arrange(new Rect(0, 0, 1280, 720));
+            Assert.True(w.Canvas.IsArrangeValid);
+            w.Move(0, 300, 200, 1, 1, 0);
+            Assert.True(w.Canvas.IsArrangeValid);   // Canvas.Left/Top would have re-armed layout
+            Assert.True(w.Canvas.IsMeasureValid);
+            var m = logo.RenderTransform!.Value;
+            Assert.Equal(300, m.M31, 3);
+            Assert.Equal(200, m.M32, 3);
+            w.Close();
+            return Task.CompletedTask;
+        });
+    }
 }

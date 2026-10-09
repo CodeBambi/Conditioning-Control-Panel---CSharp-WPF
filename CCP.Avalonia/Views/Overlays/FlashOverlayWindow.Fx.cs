@@ -28,7 +28,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         private bool _expiring;
         private double _fadeAlpha;
         private TimeSpan _fadeSpan;
-        private DispatcherTimer? _expiryTimer, _pulseTimer, _exitTimer;
+        private DispatcherTimer? _expiryTimer, _pulseTimer;
         private Border? _glowCard;
         private FlashGlowLook _glow;
 
@@ -59,7 +59,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                 }
             }
             Content = content;
-            Closed += (_, _) => { _pulseTimer?.Stop(); _pulseTimer = null; _expiryTimer?.Stop(); _exitTimer?.Stop(); };
+            Closed += (_, _) => { _pulseTimer?.Stop(); _pulseTimer = null; _expiryTimer?.Stop(); };
         }
 
         private void SetGlow(double blur, double opacity)
@@ -239,12 +239,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         private void PlayExit()
         {
             _expiryTimer?.Stop();
-            if (FlashOverlay.TryShatter(this))
-            {
-                X11Overlay.SetOpacity(this, 0);
-                Close();
+            // Hand-off, not a cut: this window stays up until the shard window has painted, then
+            // goes (owner, 2026-10-09: closing it first left a blank frame before the break).
+            if (FlashOverlay.TryShatter(this, () =>
+                {
+                    if (_closed) return;
+                    X11Overlay.SetOpacity(this, 0);
+                    Close();
+                }))
                 return;
-            }
             var exit = FlashOverlay.PickExit(CoreSettings.Current, new Random());
             if (exit == null || ExitTarget is not { } content)
             {
@@ -256,17 +259,23 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             content.RenderTransformOrigin = RelativePoint.TopLeft;
             var size = _rigCard != null ? new Size(_rigCard.Width, _rigCard.Height) : Bounds.Size;
             var angle = RigAngleRad;
-            var last = DateTime.Now;
-            _exitTimer = new DispatcherTimer(TimeSpan.FromMilliseconds(16), DispatcherPriority.Render, (_, _) =>
+            // Frame-locked (one step per composed frame), never a 16 ms DispatcherTimer: on Windows
+            // that fires on the 15.6 ms system tick, 15.6 or 31.2 ms apart, and the exit stutters.
+            TimeSpan? last = null;
+            var frames = global::ConditioningControlPanel.Avalonia.Controls.Fx.TopLevelFrameSource.For(this);
+            Action<TimeSpan>? onFrame = null;
+            onFrame = now =>
             {
-                var now = DateTime.Now;
-                FlashExit.Step(exit, (now - last).TotalSeconds);
+                if (_closed) { frames.Unsubscribe(onFrame!); return; }
+                var dt = last is { } l ? Math.Clamp((now - l).TotalSeconds, 0, 0.1) : 0;
                 last = now;
+                if (dt > 0) FlashExit.Step(exit, dt);
                 ApplyExitFrame(content, exit, size, angle);
-                if (exit.Done) { _exitTimer?.Stop(); Close(); }
-            });
+                if (exit.Done) { frames.Unsubscribe(onFrame!); Close(); }
+            };
+            Closed += (_, _) => frames.Unsubscribe(onFrame);
             ApplyExitFrame(content, exit, size, angle);
-            _exitTimer.Start();
+            frames.Subscribe(onFrame);
         }
 
         /// <summary>The picture's box in world px, unrotated, glow pad excluded: what a shatter

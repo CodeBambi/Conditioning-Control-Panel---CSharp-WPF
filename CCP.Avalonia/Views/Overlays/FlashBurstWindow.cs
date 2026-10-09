@@ -30,7 +30,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         private readonly BurstCanvas _canvas;
         private readonly PixelRect _bounds;
         private readonly Func<double, bool> _step;
-        private DispatcherTimer? _timer;
+        private Action<TimeSpan>? _frame;
+        private Action? _firstFrame;
         private bool _closed;
 
         internal PixelRect WorldBounds => _bounds;
@@ -56,10 +57,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             Closed += (_, _) =>
             {
                 _closed = true;
-                _timer?.Stop();
-                _timer = null;
+                StopFrames();
                 Open.Remove(this);
                 owned?.Dispose();
+                FireFirstFrame();   // a burst that dies before it paints must not strand the flash it replaces
             };
         }
 
@@ -73,28 +74,63 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             return alive;
         }
 
-        /// <summary>Place, show and start. False (window closed) when the platform refuses an overlay.</summary>
+        /// <summary>
+        /// Place, show and start. False (window closed) when the platform refuses an overlay.
+        ///
+        /// <para>Stepped off the window's own animation frame (one tick per composed frame), never
+        /// a 16 ms DispatcherTimer: on Windows that timer fires on the 15.6 ms system tick, so it
+        /// lands 15.6 or 31.2 ms apart and the pieces visibly skip frames.</para>
+        ///
+        /// <para>The hand-off given at creation runs once the burst has been composed at least once
+        /// (the second animation frame after Show), or when the burst closes first, or after
+        /// <see cref="HandOffLimit"/> at the latest. The flash it replaces stays on screen until
+        /// then: closing it at once left a blank gap on Windows while the new overlay window
+        /// painted its first frame (owner: "it flickers, then reappears and breaks").</para>
+        /// </summary>
         private bool Launch()
         {
             if (!X11Overlay.SetClickThrough(this, true) || !X11Overlay.SetOverrideRedirect(this, _bounds))
             {
+                _firstFrame = null;   // refused: the caller keeps its own exit
                 Close();
                 return false;
             }
             Open.Add(this);
             Show();
-            var started = DateTime.Now;
-            var last = started;
-            _timer = new DispatcherTimer(TimeSpan.FromMilliseconds(16), DispatcherPriority.Render, (_, _) =>
+            TimeSpan? started = null, last = null;
+            var frames = 0;
+            _frame = now =>
             {
-                var now = DateTime.Now;
-                var dt = (now - last).TotalSeconds;
+                if (_closed) return;
+                started ??= now;
+                var dt = last is { } l ? Math.Clamp((now - l).TotalSeconds, 0, 0.1) : 0;
                 last = now;
-                if (now - started > SafetyLife) { Close(); return; }
-                Tick(dt);
-            });
-            _timer.Start();
+                if (++frames >= 2) FireFirstFrame();
+                if (now - started.Value > SafetyLife) { Close(); return; }
+                if (dt > 0) Tick(dt);
+            };
+            global::ConditioningControlPanel.Avalonia.Controls.Fx.TopLevelFrameSource.For(this).Subscribe(_frame);
+            if (_firstFrame != null) DispatcherTimer.RunOnce(FireFirstFrame, HandOffLimit);
             return true;
+        }
+
+        /// <summary>The longest a flash waits for its burst to paint before it goes anyway.</summary>
+        internal static readonly TimeSpan HandOffLimit = TimeSpan.FromMilliseconds(250);
+
+        /// <summary>The hand-off (tests call it the way the second frame does).</summary>
+        internal void FireFirstFrame()
+        {
+            var cb = _firstFrame;
+            _firstFrame = null;
+            try { cb?.Invoke(); }
+            catch (Exception ex) { Log.Debug("Flash burst hand-off failed: {E}", ex.Message); }
+        }
+
+        private void StopFrames()
+        {
+            if (_frame == null) return;
+            global::ConditioningControlPanel.Avalonia.Controls.Fx.TopLevelFrameSource.For(this).Unsubscribe(_frame);
+            _frame = null;
         }
 
         /// <summary>Close every burst window (panic, stop, shell close).</summary>
@@ -111,21 +147,46 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         /// snapshot blitted at their offsets, each turned about its own centre and faded together;
         /// a pendulum break rotates about the pivot by the angle frozen at the dismiss.
         /// </summary>
-        internal static FlashBurstWindow? CreateShatter(FlashShatterState state, Bitmap snapshot, PixelRect monitor)
+        internal static FlashBurstWindow? CreateShatter(FlashShatterState state, Bitmap snapshot, PixelRect monitor, Action? shown = null)
         {
             var w = new FlashBurstWindow(monitor,
                 dt => { FlashShatter.Step(state, dt); return !state.Done; },
                 dc => DrawShards(dc, state, snapshot),
-                snapshot);
+                snapshot) { _firstFrame = shown };
             return w;
         }
 
-        internal static bool ShowShatter(FlashShatterState state, Bitmap snapshot, PixelRect monitor)
+        /// <param name="shown">Runs once the pieces are on screen (see <see cref="Launch"/>); the
+        /// caller closes the flash there, never before. Not called when this returns false.</param>
+        internal static bool ShowShatter(FlashShatterState state, Bitmap snapshot, PixelRect monitor, Action? shown = null)
         {
-            var w = CreateShatter(state, snapshot, monitor);
+            var w = CreateShatter(state, snapshot, ShatterBounds(state, monitor), shown);
             if (w != null && w.Launch()) return true;
             snapshot.Dispose();
             return false;
+        }
+
+        /// <summary>
+        /// The part of the monitor a break can reach, not the whole monitor: a monitor-sized
+        /// per-pixel-alpha window recomposed every frame was the cost behind laggy pops on
+        /// Windows. The reach comes off the Core constants: the furthest outward kick sideways and
+        /// up, kick + down-shove + gravity downwards over the duration, plus the half-diagonal of
+        /// the biggest piece (a piece turns about its own centre). A pendulum break turns the whole
+        /// rect about its pivot, so it keeps the monitor.
+        /// </summary>
+        internal static PixelRect ShatterBounds(FlashShatterState s, PixelRect monitor)
+        {
+            if (s.FrozenAngleRad != 0 || s.RectW <= 0 || s.RectH <= 0) return monitor;
+            var t = s.DurationSec;
+            var side = FlashShatter.OutwardSpeedMax * t;
+            var up = FlashShatter.OutwardSpeedMax * t;   // ignores gravity: generous on purpose
+            var down = (FlashShatter.OutwardSpeedMax + FlashShatter.DownKickMax) * t + 0.5 * s.GravityPxPerSec2 * t * t;
+            var piece = 0.5 * Math.Sqrt(Math.Pow(s.RectW * 0.65, 2) + Math.Pow(s.RectH * 0.65, 2)) + 8;
+            var left = Math.Max((int)Math.Floor(s.RectX - side - piece), monitor.X);
+            var top = Math.Max((int)Math.Floor(s.RectY - up - piece), monitor.Y);
+            var right = Math.Min((int)Math.Ceiling(s.RectX + s.RectW + side + piece), monitor.Right);
+            var bottom = Math.Min((int)Math.Ceiling(s.RectY + s.RectH + down + piece), monitor.Bottom);
+            return right > left && bottom > top ? new PixelRect(left, top, right - left, bottom - top) : monitor;
         }
 
         internal static void DrawShards(DrawingContext dc, FlashShatterState s, IImage image)
