@@ -1,7 +1,7 @@
 // PORTED from WPF 7.1.5 MainWindow/MainWindow.CompanionTabs.cs: the Companion section's own pages,
 // registered through the tab registry (MainShellWindow.TabNavigation.cs). Each one is the visible
 // home of options the v2 conversation page left inside the collapsed room. Registering them retires
-// TabNavigation's PendingPageStandIns for these four keys (a registered page always wins).
+// the four Companion pages (TabNavigation keeps no stand-in for them any more).
 using ConditioningControlPanel.Avalonia.Views.Controls.Companion.Pages;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows

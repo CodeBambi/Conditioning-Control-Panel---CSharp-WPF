@@ -5,11 +5,8 @@
 // CompanionPageKit's.
 //
 // Deviations:
-//   - Personality: WPF's CompanionPickerCard (avatar look + personality preset with a live preview)
-//     is not on this head. The "who" card hosts the room's live Workshop Roster cell (which
-//     companion) instead; the preset chips, re-interview and adjust are the live MakeHerYoursView.
-//     ponytail: CompanionPickerCard (AvatarTubeWindow.PickableAvatarSets + PersonalityService
-//     presets + TubeFitDialog) when the picker is ported.
+//   - Personality: the "who" card hosts CompanionPickerCard (this folder) as WPF does; its header
+//     lists what the picker still lacks (look list, portrait, studio + perk links).
 //   - Links: WPF also calls MainWindow.RefreshVideoLinkPool; this head's Library cell seeds itself.
 using System;
 using Avalonia;
@@ -35,6 +32,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion.Pages
     {
         private readonly Windows.MainShellWindow? _owner;
         internal ContentControl PickerHost { get; } = Host("PickerHost");
+        private CompanionPickerCard? _picker;
         internal ContentControl PresetsHost { get; } = Host("PresetsHost", new Thickness(0, 0, 0, 16));
         internal ContentControl CommunityHost { get; } = Host("CommunityHost");
         internal Button BtnOpenPromptEditor { get; }
@@ -59,10 +57,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion.Pages
             community.Children.Add(communityTitle);
             community.Children.Add(CommunityHost);
 
+            // Who: the same picker Customise and the chat's "who" entry use (WPF: a bare card).
             var who = new StackPanel();
-            var whoTitle = CardTitle("companion_workshop_cell_roster");
-            whoTitle.Margin = new Thickness(0, 0, 0, 8);
-            who.Children.Add(whoTitle);
             who.Children.Add(PickerHost);
 
             Content = Page(1100,
@@ -78,11 +74,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion.Pages
         internal void OnShown()
         {
             var owner = _owner ?? ShellOf(this);
+            _picker ??= new CompanionPickerCard { Shell = () => _owner ?? ShellOf(this) };
+            if (!ReferenceEquals(PickerHost.Content, _picker)) PickerHost.Content = _picker;
+            else _picker.Refresh();
             if (Shelf(owner) is { } shelf)
-            {
-                Adopt(shelf.Roster, PickerHost);
                 Adopt(shelf.Community, CommunityHost);
-            }
             if (Room(owner)?.FindControl<MakeHerYoursView>("PersonalityZone") is { } presets)
                 Adopt(presets, PresetsHost);
         }
