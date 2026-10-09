@@ -620,13 +620,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         private void BtnCreateNewEnhancement_Click()
         {
             if (string.IsNullOrEmpty(_lastMediaPathForCreateNew)) return;
-            // ponytail: DeeperEditorWindow is NOT the blocker - it is ported and beside this file.
-            // EnhancementLibrary.CreateBlank is, and it is still head-only
-            // (ConditioningControlPanel/Services/Deeper/EnhancementLibrary.cs): it is what turns a
-            // bare media path into a blank Enhancement with the right MediaType, metadata defaults
-            // and empty lanes, and the editor's ctor takes an Enhancement, not a path. See
-            // JumpToEditorForCurrentEnhancement for the other half of the route.
-            Log.Debug("EnhancementPlayer(Avalonia): create-new is a stub for {Path}", _lastMediaPathForCreateNew);
+            // WPF EnhancementPlayerWindow.xaml.cs:595. EnhancementLibrary.CreateBlank is a bare
+            // `new Enhancement { MediaType, MediaSource, Metadata = new() }`, inlined.
+            try
+            {
+                var mediaType = DeeperPreview.IsLocalVideoFile(_lastMediaPathForCreateNew)
+                    ? MediaTypes.Video : MediaTypes.Audio;
+                var blank = new Enhancement { MediaType = mediaType, MediaSource = _lastMediaPathForCreateNew };
+                new DeeperEditorWindow(blank, null).Show(this);
+            }
+            catch (Exception ex) { Log.Warning(ex, "EnhancementPlayer: open editor for new enhancement failed"); }
         }
 
         // ====================================================================================
@@ -706,15 +709,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
                 // load's "a page is up" and leave Play driving whatever is still on screen.
                 _videoNavigated = false;
 
-                // ponytail: the WPF pre-flight was scheme + UrlSafety.HostMatches(uri,
-                // DeeperConfig.PreviewHostAllowlist). Both of those live in CCP.Core but are
-                // `internal`, and Core's InternalsVisibleTo names the WPF app and the test projects,
-                // not this head — so the FIRST navigation to an arbitrary https host out of a shared
-                // .ccpenh.json is still allowed here. Only the scheme is checked. Widening Core's
-                // InternalsVisibleTo (or making those two public) is its own layer; copying the
-                // allowlist into this head would be the second copy of a security rule.
+                // WPF pre-flight (EnhancementPlayerWindow.xaml.cs:1391): https on an allowlisted
+                // host, so a hostile MediaSource in a shared .ccpenh.json never reaches the engine.
                 if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)
-                    || uri.Scheme != Uri.UriSchemeHttps)
+                    || !DeeperPreview.IsAllowedPreviewHost(uri))
                 {
                     Log.Warning("EnhancementPlayer: rejected video MediaSource {Host}", uri?.Host);
                     _txtVideoStatus.Text = Loc.Get("deeper_player_video_no_video");
@@ -728,14 +726,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
                     return;
                 }
 
-                // What the gate CAN do without the allowlist: pin the engine to the host we were
-                // asked to load. That is strictly narrower than what WPF's NavigationStarting
-                // enforced — it does not vet the first hop — but it does close the redirect leg,
-                // which is the one the pre-flight never saw. "www." is tolerated in both directions
-                // because the sites in the original allowlist redirect between the two forms.
-                var pinned = uri.Host;
-                _videoBrowser.AllowNavigation = u =>
-                    u.Scheme == Uri.UriSchemeHttps && DeeperPreview.HostsMatchIgnoringWww(u.Host, pinned);
+                // WPF's NavigationStarting (xaml.cs:1796): every later hop passes the same fence.
+                _videoBrowser.AllowNavigation = DeeperPreview.IsAllowedPreviewHost;
                 _videoBrowser.Source = uri;
                 _videoNavigated = true;
             }
@@ -1308,28 +1300,39 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
 
         private void JumpToEditorForCurrentEnhancement(string? ruleId)
         {
-            var enh = _loadedEnhancement;
-            if (enh == null) return;
-            // ponytail: "DeeperEditorWindow (not ported)" is WRONG and has been for several
-            // layers - it is Views/Deeper/DeeperEditorWindow, beside this file, with a public
-            // (Enhancement, string? filePath) ctor and a LoadedFilePath property, which is both
-            // halves of WPF's dedupe. Two things genuinely stop a straight restore, and neither is
-            // the editor:
-            //   1. The route. WPF went through MainWindow.OpenDeeperEditorFromPlayer ->
-            //      OpenDeeperFile, which RE-READS the file from disk and refreshes the Deeper
-            //      library list when the editor closes. CCP.Avalonia/Views/Windows/MainShellWindow
-            //      has no twin, and it is not a file this layer owns.
-            //   2. Handing the editor this window's own _loadedEnhancement instead would share one
-            //      mutable object between two windows: every edit in the editor would silently
-            //      rewrite the enhancement THIS player is running, with no save and no reload. WPF
-            //      never did that. A restore therefore has to re-read the .ccpenh.json (the same
-            //      EnhancementSerializer + EnhancementValidator pair LoadEnhancementFile uses) and
-            //      pass the fresh instance - the dedupe walk over the lifetime's Windows and
-            //      Activate() is the easy half.
-            // The rule-id argument has nowhere to land in either case: the editor has no
-            // "select this rule on open" entry point on this head.
-            Log.Debug("EnhancementPlayer(Avalonia): editor jump is a stub (path {Path}, rule {Rule})",
-                _loadedFilePath, ruleId);
+            // WPF EnhancementPlayerWindow.Mission3.cs:291. ruleId is unused there too.
+            if (_loadedEnhancement == null) return;
+            var path = _loadedFilePath;
+
+            // In-memory only (editor preview / embedded tag): focus the owning editor if any.
+            if (string.IsNullOrEmpty(path) || !System.IO.File.Exists(path))
+            {
+                if (Owner is DeeperEditorWindow owner) owner.Activate();
+                return;
+            }
+
+            // Dedupe: one editor per file.
+            foreach (var ed in DeeperEditorWindow.OpenEditors)
+            {
+                if (!string.Equals(ed.LoadedFilePath, path, StringComparison.OrdinalIgnoreCase)) continue;
+                if (ed.WindowState == WindowState.Minimized) ed.WindowState = WindowState.Normal;
+                ed.Activate();
+                return;
+            }
+
+            // MainWindow.OpenDeeperFile: re-read the file (never share this player's live object
+            // with the editor), record it as recent, open the editor.
+            try
+            {
+                var fresh = EnhancementSerializer.LoadFromFile(path!);
+                DeeperEditorWindow.TouchRecent(path!);
+                new DeeperEditorWindow(fresh, path).Show();
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Player: open-in-editor route failed");
+                _ = Dialogs.MessageDialog.ShowAsync(this, "Deeper", ex.Message);
+            }
         }
 
         private void BtnChange_Click() => _changePopup.IsOpen = !_changePopup.IsOpen;
