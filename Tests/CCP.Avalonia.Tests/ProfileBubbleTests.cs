@@ -182,6 +182,12 @@ public sealed class ProfileBubbleTests
             var cards = page.FindControl<StackPanel>("ProfileColumnStack")!.Children.Where(c => c.IsVisible).ToList();
             Assert.True(cards.Count > 1);
             Assert.True(cards[^1].Opacity < 1, "the entrance stagger did not hold the last card back");
+            page.FindControl<Grid>("ProfileCardWrapper")!.IsVisible = false;   // a search found no one
+            Dispatcher.UIThread.RunJobs();
+            Assert.False(shell.OgBorderLoopRunning);
+            page.FindControl<Grid>("ProfileCardWrapper")!.IsVisible = true;
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(shell.OgBorderLoopRunning);
             s.MotionLevel = MotionLevel.Reduced;               // no ambient loops
             global::ConditioningControlPanel.Avalonia.Controls.AmbientFxCanvas.Env.RaiseMotionGateChanged();
             Assert.False(shell.OgBorderLoopRunning);

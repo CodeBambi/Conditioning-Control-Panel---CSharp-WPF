@@ -58,6 +58,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 PropertyChanged += OnProfileFxWindowProperty;
                 if (page != null) page.PropertyChanged += OnProfileFxVisibility;
                 if (page?.FindControl<Border>("OgBorderContainer") is { } og) og.PropertyChanged += OnProfileFxVisibility;
+                if (page?.FindControl<Grid>("ProfileCardWrapper") is { } wrapper) wrapper.PropertyChanged += OnProfileFxVisibility;
                 AmbientFxCanvas.Env.MotionGateChanged += ApplyOgBorderLoop;
                 Closed += (_, _) => { AmbientFxCanvas.Env.MotionGateChanged -= ApplyOgBorderLoop; StopOgBorderLoop(); };
             }
@@ -90,7 +91,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             {
                 var page = ProfilePage;
                 if (page?.FindControl<Border>("OgBorderContainer") is not { } container) return;
-                bool wanted = container.IsVisible
+                bool wanted = container.IsEffectivelyVisible   // also off when only ProfileCardWrapper hides
                               && AmbientFxCanvas.Env.AllowAmbientLoops
                               && IsActive
                               && WindowState != WindowState.Minimized
