@@ -292,8 +292,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// It does — <c>TierGate</c> is CCP.Core/Services/TierGate.cs over <c>CoreEntitlement</c> —
         /// so this is MainWindow.LabTab.cs:770 verbatim: Tier 2 checked BEFORE the window is
         /// constructed, because the Lab smokescreen is a tab-wide overlay and not a gate on this
-        /// door. The window itself is ported and honest (GazeMinigameWindow disables Start and says
-        /// why, since with no tracker every round would resolve 0 >= 0 into GOOD GIRL).
+        /// door. The window runs on the webcam tracker (consent, start, calibration gates as WPF).
         ///
         /// <para>The seam is seeded by Platform.AccountSeed, so a Tier 2 account opens the window.</para>
         /// </summary>

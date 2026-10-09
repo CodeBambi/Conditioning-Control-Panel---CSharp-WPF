@@ -281,7 +281,16 @@ namespace ConditioningControlPanel.Services
         {
             if (!_running || !ReferenceEquals(firedBy, _scheduler)) return;
             Dispose(ref _scheduler);
-            try { if (!_playing && !Trigger()) ScheduleNext(); }
+            try
+            {
+                // WPF VideoService :3007: a do-not-disturb app in front reschedules, never drops.
+                if (!_playing && Services.UI.DndGuard.ShouldSuppressVideos())
+                {
+                    Services.UI.DndGuard.LogSuppressionThrottled("scheduled video");
+                    ScheduleNext(SkipRetrySeconds);
+                }
+                else if (!_playing && !Trigger()) ScheduleNext();
+            }
             catch (Exception ex)
             {
                 // WPF #388: a throwing trigger must not end the session's videos.

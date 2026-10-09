@@ -4,6 +4,7 @@ using Xunit;
 namespace CCP.Core.Tests;
 
 // WPF FlashService.ScheduleNextFlash / TriggerFlash rules, now CoreFlash.
+[Collection(SessionStatics.Name)]
 public sealed class CoreFlashScheduleTests
 {
     [Theory]
@@ -24,4 +25,38 @@ public sealed class CoreFlashScheduleTests
     [InlineData(true, true, false, true, false)]   // display change settling
     public void Tick_fires_only_when_running_enabled_idle_and_display_settled(bool running, bool enabled, bool busy, bool settling, bool fires)
         => Assert.Equal(fires, CoreFlash.ShouldFire(running, enabled, busy, settling));
+
+    // WPF FlashService :682: with "suppress flashes" on, a do-not-disturb app in front skips the
+    // scheduled spawn; another app in front lets it through.
+    [Fact]
+    public void Dnd_app_in_front_skips_the_scheduled_flash()
+    {
+        var s = CoreSettings.Current;
+        var (list, on, enabled) = (s.DndProcessList, s.DndSuppressFlashes, s.FlashEnabled);
+        var (show, front0) = (CoreFlash.ShowProvider, ConditioningControlPanel.Services.UI.DndGuard.ForegroundProcess);
+        var tick = typeof(CoreFlash).GetMethod("OnTick", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
+        int shown = 0;
+        var front = "mpv";
+        try
+        {
+            (s.DndProcessList, s.DndSuppressFlashes, s.FlashEnabled) = (new System.Collections.Generic.List<string> { "mpv" }, true, true);
+            CoreFlash.ShowProvider = () => shown++;
+            ConditioningControlPanel.Services.UI.DndGuard.ForegroundProcess = () => front;
+            ConditioningControlPanel.Services.UI.DndGuard.ResetCacheForTests();
+            CoreFlash.Start();
+            tick.Invoke(null, new object?[] { null });
+            Assert.Equal(0, shown);
+            front = "firefox";
+            ConditioningControlPanel.Services.UI.DndGuard.ResetCacheForTests();
+            tick.Invoke(null, new object?[] { null });
+            Assert.Equal(1, shown);
+        }
+        finally
+        {
+            CoreFlash.Stop();
+            (s.DndProcessList, s.DndSuppressFlashes, s.FlashEnabled) = (list, on, enabled);
+            (CoreFlash.ShowProvider, ConditioningControlPanel.Services.UI.DndGuard.ForegroundProcess) = (show, front0);
+            ConditioningControlPanel.Services.UI.DndGuard.ResetCacheForTests();
+        }
+    }
 }

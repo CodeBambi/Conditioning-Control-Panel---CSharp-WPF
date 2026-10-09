@@ -1754,16 +1754,14 @@ public sealed partial class EmiDeskService : IDisposable
     }
 
     /// <summary>Render a chord the way it is stored and shown: "Ctrl+Alt+E".</summary>
-    public static string FormatChord(ModifierKeys mods, Key key)
-    {
-        var parts = new List<string>(4);
-        if ((mods & ModifierKeys.Control) != 0) parts.Add("Ctrl");
-        if ((mods & ModifierKeys.Alt) != 0) parts.Add("Alt");
-        if ((mods & ModifierKeys.Shift) != 0) parts.Add("Shift");
-        if ((mods & ModifierKeys.Windows) != 0) parts.Add("Win");
-        parts.Add(key.ToString());
-        return string.Join("+", parts);
-    }
+    public static string FormatChord(ModifierKeys mods, Key key) => EmiDeskChord.Format(ToChordMods(mods), key.ToString());
+
+    // The rules live in Core (EmiDeskChord) so the Avalonia head refuses exactly the same chords.
+    private static ChordMods ToChordMods(ModifierKeys mods) =>
+        ((mods & ModifierKeys.Control) != 0 ? ChordMods.Ctrl : 0)
+        | ((mods & ModifierKeys.Alt) != 0 ? ChordMods.Alt : 0)
+        | ((mods & ModifierKeys.Shift) != 0 ? ChordMods.Shift : 0)
+        | ((mods & ModifierKeys.Windows) != 0 ? ChordMods.Win : 0);
 
     /// <summary>
     /// Why a candidate chord cannot be used, or null when it is fine. Localized, for the capture
@@ -1772,30 +1770,8 @@ public sealed partial class EmiDeskService : IDisposable
     /// </summary>
     public static string? ValidateChord(ModifierKeys mods, Key key)
     {
-        try
-        {
-            if (key == Key.None) return Loc.Get("emi_desk_hotkey_err_empty");
-            if (mods == ModifierKeys.None) return Loc.Get("emi_desk_hotkey_err_bare");
-
-            var s = App.Settings?.Current;
-            if (Safety.PanicPolicy.FindHookClash(
-                    key.ToString(), Safety.PanicPolicy.HookBoundBaseKeys(s)) is { } clash)
-            {
-                return Loc.GetF("emi_desk_hotkey_err_hook", clash.Name, clash.Key);
-            }
-
-            // Ctrl+Alt+G is Quick Recal (MainWindow.QuickRecalHotkey*). Two Win32 slots cannot hold
-            // the same combo and the loser would just fail to register, so say so up front.
-            if (mods == (ModifierKeys.Control | ModifierKeys.Alt) && key == Key.G)
-            {
-                return Loc.Get("emi_desk_hotkey_err_quickrecal");
-            }
-            return null;
-        }
-        catch
-        {
-            return null;
-        }
+        try { return EmiDeskChord.Validate(ToChordMods(mods), key == Key.None ? null : key.ToString(), App.Settings?.Current); }
+        catch { return null; }
     }
 
     // ---------------------------------------------------------------- app events + her own clock

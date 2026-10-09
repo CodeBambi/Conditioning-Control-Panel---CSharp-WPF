@@ -684,8 +684,8 @@
                      scrolls sideways; the tray is what makes the rest reachable.
 
                      THE ZONE NO LONGER HIDES ITSELF: it carries the Community Catalogue chip and
-                     the session Export button. In this read-only slice those existing doors remain
-                     visible but disabled; only the order half hides - see PaintTakeawayShelf. -->
+                     the session Export button, both live on a fresh install; only the order half
+                     hides - see PaintTakeawayShelf. -->
                 <Border Grid.Row="2" x:Name="TakeawayZone"
                         Theme="{StaticResource SectionPanel}" Margin="5,8,5,5" Padding="14,12">
                     <StackPanel>

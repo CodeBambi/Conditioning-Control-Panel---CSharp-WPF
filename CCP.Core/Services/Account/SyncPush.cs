@@ -37,7 +37,12 @@ namespace ConditioningControlPanel.Services
         private string[]? _serverAchievements;   // null: the profile carried none, so achievements are not known
         private Timer? _heartbeat;
         private int _nudgePending;
-        private ProfileCosmetics? _pendingCosmetics;   // an explicit Customize save not yet accepted by the server
+        private readonly Func<ProfileCosmetics?, ProfileCosmetics>? _sanitizeCosmetics;
+        private volatile bool _pendingCosmeticsClear;
+
+        /// <summary>WPF ProfileSyncService.PendingCosmeticsClear: set by an EMPTY Customize save (unequip everything),
+        /// cleared once a sync carrying the clear succeeds. In memory, as WPF.</summary>
+        public bool PendingCosmeticsClear => _pendingCosmeticsClear;
 
         /// <summary>Tests only.</summary>
         public Func<DateTime> UtcNow = () => DateTime.UtcNow;
@@ -71,9 +76,11 @@ namespace ConditioningControlPanel.Services
         /// <param name="localAchievements">This install's unlocked achievement ids.</param>
         /// <param name="inSession">The heartbeat's in_session.</param>
         /// <param name="handler">Test seam; null is the real network.</param>
-        public SyncPush(Func<IEnumerable<string>?> localAchievements, Func<bool> inSession, HttpMessageHandler? handler = null)
+        /// <param name="sanitizeCosmetics">The head's SanitizeOwn (registry + your unlocks); null never sends cosmetics.</param>
+        public SyncPush(Func<IEnumerable<string>?> localAchievements, Func<bool> inSession, HttpMessageHandler? handler = null,
+            Func<ProfileCosmetics?, ProfileCosmetics>? sanitizeCosmetics = null)
         {
-            (_localAchievements, _inSession, _handler) = (localAchievements, inSession, handler);
+            (_localAchievements, _inSession, _handler, _sanitizeCosmetics) = (localAchievements, inSession, handler, sanitizeCosmetics);
             _http = V2AuthService.Configure(new HttpClient(handler ?? new ServerClockHandler()));   // learns the server clock (release/6.11.5)
         }
 
@@ -90,7 +97,7 @@ namespace ConditioningControlPanel.Services
             StopHeartbeat();
             Loaded = false;
             _serverAchievements = null;
-            _pendingCosmetics = null;
+            _pendingCosmeticsClear = false;   // never carry one account's unequip into the next
             LastSyncTime = null;
         }
 
@@ -112,12 +119,28 @@ namespace ConditioningControlPanel.Services
             Cosmetics = cosmetics,
         };
 
-        /// <summary>WPF PersistOwnCosmetics' push: <paramref name="chosen"/> (already sanitized) rides this and every
-        /// later push until one succeeds - so a cooldown skip still delivers it on the next sync.</summary>
+        /// <summary>WPF PersistOwnCosmetics' push, after <paramref name="chosen"/> was saved to settings. Every push
+        /// sends the settings loadout (WPF BuildCosmeticsPayload), so a cooldown skip, a logout or a restart cannot
+        /// lose it; an empty <paramref name="chosen"/> is the explicit clear, held until a sync delivers it.</summary>
         public Task<bool> PushCosmeticsAsync(ProfileCosmetics chosen)
         {
-            _pendingCosmetics = chosen;
+            _pendingCosmeticsClear = chosen.IsEmpty;
             return PushAsync("cosmetics");
+        }
+
+        /// <summary>WPF BuildCosmeticsPayload: the sanitized settings loadout. An empty one goes only as the explicit
+        /// clear - WPF also sends it after a load because it adopted the cloud loadout first (AdoptCloudCosmetics);
+        /// this head does not adopt, so an empty push would wipe the account's cosmetics from a fresh install.
+        /// Any failure leaves the key out ("no change" never destroys anything).</summary>
+        private ProfileCosmetics? CosmeticsPayload(AppSettings s, bool clear)
+        {
+            if (_sanitizeCosmetics == null) return null;
+            try
+            {
+                var clean = _sanitizeCosmetics(s.ProfileCosmetics);
+                return !clean.IsEmpty || clear ? clean : null;
+            }
+            catch (Exception ex) { Log.Debug("SyncPush cosmetics payload: {E}", ex.Message); return null; }
         }
 
         /// <param name="waitForGate">Logout: wait (bounded) for an in-flight push instead of skipping.</param>
@@ -144,7 +167,8 @@ namespace ConditioningControlPanel.Services
                 var id = s.UnifiedId!;
                 if (!Loaded || !SignedIn(s)) return false;   // a logout between the check above and the gate
                 var server = _serverAchievements;
-                var cosmetics = _pendingCosmetics;
+                var clearing = _pendingCosmeticsClear;
+                var cosmetics = CosmeticsPayload(s, clearing);
                 var body = JsonConvert.SerializeObject(Body(s, server?.Concat(_localAchievements() ?? Array.Empty<string>()), cosmetics));
                 var tokenUsed = s.AuthToken;
                 HttpRequestMessage NewRequest()
@@ -195,8 +219,8 @@ namespace ConditioningControlPanel.Services
                 }
                 LastSyncTime = UtcNow();
                 (_backoffFailures, _blockedUntilUtc) = (0, null);
-                // Delivered (the clear included); a newer save made meanwhile stays pending.
-                if (cosmetics != null) Interlocked.CompareExchange(ref _pendingCosmetics, null, cosmetics);
+                // The clear has reached the server; an empty loadout goes back to meaning "no change" (WPF).
+                if (clearing && cosmetics?.IsEmpty == true) _pendingCosmeticsClear = false;
                 Log.Information("V2 Profile synced successfully ({Bytes} bytes)", json.Length);
                 try
                 {

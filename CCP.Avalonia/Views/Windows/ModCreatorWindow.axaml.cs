@@ -69,8 +69,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// <see cref="ToggleAudioPreview"/>, which keeps only the half the seam can honestly do.
     ///
     /// Stubbed, all with a ponytail marker at the call site: everything reaching App.*, a service,
-    /// or one of the ten per-panel partial classes
-    /// (ModCreatorWindow.Pools.cs, .Personalities.cs, .Advanced.cs, .Barks.cs, .Mantras.cs,
+    /// or one of the remaining per-panel partial classes
+    /// (Pools and Personalities are ported partials here; .Advanced.cs, .Barks.cs, .Mantras.cs,
     /// .EventAudio.cs, .Portraits.cs, .Emotes.cs, .UiArt.cs, .ArtFraming.cs), which are their own
     /// port layers. Their sidebar entries stay - they are part of this view's chrome - and each
     /// draws a "ported in a later layer" panel rather than a dead click.
@@ -135,30 +135,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private readonly TextBlock _txtStatus;
 
         // ─── Slot Definitions ────────────────────────────────────
-        // ponytail: needs Achievement.All, wired when the achievement registry moves to Core.
-        // In the WPF head this is ModAchievementSlots.Build(), which walks Achievement.All (69
-        // entries) and dedupes by badge file. Achievement lives in ConditioningControlPanel/Models,
-        // which this head cannot reference, so a representative slice of the real badge files
-        // stands in - enough for the Achievements section to draw its grid with true filenames.
-        private static readonly (string Key, string Name)[] AchievementSlots =
-        {
-            ("achievements/lv_10.png", "Level 10"),
-            ("achievements/Dumb_Bimbo.png", "Dumb Bimbo"),
-            ("achievements/lv_50.png", "Level 50"),
-            ("achievements/docile_cow.png", "Docile Cow"),
-            ("achievements/perfect_plastic_puppet.png", "Perfect Plastic Puppet"),
-            ("achievements/BrainwashedSlavedoll.png", "Brainwashed Slavedoll"),
-            ("achievements/PlatinumPuppet.png", "Platinum Puppet"),
-            ("achievements/daily_maintenance.png", "Daily Maintenance"),
-            ("achievements/window_shopping.png", "Window Shopping"),
-            ("achievements/10_hours_pink.png", "10 Hours Pink"),
-            ("achievements/deep_sleep.png", "Deep Sleep"),
-            ("achievements/spiral_eyes.png", "Spiral Eyes"),
-            ("achievements/obedience_reflex.png", "Obedience Reflex"),
-            ("achievements/total_lockdown.png", "Total Lockdown"),
-            ("achievements/modder.png", "Modder"),
-            ("achievements/she_remembers.png", "She Remembers"),
-        };
+        private static readonly (string Key, string Name)[] AchievementSlots = ModAchievementSlots.Build();
 
         private static readonly (string Key, string Name)[] FeatureSlots =
         {
@@ -458,8 +435,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // and one port layer each here. Their sidebar entries stay, so each gets a panel
             // saying so rather than a button that does nothing.
             BuildDeferredSection("uiart", "UI Art", "ModCreatorWindow.UiArt.cs / .ArtFraming.cs");
-            BuildDeferredSection("pools", "Pools & Triggers", "ModCreatorWindow.Pools.cs");
-            BuildDeferredSection("personalities", "Personalities", "ModCreatorWindow.Personalities.cs");
+            BuildPoolsSection();
+            BuildPersonalitiesSection();
             BuildDeferredSection("advanced", "Advanced", "ModCreatorWindow.Advanced.cs");
             BuildDeferredSection("barks", "Barks", "ModCreatorWindow.Barks.cs");
             BuildDeferredSection("mantras", "Mantras", "ModCreatorWindow.Mantras.cs");
@@ -492,14 +469,36 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private void LoadSideFilesFrom(string resourcesDir) { }
         private void ClearSideFileState() { }
 
-        // ponytail: needs the manifest-backed panel partials (Pools/Personalities/Advanced/UiArt),
-        // wired when each is ported. In the WPF head BuildManifestFromForm ends with
-        // ApplyPoolsToManifest / ApplyPersonalitiesToManifest / ApplyAdvancedToManifest /
-        // ApplyArtFramingToManifest and PopulateFromManifest with the four Populate* twins.
-        // Aggregated into one pair on purpose: a later layer that ports Pools.cs as a partial will
-        // define the real ApplyPoolsToManifest, and a stub of that exact name here would collide.
-        private void ApplyPanelSectionsToManifest(ModManifest manifest) { }
-        private void PopulatePanelSectionsFromManifest(ModManifest manifest) { }
+        // WPF BuildManifestFromForm ends with ApplyPools/Personalities/Advanced/ArtFraming
+        // (ModCreatorWindow.xaml.cs:2475-2478). Pools and Personalities are ported partials.
+        // ponytail: Advanced (ModCreatorWindow.Advanced.cs) is not ported yet, so its three
+        // manifest sections are carried through from the loaded mod unchanged - a load + export
+        // writes what WPF writes when the author does not touch the Advanced panel, instead of
+        // silently dropping them. Reset clears the carry like WPF's ClearAdvancedSection.
+        private ModManifest? _carriedAdvanced;
+
+        private void ApplyPanelSectionsToManifest(ModManifest manifest)
+        {
+            ApplyPoolsToManifest(manifest);
+            ApplyPersonalitiesToManifest(manifest);
+            manifest.TubeLayout = _carriedAdvanced?.TubeLayout;
+            manifest.BubbleScale = _carriedAdvanced?.BubbleScale;
+            manifest.EnhancementOverrides = _carriedAdvanced?.EnhancementOverrides;
+        }
+
+        private void PopulatePanelSectionsFromManifest(ModManifest manifest)
+        {
+            PopulatePoolsFromManifest(manifest);
+            PopulatePersonalitiesFromManifest(manifest);
+            _carriedAdvanced = manifest;
+        }
+
+        private void ClearPanelSections()
+        {
+            ClearPoolsSection();
+            ClearPersonalitiesSection();
+            _carriedAdvanced = null;
+        }
 
         private Border CreateSectionPanel(string key)
         {
@@ -2131,7 +2130,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         // ─── Populate From Manifest ──────────────────────────────
-        private void PopulateFromManifest(ModManifest manifest)
+        internal void PopulateFromManifest(ModManifest manifest)
         {
             // Info
             SetTextBoxValue(_txtModName, manifest.Name);
@@ -2257,7 +2256,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         // ─── Build Manifest From Form ────────────────────────────
-        private ModManifest BuildManifestFromForm()
+        internal ModManifest BuildManifestFromForm()
         {
             var name = GetTextBoxValue(_txtModName);
             var manifest = new ModManifest
@@ -2662,6 +2661,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             SetTextBoxValue(_txtMinAppVersion, "");
             SetTextBoxValue(_txtAffirmation, "");
             SetTextBoxValue(_txtRankSubject, "");
+            ClearPanelSections();
             ClearSideFileState();
 
             NavigateToSection("info");
