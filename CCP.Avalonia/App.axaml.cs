@@ -542,6 +542,14 @@ namespace ConditioningControlPanel.Avalonia
                         Platform.FriendsHead.Service = friends;
                         CoreAccount.UnifiedIdentityChanged += (_, _) => friends.Kick();
                         friends.Start(new Platform.FriendsHead.Timer());
+                        // WPF App.xaml.cs LEASH: rides the friends poll (report out, block in, 20 s while leashed).
+                        try
+                        {
+                            Platform.LeashHead.Start(friends, Environment.GetEnvironmentVariable("CCP_USERDATA_DIR"),
+                                Environment.GetEnvironmentVariable(Platform.FriendsHead.EnvVar));
+                            (desktop.MainWindow as Views.Windows.MainShellWindow)?.InitializeLeash();
+                        }
+                        catch (Exception exLeash) { Serilog.Log.Warning(exLeash, "[Leash] service could not be built"); }
                     }
                 }
                 catch (Exception ex) { Serilog.Log.Warning(ex, "[Friends] service could not be built"); }

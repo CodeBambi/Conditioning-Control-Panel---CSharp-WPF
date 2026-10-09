@@ -179,7 +179,7 @@ public sealed class SocialPagesShellTests
                 Pump();
                 var leash = host.Children.OfType<LeashTabView>().Single();
                 Assert.True(leash.IsVisible && !friends.IsVisible);
-                Assert.True(leash.ShowingEmpty, "no leash service on this head: the 7.1.5 empty state");
+                Assert.True(leash.ShowingEmpty, "no leash service built in the shell test: the 7.1.5 empty state");
                 leash.EmptyButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 Pump();
                 Assert.Equal("friends", shell.CurrentTab);

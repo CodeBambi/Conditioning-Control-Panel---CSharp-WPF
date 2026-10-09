@@ -53,7 +53,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             return Tray;
         }
 
-        /// <summary>WPF order: Show, Back to CC Labs, Wake, separator, Exit - with Stop everything above Exit.</summary>
+        /// <summary>WPF order: Show, Back to CC Labs, Wake, Cut leash (leashed only), separator, Exit - with Stop everything above Exit.</summary>
         internal NativeMenu BuildTrayMenu()
         {
             var menu = new NativeMenu();
@@ -69,6 +69,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // WPF reads the label once at tray creation (TrayIconService.cs Initialize);
             // App.Mods.IsBambiMode there is the active-mod check AppSettings.IsBambiMode makes here.
             menu.Add(Item(CoreSettings.Current.IsBambiMode ? "tray_wake_bambi" : "tray_wake", WakeBambiUp));
+            // WPF TrayIconService.cs:119-125: Cut leash, one click, only while someone holds this
+            // account's leash. Never gated, never priced, never greyed (Platform/LeashHead.Cut).
+            var cutLeash = Item("leash_cut", Platform.LeashHead.Cut);
+            void RefreshCut(object? s, EventArgs e) => cutLeash.IsVisible = Platform.LeashHead.IsLeashed;
+            RefreshCut(null, EventArgs.Empty);
+            menu.Opening += RefreshCut;
+            menu.NeedsUpdate += RefreshCut;
+            menu.Add(cutLeash);
             menu.Add(new NativeMenuItemSeparator());
             menu.Add(Item("tray_stop_everything", StopEverything));
             menu.Add(Item("tray_exit", RequestExit));

@@ -162,6 +162,20 @@ namespace ConditioningControlPanel.Services
             Cleanup();
         }
 
+        /// <summary>WPF RemoteControlService.EndSessionNow (the leash cut): end HERE first, so nothing the
+        /// controller started keeps running while the network answers, then tell the relay, unawaited.</summary>
+        public void EndSessionNow()
+        {
+            if (!IsActive) return;
+            var uid = _unifiedId();
+            Cleanup();
+            _ = Task.Run(async () =>
+            {
+                try { using var _ = await PostAsync("/v2/remote/stop", new { unified_id = uid }).ConfigureAwait(false); }
+                catch (Exception ex) { Log.Warning(ex, "[RemoteControl] Stop request failed"); }
+            });
+        }
+
         /// <summary>WPF CleanupSession: everything the controller started stops; the subject's own run stays.</summary>
         private void Cleanup()
         {
