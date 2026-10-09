@@ -1648,3 +1648,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-deeper-hub: +883
 - Deeper hub: open/play/context menu/keyboard selection/two-step delete with undo + trash, submission badge, welcome Demo/Tour/Dismiss, row hover lift; shell-deeper-fx now wired.
 - Still stub: import, watcher, duration probe, demo seeding, tutorial, webcam card, sticky accepted toast.
+
+## avalonia-port/rows-enhancements: +846
+- Enhancements tab draws WPF node states, header, secret cards, owned-glow breath, gradient drift and hover pop. XP multiplier and time math moved to Core SkillTreeRules (WPF delegates).
+- shell-enhancements-fx is wired. Still missing: purchase click, the PRO panels, the lucky toast.
