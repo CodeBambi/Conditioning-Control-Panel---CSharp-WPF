@@ -1585,3 +1585,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-emi-dock-picker: +193
 - EmiRingPicker on Core EmiSuggester/EmiState pins + EmiTargets catalogue + ring card art (views-emi-ring-picker -> wired).
 - EmiDock mini face mirrors the widget via EmiDeskWindow.FaceChanged; knock (TryKnock/EmiKnockMachine) still missing (ctrl-emi-dock stays stub).
+
+## avalonia-port/rows-gaze-minigame: +329
+- Gaze minigame now plays image rounds on WebcamTracker. Settings and pack library moved to Core (git mv). Flash is paused during the game, vibration goes to the haptics service, and panic closes the game.
+- Row stays stub: video rounds, animated GIFs, 4 reward effects and the reward audio are still missing.
