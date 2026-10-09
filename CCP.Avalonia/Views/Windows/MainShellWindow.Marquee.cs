@@ -203,7 +203,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             var outgoing = banners[_bannerCurrentIndex];
             var incoming = banners[nextIndex];
             // Polish wave 13: at Full the drum also rolls one face (MainShellWindow.BannerFx.cs).
-            bool rolled = RollBannerDrum(outgoing, incoming);
+            // The drum is decoration: a throw in it must never take the tick (and the app) with it.
+            bool rolled = false;
+            try { rolled = RollBannerDrum(outgoing, incoming); }
+            catch (Exception ex) { Log.Debug("RollBannerDrum: {E}", ex.Message); }
             Crossfade(outgoing, incoming);
             _bannerCurrentIndex = nextIndex;
 

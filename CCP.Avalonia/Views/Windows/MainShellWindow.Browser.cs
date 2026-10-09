@@ -251,7 +251,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 var s = CoreSettings.Current;
                 var currentName = s.UserDisplayName ?? "";
                 var dialog = new Dialogs.DisplayNameDialog(isChangeName: true, currentName: currentName);
-                if (!await dialog.ShowDialog<bool>(this)) return;
+                if (!await dialog.ShowDialogSafe<bool>(this)) return;
 
                 var newName = dialog.DisplayName;
                 if (string.Equals(newName, currentName, StringComparison.Ordinal)) return;
@@ -287,7 +287,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             var button = ProfilePage?.FindControl<Button>("BtnDeleteProfile");
             try
             {
-                if (!await new Dialogs.DisplayNameDialog("delete").ShowDialog<bool>(this)) return;
+                if (!await new Dialogs.DisplayNameDialog("delete").ShowDialogSafe<bool>(this)) return;
 
                 if (button != null) button.IsEnabled = false;
                 var (success, error) = await CoreAccount.DeleteAccountAsync();

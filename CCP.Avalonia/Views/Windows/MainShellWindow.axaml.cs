@@ -181,7 +181,26 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     ConditioningControlPanel.Localization.Loc.Get("msg_you_are_in_lockdown_mode_nthere_is_no_escape"));
                 return;
             }
+            // WPF MainWindow.Settings.cs:457: a running engine asks first. The tray Exit stays silent.
+            if (CoreEngine.IsRunning) { _ = ConfirmExitWhileRunningAsync(); return; }
             RequestExit();
+        }
+
+        /// <summary>Test seam: answers the "Engine is running. Stop and exit?" question without a window.</summary>
+        internal Func<System.Threading.Tasks.Task<bool>>? ExitConfirmOverride;
+
+        internal async System.Threading.Tasks.Task ConfirmExitWhileRunningAsync()
+        {
+            try
+            {
+                bool yes = ExitConfirmOverride != null
+                    ? await ExitConfirmOverride()
+                    : await Dialogs.MessageDialog.ConfirmAsync(this, ConditioningControlPanel.Localization.Loc.Get("title_confirm_exit"),
+                        ConditioningControlPanel.Localization.Loc.Get("msg_engine_is_running_stop_and_exit"));
+                if (!yes) return;
+                RequestExit();   // stops the engine, shows Circe's bill, refuses again under Lockdown
+            }
+            catch (Exception ex) { Serilog.Log.Warning(ex, "Exit confirm failed"); }
         }
     }
 }
