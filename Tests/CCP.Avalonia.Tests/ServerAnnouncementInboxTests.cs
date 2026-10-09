@@ -108,6 +108,34 @@ public sealed class ServerAnnouncementInboxTests
     });
 
     [Fact]
+    public Task OpeningTheRowShowsTheAnnouncementPopup() => Run(async _ =>
+    {
+        StartupLadder.BeginFirstLaunchQuiet(TimeSpan.FromMinutes(10));
+        var opened = new List<AnnouncementPopup>();
+        using var sub = Window.WindowOpenedEvent.AddClassHandler<Window>((w, _) => { if (w is AnnouncementPopup p) opened.Add(p); });
+        var shell = new MainShellWindow();
+        try
+        {
+            shell.Show();
+            await shell.CheckServerAnnouncementAsync();
+            Dispatcher.UIThread.RunJobs();
+            Assert.Empty(opened);
+
+            Click(shell.Named<Button>("BtnInbox")!);
+            Dispatcher.UIThread.RunJobs();
+            var flyout = TopLevel.GetTopLevel(shell)!.GetVisualDescendants().OfType<InboxFlyout>().Single();
+            flyout.UpdateLayout();
+            Click(flyout.GetVisualDescendants().OfType<Button>().First(b => b.Classes.Contains("open")));
+            Dispatcher.UIThread.RunJobs();
+
+            var popup = Assert.Single(opened);
+            Assert.Equal("The Spiral is open", popup.FindControl<TextBlock>("TxtTitle")!.Text);
+            Assert.Empty(StartupLadder.Inbox.Items);
+        }
+        finally { shell.Close(); foreach (var p in opened) p.Close(); }
+    });
+
+    [Fact]
     public Task NothingQuietOpensThePopupWhoseDismissRecordsTheAccount() => Run(async fake =>
     {
         var opened = new List<AnnouncementPopup>();

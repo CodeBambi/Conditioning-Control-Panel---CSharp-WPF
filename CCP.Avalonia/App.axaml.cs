@@ -491,7 +491,9 @@ namespace ConditioningControlPanel.Avalonia
                 DescentCountdown = new Services.Descent.DescentCountdownService();
                 DescentCountdown.Start();
                 // WPF MainWindow.Marquee.cs:688: the server announcement check, 7 s after the shell opens.
-                Views.Windows.MainShellWindow.AnnouncementClient = () => new V2AuthService();
+                // A sandbox never reaches the real proxy (the dailyFree rule above).
+                if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("CCP_USERDATA_DIR")))
+                    Views.Windows.MainShellWindow.AnnouncementClient = () => new V2AuthService();
                 if (Platform.AccountSeed.Seed())
                 {
                     // Unit 7c, with the logout clear: the push, XP banking and its two triggers (WPF
