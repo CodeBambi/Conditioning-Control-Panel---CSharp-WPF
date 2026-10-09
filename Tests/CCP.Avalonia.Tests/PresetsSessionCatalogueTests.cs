@@ -459,6 +459,15 @@ public sealed class PresetsSessionCatalogueTests
                     IsAvailable = true
                 };
                 manager.AllSessions.Add(imported);
+                // Audit #1318: a locked session is listed, counted and filtered like any other
+                // (WPF EnumerateRackSessions keeps it; only Start is disabled).
+                manager.AllSessions.Add(new Session
+                {
+                    Id = "filter_imported_unavailable",
+                    Name = "Filter Unavailable",
+                    Source = SessionSource.Imported,
+                    IsAvailable = false
+                });
 
                 var view = new PresetsTabView { Width = 1100, Height = 760 };
                 view.UseSessionManager(manager);
@@ -478,7 +487,8 @@ public sealed class PresetsSessionCatalogueTests
 
                 Assert.Equal(new[]
                 {
-                    "filter_builtin_easy", "filter_builtin_hard", "filter_custom_hard", "filter_imported_extreme"
+                    "filter_builtin_easy", "filter_builtin_hard", "filter_custom_hard", "filter_imported_extreme",
+                    "filter_imported_unavailable"
                 }.OrderBy(id => id), RowIds(panel).OrderBy(id => id));
                 Assert.Single(sourceChips, chip => (string)chip.Tag! == "all" && chip.IsChecked == true);
                 Assert.All(sourceChips, chip => Assert.True(chip.IsEnabled));
@@ -487,8 +497,8 @@ public sealed class PresetsSessionCatalogueTests
                     Assert.True(dot.IsEnabled);
                     Assert.True(dot.IsChecked);
                 });
-                Assert.Equal("4 sessions", view.FindControl<TextBlock>("TxtRackCount")!.Text);
-                Assert.Equal(new[] { "All  4", "Built-in  2", "Yours  1", "Catalogue  1" },
+                Assert.Equal("5 sessions", view.FindControl<TextBlock>("TxtRackCount")!.Text);
+                Assert.Equal(new[] { "All  5", "Built-in  2", "Yours  1", "Catalogue  2" },
                     sourceChips.Select(chip => ((TextBlock)chip.Content!).Text));
 
                 // The source control is a real ToggleButton: a keyboard activation selects Yours,
@@ -502,11 +512,13 @@ public sealed class PresetsSessionCatalogueTests
                 Assert.Single(sourceChips, chip => (string)chip.Tag! == "yours" && chip.IsChecked == true);
 
                 Click(host, Source("catalogue"));
-                Assert.Equal(new[] { "filter_imported_extreme" }, RowIds(panel));
+                Assert.Equal(new[] { "filter_imported_extreme", "filter_imported_unavailable" },
+                    RowIds(panel).OrderBy(id => id));
                 Click(host, Source("all"));
                 Assert.Equal(new[]
                 {
-                    "filter_builtin_easy", "filter_builtin_hard", "filter_custom_hard", "filter_imported_extreme"
+                    "filter_builtin_easy", "filter_builtin_hard", "filter_custom_hard", "filter_imported_extreme",
+                    "filter_imported_unavailable"
                 }.OrderBy(id => id), RowIds(panel).OrderBy(id => id));
                 Click(host, Source("builtin"));
                 var builtInRow = Assert.Single(panel.Children.OfType<Border>(),
@@ -544,15 +556,15 @@ public sealed class PresetsSessionCatalogueTests
                 Dispatcher.UIThread.RunJobs();
                 Assert.False(easy.IsChecked == true);
                 Assert.Equal(new[] { "filter_builtin_hard" }, RowIds(panel));
-                Assert.Equal("1 of 4", view.FindControl<TextBlock>("TxtRackCount")!.Text);
-                Assert.Equal(new[] { "All  4", "Built-in  2", "Yours  1", "Catalogue  1" },
+                Assert.Equal("1 of 5", view.FindControl<TextBlock>("TxtRackCount")!.Text);
+                Assert.Equal(new[] { "All  5", "Built-in  2", "Yours  1", "Catalogue  2" },
                     sourceChips.Select(chip => ((TextBlock)chip.Content!).Text));
 
                 Click(host, Difficulty(SessionDifficulty.Hard));
                 Assert.Empty(panel.Children.OfType<Border>());
                 Assert.Equal("No sessions match - clear a filter.",
                     Assert.Single(panel.Children.OfType<TextBlock>()).Text);
-                Assert.Equal("0 of 4", view.FindControl<TextBlock>("TxtRackCount")!.Text);
+                Assert.Equal("0 of 5", view.FindControl<TextBlock>("TxtRackCount")!.Text);
                 Assert.Equal("🔴 Filter Built In Hard", view.FindControl<TextBlock>("TxtDetailTitle")!.Text);
 
                 Click(host, Difficulty(SessionDifficulty.Medium));
@@ -565,9 +577,9 @@ public sealed class PresetsSessionCatalogueTests
                 Dispatcher.UIThread.RunJobs();
                 Assert.Same(empty, panel.Children.Single());
                 Assert.Equal(Loc.Get("rack_empty"), empty.Text);
-                Assert.Equal(Loc.GetF("rack_count_filtered", 0, 4),
+                Assert.Equal(Loc.GetF("rack_count_filtered", 0, 5),
                     view.FindControl<TextBlock>("TxtRackCount")!.Text);
-                Assert.Equal(new[] { "全部  4", "内置  2", "你的  1", "目录  1" },
+                Assert.Equal(new[] { "全部  5", "内置  2", "你的  1", "目录  2" },
                     sourceChips.Select(chip => ((TextBlock)chip.Content!).Text));
                 LocalizationManager.Instance.SetLanguage("en");
                 Dispatcher.UIThread.RunJobs();
@@ -577,9 +589,10 @@ public sealed class PresetsSessionCatalogueTests
                 Click(host, Source("all"));
                 Assert.Equal(new[]
                 {
-                    "filter_builtin_easy", "filter_builtin_hard", "filter_custom_hard", "filter_imported_extreme"
+                    "filter_builtin_easy", "filter_builtin_hard", "filter_custom_hard", "filter_imported_extreme",
+                    "filter_imported_unavailable"
                 }.OrderBy(id => id), RowIds(panel).OrderBy(id => id));
-                Assert.Equal("4 sessions", view.FindControl<TextBlock>("TxtRackCount")!.Text);
+                Assert.Equal("5 sessions", view.FindControl<TextBlock>("TxtRackCount")!.Text);
                 Assert.Equal(fallbackSource, CoreSettings.Current.SessionRackSourceFilter);
 
                 // Search and sort are live views; row edit/export/delete are live (share is not).
@@ -595,6 +608,27 @@ public sealed class PresetsSessionCatalogueTests
                     var actions = Assert.IsType<StackPanel>(Assert.IsType<Grid>(row.Child).Children[8]);
                     Assert.All(actions.Children.OfType<Button>(), button => Assert.True(button.IsEnabled));
                 });
+
+                // The locked session answers search and sort like any other row (WPF RackAccepts /
+                // SortRackSessions run over EnumerateRackSessions, locked included).
+                var search = view.FindControl<TextBox>("TxtRackSearch")!;
+                search.Text = "filter unavailable";
+                Dispatcher.UIThread.RunJobs();
+                Assert.Equal(new[] { "filter_imported_unavailable" }, RowIds(panel));
+                search.Text = "";
+                Dispatcher.UIThread.RunJobs();
+                var sort = view.FindControl<ComboBox>("CmbRackSort")!;
+                void Sort(string token) => sort.SelectedItem =
+                    sort.Items.OfType<ComboBoxItem>().Single(item => (string?)item.Tag == token);
+                Sort("name");
+                Dispatcher.UIThread.RunJobs();
+                Assert.Equal(new[]
+                {
+                    "filter_builtin_easy", "filter_builtin_hard", "filter_imported_extreme",
+                    "filter_imported_unavailable", "filter_custom_hard"
+                }, RowIds(panel));
+                Sort("recent");
+                Dispatcher.UIThread.RunJobs();
             }
             finally
             {
