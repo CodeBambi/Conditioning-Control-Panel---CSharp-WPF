@@ -3,11 +3,13 @@
 // slot is empty and recalls it when filled; right-click re-saves over the slot. Both directions are
 // refused mid-session (WPF Remember.cs:33/44).
 //
-// Differences, both deliberate:
+// Differences, all deliberate:
 //   * Browser mute: the saved flag is written exactly as WPF does, but not applied to a live web
 //     view - WebHost has no mute (MainShellWindow.Browser.cs, "REFUSED ... the mute pair").
 //   * Tooltips are localized (WPF hardcodes English) and re-applied on a language change.
-// WPF's RefreshDashboardRail after a recall becomes CoreEngine.Reconcile, as PresetsTabView.LoadPreset does.
+//   * After a recall, WPF only calls RefreshDashboardRail. This head calls CoreEngine.Reconcile, as
+//     PresetsTabView.LoadPreset does, so a running feature the recalled setup turns off is stopped
+//     (WPF leaves it running until the next reconcile). This is a behaviour difference.
 
 using System;
 using Avalonia.Controls;
