@@ -1565,3 +1565,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-roadmap: +149
 - shell-roadmap stub -> wired: completion chime (WPF Exclamation) and keyboard-reachable nodes with a focus border; RoadmapNodeTests (2, fail-proven); live nodes screenshot in evidence/avalonia-port/rows-roadmap.
 - Mod-gated Roadmap sub-tab visibility recorded as missing under shell-ui-updates.
+
+## avalonia-port/rows-takeaway: +70
+- shell-takeaway: sample Takeaway orders replaced with WPF's empty state (no drawer/door on this head); headless test fail-proven, live sandbox check, binding errors 0.
+- Row stays stub: drawer, door, chips, tray and actions still missing.
