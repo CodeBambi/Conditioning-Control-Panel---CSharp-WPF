@@ -132,57 +132,165 @@ namespace ConditioningControlPanel.Avalonia.Platform
             Task.WaitAll(closing, 2000);
         }
 
-        /// <summary>A LibVLC player that loops its file forever (WPF rewinds at EOF).</summary>
+        /// <summary>A LibVLC player that loops its file forever. WPF's LoopingSampleProvider rewinds
+        /// with no gap; reopening one player at EOF (Stop/Play) left a gap and opened the new stream
+        /// before our volume stuck. So it loops as <see cref="LibVlcAudio"/>'s LoopVoice does: the
+        /// next copy starts <see cref="OverlapMs"/> before the current one ends, muted until its
+        /// volume sticks.</summary>
         internal sealed class VlcLayerPlayer : ILayerPlayer
         {
-            private readonly MediaPlayer _player;
-            private readonly Media _media;
-            private readonly TaskCompletionSource _closed = new();
-            private int _volume;
-            private bool _playing, _disposed;
+            private const int OverlapMs = 120;   // as LoopVoice (WPF CROSSFADE_OVERLAP_SECONDS)
+            private sealed class Copy(MediaPlayer player, Media media)
+            {
+                public readonly MediaPlayer Player = player;
+                public readonly Media Media = media;
+                public bool Playing, Disposed;
+            }
+
+            private readonly LibVLC _vlc;
+            private readonly string _path;
             private readonly bool _startMuted;
+            private readonly object _gate = new();
+            private readonly List<Copy> _live = new();
+            private readonly TaskCompletionSource _closed = new();
+            private Copy? _newest, _timerFor;
+            private readonly TimeProvider _time;
+            private ITimer? _next;
+            private volatile int _volume;
+            private bool _disposed;
 
             public Task Closing => _closed.Task;
+            /// <summary>Copies started so far, and how many of them started with nothing else sounding (a gap).</summary>
+            internal int Copies, GapStarts;
+            /// <summary>The next pass is armed on the clock (it starts before this one ends, not at EOF).</summary>
+            internal bool Armed { get { lock (_gate) return _timerFor != null && _timerFor == _newest; } }
 
             /// <param name="startMuted">Mute until the first volume sticks, so the stream never opens at
             /// full volume for the moment before Playing (the mantra drone).</param>
-            public VlcLayerPlayer(LibVLC vlc, string path, bool startMuted = false)
+            public VlcLayerPlayer(LibVLC vlc, string path, bool startMuted = false, TimeProvider? time = null)
             {
+                _time = time ?? TimeProvider.System;
+                _vlc = vlc;
+                _path = path;
                 _startMuted = startMuted;
-                _media = new Media(vlc, path, FromType.FromPath);
-                _media.AddOption(LibVlcAudio.NoVideo);
-                _player = new MediaPlayer(_media);
-                // As in LibVlcAudio: volume set before Playing, or on libvlc's own thread, is lost.
-                _player.Playing += (_, _) => ThreadPool.QueueUserWorkItem(_ =>
+                StartCopy(after: null);
+            }
+
+            /// <summary>Starts the next pass, unless one already followed <paramref name="after"/>.</summary>
+            private void StartCopy(Copy? after)
+            {
+                Copy c;
+                lock (_gate)
                 {
-                    lock (this) { if (_disposed) return; _playing = true; LibVlcAudio.ApplyPreferredDevice(_player); ApplyVolume(); }
-                });
-                // WPF's LoopingSampleProvider never ends: restart at EOF, never from libvlc's thread.
-                _player.EndReached += (_, _) => ThreadPool.QueueUserWorkItem(_ =>
+                    if (_disposed || _newest != after) return;
+                    var media = new Media(_vlc, _path, FromType.FromPath);
+                    media.AddOption(LibVlcAudio.NoVideo);
+                    c = new Copy(new MediaPlayer(media), media);
+                    // As in LibVlcAudio: volume set before Playing, or on libvlc's own thread, is lost.
+                    c.Player.Playing += (_, _) => ThreadPool.QueueUserWorkItem(_ => OnPlaying(c));
+                    c.Player.TimeChanged += (_, e) => { var t = e.Time; ThreadPool.QueueUserWorkItem(_ => Schedule(c, t)); };
+                    c.Player.EndReached += (_, _) => ThreadPool.QueueUserWorkItem(_ => Retire(c, failed: false));
+                    c.Player.EncounteredError += (_, _) => ThreadPool.QueueUserWorkItem(_ => Retire(c, failed: true));
+                    if (_startMuted || Copies > 0) c.Player.Mute = true;
+                    if (Copies > 0 && _live.Count == 0) GapStarts++;
+                    Copies++;
+                    _live.Add(c);
+                    _newest = c;
+                    if (c.Player.Play()) return;
+                }
+                Retire(c, failed: true);
+            }
+
+            private void OnPlaying(Copy c)
+            {
+                lock (_gate)
                 {
-                    lock (this) { if (_disposed) return; _playing = false; _player.Stop(); _player.Play(); }
-                });
-                if (startMuted) _player.Mute = true;
-                _player.Play();
+                    if (_disposed || !_live.Contains(c)) return;
+                    c.Playing = true;
+                }
+                Schedule(c, 0);
+                lock (c) { if (c.Disposed) return; LibVlcAudio.ApplyPreferredDevice(c.Player); }
+                ApplyVolume(c);
+            }
+
+            /// <summary>Start the next pass <see cref="OverlapMs"/> before this one ends, measured from its
+            /// play position (re-aimed on every TimeChanged), so a slow or fast output clock cannot open a gap.</summary>
+            private void Schedule(Copy c, long timeMs)
+            {
+                lock (_gate)
+                {
+                    if (_disposed || _newest != c || !c.Playing) return;
+                    var length = c.Player.Length;
+                    if (length <= 0) return;   // unknown length: Retire restarts at the end
+                    var due = Math.Max(100, length - OverlapMs) - timeMs;   // LoopVoice's 100 ms floor
+                    if (due > 0)
+                    {
+                        _timerFor = c;
+                        (_next ??= _time.CreateTimer(_ => { Copy? f; lock (_gate) f = _timerFor; if (f != null) StartCopy(f); }, null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan))
+                            .Change(TimeSpan.FromMilliseconds(due), Timeout.InfiniteTimeSpan);
+                        return;
+                    }
+                }
+                StartCopy(c);
+            }
+
+            /// <summary>Runs on the thread pool, never on libvlc's thread. A copy that ends with nothing
+            /// else sounding (unknown length) restarts at once; a failed one ends the loop.</summary>
+            private void Retire(Copy c, bool failed)
+            {
+                bool restart;
+                lock (_gate)
+                {
+                    if (!_live.Remove(c)) return;
+                    DisposeCopy(c);
+                    restart = !_disposed && !failed && _live.Count == 0;
+                }
+                if (restart) StartCopy(c);
+            }
+
+            private static void DisposeCopy(Copy c)
+            {
+                lock (c)
+                {
+                    c.Disposed = true;
+                    try { c.Player.Stop(); c.Player.Dispose(); c.Media.Dispose(); }
+                    catch (Exception ex) { Log.Debug(ex, "LayeredAudio: dispose"); }
+                }
             }
 
             public int Volume
             {
-                set { lock (this) { if (_disposed) return; _volume = value; if (_playing) ApplyVolume(); } }
+                set
+                {
+                    Copy[] playing;
+                    lock (_gate)
+                    {
+                        if (_disposed) return;
+                        _volume = value;
+                        playing = _live.Where(c => c.Playing).ToArray();
+                    }
+                    foreach (var c in playing) ApplyVolume(c);
+                }
             }
 
             // ponytail: the pulse output drops a volume set too soon after the stream opens, so re-apply
-            // until libvlc reports it (bounded, 20 x 25 ms). Caller holds lock(this).
-            private void ApplyVolume()
+            // until libvlc reports it (bounded, 20 x 25 ms). Never sleeps holding _gate: that would hold
+            // up the next pass's start and reopen the gap.
+            private void ApplyVolume(Copy c)
             {
                 for (var i = 0; i < 20; i++)
                 {
-                    _player.Volume = _volume;
-                    if (_player.Volume == _volume) { if (_startMuted) _player.Mute = false; return; }
+                    lock (c)
+                    {
+                        if (c.Disposed) return;
+                        var v = _volume;
+                        c.Player.Volume = v;
+                        if (c.Player.Volume == v) { c.Player.Mute = false; return; }
+                    }
                     Thread.Sleep(25);
                 }
                 Log.Debug("LayeredAudio: volume {V} did not stick", _volume);
-                if (_startMuted) _player.Mute = false;
+                lock (c) if (!c.Disposed) c.Player.Mute = false;
             }
 
             public void Dispose()
@@ -190,8 +298,16 @@ namespace ConditioningControlPanel.Avalonia.Platform
                 // Off the caller's thread: Stop blocks until libvlc tears the output down.
                 ThreadPool.QueueUserWorkItem(_ =>
                 {
-                    try { lock (this) { _disposed = true; _player.Stop(); _player.Dispose(); _media.Dispose(); } }
-                    catch (Exception ex) { Log.Debug(ex, "LayeredAudio: dispose"); }
+                    try
+                    {
+                        lock (_gate)
+                        {
+                            _disposed = true;
+                            _next?.Dispose();
+                            foreach (var c in _live) DisposeCopy(c);
+                            _live.Clear();
+                        }
+                    }
                     finally { _closed.TrySetResult(); }
                 });
             }

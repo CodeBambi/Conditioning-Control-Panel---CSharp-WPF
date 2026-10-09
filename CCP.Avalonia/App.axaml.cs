@@ -956,7 +956,8 @@ namespace ConditioningControlPanel.Avalonia
         /// first use. A Linux profile that already has files in UserData/assets keeps using it -
         /// nothing is moved and nothing switches silently. A CCP_USERDATA_DIR sandbox (tests, live
         /// checks), an unknown home or an unreadable legacy folder also keep UserData/assets, so
-        /// nothing outside the sandbox is created. Decided once per process.
+        /// nothing outside the sandbox is created; so does a home where ~/ccp media cannot be
+        /// created (read-only or Flatpak-confined). Decided once per process.
         /// </summary>
         internal static string DefaultAssetsPath(bool isLinux, string home, string userData, bool sandboxed)
         {
@@ -978,7 +979,9 @@ namespace ConditioningControlPanel.Avalonia
             }
             var media = Path.Combine(home, "ccp media");
             CorePaths.EnsureCustomAssetsDirectories(media);
-            return media;
+            if (Directory.Exists(media)) return media;
+            Serilog.Log.Warning("Media folder: could not create {Media}; keeping {Legacy}", media, legacy);
+            return legacy;
         }
 
         /// <summary>The exit save, after Takeover hands back what a pulse borrowed - else a boosted
