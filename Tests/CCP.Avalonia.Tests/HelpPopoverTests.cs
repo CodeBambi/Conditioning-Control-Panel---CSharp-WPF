@@ -76,12 +76,24 @@ public sealed class HelpPopoverTests
 
                 var popup = HelpPopover.PopupContent(button);
                 Assert.NotNull(popup);
-                var texts = Descendants(popup!).OfType<TextBlock>()
-                    .Select(text => text.Text)
+                // Audit #1313: WPF HelpTooltipBuilder.Marked renders **word** as a SemiBold accent run,
+                // never as literal asterisks.
+                static string Shown(TextBlock block) => block.Inlines is { Count: > 0 } inlines
+                    ? string.Concat(inlines.OfType<global::Avalonia.Controls.Documents.Run>().Select(run => run.Text))
+                    : block.Text ?? string.Empty;
+                var blocks = Descendants(popup!).OfType<TextBlock>().ToArray();
+                var texts = blocks.Select(Shown)
                     .Where(text => !string.IsNullOrWhiteSpace(text))
                     .ToArray();
                 Assert.Contains(content.Title, texts);
-                Assert.Contains(content.WhatItDoes, texts);
+                Assert.Contains(content.WhatItDoes!.Replace("**", ""), texts);
+                Assert.DoesNotContain(texts, text => text.Contains("**", StringComparison.Ordinal));
+                var bold = blocks.SelectMany(block => block.Inlines ?? new global::Avalonia.Controls.Documents.InlineCollection())
+                    .OfType<global::Avalonia.Controls.Documents.Run>()
+                    .Where(run => run.FontWeight == FontWeight.SemiBold).Select(run => run.Text).ToArray();
+                Assert.Contains("Automatically start conditioning", bold);
+                Assert.Contains("free and relaxed", bold);
+                Assert.Contains("every 30 seconds", bold);
                 Assert.Contains("What it does", texts);
                 Assert.Contains("Tips", texts);
                 Assert.Contains("How it works", texts);
