@@ -93,6 +93,101 @@ public sealed class WindowDropTests
         return Task.CompletedTask;
     });
 
+    [Fact]
+    public Task SessionDroppedOnTheWindowImportsIntoTheLibrary() => Run((shell, root, _) =>
+    {
+        var custom = Directory.CreateDirectory(Path.Combine(root, "custom")).FullName;
+        var files = new SessionFileService(custom, Directory.CreateDirectory(Path.Combine(root, "built-in")).FullName);
+        var manager = new SessionManager(files);
+        manager.LoadAllSessions();
+        shell.Named<ConditioningControlPanel.Avalonia.Views.Tabs.PresetsTabView>("PresetsTab")!.UseSessionManager(manager);
+        var definition = ConditioningControlPanel.Models.SessionDefinition.FromSession(ConditioningControlPanel.Models.Session.MorningDrift);
+        definition.Id = "window-dropped";
+        definition.Name = "Window Dropped";
+        var dropped = Path.Combine(root, "window.session.json");
+        files.ExportSession(definition, dropped);
+
+        Drop(shell, dropped);
+
+        Assert.Single(Directory.GetFiles(custom));
+        Assert.Contains(manager.AllSessions, x => x.Id == "window-dropped");
+        return Task.CompletedTask;
+    });
+
+    [Fact]
+    public Task PresetDroppedOnTheWindowImports() => Run((shell, root, _) =>
+    {
+        var settings = ConditioningControlPanel.CoreSettings.Current;
+        var users = settings.UserPresets.ToList();
+        var id = "window-drop-" + Guid.NewGuid().ToString("N");
+        try
+        {
+            var preset = ConditioningControlPanel.Models.Preset.FromSettings(settings, "Window Drop");
+            preset.Id = id;
+            var file = Path.Combine(root, "window.preset.json");
+            File.WriteAllText(file, new PresetFileService().SerializePreset(preset));
+
+            Drop(shell, file);
+
+            Assert.Contains(settings.UserPresets, p => p.Id == id);
+            Assert.NotNull(Toast(shell, Loc.GetF("preset_drop_imported_fmt", "Window Drop")));
+        }
+        finally
+        {
+            settings.UserPresets.Clear();
+            settings.UserPresets.AddRange(users);
+            ConditioningControlPanel.CoreSettings.Save();
+            foreach (var f in Directory.Exists(PresetFileService.CustomPresetsFolder)
+                         ? Directory.GetFiles(PresetFileService.CustomPresetsFolder, id + "*") : Array.Empty<string>())
+                File.Delete(f);
+        }
+        return Task.CompletedTask;
+    });
+
+    /// <summary>WPF HandleModDropAsync (ModCatalogue.cs:84): Cancel installs nothing; OK installs and toasts.</summary>
+    [Fact]
+    public Task ModDropConfirmsByNameAndAuthorThenInstalls() => Run(async (shell, root, _) =>
+    {
+        var userData = ConditioningControlPanel.CorePaths.UserData;
+        var mods = new CoreModsSnapshot();
+        var oldSettings = ConditioningControlPanel.CoreSettings.ServiceProvider;
+        SettingsService? svc = null;
+        try
+        {
+            svc = new SettingsService();
+            ConditioningControlPanel.CoreSettings.ServiceProvider = () => svc;
+            global::ConditioningControlPanel.Avalonia.App.StartMods();
+            var pkg = Path.Combine(root, "drop.ccpmod");
+            using (var zip = System.IO.Compression.ZipFile.Open(pkg, System.IO.Compression.ZipArchiveMode.Create))
+            using (var w = new StreamWriter(zip.CreateEntry("mod.json").Open()))
+                w.Write("{\"Id\":\"window-drop-mod\",\"Name\":\"Drop Mod\",\"Version\":\"1.0.0\",\"Author\":\"Tester\"}");
+            var installed = Path.Combine(userData, "mods", "window-drop-mod");
+
+            Drop(shell, pkg);
+            var ask = await WaitFor(() => shell.OwnedWindows.OfType<MessageDialog>().SingleOrDefault());
+            Assert.Equal(Loc.GetF("msg_confirm_install_mod_fmt", "Drop Mod", "Tester"), ask.FindControl<TextBlock>("TxtMessage")!.Text);
+            Click(ask, "BtnCancel");
+            await WaitFor(() => shell.OwnedWindows.OfType<MessageDialog>().Any() ? null : shell);
+            Assert.False(Directory.Exists(installed));
+
+            Drop(shell, pkg);
+            Click(await WaitFor(() => shell.OwnedWindows.OfType<MessageDialog>().SingleOrDefault()), "BtnOk");
+            await WaitFor(() => Toast(shell, Loc.GetF("toast_mod_installed_fmt", "Drop Mod")));
+            Assert.True(Directory.Exists(installed));
+        }
+        finally
+        {
+            svc?.SaveImmediate();
+            svc?.SealForReset();
+            ConditioningControlPanel.CoreSettings.ServiceProvider = oldSettings;
+            mods.Dispose();
+            global::ConditioningControlPanel.Avalonia.App.ResetReleaseContent();
+            foreach (var f in Directory.GetFiles(userData, "settings*")) File.Delete(f);
+            foreach (var dir in new[] { "mods", "builtin_mods" })
+                if (Directory.Exists(Path.Combine(userData, dir))) Directory.Delete(Path.Combine(userData, dir), recursive: true);
+        }
+    });
+
     // ---- harness ----------------------------------------------------------------------
 
     private static Task Run(Func<MainShellWindow, string, string, Task> body) => AvaloniaTestDispatcher.RunAsync(async () =>

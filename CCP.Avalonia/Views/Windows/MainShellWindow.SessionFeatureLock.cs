@@ -320,15 +320,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             return true;
         }
 
+        /// <summary>The last pulse started, for tests (Avalonia's animation clock is internal, so
+        /// a test cannot step it).</summary>
+        internal global::Avalonia.Animation.Animation? LastRibbonPulse { get; private set; }
+
         /// <summary>
         /// WPF PulseSessionLockRibbon (SessionFeatureLock.cs:503): 560 ms, opacity 1 - 0.25 - 1 -
         /// 0.25 - 1, no fill afterwards. Runs on the ribbon's own clock, so it stops with the
         /// ribbon. Cosmetic only - a throw here must never take the refusal down.
         /// </summary>
-        /// <summary>The last pulse started, for tests (Avalonia's animation clock is internal, so
-        /// a test cannot step it).</summary>
-        internal global::Avalonia.Animation.Animation? LastRibbonPulse { get; private set; }
-
         private void PulseSessionLockRibbon()
         {
             try
