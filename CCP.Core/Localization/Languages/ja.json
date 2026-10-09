@@ -1,4 +1,13 @@
 {
+  "deeper_submission_badge_published": "公開済み",
+  "deeper_submission_badge_published_tip": "このエンハンスメントはコミュニティカタログで公開中です。",
+  "deeper_submission_badge_pending": "審査中",
+  "deeper_submission_badge_pending_tip": "提出済み：カタログの審査待ちです。",
+  "deeper_submission_badge_rejected": "却下",
+  "deeper_submission_badge_rejected_tip": "この提出は承認されませんでした。編集して再提出してください。",
+  "deeper_welcome_card_open_demo": "デモを開く",
+  "deeper_library_delete_confirm_fmt": "「{0}」を削除しますか？.ccpenh.json ファイルはごみ箱に移動します。",
+  "deeper_library_delete_title": "エンハンスメントを削除",
   "companion_v2_open_activity": "{0}を開く",
   "companion_ask_watch_q_1": "これ観て、私のために落ちてみる？「{0}」",
   "companion_ask_watch_q_2": "ひとつ選んでおいたよ。あなたと、これと、ゆっくり気持ちいい落ち方。「{0}」",

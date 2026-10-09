@@ -10,30 +10,11 @@
 // Start and stop are driven by SwitchTabFx: arriving at "deeper" runs it, leaving cancels it and
 // puts the glyph back at 0,0. That replaces WPF's OnDeeperTabVisibilityChanged.
 //
-// Two of WPF's gates have no equivalent here and are NOT faked:
-//   * MotionFx.AllowAmbientLoops (reduced motion + the performance tier). The only copy of that
-//     gate on this head is AmbientFxCanvas's private nested Env, which a non-canvas loop cannot
-//     reach. So this drift currently runs whenever the tab is showing. Restore the gate when
-//     MotionFx moves to Core - it is one `if` at the top of ApplyDeeperGlyphDrift.
-//   * DeeperGlyphFrameRate = 10. That is Timeline.SetDesiredFrameRate, a per-storyboard frame cap.
-//     Avalonia has no per-animation clock rate, so it drops for the same reason AmbientFrameRate
-//     did (see MainShellWindow.AmbientFx.cs). A 3px sine over 11.5s is sub-pixel per frame either
-//     way; what is lost is the CPU saving, not the look.
-// Window activation/minimise parking (WPF's Activated/Deactivated/StateChanged funnel) is also
-// gone: the drift is two interpolators on one transform, and a tab the user is not looking at
-// already cancels it.
-//
-// Still a note: OnDeeperRowHover, the 2px library-row hover lift. It needs MotionFx.AllowTransitions
-// AND a hover handler on the row template inside DeeperTabView, which this layer does not own.
-// The rows keep the border-brush reveal their template already carries, so hover is not dead -
-// only the lift is missing.
-//
-// Members of the WPF file still dropped (6):
-//   private const double DeeperRowLiftPx / private const int DeeperRowLiftMs
-//   private const int DeeperGlyphFrameRate                 - no Avalonia equivalent, see above
-//   private bool DeeperFxOnScreen                          - the tab key SwitchTabFx passes IS this
-//   private void OnDeeperFxWindowStateish(…)
-//   internal void OnDeeperRowHover(…)
+// WPF's gates are kept: MotionFx.AllowAmbientLoops (AmbientFxCanvas.Env) and DeeperFxOnScreen
+// (active, not minimised; Activated/Deactivated/WindowState re-evaluate it). Dropped: only
+// DeeperGlyphFrameRate = 10 - Avalonia has no per-animation clock rate (see
+// MainShellWindow.AmbientFx.cs); a 3px sine over 11.5s is sub-pixel per frame either way.
+// OnDeeperRowHover (the 2px library-row lift) is driven by DeeperTabView's row enter/leave.
 
 using System;
 using System.Threading;
@@ -57,6 +38,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         /// <summary>Half-periods; 23s and 31s round trips, mismatched so the path does not repeat
         /// on an obvious beat.</summary>
+        private const double DeeperRowLiftPx = 2.0;
+        private const int DeeperRowLiftMs = 150;
         private const double DeeperGlyphDriftYSeconds = 11.5;
         private const double DeeperGlyphDriftXSeconds = 15.5;
 
@@ -74,6 +57,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _deeperFxInitialized = true;
             try
             {
+                // WPF InitializeDeeperFx: park the drift while the window is inactive or minimised.
+                Activated += OnDeeperFxWindowStateish;
+                Deactivated += OnDeeperFxWindowStateish;
+                PropertyChanged += (_, e) => { if (e.Property == WindowStateProperty) OnDeeperFxWindowStateish(null, EventArgs.Empty); };
+
                 // FindControl, not the generated field: DeeperTabView loads with
                 // AvaloniaXamlLoader.Load, so DeeperWaveGlyph is null on it despite compiling.
                 var glyph = Named<Tabs.DeeperTabView>("DeeperTab")
@@ -99,8 +87,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             try
             {
+                // WPF DeeperFxOnScreen + MotionFx.AllowAmbientLoops.
                 bool wanted = string.Equals(tab, "deeper", StringComparison.OrdinalIgnoreCase)
-                              && _deeperGlyphDrift != null;
+                              && _deeperGlyphDrift != null
+                              && IsActive && WindowState != WindowState.Minimized
+                              && global::ConditioningControlPanel.Avalonia.Controls.AmbientFxCanvas.Env.AllowAmbientLoops;
                 if (!wanted) { StopDeeperGlyphDrift(); return; }
                 if (_deeperGlyphClock != null) return;    // already drifting
 
@@ -126,6 +117,29 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 };
                 _ = anim.RunAsync(_deeperGlyphDrift!, _deeperGlyphClock!.Token);
             }
+        }
+
+        private void OnDeeperFxWindowStateish(object? sender, EventArgs e) => ApplyDeeperGlyphDrift(CurrentTab ?? "");
+
+        /// <summary>WPF row hover lift: a 2px rise, not a scale (full-width rows in a ScrollViewer
+        /// would clip a scale). Interaction motion: eased at every level but Off, which snaps.</summary>
+        internal void OnDeeperRowHover(Control? row, bool on)
+        {
+            if (row == null) return;
+            try
+            {
+                if (row.RenderTransform is not TranslateTransform slide)
+                {
+                    if (row.RenderTransform != null) return;   // an authored transform is never clobbered
+                    row.RenderTransform = slide = new TranslateTransform();
+                }
+                slide.Transitions = global::ConditioningControlPanel.Avalonia.Controls.AmbientFxCanvas.Env.AllowTransitions
+                    ? new Transitions { new DoubleTransition { Property = TranslateTransform.YProperty,
+                        Duration = TimeSpan.FromMilliseconds(DeeperRowLiftMs), Easing = new QuadraticEaseOut() } }
+                    : null;
+                slide.Y = on ? -DeeperRowLiftPx : 0;
+            }
+            catch (Exception ex) { Log.Debug("OnDeeperRowHover: {E}", ex.Message); }
         }
 
         private void StopDeeperGlyphDrift()

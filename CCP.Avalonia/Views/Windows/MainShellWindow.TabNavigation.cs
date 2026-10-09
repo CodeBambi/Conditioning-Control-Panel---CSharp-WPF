@@ -217,7 +217,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                         _ = CheckCatalogueSubmissionStatusesAsync(CatalogueKindPresets);
                         _ = CheckCatalogueSubmissionStatusesAsync(CatalogueKindSessions);
                         break;
-                    case "deeper": _ = CheckDeeperSubmissionStatusesAsync(); break;
+                    // WPF TabNavigation.cs:358: every door into the tab rescans the library.
+                    case "deeper": InitializeDeeperHub(); _ = CheckDeeperSubmissionStatusesAsync(); break;
 
                     // WPF MainWindow.TabNavigation.cs:429: every show re-fetches the board (read-only).
                     case "leaderboard": _ = Named<Tabs.LeaderboardTabView>("LeaderboardTab")?.RefreshLeaderboardAsync(); break;

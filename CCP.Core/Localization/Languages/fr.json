@@ -1,4 +1,13 @@
 {
+  "deeper_submission_badge_published": "Publié",
+  "deeper_submission_badge_published_tip": "Cette amélioration est en ligne dans le catalogue communautaire.",
+  "deeper_submission_badge_pending": "En attente",
+  "deeper_submission_badge_pending_tip": "Soumis : en attente de validation pour le catalogue.",
+  "deeper_submission_badge_rejected": "Refusé",
+  "deeper_submission_badge_rejected_tip": "Cette soumission n'a pas été acceptée. Modifie-la et soumets-la à nouveau.",
+  "deeper_welcome_card_open_demo": "Ouvrir la démo",
+  "deeper_library_delete_confirm_fmt": "Supprimer « {0} » ? Le fichier .ccpenh.json part à la corbeille.",
+  "deeper_library_delete_title": "Supprimer l'amélioration",
   "companion_v2_open_activity": "Ouvrir {0}",
   "companion_ask_watch_q_1": "on regarde ça et tu lâches prise pour moi ? \"{0}\"",
   "companion_ask_watch_q_2": "j'en ai choisi une. toi, ça, et une belle descente lente. \"{0}\"",

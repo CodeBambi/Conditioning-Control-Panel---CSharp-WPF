@@ -1,4 +1,13 @@
 {
+  "deeper_submission_badge_published": "게시됨",
+  "deeper_submission_badge_published_tip": "이 인핸스먼트는 커뮤니티 카탈로그에 게시되어 있습니다.",
+  "deeper_submission_badge_pending": "대기 중",
+  "deeper_submission_badge_pending_tip": "제출됨: 카탈로그 검토를 기다리는 중입니다.",
+  "deeper_submission_badge_rejected": "거부됨",
+  "deeper_submission_badge_rejected_tip": "이 제출물은 승인되지 않았습니다. 수정 후 다시 제출하세요.",
+  "deeper_welcome_card_open_demo": "데모 열기",
+  "deeper_library_delete_confirm_fmt": "\"{0}\"을(를) 삭제할까요? .ccpenh.json 파일은 휴지통으로 이동합니다.",
+  "deeper_library_delete_title": "인핸스먼트 삭제",
   "companion_v2_open_activity": "{0} 열기",
   "companion_ask_watch_q_1": "이거 보면서 나를 위해 빠져볼래? \"{0}\"",
   "companion_ask_watch_q_2": "하나 골라놨어. 너, 이거, 그리고 느긋하고 기분 좋은 드롭. \"{0}\"",

@@ -1,4 +1,10 @@
 {
+  "deeper_submission_badge_published": "已发布",
+  "deeper_submission_badge_published_tip": "此增强已在社区目录中上线。",
+  "deeper_submission_badge_pending": "待审核",
+  "deeper_submission_badge_pending_tip": "已提交：等待目录审核。",
+  "deeper_submission_badge_rejected": "已拒绝",
+  "deeper_submission_badge_rejected_tip": "此提交未被接受。编辑后重新提交。",
   "companion_v2_open_activity": "打开{0}",
   "companion_ask_watch_q_1": "要不要看这个，为我沉下去？“{0}”",
   "companion_ask_watch_q_2": "我挑了一个。你，这个，再加一次慢慢的、舒服的沉溺。“{0}”",

@@ -1,4 +1,13 @@
 {
+  "deeper_submission_badge_published": "Publicado",
+  "deeper_submission_badge_published_tip": "Este aprimoramento está publicado no catálogo da comunidade.",
+  "deeper_submission_badge_pending": "Pendente",
+  "deeper_submission_badge_pending_tip": "Enviado: aguardando revisão para o catálogo.",
+  "deeper_submission_badge_rejected": "Rejeitado",
+  "deeper_submission_badge_rejected_tip": "Este envio não foi aceito. Edite e envie novamente.",
+  "deeper_welcome_card_open_demo": "Abrir a demo",
+  "deeper_library_delete_confirm_fmt": "Excluir \"{0}\"? O arquivo .ccpenh.json vai para a lixeira.",
+  "deeper_library_delete_title": "Excluir aprimoramento",
   "companion_v2_open_activity": "Abrir {0}",
   "companion_ask_watch_q_1": "bora assistir isso e cair pra mim? \"{0}\"",
   "companion_ask_watch_q_2": "escolhi um pra você. você, isso e uma queda gostosa e lenta. \"{0}\"",
