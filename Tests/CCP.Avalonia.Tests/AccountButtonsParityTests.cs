@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Net;
 using System.Net.Http;
 using System.Threading;
@@ -31,6 +32,13 @@ public sealed class AccountButtonsParityTests
     [Fact]
     public async Task Link_StoresTheLinkAndTheRotatedToken_AlreadyLinkedIsQuietSuccess_DifferentUserFails()
     {
+        // AppSettings.AuthToken lives in CoreSecrets (the head seeds SecretStore before settings load). Own a
+        // memory store here: without one the rotated-token write is a silent no-op, and this test only passed
+        // when an earlier test in the run (SecretStore.Seed() in the Chaster suites) had left a store attached.
+        var (oldGet, oldSet) = (CoreSecrets.RetrieveProvider, CoreSecrets.StoreProvider);
+        var secrets = new Dictionary<string, string?>();
+        CoreSecrets.RetrieveProvider = n => secrets.GetValueOrDefault(n);
+        CoreSecrets.StoreProvider = (n, v) => secrets[n] = v;
         var s = CoreSettings.Current;
         var (oldId, oldTok, oldD, oldP) = (s.UnifiedId, s.AuthToken, s.HasLinkedDiscord, s.HasLinkedPatreon);
         try
@@ -55,7 +63,11 @@ public sealed class AccountButtonsParityTests
             Assert.Equal(AccountLink.Outcome.Failed, failed);
             Assert.Contains("different user", error);
         }
-        finally { (s.UnifiedId, s.AuthToken, s.HasLinkedDiscord, s.HasLinkedPatreon) = (oldId, oldTok, oldD, oldP); }
+        finally
+        {
+            (s.UnifiedId, s.AuthToken, s.HasLinkedDiscord, s.HasLinkedPatreon) = (oldId, oldTok, oldD, oldP);
+            (CoreSecrets.RetrieveProvider, CoreSecrets.StoreProvider) = (oldGet, oldSet);
+        }
     }
 
     [Fact]
