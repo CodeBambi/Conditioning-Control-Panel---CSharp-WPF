@@ -43,6 +43,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 var dash = Named<Tabs.SettingsTabView>("SettingsTab");
                 var btn = dash?.FindControl<Button>("BtnFoldBrowser");
                 if (btn != null) btn.Click += BtnFoldBrowser_Click;
+                // The billboard is wired here, before the window shows, so its clock re-checks on
+                // Opened (WPF's host.IsVisibleChanged fires on show). The static gate is held only
+                // while the shell is open (P41).
+                Opened += (_, _) =>
+                {
+                    Env.MotionGateChanged -= RestartBillboardClock;
+                    Env.MotionGateChanged += RestartBillboardClock;
+                    RestartBillboardClock();
+                };
+                Closed += (_, _) => { Env.MotionGateChanged -= RestartBillboardClock; StopBillboardClock(); };
                 ApplyBrowserFold(animate: false);
             }
             catch (Exception ex) { Log.Warning(ex, "InitDashboardBrowserFold failed"); }

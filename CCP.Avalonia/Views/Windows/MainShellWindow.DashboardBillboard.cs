@@ -96,8 +96,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             };
             // Tab hidden / shown (P01): the shell hides the whole tab with IsVisible.
             dash.PropertyChanged += (_, e) => { if (e.Property == IsVisibleProperty) RestartBillboardClock(); };
-            Env.MotionGateChanged += RestartBillboardClock;
-            Closed += (_, _) => { Env.MotionGateChanged -= RestartBillboardClock; StopBillboardClock(); };
         }
 
         private static void BindLoc(AvaloniaObject target, AvaloniaProperty property, string key) =>
@@ -105,7 +103,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 { Source = LocalizationManager.Instance, Mode = global::Avalonia.Data.BindingMode.OneWay });
 
         private bool BillboardMayAdvance(Border host) =>
-            host.IsEffectivelyVisible && !_billboardPaused && !host.IsKeyboardFocusWithin && Env.AllowAmbientLoops
+            IsVisible && host.IsEffectivelyVisible && !_billboardPaused && !host.IsKeyboardFocusWithin && Env.AllowAmbientLoops
             && DashboardBillboard.ShouldAdvance(_billboardPointerOver, onScreen: true);
 
         /// <summary>WPF RestartBillboardClock (:172).</summary>

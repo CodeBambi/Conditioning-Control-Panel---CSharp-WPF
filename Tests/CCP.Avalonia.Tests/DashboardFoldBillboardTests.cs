@@ -100,7 +100,9 @@ public sealed class DashboardFoldBillboardTests
             Click(C<Button>("BillboardCard"));
             Assert.Equal(new[] { DashboardBillboard.PatreonUrl }, opened);
 
-            // The chevron writes the preference: open card, billboard gone, clock stopped.
+            // The chevron writes the preference: open card, billboard gone, clock stopped. Motion Off
+            // so the fold settles at once (at Full the 180 ms ease keeps the body hidden until it lands).
+            s.MotionLevel = MotionLevel.Off;
             Click(C<Button>("BtnFoldBrowser"));
             Dispatcher.UIThread.RunJobs();
             Assert.False(s.DashboardBrowserCollapsed);
@@ -129,6 +131,43 @@ public sealed class DashboardFoldBillboardTests
             MainShellWindow.BillboardOpenUrl = oldOpen;
             s.DashboardBrowserCollapsed = true;
             s.MotionLevel = MotionLevel.Full;
+            CoreSettings.ServiceProvider = old;
+        }
+        return Task.CompletedTask;
+    });
+
+    /// <summary>A normal launch: folded at Full motion, the clock runs once the window is shown,
+    /// with no motion-gate event behind it (review P1).</summary>
+    [Fact]
+    public Task FoldedLaunchAtFullMotionStartsTheClock() => AvaloniaTestDispatcher.RunAsync(() =>
+    {
+        if (Application.Current is null)
+            AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>()
+                .UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                .SetupWithoutStarting();
+        var old = CoreSettings.ServiceProvider;
+        var service = new SettingsService();
+        CoreSettings.ServiceProvider = () => service;
+        var s = CoreSettings.Current;
+        s.DashboardBrowserCollapsed = true;
+        s.MotionLevel = MotionLevel.Full;
+        s.PerformanceMode = false;
+        var shell = new MainShellWindow();
+        try
+        {
+            Assert.False(shell.BillboardClockRunning);   // not on screen yet
+            shell.Show();
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(shell.FindControl<SettingsTabView>("SettingsTab")!.FindControl<Border>("DashBillboard")!.IsEffectivelyVisible);
+            Assert.True(shell.BillboardClockRunning);
+            shell.Close();
+            Dispatcher.UIThread.RunJobs();
+            Assert.False(shell.BillboardClockRunning);
+        }
+        finally
+        {
+            shell.Close();
+            Dispatcher.UIThread.RunJobs();
             CoreSettings.ServiceProvider = old;
         }
         return Task.CompletedTask;
