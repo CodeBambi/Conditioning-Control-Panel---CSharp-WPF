@@ -1,8 +1,9 @@
 // PORTED from ConditioningControlPanel/Controls/Friends/FriendsRailChip.cs: your face and name at the
 // foot of the rail with a mint pill for friends online; a click opens the drawer upward over the rail.
 // The pink badge counts unread "What happened" lines (FriendsFeedHost.Feed).
-// ponytail: no bump / hover lift, no tier plate, no
-// rail hold; Popup light-dismiss stands in for WPF's click-outside and host-moved watchers.
+// The tier plate follows the name, the face lifts on hover, both counts bump when they rise, and an
+// open drawer holds the rail (a no-op on the always-labelled 7.1.5 rail, kept for parity) and folds
+// when the host window moves, changes state or loses the player; Popup light-dismiss is the click-outside.
 using System;
 using Avalonia;
 using Avalonia.Controls;
@@ -51,8 +52,13 @@ public sealed class FriendsRailChip : Grid
         // The name column is 0 px wide while the rail is shut, so nothing in it may wrap.
         _name = FriendsDrawer.Label(Drawer.MeName(), 14, FriendsDrawer.Text, FriendsDrawer.Display, FontWeight.SemiBold);
         _name.Margin = new Thickness(0, 0, 10, 0);
-        Grid.SetColumn(_name, 1);
-        Children.AddRange(new Control[] { _face, _name });
+        _nameLine.Children.Add(_name);
+        Grid.SetColumn(_nameLine, 1);
+        Children.AddRange(new Control[] { _face, _nameLine });
+        RefreshPlate();
+        // WPF Hover: the face wears the raised wash and lifts 2% (MotionFx.HoverLift, 150 ms).
+        PointerEntered += (_, _) => Hover(true);
+        PointerExited += (_, _) => Hover(false);
         ToolTip.SetTip(this, Loc.Get("friends_chip_tooltip"));
         _popup = new Popup
         {
@@ -60,8 +66,8 @@ public sealed class FriendsRailChip : Grid
             IsLightDismissEnabled = true,
         };
         Children.Add(_popup);
-        _popup.Opened += (_, _) => { Friends.FriendsSfx.DrawerOpen(); _face.Background = FriendsDrawer.Raised; Drawer.OnOpened(); };
-        _popup.Closed += (_, _) => { Friends.FriendsSfx.DrawerClose(); _face.Background = Brushes.Transparent; Drawer.OnClosed(); };
+        _popup.Opened += (_, _) => OnPopupOpened();
+        _popup.Closed += (_, _) => OnPopupClosed();
         Drawer.OwnerWindow = () => TopLevel.GetTopLevel(this) as Window;
         Drawer.CloseRequested += () => _popup.IsOpen = false;
         Drawer.SettingsRequested += () => (TopLevel.GetTopLevel(this) as MainShellWindow)?.ShowTab("appsettings");
@@ -91,7 +97,87 @@ public sealed class FriendsRailChip : Grid
         _faceGrid.Children.Add(_pill);
         _faceGrid.Children.Add(_badge);
         if (_name != null) _name.Text = name;
+        RefreshPlate();
     }
+
+    private readonly StackPanel _nameLine = new() { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+    /// <summary>WPF Repaint: your tier plate (13 px) after the name.</summary>
+    private void RefreshPlate()
+    {
+        if (_name == null) return;
+        while (_nameLine.Children.Count > 1) _nameLine.Children.RemoveAt(1);
+        if (FriendsDrawer.TierPlate(Drawer.MeTier(), 13) is { } plate) _nameLine.Children.Add(plate);
+    }
+
+    private void Hover(bool on)
+    {
+        _face.Background = on || _popup.IsOpen ? FriendsDrawer.Raised : Brushes.Transparent;
+        if (_face.RenderTransform is not ScaleTransform s) { _face.RenderTransformOrigin = RelativePoint.Center; _face.RenderTransform = s = new ScaleTransform(1, 1); }
+        double to = on ? 1.02 : 1.0;
+        if (FriendsDrawer.Amount <= 0) { s.ScaleX = s.ScaleY = to; return; }
+        global::ConditioningControlPanel.Avalonia.Helpers.TransformTween.Run(s, TimeSpan.FromMilliseconds(150), new (double, AvaloniaProperty, double)[]
+        {
+            (0, ScaleTransform.ScaleXProperty, s.ScaleX), (1, ScaleTransform.ScaleXProperty, to),
+            (0, ScaleTransform.ScaleYProperty, s.ScaleY), (1, ScaleTransform.ScaleYProperty, to),
+        });
+    }
+
+    /// <summary>WPF Bump: a pill swells 45% and settles when its count goes up.</summary>
+    private static void Bump(Border pill)
+    {
+        double k = FriendsDrawer.Amount;
+        if (k <= 0) return;
+        if (pill.RenderTransform is not ScaleTransform s) { pill.RenderTransformOrigin = RelativePoint.Center; pill.RenderTransform = s = new ScaleTransform(1, 1); }
+        double peak = 1 + 0.45 * k;
+        global::ConditioningControlPanel.Avalonia.Helpers.TransformTween.Run(s, TimeSpan.FromMilliseconds(420), new (double, AvaloniaProperty, double)[]
+        {
+            (0, ScaleTransform.ScaleXProperty, 1), (0.29, ScaleTransform.ScaleXProperty, peak), (0.6, ScaleTransform.ScaleXProperty, 0.94), (1, ScaleTransform.ScaleXProperty, 1),
+            (0, ScaleTransform.ScaleYProperty, 1), (0.29, ScaleTransform.ScaleYProperty, peak), (0.6, ScaleTransform.ScaleYProperty, 0.94), (1, ScaleTransform.ScaleYProperty, 1),
+        });
+    }
+    private int _lastCount = -1, _lastUnread = -1;
+
+    private Window? _host;
+    private void OnPopupOpened()
+    {
+        Friends.FriendsSfx.DrawerOpen();
+        try
+        {
+            _host = TopLevel.GetTopLevel(this) as Window;
+            (_host as MainShellWindow)?.HoldNavRailOpen(_popup);
+            if (_host != null)
+            {
+                _host.PositionChanged += OnHostMoved;
+                _host.PropertyChanged += OnHostState;
+                _host.Deactivated += OnHostDeactivated;
+            }
+            _face.Background = FriendsDrawer.Raised;
+            Drawer.OnOpened();
+        }
+        catch (Exception ex) { Serilog.Log.Debug("[Friends] drawer open failed: {E}", ex.Message); }
+    }
+    private void OnPopupClosed()
+    {
+        Friends.FriendsSfx.DrawerClose();
+        try
+        {
+            if (_host != null)
+            {
+                _host.PositionChanged -= OnHostMoved;
+                _host.PropertyChanged -= OnHostState;
+                _host.Deactivated -= OnHostDeactivated;
+            }
+            (_host as MainShellWindow)?.ReleaseNavRailOpen(_popup);
+            _host = null;
+            _face.Background = Brushes.Transparent;
+            Drawer.OnClosed();
+        }
+        catch (Exception ex) { Serilog.Log.Debug("[Friends] drawer close failed: {E}", ex.Message); }
+    }
+    private void OnHostMoved(object? sender, PixelPointEventArgs e) => _popup.IsOpen = false;
+    private void OnHostState(object? sender, AvaloniaPropertyChangedEventArgs e) { if (e.Property == Window.WindowStateProperty) _popup.IsOpen = false; }
+    /// <summary>Another app came to the front: fold, unless the keyboard is inside the drawer.</summary>
+    private void OnHostDeactivated(object? sender, EventArgs e) { if (!Drawer.IsKeyboardFocusWithin) _popup.IsOpen = false; }
     internal bool IsOpen => _popup.IsOpen;
 
     internal int PillCount => _pill.IsVisible && int.TryParse(_pillText.Text, out var n) ? n : 0;
@@ -131,6 +217,8 @@ public sealed class FriendsRailChip : Grid
         try { if (_svc?.Available != false) n = _feed?.Unread ?? 0; } catch { }
         _badgeText.Text = FriendsFeedRules.BadgeText(n);
         _badge.IsVisible = n > 0;
+        if (n > _lastUnread && _lastUnread >= 0 && n > 0) Bump(_badge);
+        _lastUnread = n;
         var who = string.IsNullOrWhiteSpace(_name?.Text) ? "" : _name!.Text + "\n";
         ToolTip.SetTip(this, n > 0 ? who + Loc.Get("friends_chip_tooltip") + "\n" + Loc.GetF("friends_feed_new", n) : who + Loc.Get("friends_chip_tooltip"));
     }
@@ -142,5 +230,7 @@ public sealed class FriendsRailChip : Grid
         try { if (_svc?.Available == true) n = _svc.Snapshot?.OnlineCount ?? 0; } catch { }
         _pillText.Text = n.ToString();
         _pill.IsVisible = n > 0;
+        if (n > _lastCount && _lastCount >= 0 && n > 0) Bump(_pill);
+        _lastCount = n;
     }
 }

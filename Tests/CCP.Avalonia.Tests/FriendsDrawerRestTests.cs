@@ -231,6 +231,30 @@ public sealed class FriendsDrawerRestTests
         Assert.Equal(new[] { "friends-menu-item:block", "friends-menu-item:report" }, tags);
     });
 
+    /// <summary>WPF FriendsRailChip: your tier plate after the name; the online pill bumps when its count rises.</summary>
+    [Fact]
+    public Task RailChipWearsThePlateAndBumps() => AvaloniaTestDispatcher.RunAsync(async () =>
+    {
+        var (art, level) = (FriendsDrawer.TierArt, FriendsDrawer.MotionLevelNow);
+        FriendsDrawer.TierArt = _ => new global::Avalonia.Media.DrawingImage(new global::Avalonia.Media.DrawingGroup());
+        FriendsDrawer.MotionLevelNow = () => MotionLevel.Full;
+        try
+        {
+            var svc = Service();
+            var chip = new FriendsRailChip(svc);
+            chip.Drawer.MeTier = () => 2;
+            chip.RefreshFace();
+            Assert.NotNull(Tagged<Image>(chip, "friends-tier-2"));
+            chip.UpdatePill();
+            await svc.RefreshAsync();
+            chip.UpdatePill();
+            var pill = Tagged<Border>(chip, "friends-chip-online")!;
+            Assert.Equal(1, chip.PillCount);
+            Assert.IsType<global::Avalonia.Media.ScaleTransform>(pill.RenderTransform);
+        }
+        finally { (FriendsDrawer.TierArt, FriendsDrawer.MotionLevelNow) = (art, level); }
+    });
+
     /// <summary>Juice: online dots carry the breathing tag, a row has the sheen host, and motion Off
     /// leaves the drawer still (no transform after the entrance).</summary>
     [Fact]
