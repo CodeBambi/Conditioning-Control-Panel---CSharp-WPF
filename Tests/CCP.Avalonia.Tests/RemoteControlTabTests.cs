@@ -34,6 +34,11 @@ public sealed class RemoteControlTabTests
                 host.Show();
                 Dispatcher.UIThread.RunJobs();
 
+                // Fix wave 2026-10-09 (S6, S7): emotes and the directory opt-in have no route on this relay yet, so
+                // neither block is offered (a tick would tell a player they are listed when they are not).
+                Assert.False(view.FindControl<Border>("EmotePickerPanel")!.IsVisible);
+                Assert.False(view.FindControl<Border>("OptInSectionPanel")!.IsVisible);
+
                 var toggle = view.FindControl<CheckBox>("ChkRemoteControlEnabled")!;
                 toggle.IsChecked = true;
                 Dispatcher.UIThread.RunJobs();

@@ -15,10 +15,9 @@
 //
 // WHAT IS ACTUALLY BLOCKED, and by what:
 //   The rows are no longer blocked: LeaderboardTabView.RefreshLeaderboardAsync fetches through Core's
-//   LeaderboardClient (read-only) and paints UpdateYourRankDisplay / UpdateYouBar there. Still missing: the
-//   trophy-case columns (SkillService) and the rank snapshot deltas.
-//   BtnLeaderboardDiscord_Click needs the Discord DM path; ReleaseLinks in Core carries links, not
-//   the DM.
+//   LeaderboardClient (read-only) and paints UpdateYourRankDisplay / UpdateYouBar there. The trophy-case
+//   columns (SkillTreeRules), the rank snapshot deltas (Core LeaderboardRankSnapshots) and the Discord chip
+//   (BtnLeaderboardDiscord_Click) live there too since the 2026-10-09 fix wave.
 //   BtnJumpToMe_Click and the whole _lbFx* group are WPF-specific: an attached DependencyProperty
 //   (LbScrollOffsetProperty) animated to drive ScrollViewer offset, plus FindVisualDescendant,
 //   ScrollViewer clip fiddling and an overscroll bounce. Avalonia has no attached-DP animation

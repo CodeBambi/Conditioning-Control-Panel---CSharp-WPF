@@ -103,17 +103,26 @@ internal static class LeashHead
         try { streak = App.Achievements?.Progress?.ConsecutiveDays ?? 0; } catch { }
 
         bool linked = false;
+        DateTime? ends = null;
+        bool hidden = false;
         int? tab = null;
         try
         {
             var c = ChasterHead.Service;
-            if (c != null && c.TakesLeashTime) { linked = true; tab = c.BalanceSeconds; }
+            if (c != null && c.TakesLeashTime)
+            {
+                linked = true;
+                var l = c.Lock;
+                ends = l?.EndsAtUtc;
+                hidden = l?.TimerHidden == true;
+                tab = c.BalanceSeconds;
+            }
         }
         catch (Exception ex) { Serilog.Log.Debug("Leash chaster read failed: {E}", ex.Message); }
 
-        // ponytail: minutes today (WPF FeatureDayLog day Cm) and the Chaster lock end/hidden flag are
-        // not on this head yet; they read 0 / none, which only thins the holder's day card.
-        return new LeashDayInputs(DateTime.Now, 0, done, total, streak, linked, null, false, tab);
+        // ponytail: minutes today (WPF FeatureDayLog day Cm) has no source on this head (no per-day log, only the
+        // all-time total), so it reads 0, which only thins the holder's day card.
+        return new LeashDayInputs(DateTime.Now, 0, done, total, streak, linked, ends, hidden, tab);
     }
 
     /// <summary>WPF ChasterLeashTab: the same NoteSeconds path, literal row ids.</summary>
