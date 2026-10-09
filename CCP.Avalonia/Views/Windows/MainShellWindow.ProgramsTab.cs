@@ -71,24 +71,28 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             return items;
         }
 
-        /// <summary>WPF ProgramsTab.cs:309 ProgramRadialGlowBrush: accent at alpha, fading out at 0.75.</summary>
-        internal static IBrush ProgramRadialGlowBrush(IBrush accent, byte alpha)
+        /// <summary>WPF ProgramsTab.cs:309 ProgramRadialGlowBrush: accent at alpha, fading out at the radius.</summary>
+        internal static IBrush ProgramRadialGlowBrush(IBrush accent, byte alpha,
+            double centerX = 0.5, double centerY = 0.5, double radius = 0.75)
         {
             if (accent is not ISolidColorBrush solid) return Brushes.Transparent;
             var c = solid.Color;
+            var centre = new global::Avalonia.RelativePoint(centerX, centerY, global::Avalonia.RelativeUnit.Relative);
             return new RadialGradientBrush
             {
+                Center = centre,
+                GradientOrigin = centre,
                 GradientStops =
                 {
                     new GradientStop(Color.FromArgb(alpha, c.R, c.G, c.B), 0),
                     new GradientStop(Color.FromArgb(0, c.R, c.G, c.B), 1),
                 },
-                RadiusX = new global::Avalonia.RelativeScalar(0.75, global::Avalonia.RelativeUnit.Relative),
-                RadiusY = new global::Avalonia.RelativeScalar(0.75, global::Avalonia.RelativeUnit.Relative),
+                RadiusX = new global::Avalonia.RelativeScalar(radius, global::Avalonia.RelativeUnit.Relative),
+                RadiusY = new global::Avalonia.RelativeScalar(radius, global::Avalonia.RelativeUnit.Relative),
             };
         }
 
-        private static IBrush AccentBrush(string? hex)
+        internal static IBrush AccentBrush(string? hex)
         {
             try
             {
