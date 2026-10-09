@@ -30,7 +30,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     /// ponytail: needs JustDropOrdersService and the tab FX clock, wired when those move to
     /// Core. Reveal spoilers and the Catalogue chip are wired. The remaining wiring points,
     /// all named in the XAML, are:
-    ///   BtnSharePreset /
     ///   BtnSelectCornerGif / ChkCornerGifEnabled / RbCornerTL..BR /
     ///   SliderCornerGifSize + SliderCornerGifOpacity / CmbRackSort.SelectionChanged /
     ///   preset chip clicks and IsVisibleChanged -> OnPresetsTabVisibilityChanged (the card-sheen
@@ -54,6 +53,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             CmbRackSort.SelectionChanged += CmbRackSort_SelectionChanged;
             TxtRackSearch.TextChanged += TxtRackSearch_TextChanged;
             BtnExportPreset.Click += BtnExportPreset_Click;
+            // WPF BtnSharePreset_Click (MainWindow.PresetIO.cs:192).
+            BtnSharePreset.Click += async (_, _) =>
+            {
+                if (_selectedPreset is { IsDefault: false } p && Shell is { } owner) await owner.SharePresetToCatalogueAsync(p);
+            };
             BtnLoadPreset.Click += BtnLoadPreset_Click;
             BtnSaveOverPreset.Click += BtnSaveOverPreset_Click;
             BtnDeletePreset.Click += BtnDeletePreset_Click;
@@ -275,8 +279,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         private SessionManager? _sessionManager;
 
-        private IReadOnlyList<Session> _availableSessions =
-            Session.GetAllSessions().Where(session => session.IsAvailable).ToArray();
+        // Every session, locked ones included: WPF lists them and only disables Start
+        // ("🔒 Coming Soon", MainWindow.SessionIO.cs:971-972).
+        private IReadOnlyList<Session> _availableSessions = Session.GetAllSessions().ToArray();
         private Session? _selectedSession;
 
         private static string InitialRackSourceFilter() =>
@@ -309,7 +314,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         {
             ArgumentNullException.ThrowIfNull(manager);
             _sessionManager = manager;
-            _availableSessions = manager.AllSessions.Where(session => session.IsAvailable).ToArray();
+            _availableSessions = manager.AllSessions.ToArray();
             _selectedSession = null;
             RackSourceChips.Children.Clear();
             RackDifficultyChips.Children.Clear();
@@ -351,8 +356,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 PresetCardsPanel.Children.Insert(at++, PresetChip(preset));
         }
 
-        /// <summary>WPF's SelectPreset (MainWindow.Presets.cs:461). Share stays disabled: the
-        /// preset Share-to-catalogue submission is split out (shell-preset-io).</summary>
+        /// <summary>WPF's SelectPreset (MainWindow.Presets.cs:461).</summary>
         private void SelectPreset(Preset preset)
         {
             _selectedPreset = preset;
@@ -383,6 +387,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             BtnSaveOverPreset.IsEnabled = !preset.IsDefault;
             BtnDeletePreset.IsEnabled = !preset.IsDefault;
             BtnExportPreset.IsEnabled = true;
+            BtnSharePreset.IsEnabled = !preset.IsDefault;
             UpdatePresetShareStatusBadge(preset);
             RefreshSessionRackSelection();
         }
@@ -635,8 +640,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// <summary>Four source chips (single-select) and four difficulty dots (independent).</summary>
         private void SeedRackToolbar()
         {
-            // Counts come from the same available Core catalogue as the rows; unavailable
-            // placeholders must never make the rack claim that they can be selected.
+            // Counts come from the same Core catalogue as the rows (WPF EnumerateRackSessions:
+            // locked sessions are listed and counted; only their Start button is disabled).
             var builtIn = _availableSessions.Count(session => session.Source == SessionSource.BuiltIn);
             var custom = _availableSessions.Count(session => session.Source == SessionSource.Custom);
             var imported = _availableSessions.Count(session => session.Source == SessionSource.Imported);
@@ -899,9 +904,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             export.Click += (_, e) => { e.Handled = true; ExportSession(session); };
             actions.Children.Add(export);
             // WPF SessionIO.cs:453-457: delete only where SessionManager.DeleteSession can succeed.
-            // ponytail: the share (☁) button needs the catalogue submission write path on this head.
             if (session.Source != SessionSource.BuiltIn)
             {
+                // WPF SessionBtn_Share (MainWindow.SessionIO.cs:1827).
+                var share = RowAction("☁", Loc.Get("tooltip_share_to_catalogue"), danger: false);
+                share.IsEnabled = true;
+                share.Click += async (_, e) =>
+                {
+                    e.Handled = true;
+                    if (Shell is { } owner) await owner.ShareSessionToCatalogueAsync(session);
+                };
+                actions.Children.Add(share);
                 var delete = RowAction("\U0001F5D1", Loc.Get("tooltip_delete_session"), danger: true);
                 delete.IsEnabled = true;
                 delete.Click += (_, e) => { e.Handled = true; ConfirmDeleteSession(session); };
@@ -996,7 +1009,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         {
             if (sender is not Border row || !e.GetCurrentPoint(row).Properties.IsLeftButtonPressed)
                 return;
-            if (row.Tag is not Session session || !session.IsAvailable) return;
+            if (row.Tag is not Session session) return;
 
             row.Focus();
             SelectSession(session);
@@ -1006,7 +1019,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private void SessionRow_KeyDown(object? sender, KeyEventArgs e)
         {
             if (e.Key is not (Key.Enter or Key.Space) ||
-                sender is not Border { Tag: Session session } || !session.IsAvailable)
+                sender is not Border { Tag: Session session })
                 return;
 
             SelectSession(session);
@@ -1015,8 +1028,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         private void SelectSession(Session session)
         {
-            if (!session.IsAvailable) return;
-
             _selectedSession = session;
             _selectedPreset = null;
             RefreshPresetsList();
@@ -1024,7 +1035,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             PresetButtonsPanel.IsVisible = false;
             SessionDetailScroller.IsVisible = true;
             SessionButtonsPanel.IsVisible = true;   // WPF SessionIO.cs:923/:971
-            BtnStartSession.IsEnabled = true;
+            ApplyStartButton();
             BtnExportSession.IsEnabled = true;   // WPF SessionIO.cs:973
             SessionSpoilerPanel.IsVisible = false;
             SetRevealLabel("btn_reveal_details");
@@ -1115,8 +1126,26 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         /// <summary>The session button's text while a session runs (WPF sets its Content per tick);
         /// null puts the localised Start label back. A TextBlock, so no '_' becomes an access key.</summary>
-        internal void SetSessionButtonLabel(string? text) =>
-            BtnStartSession.Content = text is null ? _startSessionLabel : new TextBlock { Text = text };
+        internal void SetSessionButtonLabel(string? text)
+        {
+            _sessionButtonRunning = text is not null;
+            if (text is null) ApplyStartButton();
+            else BtnStartSession.Content = new TextBlock { Text = text };
+        }
+
+        private bool _sessionButtonRunning;
+
+        /// <summary>WPF SessionIO.cs:971-972: a locked session greys Start and reads "🔒 Coming Soon".
+        /// While a session runs the button is Stop, so it keeps its running label and stays live.</summary>
+        private void ApplyStartButton()
+        {
+            var locked = _selectedSession is { IsAvailable: false };
+            if (_selectedSession is not null) BtnStartSession.IsEnabled = !locked || _sessionButtonRunning;
+            if (_sessionButtonRunning) return;
+            BtnStartSession.Content = locked
+                ? new TextBlock { Text = "🔒 " + Loc.Get("label_coming_soon") }
+                : _startSessionLabel;
+        }
 
         private void RefreshSessionRackSelection()
         {

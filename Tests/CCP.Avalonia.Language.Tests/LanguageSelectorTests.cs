@@ -85,7 +85,7 @@ public sealed class LanguageSelectorTests
 
             var presets = Assert.IsType<PresetsTabView>(shell.FindControl<PresetsTabView>("PresetsTab"));
             var rows = presets.FindControl<StackPanel>("SessionRackPanel")!.Children.OfType<Border>().ToArray();
-            Assert.Equal(2, rows.Length);
+            Assert.Equal(3, rows.Length);   // the locked session is listed too, as WPF (audit #1318)
             var builtIn = Assert.Single(rows, row => (row.Tag as Session)?.Id == "language_builtin");
             var builtInSession = Assert.IsType<Session>(builtIn.Tag);
             Assert.Equal(SessionSource.BuiltIn, builtInSession.Source);
@@ -98,7 +98,7 @@ public sealed class LanguageSelectorTests
                 custom.SourceFilePath);
             Assert.Equal("Language Custom", custom.Name);
             Assert.True(custom.IsAvailable);
-            Assert.DoesNotContain(rows, row => (row.Tag as Session)?.Id == "language_unavailable");
+            Assert.Contains(rows, row => (row.Tag as Session)?.Id == "language_unavailable");
 
             // Navigate through the real shell door before exercising the row's keyboard path.
             shell.FindControl<Button>("BtnPresets")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));

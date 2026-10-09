@@ -68,6 +68,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _successTokenRow = this.FindControl<Grid>("SuccessTokenRow")!;
 
             ApplyKind();
+            PreTickForRecentFreeze();
 
             _enableTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
             _enableTimer.Tick += EnableTimer_Tick;
@@ -105,6 +106,25 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _txtSteps.IsVisible = !suggestion;
             _chkIncludeAppLog.IsVisible = !suggestion;
             _txtScrubberCounts.IsVisible = !suggestion;
+        }
+
+        /// <summary>WPF BugReportWindow.xaml.cs:87-101: a freeze recorded recently ticks "include log"
+        /// for the user (so the hang file rides along) and names the freeze. Never for suggestions.</summary>
+        private void PreTickForRecentFreeze()
+        {
+            try
+            {
+                if (BugReportService.FindRecentHangReport(_kind) is not DateTime at) return;
+
+                _chkIncludeAppLog.IsChecked = true;
+                var hint = this.FindControl<TextBlock>("TxtHangHint")!;
+                hint.Text = Loc.GetF("bug_report_hang_attached_hint", at.ToString("d"));
+                hint.IsVisible = true;
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("[BugReport] freeze pre-tick skipped: {Msg}", ex.Message);
+            }
         }
 
         private void OnOpened(object? sender, EventArgs e)

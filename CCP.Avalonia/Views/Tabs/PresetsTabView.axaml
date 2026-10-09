@@ -43,6 +43,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+             xmlns:fx="clr-namespace:ConditioningControlPanel.Avalonia.Controls"
              x:Class="ConditioningControlPanel.Avalonia.Views.Tabs.PresetsTabView">
     <UserControl.Resources>
 
@@ -593,7 +594,7 @@
                      built by RepaintSessionRack from the session registry and told apart by a
                      colour code, never by which panel it sits in. Rows carry the session id in
                      Tag, and that is contractual. The source, difficulty, sort and search controls
-                     query this same available-only registry. -->
+                     query this same registry (locked sessions included, as WPF). -->
                 <Border Grid.Row="1" Theme="{StaticResource SectionPanel}" Margin="5,8,5,0" Padding="14,12">
                     <Grid RowDefinitions="Auto,Auto,*">
 
@@ -614,23 +615,27 @@
                                     IsEnabled="False" Opacity="0.5"/>
                         </Grid>
 
-                        <!-- THE RACK TOOLBAR. A WrapPanel keeps the live controls inside the rack
-                             when the shell is narrow or a translation makes a chip wider. At the
-                             normal shell width all four controls remain on the original single 28px
-                             line; when they no longer fit, sort and search move to the next line
-                             instead of extending past the SectionPanel's right edge. Every control
+                        <!-- THE RACK TOOLBAR. WPF is one 28px Grid row: chips left, an empty *
+                             column, sort and search pushed right (PresetsTabView.xaml:805-809).
+                             SplitRowPanel keeps exactly that while both groups fit; when the shell
+                             is narrow or a translation widens a chip, sort and search drop to a
+                             second line, right-aligned, instead of running past the rack's edge. Every control
                              here is a VIEW over the same list - none of them mutate a session. Source
                              is single-select, difficulty is four independent toggles, and sort and
-                             search query the mounted available-only registry. The chips are built in
+                             search query the mounted registry. The chips are built in
                              code because each carries a live count; sort and search remain declared
                              here so their localized faces stay in XAML. -->
-                        <WrapPanel Grid.Row="1" x:Name="RackToolbar" Orientation="Horizontal"
-                                   HorizontalAlignment="Stretch" Margin="0,0,0,9">
+                        <fx:SplitRowPanel Grid.Row="1" x:Name="RackToolbar" Gap="0" MinHeight="28"
+                                          HorizontalAlignment="Stretch" Margin="0,0,0,9">
+                          <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <StackPanel x:Name="RackSourceChips"
                                         Orientation="Horizontal" VerticalAlignment="Center"/>
 
                             <StackPanel x:Name="RackDifficultyChips"
                                         Orientation="Horizontal" VerticalAlignment="Center" Margin="9,0,0,0"/>
+                          </StackPanel>
+
+                          <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
 
                             <ComboBox x:Name="CmbRackSort" SelectedIndex="0"
                                       Width="128" Height="26" VerticalAlignment="Center" FontSize="11"
@@ -650,14 +655,14 @@
                             <!-- Avalonia's TextBox has a native PlaceholderText, so the WPF sibling
                                  TextBlock (TxtRackSearchHint) and the code that collapses it are
                                  both gone. The live search handler trims the transient query and
-                                 repaints the same available-only registry immediately. -->
+                                 repaints the same registry immediately. -->
                             <TextBox x:Name="TxtRackSearch"
-                                     Height="26" MinHeight="0" MinWidth="64" MaxWidth="150" FontSize="11" Padding="7,0"
-                                     HorizontalAlignment="Stretch"
+                                     Width="150" Height="26" MinHeight="0" FontSize="11" Padding="7,0"
                                      VerticalContentAlignment="Center"
                                      VerticalAlignment="Center" Theme="{StaticResource FocusGlowTextBox}"
                                      PlaceholderText="{loc:Str rack_search_watermark}"/>
-                        </WrapPanel>
+                          </StackPanel>
+                        </fx:SplitRowPanel>
 
                         <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
                             <!-- ONE panel. RepaintSessionRack clears and refills it; nothing else

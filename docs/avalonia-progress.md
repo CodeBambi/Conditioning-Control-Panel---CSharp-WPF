@@ -1512,3 +1512,49 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-companion-editors: +478
 - Prompt editor: Save keeps only edited boxes (`ActivePersonaPromptText` moved to Core), unticking clears the community prompt, and the X asks Save/Discard/Cancel (`btn_discard` added in 9 languages).
 - Attention style editor: Test spawns a bouncing topmost test target that panic closes (`attention-test` surface), and the preview shadows are back. attention-target-editor is now wired; the prompt and phrase editors stay stub.
+
+## avalonia-port/rows-mod-picker: +43
+- dialogs-mod-picker re-audited: unreachable on WPF too, parity holds; row stays stub with that note (x:Names match plus port-only TitleBar/TxtDownload).
+- Stale WPF cite MainWindow.xaml.cs:610-611 -> 587-588 (ledger + 3 comments); stale WPF first-run comment corrected.
+- Cherry-picked CornerGif frame-stepping + SettingsService leaked-save disarm flake fixes (from rows-companion-editors).
+
+## avalonia-port/rows-friends-drawer: +452
+- Friends drawer card: Invite / Poke / Send a watch actions with their inline pickers over Core FriendsService (Goon/chess tiles shut: hosts WPF-only).
+- Results after fold fly over the chip's window; folded drawer unsubscribes; poke hover; shut-tile string in 9 languages.
+- 2 headless tests over a fake wire (fail-proven x5 and x3; the second opens via the rail-chip click and checks the folded-drawer word); rows stay stub (feed, trails, tables, leash, juice, rail-chip extras remain).
+
+## avalonia-port/rows-program-enroll: +135
+- ProgramEnrollDialog headless test (contract gate, Strict unavailable, clock results, Escape, Cancel), each fail-proven; row stays stub (caller, run panel, session runner missing).
+- Decision logged: Enroll caller lands only together with the run panel (no lapsing enrollments).
+
+## avalonia-port/rows-asset-submit: +289
+- dialogs-asset-submit wired: preset Share + session rack ☁ open AssetSubmitDialog -> Core CatalogueClient submit/record/badge/toast; auth + affirmation gates as WPF (AssetSubmitWireTests, 4 fail-proofs).
+- Live (sandbox) limited to listing/disabled state; mod (MEGA) branch still waits on shell-mod-catalogue.
+
+## avalonia-port/rows-companion-workshop: +465
+- Workshop Library cell: the per-mod video link editor now works on Avalonia (add/preview/delete/save), and its rules live in Core `VideoLinkPool`, which WPF also uses.
+- Roster cards show each companion's level, name, tooltip and an accent ring on the active one; switching companion and assigning a personality are still missing (stub).
+
+## avalonia-port/rows-deeper-editor: +583
+- Deeper editor plays local audio through LibVLC (clock, seek, end, real length, panic surface). Editor and player previews use Core's host allowlist on every hop.
+- Player: Create new and Open in editor work (re-read, one editor per file, recent). The dialog picker remembers the last folder.
+
+## avalonia-port/audit-fix-media: +382
+- Audit fixes for #1778/#1843/#1933/#1932/#1935: overlap layer loop, media-folder fallback, panic-safe grace pause, bubble count LibVLC skip, hermetic Buttplug test.
+- Each fix has a real-path test proven red by a break (evidence/audit-fix-media/fail-proofs.txt); gate GATE-OK.
+
+## avalonia-port/rows-companion-cards: +668
+- Her Room: live attention gauge (AttentionCopy/ConstellationMath shared from Core), runtime dormant constellation with shimmer, chat History transcript window, SyncBrain on provider pick; "patreon" key opens Settings/Account like WPF.
+- Rows: attention-gauge and constellation are wired; chat-threshold (link chip, wheel relay) and hero-card (tutorial chip) stay stub.
+
+## avalonia-port/rows-inbox: +317
+- shell-inbox: server announcement routed via the startup Inbox (Core V2AuthService fetch + account dismissal), row/popup dismiss record both halves; 3 tests, fail-proven x4.
+- Row stays stub (modal ladder, intake nudge, other posters).
+
+## avalonia-port/audit-fix-safety: +257
+- Closes 7 still-open P1/P2 audit findings (#1790, #1987 x2, #1982, #1956, #1833, #1937): rebind double-capture, a CRLF scan test, a late follow-up reply's effects after a panic (both heads), a refused pink filter overwriting settings, Lockdown counted as busy, a held lock card replaying on stop, and remote session-end stops moved to the UI thread.
+- Each fix has a fail-proven headless or Core test.
+
+## avalonia-port/audit-fix-misc: +273
+- Closes seven open P0-P2 audit findings (#2096 #1763 #1908 #1456 #1318 #1313 #1289): the update tooltip key, the passive recap no longer staying on top, the rack toolbar layout, locked sessions shown as "Coming Soon", `**bold**` in help text, and the freeze pre-tick in the bug report.
+- Each Avalonia fix has a test that was seen to fail when the fix was broken; #1763 was checked with a string script.

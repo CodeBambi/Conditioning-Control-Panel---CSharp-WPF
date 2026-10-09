@@ -100,11 +100,19 @@ namespace ConditioningControlPanel.Avalonia
             PinkCommand.Surface = (on, intensity) => Start(() =>
             {
                 var s = CoreSettings.Current;
+                var (oldOpacity, oldEnabled) = (s.PinkFilterOpacity, s.PinkFilterEnabled);
                 s.PinkFilterOpacity = intensity;
                 s.PinkFilterEnabled = on;
                 if (Host is { } host) PinkFilterOverlay.Refresh(host);
+                if (on && !PinkFilterOverlay.IsShowing)
+                {
+                    // Refused: nothing showed, so the user's saved Pink filter settings stay as they were.
+                    (s.PinkFilterOpacity, s.PinkFilterEnabled) = (oldOpacity, oldEnabled);
+                    if (Host is { } h) PinkFilterOverlay.Refresh(h);
+                    return false;
+                }
                 CoreSettings.Save();
-                return !on || PinkFilterOverlay.IsShowing;
+                return true;
             });
             MediaCommand.VideoSurface = path => Start(() =>
                 CoreEngine.Video?.Trigger(path == null ? null : false, path) == true);

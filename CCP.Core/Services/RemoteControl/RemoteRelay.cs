@@ -170,7 +170,11 @@ namespace ConditioningControlPanel.Services
             _loop = null;
             (IsActive, SessionCode, ConnectPin, Tier, ControllerIdle, _idleSince, _autoDisconnected) = (false, null, null, null, false, null, false);
             (_remoteSetStrictLock, _pollBackedOff, _lastControllerCommand) = (false, false, DateTime.MinValue);
-            try { _stopEffects(false); } catch (Exception ex) { Log.Warning(ex, "[RemoteControl] stop effects failed"); }
+            // StopAsync and the poll loop land here off the UI thread, and the stops close windows: run
+            // them on the UI like ControllerLeft, posted if a stalled UI cancels the Invoke.
+            void StopEffects() { try { _stopEffects(false); } catch (Exception ex) { Log.Warning(ex, "[RemoteControl] stop effects failed"); } }
+            var (done, _) = CoreDispatch.Invoke(() => { StopEffects(); return 0; }, TimeSpan.FromSeconds(10));
+            if (!done) CoreDispatch.Post(StopEffects);
             if (ControllerConnected) { ControllerConnected = false; ControllerConnectedChanged?.Invoke(this, EventArgs.Empty); }
             SessionEnded?.Invoke(this, EventArgs.Empty);
         }

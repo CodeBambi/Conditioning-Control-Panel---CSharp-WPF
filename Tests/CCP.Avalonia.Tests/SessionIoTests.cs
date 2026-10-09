@@ -42,6 +42,7 @@ public sealed class SessionIoTests
             Dispatcher.UIThread.RunJobs();
             var recap = Assert.Single(shell.OwnedWindows.OfType<ConditioningControlPanel.Avalonia.Views.Windows.SessionCompleteWindow>());
             Assert.False(recap.ShowActivated);
+            Assert.False(recap.Topmost);   // audit #1908: WPF Topmost = !passive (Presets.cs:1799)
             recap.Close();
         }
         finally
