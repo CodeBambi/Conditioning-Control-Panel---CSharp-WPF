@@ -225,6 +225,39 @@ public sealed class RemoteRelayTests
         finally { (s.StrictLockEnabled, s.PanicKeyEnabled, s.StopEffectsOnRemoteDisconnect) = saved; }
     }
 
+    // The Leash (owner, 2026-09-26; WPF RemoteControlService.ExecuteCommand): a leashed account keeps its
+    // way out. A controller can never switch Strict Lock on while the account is leashed.
+    [Fact]
+    public async Task A_leashed_account_refuses_the_controllers_strict_lock()
+    {
+        var s = CoreSettings.Current;
+        var saved = (s.StrictLockEnabled, s.PanicKeyEnabled, s.StopEffectsOnRemoteDisconnect);
+        var leashed = ConditioningControlPanel.Services.Leash.LeashGuard.IsLeashed;
+        try
+        {
+            (s.StrictLockEnabled, s.PanicKeyEnabled, s.StopEffectsOnRemoteDisconnect) = (false, true, false);
+            ConditioningControlPanel.Services.Leash.LeashGuard.IsLeashed = () => true;
+            var f = new FakeRelay();
+            using var r = new RemoteRelay(() => "tok", () => "uid-1", "9.9.9", RemoteCommands.Execute, _ => { }, f) { AutoPoll = false };
+            await r.StartAsync("full");
+            Poll(f, "{\"controller_connected\":true,\"commands\":[{\"id\":\"1\",\"action\":\"enable_strict_lock\"}]}");
+            await r.PollOnceAsync();
+            Assert.False(s.StrictLockEnabled);
+            Assert.True(s.PanicKeyEnabled);
+
+            // A check that throws counts as leashed: refusing by mistake costs less than allowing by mistake.
+            ConditioningControlPanel.Services.Leash.LeashGuard.IsLeashed = () => throw new InvalidOperationException();
+            Poll(f, "{\"controller_connected\":true,\"commands\":[{\"id\":\"2\",\"action\":\"enable_strict_lock\"}]}");
+            await r.PollOnceAsync();
+            Assert.False(s.StrictLockEnabled);
+        }
+        finally
+        {
+            ConditioningControlPanel.Services.Leash.LeashGuard.IsLeashed = leashed;
+            (s.StrictLockEnabled, s.PanicKeyEnabled, s.StopEffectsOnRemoteDisconnect) = saved;
+        }
+    }
+
     // main 7b22ece8c (ccp-bugs #1065): no toy -> refused, never a silent "ok".
     [Fact]
     public void Trigger_haptic_with_no_toy_is_refused()

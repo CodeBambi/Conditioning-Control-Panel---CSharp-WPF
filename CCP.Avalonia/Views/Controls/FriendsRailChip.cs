@@ -77,7 +77,7 @@ public sealed class FriendsRailChip : Grid
         ToolTip.SetTip(this, Loc.Get("friends_chip_tooltip"));
         _popup = new Popup
         {
-            Child = Drawer, Placement = PlacementMode.Top, PlacementTarget = this, HorizontalOffset = 4 - ShadowRoom, VerticalOffset = -6 + ShadowRoom + 10,
+            Child = Drawer, Placement = PlacementMode.AnchorAndGravity, PlacementAnchor = global::Avalonia.Controls.Primitives.PopupPositioning.PopupAnchor.TopLeft, PlacementGravity = global::Avalonia.Controls.Primitives.PopupPositioning.PopupGravity.TopRight, PlacementTarget = this, HorizontalOffset = 4 - ShadowRoom, VerticalOffset = -6 + ShadowRoom + 10,
             IsLightDismissEnabled = true,
         };
         Children.Add(_popup);

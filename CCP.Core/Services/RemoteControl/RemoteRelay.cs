@@ -321,7 +321,19 @@ namespace ConditioningControlPanel.Services
             (_lastStatus, _lastReason) = ("ok", null);
             _lastControllerCommand = Now();          // WPF NoteControllerActivity: every command, refused or not
             RemoteCommands.RemoteHaptics.NoteCommand();
-            var reason = RemoteCommandGate.Screen(action, LockdownService.Current?.IsActive == true);
+            // The Leash (owner, 2026-09-26; WPF RemoteControlService.ExecuteCommand): a leashed account keeps
+            // its way out. From ANY remote session Strict Lock never goes on, the panic key never goes off,
+            // and a session start loses its strict_lock flag. Asked first, before any other gate.
+            string? reason = null;
+            var leash = Leash.LeashRemoteRule.Screen(action, Leash.LeashRemoteRule.AsksStrictLock(parameters), Leash.LeashGuard.Check());
+            if (leash == Leash.LeashRemoteVerdict.Refuse) reason = "not while on a leash";
+            else if (leash == Leash.LeashRemoteVerdict.StripStrict)
+            {
+                parameters = parameters == null ? null : (JObject)parameters.DeepClone();
+                if (parameters != null) parameters["strict_lock"] = false;
+                Log.Information("[RemoteControl] start_session asked for strict lock; dropped, the account is leashed");
+            }
+            reason ??= RemoteCommandGate.Screen(action, LockdownService.Current?.IsActive == true);
             if (reason == null)
             {
                 Log.Information("[RemoteControl] Executing: {Action}", action);
