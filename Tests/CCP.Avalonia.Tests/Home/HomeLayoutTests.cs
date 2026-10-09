@@ -54,7 +54,7 @@ public sealed class HomeLayoutTests
             BoardHeadTests.Pin();
             var s = CoreSettings.Current;
             var saved = (s.DashboardBrowserCollapsed, s.FavoritesDrawerOpen, s.DashboardInvertClicks,
-                s.RailFavorites.ToList(), s.RailRecent.ToList(), s.DashboardToggleHintUses);
+                s.RailFavorites.ToList(), s.RailRecent.ToList(), s.DashboardToggleHintUses, s.PerformanceMode);
             MainShellWindow? shell = null;
             try
             {
@@ -68,7 +68,7 @@ public sealed class HomeLayoutTests
             {
                 shell?.Close();
                 BoardHeadTests.Unpin();
-                (s.DashboardBrowserCollapsed, s.FavoritesDrawerOpen, s.DashboardInvertClicks, var fav, var rec, s.DashboardToggleHintUses) = saved;
+                (s.DashboardBrowserCollapsed, s.FavoritesDrawerOpen, s.DashboardInvertClicks, var fav, var rec, s.DashboardToggleHintUses, s.PerformanceMode) = saved;
                 s.RailFavorites = fav;
                 s.RailRecent = rec;
             }
@@ -184,7 +184,13 @@ public sealed class HomeLayoutTests
         Assert.Contains("tab.achievements", CoreSettings.Current.RailFavorites);
         Assert.NotNull(drawer.FindChip("tab.achievements"));
         Shot(shell, "e3-home-pin-peek.png");
-    }, s => { s.FavoritesDrawerOpen = false; s.RailFavorites = new List<string>(); });
+    }, s =>
+    {
+        s.FavoritesDrawerOpen = false;
+        s.RailFavorites = new List<string>();
+        // The 2.5 s peek runs on real time; ambient Forever loops make headless RunJobs spin past it.
+        s.PerformanceMode = true;
+    });
 
     [Fact]
     public Task The_Deeper_editor_tile_opens_the_Deeper_page() => WithHome((shell, tab) =>
