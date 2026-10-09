@@ -272,7 +272,7 @@
                         <TextBlock Text="{loc:Str companion_chat_open_full}"/>
                     </Button>
                     <!-- History: the read-only transcript viewer over the persisted session.json -->
-                    <Button Theme="{StaticResource CmpChipButtonStyle}"
+                    <Button x:Name="BtnChatHistory" Theme="{StaticResource CmpChipButtonStyle}"
                             Command="{Binding HistoryCommand}">
                         <TextBlock Text="{loc:Str companion_chat_history}"/>
                     </Button>

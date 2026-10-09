@@ -197,21 +197,26 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
             // surface on this head yet); History needs the transcript viewer; Unlock needs the
             // Patreon tab. None of the three has a target here, and all three are Relays whose
             // CanExecute is constant so the buttons at least do not pretend to be armed.
-            // Live: Open full chat is the tube's input box (WPF App.AvatarWindow.OpenChatInput) and
-            // Unlock is the Patreon tab; History stays inert (no transcript window on this head).
+            // Live: Open full chat is the tube's input box (WPF App.AvatarWindow.OpenChatInput),
+            // History the stored transcript (WPF CompanionTranscriptWindow.ShowFor) and Unlock the Patreon tab.
             OpenFullChatCommand = live
                 ? new Relay(() => Views.AvatarTube.AvatarTubeWindow.Live?.OpenChatInput())
                 : new Relay(() => { }, () => false);
-            HistoryCommand = new Relay(() => { }, () => false);
+            HistoryCommand = live
+                ? new Relay(() => CompanionTranscriptWindow.ShowFor(ShellWindow()))
+                : new Relay(() => { }, () => false);
             UnlockCommand = live
-                ? new Relay(() => (global::Avalonia.Application.Current?.ApplicationLifetime
-                    as global::Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)
-                    ?.Windows.OfType<Views.Windows.MainShellWindow>().FirstOrDefault()?.ShowTab("patreon"))
+                ? new Relay(() => ShellWindow()?.ShowTab("patreon"))
                 : new Relay(() => { }, () => false);
             // The page IS composed now, so this one has a real target - see OpenEngineRoom.
             OpenEngineRoomCommand = _engineRoom = new Relay(() => _openEngineRoom?.Invoke(),
                                                            () => _openEngineRoom != null);
         }
+
+        private static Views.Windows.MainShellWindow? ShellWindow()
+            => (global::Avalonia.Application.Current?.ApplicationLifetime
+                as global::Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)
+               ?.Windows.OfType<Views.Windows.MainShellWindow>().FirstOrDefault();
 
         private Action? _openEngineRoom;
 
