@@ -19,7 +19,7 @@
 // HookNavPremiumTags' subscriptions.
 //
 // Callers this layer does not own: InitializeNavRail and RefreshNavPremiumTags' repaint callers
-// live in MainShellWindow.NavRail.cs / MainShellWindow.PremiumRail.cs, and the collapse fade that
+// live in MainShellWindow.NavRail.cs / MainShellWindow.FavoritesRail.cs, and the collapse fade that
 // reads NavPremiumTagElements is SetNavRailExpanded in MainShellWindow.NavRail.cs.
 
 using System.Collections.Generic;

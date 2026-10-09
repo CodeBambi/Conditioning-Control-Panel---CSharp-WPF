@@ -46,16 +46,10 @@
 //                          to own a mutable transform first; and both are ambient loops behind
 //                          ChromeAmbientAllowed.
 //   PrepareRailArtNudge, RefreshRailArtClones, RailItem_MouseEnter, RailItem_MouseLeave,
-//   ApplyRailHover, PremiumRailItems
-//                        - the premium rail's hover lift and art nudge. WPF clones each chip's
-//                          Background brush and puts a RelativeTransform on the CLONE. The chips
-//                          (ChipTakeover and its eight siblings) live in SettingsTabView.axaml,
-//                          whose hover handlers that view owns, and the gate is
-//                          MotionFx.AllowTransitions (ConditioningControlPanel/Services/MotionFx.cs).
-//   ApplyRailDotPulse, _pulsingRailDots
-//                        - the rail's status dots pulse only while a feature is LIVE, and that
-//                          liveness belongs to the feature services. A dot pulsing on a feature
-//                          that is off says the feature is running.
+//   ApplyRailHover, PremiumRailItems, ApplyRailDotPulse, _pulsingRailDots
+//                        - retired with the premium quick-toggle rail on WPF (2026-09-11); the
+//                          dashboard column is the favorites rail now (MainShellWindow.FavoritesRail.cs),
+//                          which has no hover nudge or status dots. Nothing to port.
 //   ApplyBrowserFrameSweep, HookBrowserStatusWatcher, BrowserStatus_TextChanged,
 //   ApplyBrowserStatusPulse
 //                        - the browser card's frame sweep and status pulse. BrowserFrameStop* was

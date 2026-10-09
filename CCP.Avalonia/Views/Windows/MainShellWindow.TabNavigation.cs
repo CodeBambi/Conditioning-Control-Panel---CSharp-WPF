@@ -12,7 +12,7 @@
 //     NaN) and shut (0); the WPF MeasureDoorPanel + NavDoorExpandMs tween returns with the FX
 //     partials.
 //   - Per-tab side effects on the way in (RefreshPresetsList, StopPolling on leaving Available Subjects,
-//     UpdatePatreonUI, RefreshIntakePassTile, RefreshPremiumRail). Those reach App.* or a service.
+//     UpdatePatreonUI, RefreshIntakePassTile, RefreshDashboardRail - its favorites half is restored). Those reach App.* or a service.
 //     The FIVE that do not are restored in OnTabShown below:
 //       * StudioTab.OnTabShown() for "studio" and StudioTab.FocusRackEntry("haptics") for the
 //         haptics alias - ported view state on StudioTabView. Without the second, ShowTab("haptics")
@@ -189,6 +189,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     // both host real dose dials, so a lock that was latched rather than re-derived
                     // could survive a crash, an abort or an out-of-order session event.
                     case "settings": RefreshFavoritesRail(); RefreshSessionFeatureLock(); MaybeShowFeatureIntro("daily-free", "settings"); break;
+                    case "progression": RefreshFavoritesRail(); break; // WPF TabNavigation.cs:308 (RefreshDashboardRail)
                     case "studio": StudioRack?.OnTabShown(); RefreshSessionFeatureLock(); MaybeShowFeatureIntro("studio-rack", "studio"); break;
                     case "haptics": StudioRack?.FocusRackEntry("haptics"); RefreshSessionFeatureLock(); MaybeShowFeatureIntro("haptics"); break;
 

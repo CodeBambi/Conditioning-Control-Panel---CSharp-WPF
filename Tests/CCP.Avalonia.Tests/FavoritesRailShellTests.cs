@@ -125,6 +125,10 @@ public sealed class FavoritesRailShellTests
                 w.Show();
                 Dispatcher.UIThread.RunJobs();
                 var link = w.Named<Button>("BannerWebLink")!;
+                // The inline link must fit inside its line (review P2: "web app" drew as "web ap").
+                var line = w.Named<TextBlock>("TxtBannerWeb")!;
+                Assert.True(link.Bounds.Right <= line.Bounds.Width,
+                    $"banner link {link.Bounds} overruns its line {line.Bounds}");
                 Assert.True(link.Focus());
                 w.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, "");
                 Dispatcher.UIThread.RunJobs();

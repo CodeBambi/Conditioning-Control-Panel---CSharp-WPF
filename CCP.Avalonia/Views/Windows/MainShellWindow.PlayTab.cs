@@ -11,7 +11,7 @@
 //   RefreshPlayCards        - Services.TierGate.RequiresLab / RequiresPremium for eight verdicts,
 //                             which IS available now (CCP.Core/Services/TierGate.cs, over the
 //                             CoreEntitlement seam) - the rest of the member is not:
-//                             MainWindow.PremiumRail.cs's SetLockband / SetLockbandVisible to paint
+//                             MainWindow.PlayTab.cs's SetLockband / SetLockbandVisible (WPF :305) to paint
 //                             one; App.Patreon.HasPremiumAccess / HasLabAccess
 //                             (ConditioningControlPanel/Services/Account/PatreonService.cs) for the
 //                             two Goon perk lines; and the two static door flags
