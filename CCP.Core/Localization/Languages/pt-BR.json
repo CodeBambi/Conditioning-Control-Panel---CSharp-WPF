@@ -764,6 +764,7 @@
   "panic_camera_stopped": "Câmera parada. Inicie o rastreamento para retomar.",
   "btn_confirm": "Confirmar",
   "btn_save": "Salvar",
+  "btn_discard": "Descartar",
   "btn_close": "Fechar",
   "btn_delete": "Excluir",
   "btn_reset": "Redefinir",

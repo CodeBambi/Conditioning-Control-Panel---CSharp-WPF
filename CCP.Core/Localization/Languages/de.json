@@ -764,6 +764,7 @@
   "panic_camera_stopped": "Kamera gestoppt. Starte das Tracking, um fortzufahren.",
   "btn_confirm": "Bestätigen",
   "btn_save": "Speichern",
+  "btn_discard": "Verwerfen",
   "btn_close": "Schließen",
   "btn_delete": "Löschen",
   "btn_reset": "Zurücksetzen",

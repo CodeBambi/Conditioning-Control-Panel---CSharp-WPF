@@ -764,6 +764,7 @@
   "panic_camera_stopped": "Caméra arrêtée. Lancez le suivi pour reprendre.",
   "btn_confirm": "Confirmer",
   "btn_save": "Sauvegarder",
+  "btn_discard": "Abandonner",
   "btn_close": "Fermer",
   "btn_delete": "Supprimer",
   "btn_reset": "Réinitialiser",

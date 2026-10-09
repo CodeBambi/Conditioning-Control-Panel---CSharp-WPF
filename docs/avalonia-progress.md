@@ -1508,3 +1508,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-settings-devices: +196
 - Settings → Devices camera picker and ↻ live over V4L2 sysfs (metadata nodes skipped, WPF log lines verbatim); row stays stub
 - WebcamDevicePickerTests (fake sysfs, fail-proven); live props in evidence/rows-settings-devices
+
+## avalonia-port/rows-companion-editors: +478
+- Prompt editor: Save keeps only edited boxes (`ActivePersonaPromptText` moved to Core), unticking clears the community prompt, and the X asks Save/Discard/Cancel (`btn_discard` added in 9 languages).
+- Attention style editor: Test spawns a bouncing topmost test target that panic closes (`attention-test` surface), and the preview shadows are back. attention-target-editor is now wired; the prompt and phrase editors stay stub.

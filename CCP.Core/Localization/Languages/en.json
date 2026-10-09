@@ -1572,6 +1572,7 @@
   "btn_cancel": "Cancel",
   "btn_confirm": "Confirm",
   "btn_save": "Save",
+  "btn_discard": "Discard",
   "btn_close": "Close",
   "btn_delete": "Delete",
   "btn_reset": "Reset",
