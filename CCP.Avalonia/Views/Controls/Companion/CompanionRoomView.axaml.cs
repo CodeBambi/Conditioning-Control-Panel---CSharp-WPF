@@ -135,6 +135,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         /// accent ring and supported set follow a mod switch made while the tab is open.</summary>
         internal void RefreshRoster() => (WorkshopZone.DataContext as Runtime.WorkshopRuntimeVm)?.Parts.Roster.Refresh();
 
+        /// <summary>
+        /// The data half of a show, no clocks: WPF SyncCompanionTabUI -> CompanionRoom.Sync() runs on
+        /// every ShowTab("companion"), so the zones re-read even while v2 keeps the room collapsed
+        /// (their cells are adopted by the Companion pages). The room's own show edge never fires
+        /// then, so the shell calls this from the tab's edge too.
+        /// </summary>
+        internal void SyncData()
+        {
+            ChatZone.ViewModel?.Sync();
+            MemoryZone.ViewModel?.Sync();
+            AttentionZone.ViewModel?.Sync();
+            // WPF UpdateCompanionCardsUI runs on the same show: the roster's levels and ring.
+            RefreshRoster();
+        }
+
         // ponytail: ICompanionRoomVm (zone interfaces) lives in the WPF head; hero, chat and memory are
         // live, the other zones seed their own viewmodels until their runtime crosses.
 
@@ -167,13 +182,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
                 // park time would be a lie.
                 AwarenessZone.StartRefresh();   // WPF IsVisibleChanged -> StartRefresh (re-reads first)
                 AwarenessZone.SyncCursorBlink();
-                ChatZone.ViewModel?.Sync();
-                MemoryZone.ViewModel?.Sync();
-                AttentionZone.ViewModel?.Sync();
+                SyncData();
                 // The constellation's one-shot dormant sweep waits for the first time the tab is seen.
                 HeroZone.GetLogicalDescendants().OfType<RelationshipConstellation>().FirstOrDefault()?.PlayIntro();
-                // WPF UpdateCompanionCardsUI runs on the same show: the roster's levels and ring.
-                (WorkshopZone.DataContext as Runtime.WorkshopRuntimeVm)?.Parts.Roster.Refresh();
                 // ponytail: WPF also calls ChatZone.SyncThinking() here. This head's
                 // ChatThresholdView has no thinking clock to sync - WPF's dots are three
                 // RepeatBehavior=Forever Storyboards (CmpThinkingDotsStoryboard) and the port

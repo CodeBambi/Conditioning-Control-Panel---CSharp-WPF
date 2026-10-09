@@ -35,14 +35,30 @@ public sealed class WorkshopCellsTests
                 .SetupWithoutStarting();
     }
 
-    private static T OpenCell<T>(MainShellWindow shell) where T : Control
+    /// <summary>The Workshop's live cells. Under v2 (7.1.5) the room is collapsed and its accordion never
+    /// realizes them; the Companion pages adopt the same instances.</summary>
+    private static WorkshopShelfParts Shelf(MainShellWindow shell) =>
+        ((WorkshopRuntimeVm)shell.GetLogicalDescendants().OfType<CompanionRoomView>().Single()
+            .FindControl<WorkshopAccordion>("WorkshopZone")!.DataContext!).Parts;
+
+    /// <summary>7.1.5: the Library cell's home is Companion &gt; Links ("Videos it can play").</summary>
+    private static WorkshopLibraryCell OpenLibrary(MainShellWindow shell)
+    {
+        shell.Show();
+        shell.ShowTab("companionlinks");
+        Dispatcher.UIThread.RunJobs();
+        return Shelf(shell).Library;
+    }
+
+    /// <summary>7.1.5: the roster has no page of its own (Personality's picker is the pick); the room
+    /// still keeps the live cell and repaints it on the Companion tab's show edge (WPF
+    /// UpdateCompanionCardsUI).</summary>
+    private static WorkshopRosterCell OpenRoster(MainShellWindow shell)
     {
         shell.Show();
         shell.ShowTab("companion");
         Dispatcher.UIThread.RunJobs();
-        shell.GetLogicalDescendants().OfType<WorkshopAccordion>().Single().ExpandAndReveal();
-        Dispatcher.UIThread.RunJobs();
-        return shell.GetLogicalDescendants().OfType<T>().Single();
+        return Shelf(shell).Roster;
     }
 
     private static void Click(Button b) => b.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
@@ -64,7 +80,7 @@ public sealed class WorkshopCellsTests
         var shell = new MainShellWindow();
         try
         {
-            var cell = OpenCell<WorkshopLibraryCell>(shell);
+            var cell = OpenLibrary(shell);
             Assert.NotNull(TopLevel.GetTopLevel(cell));
             Assert.Single(cell.Rows);                                   // the listing page is dropped
             Assert.Equal("Kept", cell.Rows[0].NameBox.Text);
@@ -117,7 +133,7 @@ public sealed class WorkshopCellsTests
         var shell = new MainShellWindow();
         try
         {
-            var cell = OpenCell<WorkshopRosterCell>(shell);
+            var cell = OpenRoster(shell);
             var level = cell.FindControl<TextBlock>("TxtCompanion2Level")!;
             Assert.Equal("Lv.7", level.Text);
             Assert.False(string.IsNullOrEmpty(cell.FindControl<TextBlock>("TxtCompanion2Name")!.Text));
