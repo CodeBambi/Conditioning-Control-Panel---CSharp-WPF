@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using Avalonia.Threading;
 using ConditioningControlPanel;
@@ -107,9 +108,38 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             settings.LastSeenUtc = DateTime.UtcNow;
             CoreSettings.Save(suppressCloudBackup: true);
 
-            var greeting = BuildAbsenceGreeting(lastSeen);
-            if (greeting == null) GiggleFromCategory("StartupGreeting");   // first run, no prior timestamp
-            else Giggle(greeting);
+            // WPF ShowGreeting: the mod's AppOpened bark (away bucket) wins over the preset greeting.
+            if (!CoreBark.TryAppOpened(CoreBark.GreetingAwayBucket(lastSeen)))
+            {
+                var greeting = BuildAbsenceGreeting(lastSeen);
+                if (greeting == null) GiggleFromCategory("StartupGreeting");   // first run, no prior timestamp
+                else Giggle(greeting);
+            }
+
+            // Celebrate a daily-streak milestone once (queues after the welcome line).
+            CheckStreakMilestoneGreeting();
+        }
+
+        /// <summary>WPF StreakMilestoneDays: daily-login-streak day counts called out on app open.</summary>
+        private static readonly int[] StreakMilestoneDays = { 7, 14, 30, 60, 100, 365 };
+
+        /// <summary>WPF CheckStreakMilestoneGreeting (Speech.cs:2758). A 0 streak is the unsynced beat
+        /// at app open, never a reset (the "30 days replays at 50" bug).</summary>
+        private static void CheckStreakMilestoneGreeting()
+        {
+            var settings = CoreSettings.Current;
+            int streak = settings.CurrentStreak;
+            if (streak <= 0) return;
+            int reached = 0;
+            foreach (var m in StreakMilestoneDays)
+                if (m <= streak) reached = m;
+            if (reached == settings.LastAnnouncedStreakMilestone) return;
+
+            bool isNewMilestone = reached > settings.LastAnnouncedStreakMilestone;
+            settings.LastAnnouncedStreakMilestone = reached;   // also resets the latch on a streak drop
+            CoreSettings.Save(suppressCloudBackup: true);
+            if (isNewMilestone && reached > 0)
+                CoreBark.Raise("StreakMilestone", new Dictionary<string, object> { ["streak_days"] = (double)reached }, guaranteed: true);
         }
 
         /// <summary>WPF GiggleFromCategory (Speech.cs:2283): a random ENABLED phrase of the category.
@@ -188,6 +218,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
 
             ClearStaleSpeechLatch();   // WPF: the one beat that keeps running while she is wedged
             if (!IsSpeechReady()) return;
+            if (CoreBark.TryDispatchIdle()) return;   // WPF: an Idle bark first, the preset phrase is the fallback
             Giggle(RandomBambiPhrase());
         }
 

@@ -18,7 +18,7 @@ namespace ConditioningControlPanel.Avalonia.Platform;
 /// </summary>
 internal static class CompanionHead
 {
-    private static DispatcherTimer? _drainTimer, _activeTimer, _greetingDebounce;
+    private static DispatcherTimer? _drainTimer, _activeTimer;
     private static bool _started;
 
     /// <summary>WPF GamificationBridge.BestFriendsCompanionLevel.</summary>
@@ -69,29 +69,16 @@ internal static class CompanionHead
         if (level >= BestFriendsCompanionLevel)
             try { App.Achievements?.TryUnlock("best_friends"); } catch { }
 
-        // AvatarTubeWindow.Reactions.cs:542, the line.
-        var tube = Views.AvatarTube.AvatarTubeWindow.Live;
-        if (tube == null) return;
-        if (max) tube.GigglePriority($"{name} reached MAX LEVEL! *sparkles*", aiGenerated: false);
-        else if (level % 10 == 0) tube.GigglePriority($"{name} is now level {level}! Keep going!", aiGenerated: false);
-        else
-        {
-            // GiggleFromCategory("LevelUp"): a random enabled phrase of the category.
-            var lines = ConditioningControlPanel.Services.Awareness.AwarenessReactionPhrases.Enabled("LevelUp");
-            if (lines.Length > 0) tube.Giggle(lines[Random.Shared.Next(lines.Length)]);
-        }
+        // AvatarTubeWindow.Reactions.cs:542, the line: the tube's own handler speaks it (queue rules).
+        CoreTubeEvents.RaiseCompanionLevelUp(name, level, max);
     }
 
-    /// <summary>AvatarTubeWindow.Reactions.cs:570: a 600 ms debounced greeting from the new companion.</summary>
+    /// <summary>WPF SwitchToCompanionAvatar + OnCompanionSwitched: the tube swaps art, drops its queue
+    /// and greets once rapid cycling settles (600 ms debounce lives in the tube).</summary>
     internal static void OnSwitched(CompanionId id)
     {
-        _greetingDebounce?.Stop();
-        _greetingDebounce = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(600) };
-        _greetingDebounce.Tick += (_, _) =>
-        {
-            _greetingDebounce?.Stop();
-            Views.AvatarTube.AvatarTubeWindow.Live?.Giggle(CoreMods.MakeModAware($"Hi! {DisplayName(id)} is here now~"));
-        };
-        _greetingDebounce.Start();
+        try { Views.AvatarTube.AvatarTubeWindow.Live?.SwitchToCompanionAvatar(id); }
+        catch (Exception ex) { Log.Debug("companion avatar swap: {E}", ex.Message); }
+        CoreTubeEvents.RaiseCompanionSwitched(DisplayName(id));
     }
 }

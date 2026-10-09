@@ -196,9 +196,11 @@ internal static class Win32PanicKey
     internal static void OnDown(int vk, DateTime nowUtc)
     {
         _boundVk = VirtualKeys.Of(_currentKey());
-        KeyDown?.Invoke(vk, VirtualKeys.NameOf(vk));
+        // Panic first: no listener (keyword triggers, push-to-talk) may ever stand between a press and panic.
         if (vk != 0 && vk == _boundVk && !HeldPanic.Down(nowUtc, leashed: false).Repeat)
             _onPress();
+        try { KeyDown?.Invoke(vk, VirtualKeys.NameOf(vk)); }
+        catch (Exception ex) { Log.Debug("Panic key: a key listener threw: {E}", ex.Message); }
         // She's Listening push-to-talk rides the same hook (WPF GlobalKeyboardHook), as on X11.
         if (X11PanicKey.PushToTalk is { } ptt && vk == VirtualKeys.Of(X11PanicKey.PushToTalkKey?.Invoke()) && vk != _boundVk)
             ptt();
