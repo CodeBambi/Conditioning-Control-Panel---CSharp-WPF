@@ -37,4 +37,19 @@ public sealed class ProgramArtPathsTests
         Assert.Equal(new[] { "programs/plate_default.png" },
             ProgramArtPaths.DayPlate(program, new ProgramDay()));
     }
+
+    [Fact]
+    public void HeroTriesProgramThenArchetypeThenDefault()
+    {
+        var program = new ProgramDefinition
+        {
+            Id = "kept",
+            Templates = new List<ProgramSessionTemplate> { new() { Id = "BW-Drift", Name = "Drift" } }
+        };
+
+        Assert.Equal(
+            new[] { "programs/kept_hero_drift.png", "programs/hero_drift.png", "programs/hero_default.png" },
+            ProgramArtPaths.DayHero(program, new ProgramDay { SessionTemplateId = "BW-Drift" }));
+        Assert.Equal(new[] { "programs/hero_default.png" }, ProgramArtPaths.DayHero(program, new ProgramDay()));
+    }
 }

@@ -33,7 +33,9 @@ namespace ConditioningControlPanel.Avalonia.Helpers
     /// <c>Views/Features/PinkFilterFeatureControl.axaml.cs</c>. Neither is reachable from
     /// Helpers/, so the layer that owns them makes the swap.</para>
     ///
-    /// <para>ponytail: no decode cache, and that is now a measured decision rather than a guess.
+    /// <para>ponytail: <see cref="TryLoad"/> keeps no decode cache, and that is a measured decision.
+    /// The one exception is <see cref="FirstOf"/> (program art chains), which caches hits AND
+    /// misses per (active mod, path, width), so a mod switch reads fresh without invalidation.
     /// All 42 call sites on this head were read: every one sits in a constructor, a one-shot
     /// build (BubbleCountWindow.LoadBubbleImage, AvatarTubeWindow.LoadAvatarPoses), or a
     /// user-driven repaint (SetTubeStyle, a ModChanged handler) that stores the Bitmap it gets.
