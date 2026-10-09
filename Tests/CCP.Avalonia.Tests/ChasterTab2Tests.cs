@@ -264,7 +264,7 @@ public sealed class ChasterTab2Tests
             await chaster.RefreshLockAsync();
             Dispatcher.UIThread.RunJobs();
             chip.Apply();
-            Assert.Equal(Color.FromArgb(0x8C, 0xFF, 0x69, 0xB4), chip.GlowColour);
+            Assert.Equal(Color.FromRgb(0xFF, 0x69, 0xB4), chip.GlowColour);
 
             w.MouseMove(chip.TranslatePoint(new Point(36, 20), w)!.Value);
             Dispatcher.UIThread.RunJobs();
@@ -273,7 +273,7 @@ public sealed class ChasterTab2Tests
 
             v.ChasterPaused = true;
             chip.Apply();
-            Assert.Equal(Color.FromArgb(0x8C, 0x9A, 0xA0, 0xB8), chip.GlowColour);
+            Assert.Equal(Color.FromRgb(0x9A, 0xA0, 0xB8), chip.GlowColour);
             Assert.EndsWith(ConditioningControlPanel.Localization.Loc.Get("chaster_chip_paused_tip"), chip.PeekText);
 
             w.MouseMove(new Point(390, 290));
