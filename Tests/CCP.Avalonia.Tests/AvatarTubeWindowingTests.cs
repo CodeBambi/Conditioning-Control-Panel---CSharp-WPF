@@ -75,6 +75,13 @@ public sealed class AvatarTubeWindowingTests
         Dispatcher.UIThread.RunJobs();
         Assert.True(tube.Position.X > main.Position.X);
         AssertClear();
+
+        // Float (no room either side, she hangs over the shell): both clear margins are cut, her art keeps input.
+        main.Width = 4000;
+        Dispatcher.UIThread.RunJobs();
+        var f = tube.InputRect!.Value;
+        Assert.True(f.X > 0 && f.Right < (int)Math.Round(tube.Width), $"float rect {f}");
+        Assert.True(f.Width > tube.Width / 4);
     });
 
     [Fact]

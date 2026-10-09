@@ -2,7 +2,6 @@
 // foot of the rail with a mint pill for friends online; a click opens the drawer upward over the rail.
 // ponytail: no unread badge (the feed is not on this head), no bump / hover lift, no tier plate, no
 // rail hold; Popup light-dismiss stands in for WPF's click-outside and host-moved watchers.
-using Avalonia.VisualTree;
 using System;
 using Avalonia;
 using Avalonia.Controls;
@@ -10,6 +9,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.VisualTree;
 using ConditioningControlPanel.Avalonia.Views.Windows;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Services.Friends;
