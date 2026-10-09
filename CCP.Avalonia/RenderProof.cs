@@ -47,6 +47,24 @@ namespace ConditioningControlPanel.Avalonia
         }
 
         /// <summary>
+        /// A BOUNDED stand-in for Dispatcher.UIThread.RunJobs() in the headless self-checks.
+        /// RunJobs returns only when the queue is empty; the shell's Forever FX loops (FrameClock,
+        /// ambient canvases) refill it on real-time timers, so on a loaded machine a tick takes
+        /// longer than its interval and RunJobs spun at 100% CPU forever (--nav-check wrote no
+        /// shot, 2026-10-09). This pumps until the queue goes idle OR the budget runs out,
+        /// whichever comes first; the budget stop is posted at Send so a job storm cannot starve it.
+        /// </summary>
+        internal static void Pump(int budgetMs = 750)
+        {
+            var frame = new DispatcherFrame();
+            void Stop() => frame.Continue = false;
+            Dispatcher.UIThread.Post(Stop, DispatcherPriority.ContextIdle);
+            using var budget = new System.Threading.Timer(_ => Dispatcher.UIThread.Post(Stop, DispatcherPriority.Send),
+                                                          null, budgetMs, System.Threading.Timeout.Infinite);
+            Dispatcher.UIThread.PushFrame(frame);
+        }
+
+        /// <summary>
         /// One headless platform per process. SetupWithoutStarting() throws if called twice,
         /// which is what --render-all would otherwise do for every view.
         /// </summary>
@@ -115,8 +133,8 @@ namespace ConditioningControlPanel.Avalonia
                 window.Show();
 
                 // Two passes: layout settles on the first, content is painted on the second.
-                Dispatcher.UIThread.RunJobs();
-                Dispatcher.UIThread.RunJobs();
+                Pump();
+                Pump();
 
                 using var frame = window.CaptureRenderedFrame();
                 if (frame is null)

@@ -26,7 +26,7 @@ namespace ConditioningControlPanel.Avalonia
             // Shown, not merely constructed: a TopLevel that was never opened has no popup host,
             // so the tooltip sweep below could not be probed at all.
             w.Show();
-            global::Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            RenderProof.Pump();
             bool Vis(string n) => w.FindControl<Control>(n)?.IsVisible == true;
             var strip = w.NavStrip!;
 
@@ -214,7 +214,7 @@ namespace ConditioningControlPanel.Avalonia
             foreach (var (tab, file) in pairs)
             {
                 w.ShowTab(tab);
-                for (int i = 0; i < 4; i++) global::Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+                for (int i = 0; i < 4; i++) RenderProof.Pump();
                 using var frame = w.CaptureRenderedFrame();
                 if (frame is null) { fails++; Console.Error.WriteLine("FAIL no frame for " + tab); continue; }
                 var path = Path.Combine(dir, file);
