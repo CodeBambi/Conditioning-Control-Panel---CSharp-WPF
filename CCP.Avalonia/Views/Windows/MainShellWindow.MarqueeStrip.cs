@@ -49,7 +49,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 // The page starts its own strip on attach; this covers a page that attached first.
                 HomeTab?.StartMarqueeAnimation();
 
-                DispatcherTimer.RunOnce(RefreshMarqueeFromSettings, TimeSpan.FromSeconds(3));
+                RunOnceWhileOpen(RefreshMarqueeFromSettings, TimeSpan.FromSeconds(3));
 
                 _marqueeRefreshTimer?.Stop();
                 _marqueeRefreshTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(5) };

@@ -57,8 +57,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private void InitializeServerBanners()
         {
-            DispatcherTimer.RunOnce(CheckServerUpdateBanner, TimeSpan.FromSeconds(5));
-            DispatcherTimer.RunOnce(CheckServerAnnouncement, TimeSpan.FromSeconds(7));
+            RunOnceWhileOpen(CheckServerUpdateBanner, TimeSpan.FromSeconds(5));   // MainShellWindow.Lifetime.cs: a closed shell is never rooted by it
+            RunOnceWhileOpen(CheckServerAnnouncement, TimeSpan.FromSeconds(7));
         }
 
         /// <summary>WPF opens the banner's url from the pill when set. True when it opened.</summary>
@@ -102,9 +102,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             try
             {
                 using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-                var response = await http.GetAsync(UpdateBannerUrl);
+                var response = await http.GetAsync(UpdateBannerUrl, ClosedToken);
                 if (!response.IsSuccessStatusCode) return;
-                var result = ParseUpdateBanner(await response.Content.ReadAsStringAsync(), CurrentAppVersion());
+                var result = ParseUpdateBanner(await response.Content.ReadAsStringAsync(ClosedToken), CurrentAppVersion());
                 if (result == null) return;
 
                 Log.Information("Server update banner enabled: version={Version}, message={Message}", result.Version, result.Message);
@@ -132,9 +132,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 if (!string.IsNullOrWhiteSpace(unifiedId)) url += $"?unified_id={Uri.EscapeDataString(unifiedId)}";
 
                 using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-                var response = await http.GetAsync(url);
+                var response = await http.GetAsync(url, ClosedToken);
                 if (!response.IsSuccessStatusCode) return;
-                var result = ParseAnnouncement(await response.Content.ReadAsStringAsync(), CoreSettings.Current.DismissedAnnouncementId);
+                var result = ParseAnnouncement(await response.Content.ReadAsStringAsync(ClosedToken), CoreSettings.Current.DismissedAnnouncementId);
                 if (result == null) return;
 
                 Log.Information("Server announcement received: id={Id}, title={Title}", result.Id, result.Title);
