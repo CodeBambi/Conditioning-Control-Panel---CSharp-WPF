@@ -123,4 +123,25 @@ public sealed class ProgramServiceReadOnlyTests : IDisposable
 
         Assert.Equal(before, File.ReadAllBytes(StatePath));
     }
+
+    [Fact]
+    public void ReadOnlySkipsTheStartupLapseAudit()
+    {
+        var state = new ProgramState
+        {
+            Active = new ProgramEnrollment
+            {
+                ProgramId = "first_week",
+                CurrentDay = 2,
+                State = ProgramEnrollmentState.Lapsed,
+                LapseAudited = false,
+            },
+        };
+        File.WriteAllText(StatePath, JsonSerializer.Serialize(state));
+
+        // RepairSpuriousLapse would stamp LapseAudited (and may un-lapse) on a writing instance.
+        using var svc = new ProgramService(StatePath, readOnly: true);
+        Assert.Equal(ProgramEnrollmentState.Lapsed, svc.State.Active!.State);
+        Assert.False(svc.State.Active.LapseAudited);
+    }
 }

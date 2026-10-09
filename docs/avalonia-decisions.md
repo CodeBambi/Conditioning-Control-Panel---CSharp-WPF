@@ -697,5 +697,5 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
   lock for schema skew before this head writes. Reviewer checks: WPF path byte-identical (`public ProgramService()`
   chains to the same path, readOnly false); no write/move under readOnly; startup uses CreateReadOnly + Dispose.
   Tests: `Tests/CCP.Core.Tests/ProgramServiceReadOnlyTests.cs` (WPF-shape fixture byte round-trip under
-  TZ=Europe/Berlin; no write on Save/Dispose; temp recovery untouched; corrupt file untouched; no lapse after 10 days),
+  TZ=Europe/Berlin; no write on Save/Dispose; temp recovery untouched; corrupt file untouched; no lapse after 10 days; startup lapse audit skipped),
   `Tests/CCP.Avalonia.Tests/ProgramServiceStartupTests.cs`.
