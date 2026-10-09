@@ -81,9 +81,32 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (LockdownActive) return;   // PLAYBOOK P05, like OpenInvitesCard
             switch (key)
             {
+                case "backroom":
+                case "breakout":
+                case "goon":
+                case "dtrh":
+                case "arcademy": LaunchCardGame(key); break;
                 case "gazeminigame": Named<Tabs.PlayTabView>("PlayTab")?.OpenGazeMinigame(); break;
                 default: ShowTab(key); break;
             }
+        }
+
+        /// <summary>WPF LaunchExclusiveGame / LaunchPlayGoon / LaunchPlay*: a panel card's game door. Signed
+        /// out, a game that needs an account opens the panel's sign-in dialog (never the launcher); else the
+        /// launcher's own entry answers (its leash gate, tier refusal and GameWindow host) and the launcher
+        /// never comes on screen. False = no such game on this head.</summary>
+        internal bool LaunchCardGame(string id)
+        {
+            var card = global::ConditioningControlPanel.Services.Launcher.LauncherCards.Find(id);
+            if (card == null || !LauncherWindow.Destinations.ContainsKey(card.Id)) return false;
+            if (card.RequiresAccount && !CoreAccount.IsLoggedIn)
+            {
+                Serilog.Log.Information("[Play] {Id}: sign in first", id);
+                _ = OpenUnifiedLoginDialog();
+                return true;
+            }
+            Serilog.Log.Information("[Play] {Id}: launching from a panel card", id);
+            return LauncherWindow.LaunchGame(this, id);
         }
 
         /// <summary>WPF _invitePanel.RefreshAsync(): throttled inside, so a repaint storm costs one read.</summary>

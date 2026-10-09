@@ -235,10 +235,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// sign-in ask, leash gate, tier refusal and host are the ones the card gets.</summary>
         private void LaunchGame(string id)
         {
-            if (Owner is not { } shell) { Log.Debug("[Play] {Id}: no shell", id); return; }
+            if (Owner is not { } shell) { Log.Information("[Play] {Id}: no shell", id); return; }
             try
             {
-                if (!LauncherWindow.LaunchGame(shell, id))
+                if (!shell.LaunchCardGame(id))
                     Log.Information("[Play] {Id}: no game host on this head", id);
             }
             catch (Exception ex) { Log.Warning(ex, "[Play] launch {Id} failed", id); }

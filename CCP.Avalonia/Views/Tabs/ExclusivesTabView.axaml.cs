@@ -566,13 +566,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         }
 
         /// <summary>
-        /// ponytail: "fyp"/"justdrop" are shell WindowKeys; "backroom" (WPF BtnStartBackRoom_Click) and main
-        /// 2e9080399's Breakout, Goon hosting, Down the Rabbit Hole and Arcademy have no host on this head, and
-        /// Focus Gaze's Play-wall switch is still inert (PlayTabView.ChkFocusGaze_Changed); add it back when that works.
+        /// ponytail: "fyp"/"justdrop" are shell WindowKeys with no window on this head, and Focus Gaze's
+        /// Play-wall switch is still inert (PlayTabView.ChkFocusGaze_Changed); add them back when those work.
         /// Their cards stay visible but inert (no hand, honest tooltip) and never reach ShowTab or a bark.
+        /// The games (Back Room, Breakout, Goon, Down the Rabbit Hole, Arcademy) open through
+        /// MainShellWindow.LaunchCardGame, the Play wall's own door (wave 3 r5).
         /// </summary>
         internal static bool IsOnThisBuild(string key) =>
-            key is not ("fyp" or "justdrop" or "backroom" or "breakout" or "goon" or "dtrh" or "arcademy" or "focusgaze");
+            key is not ("fyp" or "justdrop" or "focusgaze");
 
         /// <summary>WPF OpenExclusiveFeature: the card never blocks, the destination's own gate does.</summary>
         private void Open(ExclusiveFeature feature)
