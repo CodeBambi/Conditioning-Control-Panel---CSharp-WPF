@@ -158,6 +158,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             ToolTip.SetShowOnDisabled(open, true);
             RefreshTierPlates();
             Dress(this.FindControl<Control>("SpotFreeToday")!);
+            Dress(this.FindControl<Control>("SpotVeilLock")!);   // WPF :799 breathes only under a shown veil
         }
 
         /// <summary>WPF RefreshExclusiveTierPlates: the plate matching the account's access lights and breathes.
@@ -196,8 +197,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private void UpdateMotion()
         {
             bool want = IsVisible && this.IsAttachedToVisualTree() && AmbientFxCanvas.Env.AllowAmbientLoops;
-            if (want == (_motion != null)) return;
-            if (want)
+            // Re-dressed either way: a glow-gate change (performance tier) alone must re-apply the glows.
+            if (want == (_motion != null)) { }
+            else if (want)
             {
                 _motionStart = FxAdorner.Time.GetTimestamp();
                 // WPF caps every ambient loop on this tab at 24fps (AmbientFrameRate).
@@ -225,7 +227,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             double glow = Breath(t, 3.4, 0.35, 0.9), fade = Breath(t, 1.9, 0.72, 1.0), swell = Breath(t, 1.9, 1.0, 1.06);
             foreach (var part in _fxParts)
             {
-                if (!part.IsVisible) continue;   // a hidden veil/pill costs no invalidation
+                if (!part.IsEffectivelyVisible) continue;   // a padlock under a hidden veil neither glows nor ticks (WPF :964)
                 if (IsPill(part))
                 {
                     part.Opacity = fade;
@@ -262,7 +264,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             }
             else
             {
-                part.Effect = _motion != null && glow
+                part.Effect = _motion != null && glow && part.IsEffectivelyVisible
                     ? new DropShadowEffect { Color = AmbientFxCanvas.Env.GlowColor, BlurRadius = Math.Min(20, AmbientFxCanvas.Env.MaxGlowBlurRadius(tier)), OffsetX = 0, OffsetY = 0, Opacity = 0.8 }
                     : null;
             }

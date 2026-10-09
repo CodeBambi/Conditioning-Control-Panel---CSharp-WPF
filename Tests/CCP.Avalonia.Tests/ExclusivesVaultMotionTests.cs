@@ -64,6 +64,11 @@ public sealed class ExclusivesVaultMotionTests
             Assert.Equal(new Thickness(3), tiered.BorderThickness);
             Assert.Equal(ExclusiveFeature.All[0].Tier, TierFxBorder.GetTier(view.FindControl<Border>("SpotlightCard")!));
             Assert.True(view.SheenCount > 0);
+            // Only padlocks under a shown veil glow (WPF ApplyVeilLockBreath(lock, veil visible)).
+            var locks = Parts(view, "VeilLock");
+            Assert.Contains(locks, l => l.IsEffectivelyVisible && l.Effect is DropShadowEffect);
+            Assert.Contains(locks, l => !l.IsEffectivelyVisible);
+            Assert.All(locks.Where(l => !l.IsEffectivelyVisible), l => Assert.Null(l.Effect));
 
             // FREE TODAY pulse (fade + swell). No roster entry reaches the untiered gold pill today (fyp,
             // the spotlight, re-stamps its badge instead), so the hero pill is shown by hand.
