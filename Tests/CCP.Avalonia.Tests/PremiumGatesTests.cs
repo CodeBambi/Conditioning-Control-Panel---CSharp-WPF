@@ -5,6 +5,7 @@ using Avalonia.Headless;
 using Avalonia.Threading;
 using CCP.Avalonia.Testing;
 using ConditioningControlPanel;
+using ConditioningControlPanel.Avalonia.Controls;
 using ConditioningControlPanel.Avalonia.Views.Windows;
 using Xunit;
 
@@ -21,7 +22,7 @@ public sealed class PremiumGatesTests
     };
 
     private static readonly string[] Bands =
-        { "PlayLockGaze", "PlayLockFocusGaze", "PlayLockRemote", "PlayLockLockdown", "PlayLockBlink", "PlayLockFyp", "PlayLockDtrh", "PlayLockArcademy" };
+        { "PlayLockGaze", "PlayLockFocusGaze", "PlayLockRemote", "PlayLockLockdown", "PlayLockBlink", "PlayLockFyp", "PlayLockBreakout" };
 
     /// <summary>Decision "Entitlement lapse: startup write deferred": navigation/startup clears a lapsed
     /// flag in memory and leaves settings.json alone; the next entitlement event writes it.</summary>
@@ -114,6 +115,10 @@ public sealed class PremiumGatesTests
                 Assert.False(Banded("PlayLockRemote"));
                 Assert.True(Veiled("LockdownTab", "LockdownGate"));
                 Assert.True(Banded("PlayLockFyp"));
+                // ...and stamps FREE TODAY over that card's sign only (WPF RefreshPlayFreeStamps).
+                bool Stamped(string badge) => shell.Named<Control>("PlayTab")!.FindControl<TierBadge>(badge)!.FreeToday;
+                Assert.True(Stamped("PlayBadgeRemote"));
+                Assert.False(Stamped("PlayBadgeFyp"));
 
                 // The other three pool keys lift their own veils (WPF RefreshEntitlementVeils).
                 CoreEntitlement.IsFreeTodayProvider = k => k is "takeover" or "voice" or "haptics";
@@ -134,7 +139,11 @@ public sealed class PremiumGatesTests
                 foreach (var (t, g) in Veils) Assert.False(Veiled(t, g), g);
                 Assert.False(HapticsVeiled());
                 foreach (var b in new[] { "PlayLockRemote", "PlayLockLockdown", "PlayLockBlink", "PlayLockFyp" }) Assert.False(Banded(b), b);
-                foreach (var b in new[] { "PlayLockGaze", "PlayLockFocusGaze", "PlayLockDtrh", "PlayLockArcademy" }) Assert.True(Banded(b), b);
+                // An owner gets no gift: a free day on a door already open stamps nothing.
+                CoreEntitlement.IsFreeTodayProvider = k => k == "remote";
+                Show("play");
+                Assert.False(Stamped("PlayBadgeRemote"));
+                foreach (var b in new[] { "PlayLockGaze", "PlayLockFocusGaze", "PlayLockBreakout" }) Assert.True(Banded(b), b);
 
                 // Tier 2: every band down.
                 CoreEntitlement.HasLabProvider = () => true;
