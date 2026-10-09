@@ -788,3 +788,30 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
 - Tests: `Tests/CCP.Core.Tests/ProgramCanEnrollCapabilityTests.cs`, `Tests/CCP.Avalonia.Tests/ProgramCapabilitiesTests.cs`,
   `ProgramsBrowseTests.RefusedCardRendersTheMissingFeature`, `OverlayQuestMinutesTests`. Fail-proofs:
   ~/ccp-port/evidence/review-programs-signals/fail-proofs.log.
+
+## 2026-10-09: Programs 3a - the first Linux writes to programs.json (avalonia-port/programs-run-3a)
+- Context: CHECKPOINT B and the 3a prereq decision (oracle-deep via the supervisor, P44; ~/ccp-port/evidence/oracle/
+  programs-checkpoint-B.md, programs-3a-canenroll.md) cleared one commit that makes enrollments real on Linux.
+- Decisions applied:
+  - App startup builds `new ProgramService()` (timers, startup RepairSpuriousLapse + rollover, Dispose flush) and seeds
+    `CoreQuests.TrackProgramVerifierProvider` like WPF App.xaml.cs:413. `CreateReadOnly()` is deleted (no caller left; tests use the internal ctor).
+  - IsReadOnly (a newer SchemaVersion stamp) is honoured in Core AND on both heads: Enroll/Pause/Resume/Withdraw/Restart/
+    Dismiss/SubmitRitualTask return early, WPF greys its lifecycle buttons and the lapsed panel (`ApplyProgramsReadOnly`),
+    Avalonia greys Withdraw/Start and shows the existing read-only note. WPF output is unchanged for writable files.
+    The note's text ("only advance in the Windows app") predates the stamp; reused rather than adding a 9-language string.
+  - Rollover is skipped for an Active run whose program has a required task the head cannot raise
+    (`UnavailableTasks(program, CoreProgram.IsTaskAvailable)`); WPF never seeds the provider, so it is unaffected. Withdraw
+    stays enabled for that run.
+  - SessionRunner gained `Stopped(session, completed)`; `CCP.Avalonia/Platform/ProgramEngineBridge.cs` mirrors the WPF
+    bridge and is attached on every program-session start (WPF attaches in StartProgramSession too).
+  - Panic ENDS a program session (`program-session` surface before `engine`, SafetyCritical) instead of WPF's pause; a
+    foreign session still pauses. Lockdown refuses Enroll, Withdraw and Start (P05 rows); WPF has no gate there, so this is
+    an Avalonia-only refusal with the existing "no escape" text.
+  - Locked premium cards stay disabled (no App Info route yet): no premium program is finishable on this head at 3a.
+  - ShareLevel: the Avalonia dialog has no picker, so enrollments use WPF's default (Private).
+- Risks: last-writer-wins on hand-synced profiles (30 s timer can overwrite a synced-in file); WPF releases older than 3-0
+  drop unknown fields; the session row has no live clock/progress bar yet; a capability the table claims may never fire at
+  runtime (e.g. Pink Filter minutes on Wayland without a tint).
+- Tests: `Tests/CCP.Core.Tests/ProgramRunLifecycleTests.cs`, `Tests/CCP.Avalonia.Tests/ProgramsRunLifecycleTests.cs`,
+  `ProgramServiceStartupTests`, `LockdownVeilTests`, `ProgramsRunViewTests`, `PanicSurfacesTests`. Fail-proofs:
+  ~/ccp-port/evidence/review-programs-run-3a/fail-proofs.log.
