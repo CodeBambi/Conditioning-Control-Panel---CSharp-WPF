@@ -24,9 +24,19 @@ public sealed class CompanionEffectsTests
             CompanionEffects.Seed();
             Assert.NotNull(CompanionBrain.CommandExecutor);
             Assert.NotNull(CompanionBrain.ActivitiesProvider);
-            Assert.Null(SpiralCommand.Surface);                     // no spiral overlay port
+            Assert.NotNull(SpiralCommand.Surface);                  // studio#16: the spiral surface is seeded
             // No main window / click-through here: the overlay surface refuses instead of claiming a flash.
             Assert.False(FlashImageCommand.Surface!(3, 1000, 100));
+            // No main window and no running engine here: the spiral is refused, never claimed.
+            var engine = CoreSession.IsEngineRunningProvider;
+            CoreSession.IsEngineRunningProvider = () => false;
+            var (was, opacity) = (CoreSettings.Current.SpiralEnabled, CoreSettings.Current.SpiralOpacity);
+            try { Assert.False(SpiralCommand.Surface!(true, 12)); }
+            finally
+            {
+                CoreSession.IsEngineRunningProvider = engine;
+                (CoreSettings.Current.SpiralEnabled, CoreSettings.Current.SpiralOpacity) = (was, opacity);
+            }
         });
     }
 
