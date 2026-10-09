@@ -134,7 +134,8 @@
 
                 <!-- Actions (kept above the library so they're reachable without scrolling) -->
                 <!-- THE LOOM: weave your own spiral (also craftable inside DtRH) -->
-                <Button x:Name="BtnOpenLoom"
+                <!-- Hidden: the Loom host is not ported, so the button would do nothing. -->
+                <Button x:Name="BtnOpenLoom" IsVisible="False"
                         Content="🌀 THE LOOM — weave your own spiral"
                         Theme="{DynamicResource OutlineButton}" HorizontalAlignment="Stretch"
                         Padding="12,10"

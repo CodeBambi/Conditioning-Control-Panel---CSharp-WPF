@@ -561,15 +561,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             // Tier 1: the rack's one paid module, same bar as the premium rail's chip.
             Add("haptics", "📳", "vibe.png", "Haptics", "tab_haptics", PanelHaptics, null, null,
                 () => CoreSettings.Current.Haptics?.Enabled,
-                // REFUSED, and the page being hosted now does not change it. WPF flips
-                // PanelHaptics.ChkHapticsEnabled so the page's own handler AND its premium gate
-                // run with the write; HapticsTabView.ChkHapticsEnabled_Changed is itself an empty
-                // stub on this head (all 34 of its forwards are - see the header of
-                // CCP.Avalonia/Views/Windows/MainShellWindow.Haptics.cs), so the flip would move a
-                // checkbox and nothing else. Writing CoreSettings.Current.Haptics.Enabled straight
-                // from here instead would skip the gate AND start no device, which is worse than
-                // an inert gesture on a page whose subject is hardware that touches the user.
-                toggle: null,
+                // No wall key: the enable lives on the nested Haptics settings object. As WPF, flip
+                // the page's own master box so its handler runs with the write, premium gate
+                // included. Both ways: the box only writes the flag, it connects no device.
+                toggle: () => FlipMasterCheckBox(PanelHaptics?.ChkHapticsEnabled),
                 tier: 1);
 
             _layout.Add("st4_studio_group_timing");
@@ -1140,8 +1135,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// <summary>
         /// WPF StudioTabView.xaml.cs:1231: the eleven wall modules go through the shell's
         /// <c>ToggleWallFeature</c> (session-lock refusal, Save, <c>CoreEngine.ApplyLive</c>).
-        /// ponytail: the Haptics half is blocked on <c>HapticsTabView.ChkHapticsEnabled_Changed</c>
-        /// being a stub.
+        /// Haptics, Scheduler and Ramp carry their own toggle (the panel's master box).
         /// </summary>
         private void QuickToggle(string key) =>
             (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.ToggleWallFeature(key);

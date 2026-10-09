@@ -160,6 +160,36 @@
                                           Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
                             </Grid>
 
+                            <!-- Stay until popped (FlashStayUntilPopped). Needs clicking on, so it greys out with it. -->
+                            <Grid Height="34" Background="Transparent" ToolTip.Tip="{loc:Str tooltip_flash_stay_until_popped}"
+                                  IsEnabled="{Binding #ChkClickable.IsChecked}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_flash_stay_until_popped}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <CheckBox Grid.Column="1" x:Name="ChkStayUntilPopped"
+                                          Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
+                            </Grid>
+
+                            <!-- Leave animation (FlashExitStyle): how a clicked flash goes. Rows built in code. -->
+                            <Grid Height="36" Background="Transparent" ToolTip.Tip="{loc:Str tooltip_flash_exit}"
+                                  IsEnabled="{Binding #ChkClickable.IsChecked}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_flash_exit}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <ComboBox Grid.Column="1" x:Name="CmbExit" Width="170"
+                                          VerticalAlignment="Center" Theme="{StaticResource DarkComboBoxStyle}"/>
+                            </Grid>
+                            <!-- #1386: while an owned Shatter is on it decides the leave, so the picker greys out. -->
+                            <TextBlock x:Name="TxtExitShatterNote" Text="{loc:Str flash_exit_shatter_note}" IsVisible="False"
+                                       FontSize="11.5" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap"
+                                       Margin="0,-2,0,6"/>
+
                             <Grid Height="34" Background="Transparent" ToolTip.Tip="{loc:Str tooltip_hydra_mode_clicking_an_image_spawns_two_more}">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
@@ -283,6 +313,45 @@
                                         <TextBlock Grid.Column="2" x:Name="TxtDriftSpeed" Text="1x" HorizontalAlignment="Right"
                                                    VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
                                                    FontSize="13" FontWeight="Bold"/>
+                                    </Grid>
+
+                                    <!-- Rounded corners, Draggable GIFs and Shatter (wave 2). All three ride the
+                                         motion grants, like the picker above them. WPF's Jackpot Remix row is not
+                                         here: nothing in this head reads JackpotRemixEnabled yet. -->
+                                    <Grid x:Name="RowRoundedCorners" Height="34" Background="Transparent" IsVisible="False"
+                                          ToolTip.Tip="{loc:Str tooltip_flash_rounded_corners}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{loc:Str setting_flash_rounded_corners}" FontSize="13" FontWeight="SemiBold"
+                                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                        <CheckBox Grid.Column="1" x:Name="ChkFlashRoundedCorners"
+                                                  Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
+                                    </Grid>
+
+                                    <Grid x:Name="RowDraggable" Height="34" Background="Transparent" IsVisible="False"
+                                          ToolTip.Tip="{loc:Str tooltip_flash_draggable}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{loc:Str setting_flash_draggable}" FontSize="13" FontWeight="SemiBold"
+                                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                        <CheckBox Grid.Column="1" x:Name="ChkFlashDraggable"
+                                                  Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
+                                    </Grid>
+
+                                    <Grid x:Name="RowShatter" Height="34" Background="Transparent" IsVisible="False"
+                                          ToolTip.Tip="{loc:Str tooltip_flash_shatter}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{loc:Str setting_flash_shatter}" FontSize="13" FontWeight="SemiBold"
+                                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                        <CheckBox Grid.Column="1" x:Name="ChkFlashShatter"
+                                                  Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
                                     </Grid>
                                 </StackPanel>
                             </Border>

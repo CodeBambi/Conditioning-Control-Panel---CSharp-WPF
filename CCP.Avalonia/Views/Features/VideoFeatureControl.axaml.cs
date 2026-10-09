@@ -408,11 +408,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             await new AttentionTargetEditorDialog().ShowDialogSafe(owner);
         }
 
+        /// <summary>The fullscreen interaction on screen right now, by its WPF queue name, or null
+        /// (WPF InteractionQueue.CurrentInteraction). A seam for tests.</summary>
+        internal static Func<string?> OtherInteraction = () =>
+            Windows.LockCardWindow.IsAnyOpen() ? "LockCard"
+            : Windows.BubbleCountWindow.IsAnyOpen() ? "BubbleCount"
+            : Windows.PopQuizWindow.IsAnyOpen() ? "PopQuiz"
+            : null;
+
         private async void BtnTestVideo_Click(object? sender, RoutedEventArgs e)
         {
-            // WPF BtnTestVideo_Click -> TriggerVideo(userInitiated: true), after its stuck-video prompt.
-            // ponytail: WPF's second prompt ("another interaction is in progress") needs the interaction
-            // queue, which this head does not have.
+            // WPF BtnTestVideo_Click -> TriggerVideo(userInitiated: true), after its two prompts.
             if (CoreEngine.Video is not { } video) return;
             if (video.IsPlaying)
             {
@@ -421,6 +427,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
                         "A video appears to be playing.\n\nIf you don't see a video, it may be stuck. Click Yes to force reset and try again.",
                         okText: "Yes")) return;
                 Serilog.Log.Warning("User requested force reset of stuck video state");
+                video.ForceCleanup();
+            }
+            // WPF's second prompt (InteractionQueue.CanStart): never fire over an open interaction
+            // without asking. This head has no queue, so the question is asked of the windows.
+            if (OtherInteraction() is { } other)
+            {
+                if (TopLevel.GetTopLevel(this) is not Window owner) return;
+                if (!await Dialogs.MessageDialog.ConfirmAsync(owner, "Please Wait",
+                        $"Another interaction is in progress ({other}).\n\nIf this seems stuck, click Yes to force reset and try again.",
+                        okText: "Yes")) return;
                 video.ForceCleanup();
             }
             video.Trigger();

@@ -1,5 +1,6 @@
 using Avalonia;
 using System.ComponentModel;
+using System.Globalization;
 using Avalonia.Controls;
 using Avalonia.Threading;
 using ConditioningControlPanel.Models;
@@ -57,6 +58,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
                 CoreSettings.Current.FlashDuration = v;
                 CoreSettings.Save();
             };
+            SliderGifSpeed.ValueChanged += (_, e) =>
+            {
+                if (_isLoading) return;
+                var s = CoreSettings.Current;
+                s.FlashGifSpeedMultiplier = e.NewValue;   // the setter clamps to 0.25-4.0
+                TxtGifSpeed.Text = FormatGifSpeed(s.FlashGifSpeedMultiplier);
+                CoreSettings.Save();
+            };
             ChkAudio.IsCheckedChanged += (_, _) =>
             {
                 if (_isLoading) return;
@@ -94,6 +103,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             LoadFromSettings();
         }
 
+        /// <summary>One decimal, invariant, so the readout is "1.0x" in every locale.</summary>
+        private static string FormatGifSpeed(double multiplier)
+            => multiplier.ToString("0.0", CultureInfo.InvariantCulture) + "x";
+
         private void Unhook()
         {
             if (_hooked != null) _hooked.PropertyChanged -= OnSettingsPropertyChanged;
@@ -114,6 +127,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
                 TxtFade.Text = $"{s.FadeDuration}%";
                 SliderDuration.Value = s.FlashDuration;
                 TxtDuration.Text = $"{s.FlashDuration}s";
+                SliderGifSpeed.Value = s.FlashGifSpeedMultiplier;
+                TxtGifSpeed.Text = FormatGifSpeed(s.FlashGifSpeedMultiplier);
                 ChkAudio.IsChecked = s.FlashAudioEnabled;
             }
             finally { _isLoading = false; }
@@ -127,6 +142,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
                 e.PropertyName == nameof(AppSettings.FlashOpacity) ||
                 e.PropertyName == nameof(AppSettings.FadeDuration) ||
                 e.PropertyName == nameof(AppSettings.FlashDuration) ||
+                e.PropertyName == nameof(AppSettings.FlashGifSpeedMultiplier) ||
                 e.PropertyName == nameof(AppSettings.FlashAudioEnabled))
             {
                 Dispatcher.UIThread.Post(LoadFromSettings);
