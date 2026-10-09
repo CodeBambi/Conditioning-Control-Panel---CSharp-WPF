@@ -74,7 +74,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         // ------------------------------------------------------------------
         // The card (read-only): WPF MainWindow.Browser.cs BtnViewMyProfile_Click, SearchAndDisplayProfile,
         // DisplayOwnProfile, DisplayProfileEntry and RefreshProfileViewerAsync, on the tab itself.
-        // ponytail: no avatar picture (no Discord avatar URL or remote image load on this head), no Patreon
+        // The picture: yours from Discord when ShareProfilePicture is on, a looked-up player's from the
+        // server's avatar_url (Helpers/AvatarPhotos). ponytail: no Patreon
         // badge/banner art, no edit-name/delete/Discord-DM buttons (writes, unit 7), no cosmetics, no staff
         // flag for your own card (no Discord service): each stays hidden rather than drawn wrong.
         // ------------------------------------------------------------------
@@ -187,6 +188,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             TxtProfileViewerAchievements.Text = $"{unlocked} / {total}";
             Host?.SetProfileViewingSelf(true);
             Host?.ApplyOwnProfileWardrobe();
+            ShowProfilePhoto(TxtProfileViewerName.Text ?? "", Helpers.AvatarPhotos.OwnUrl(256));   // WPF Browser.cs:1909
             SetXpMeter(s.PlayerLevel, s.PlayerXP);
             Host?.UpdateProfileShowcase(unlocked, total, progress?.UnlockedAchievements);
             ShowAchievements(progress?.UnlockedAchievements, Loc.Get("label_no_achievements_yet"));
@@ -215,6 +217,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             ShowAchievements(null, $"{entry.AchievementsCount} achievements unlocked");
             // entry.Xp is lifetime; the meter wants progress inside the level.
             Host?.SetProfileViewingSelf(isOwn);
+            ShowProfilePhoto(entry.DisplayName, isOwn ? Helpers.AvatarPhotos.OwnUrl(256) : null);
             // WPF Browser.cs:2290: the board row carries no cosmetics - yours from settings, theirs stripped until the lookup.
             if (isOwn) Host?.ApplyOwnProfileWardrobe();
             else Host?.ApplyViewedProfileWardrobe(null);
@@ -240,8 +243,32 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 ApplyIdentityBadges(lookup.IsStaff, lookup.StaffRole, lookup.IsWhitelisted);
                 Host?.ApplyViewedProfileWardrobe(lookup.Cosmetics);   // WPF Browser.cs:2437
             }
+            // WPF Browser.cs:2437: the server's picture; your own card falls back to your Discord one.
+            var photo = lookup.AvatarUrl;
+            if (string.IsNullOrEmpty(photo) && string.Equals(name, CoreSettings.Current.UserDisplayName, StringComparison.OrdinalIgnoreCase))
+                photo = Helpers.AvatarPhotos.OwnUrl(256);
+            ShowProfilePhoto(name, photo);
             if (lookup.Achievements is { Count: > 0 }) ShowAchievements(lookup.Achievements, "");
             else if (lookup.AchievementsCount > 0) ShowAchievements(null, $"{lookup.AchievementsCount} achievements unlocked");
+        }
+
+        /// <summary>The hero disc's picture (WPF ProfileViewerAvatar.ImageSource): cleared at once, then
+        /// filled when the load lands, if the same player is still on the card.</summary>
+        private void ShowProfilePhoto(string name, string? url)
+        {
+            ProfileHeroAvatar.AvatarImage = null;
+            if (string.IsNullOrEmpty(url)) return;
+            _ = PaintProfilePhotoAsync(name, url);
+        }
+
+        private async Task PaintProfilePhotoAsync(string name, string url)
+        {
+            var bmp = await Helpers.AvatarPhotos.LoadAsync(url, 256);
+            if (bmp == null) return;
+            global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                if (TxtProfileViewerName.Text == name) ProfileHeroAvatar.AvatarImage = bmp;
+            });
         }
 
         private void ShowCard(bool og)
