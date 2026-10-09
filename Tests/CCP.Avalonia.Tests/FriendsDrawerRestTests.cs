@@ -178,6 +178,11 @@ public sealed class FriendsDrawerRestTests
             await Task.Delay(150);
             FriendsSfx.Denied();
             Assert.Equal(2, played.Count);   // master 0 is silence
+            ConditioningControlPanel.CoreSettings.Current.MasterVolume = 50;
+            var video = FriendsSfx.VideoPlaying;
+            FriendsSfx.VideoPlaying = () => true;
+            try { await Task.Delay(150); FriendsSfx.Sent(); Assert.Equal(2, played.Count); }   // the mandatory video owns the room
+            finally { FriendsSfx.VideoPlaying = video; }
         }
         finally { FriendsSfx.Player = null; ConditioningControlPanel.CoreSettings.Current.MasterVolume = vol; }
     });

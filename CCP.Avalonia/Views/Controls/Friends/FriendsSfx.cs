@@ -1,8 +1,9 @@
 // PORTED from ConditioningControlPanel/Services/Friends/FriendsSfx.cs (7.1.5): the drawer's small sounds,
 // same files and scales. One clock (FriendsSfxGate, Core): a 130 ms floor between any two, incoming
 // ones further apart and halved while a session runs. Silent at master volume 0 or with no file.
-// ponytail: WPF also stays silent while AudioService.IsOutputSuppressed, the mandatory video plays or
-// an EMI line holds the room; this head has no such probes yet. No mod sound override (ChaosSfx's note).
+// Silent while the mandatory video plays (CoreEngine.Video, WPF App.Video.IsPlaying).
+// ponytail: WPF also stays silent while AudioService.IsOutputSuppressed or an EMI line holds the room
+// (EmiLineEngine.HoldActive); this head has no probe for either. No mod sound override (ChaosSfx's note).
 using System;
 using ConditioningControlPanel.Services;
 using ConditioningControlPanel.Services.Friends;
@@ -16,6 +17,8 @@ internal static class FriendsSfx
 
     /// <summary>Test seam: what a pass plays (path, level, tag). Null = CoreAudio.</summary>
     internal static Action<string, float, string>? Player { get; set; }
+    /// <summary>Test seam: the mandatory video owns the room (WPF App.Video?.IsPlaying).</summary>
+    internal static Func<bool> VideoPlaying { get; set; } = () => CoreEngine.Video?.IsPlaying == true;
 
     public static void DrawerOpen() => Play("chaos/cards_in.mp3", 0.14f, "friends-open");
     public static void DrawerClose() => Play("chaos/ui_unequip.mp3", 0.10f, "friends-close");
@@ -35,6 +38,7 @@ internal static class FriendsSfx
         {
             int level = CoreSettings.Current?.MasterVolume ?? 0;
             if (level <= 0) return;
+            if (VideoPlaying()) return;   // the mandatory video owns the room
             float master = Math.Clamp(level / 100f, 0f, 1f);
             lock (Gate) { if (!Rules.TryPass(DateTime.UtcNow, incoming)) return; }
             var path = ContentLocator.Resolve(System.IO.Path.Combine("Resources", "sounds", rel.Replace('/', System.IO.Path.DirectorySeparatorChar)));
