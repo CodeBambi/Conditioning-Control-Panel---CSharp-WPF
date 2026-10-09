@@ -37,7 +37,11 @@ internal static class X11SummonChord
     [DllImport(LibX11)] private static extern byte XKeysymToKeycode(IntPtr display, ulong keysym);
     [DllImport(LibX11)] private static extern int XRefreshKeyboardMapping(IntPtr mappingEvent);
     [DllImport(LibX11)] private static extern IntPtr XSetErrorHandler(IntPtr handler);
-    [DllImport("libc", SetLastError = true)] private static extern int poll(ref PollFd fds, ulong nfds, int timeout);
+    [DllImport("libc", SetLastError = true)] private static extern int poll([In, Out] PollFd[] fds, ulong nfds, int timeout);
+    [DllImport("libc")] private static extern int pipe(int[] fds);
+    [DllImport("libc")] private static extern nint read(int fd, byte[] buf, nint count);
+    [DllImport("libc")] private static extern nint write(int fd, byte[] buf, nint count);
+    private static readonly int[] _wake = { -1, -1 };   // self-pipe: Arm wakes the listener to drain what XSync queued
 
     private static readonly object Gate = new();
     private static IntPtr _display, _root;
@@ -78,6 +82,8 @@ internal static class X11SummonChord
                 if (_badAccess) { XUngrabKey(_display, code, AnyModifier, _root); XFlush(_display); return false; }
                 _keycode = code;
                 _onPress = onPress;
+                // XSync read the socket, so anything it queued would sit until the next X traffic.
+                if (_wake[1] >= 0) write(_wake[1], new byte[1], 1);
                 return true;
             }
         }
@@ -114,6 +120,7 @@ internal static class X11SummonChord
         if (_display == IntPtr.Zero) { Log.Warning("[EmiDesk] no X display: the summon chord cannot be armed"); return false; }
         _root = XDefaultRootWindow(_display);
         var fd = XConnectionNumber(_display);
+        pipe(_wake);
         new Thread(() => Listen(fd)) { IsBackground = true, Name = "emi-chord-x11" }.Start();
         return true;
     }
@@ -132,13 +139,15 @@ internal static class X11SummonChord
     private static void Listen(int fd)
     {
         var ev = Marshal.AllocHGlobal(XEventSize);
-        var pfd = new PollFd { Fd = fd, Events = 1 /* POLLIN */ };
+        var pfd = new[] { new PollFd { Fd = fd, Events = 1 /* POLLIN */ }, new PollFd { Fd = _wake[0], Events = 1 } };
+        var buf = new byte[16];
         while (true)
         {
             try
             {
-                // Block without the lock; Arm's XSync may queue events, so drain on every wake.
-                if (poll(ref pfd, 1, -1) < 0 && Marshal.GetLastWin32Error() != 4 /* EINTR */) Thread.Sleep(1000);
+                // Block without the lock on the X socket and the wake pipe; drain the queue on every wake.
+                if (poll(pfd, _wake[0] >= 0 ? 2UL : 1UL, -1) < 0 && Marshal.GetLastWin32Error() != 4 /* EINTR */) Thread.Sleep(1000);
+                if ((pfd[1].REvents & 1) != 0) read(_wake[0], buf, buf.Length);
                 Action? fire = null;
                 lock (Gate)
                 {

@@ -4,8 +4,8 @@ using Serilog;
 namespace ConditioningControlPanel.Services.UI
 {
     /// <summary>
-    /// Do-not-disturb for the Core schedulers: WPF <c>Services/UI/DoNotDisturbGuard.cs</c>'s decision
-    /// with the foreground read a head seam instead of user32. Read only when a spawn is due, cached
+    /// Do-not-disturb decision for both heads (WPF <c>DoNotDisturbGuard</c> delegates here and seeds
+    /// <see cref="ForegroundProcess"/> with user32; Avalonia seeds it with X11). Read only when a spawn is due, cached
     /// a second; no provider (or one that throws) reads as "not privileged".
     /// </summary>
     public static class DndGuard
@@ -18,7 +18,6 @@ namespace ConditioningControlPanel.Services.UI
         private static string _cached = "";
         private static readonly object Gate = new();
 
-        /// <summary>Cached foreground process name (WPF ForegroundProcessName).</summary>
         public static string ForegroundProcessName()
         {
             lock (Gate)
@@ -51,7 +50,6 @@ namespace ConditioningControlPanel.Services.UI
 
         public static bool ShouldSuppressFlashes() => CoreSettings.Current.DndSuppressFlashes && IsPrivilegedAppForeground();
 
-        /// <summary>One line a minute at most, shared by the video and flash paths.</summary>
         public static void LogSuppressionThrottled(string what)
         {
             var now = Environment.TickCount64;
@@ -63,7 +61,6 @@ namespace ConditioningControlPanel.Services.UI
             Log.Information("[DND] {What} suppressed - do-not-disturb app in foreground ({Process})", what, ForegroundProcessName());
         }
 
-        /// <summary>Test seam: forget the cached foreground read.</summary>
         internal static void ResetCacheForTests()
         {
             lock (Gate) { _cacheExpiryTick = 0; _nextLogTick = 0; _cached = ""; }

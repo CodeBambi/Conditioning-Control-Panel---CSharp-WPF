@@ -10,12 +10,8 @@ namespace ConditioningControlPanel.Services.EmiDesk
     [Flags]
     public enum ChordMods { None = 0, Ctrl = 1, Alt = 2, Shift = 4, Win = 8 }
 
-    /// <summary>
-    /// The EMI Desk summon chord rules both heads share: how a chord is written ("Ctrl+Alt+E") and
-    /// what is refused. Lifted from the WPF <c>EmiDeskService.FormatChord</c> / <c>ValidateChord</c>,
-    /// which now delegate here; key names are the WPF/Avalonia <c>Key</c> enum names (identical for
-    /// the keys a chord uses).
-    /// </summary>
+    /// <summary>EMI Desk summon chord rules for both heads (WPF FormatChord/ValidateChord delegate here);
+    /// key names are the WPF/Avalonia <c>Key</c> enum names.</summary>
     public static class EmiDeskChord
     {
         public const string DefaultHotkey = "Ctrl+Alt+E";
@@ -58,11 +54,8 @@ namespace ConditioningControlPanel.Services.EmiDesk
             return (mods, key);
         }
 
-        /// <summary>
-        /// Why a candidate chord cannot be used, or null when it is fine. Localized, for the capture
-        /// UI to show inline. Checks: a modifier is required, the base key must not be on the global
-        /// keyboard hook (panic / pause), and it must not be the Quick Recal chord (Ctrl+Alt+G).
-        /// </summary>
+        /// <summary>Why a chord cannot be used (localized), or null: a modifier is required, the base key
+        /// must not be on the panic/pause hook, and it must not be Quick Recal (Ctrl+Alt+G).</summary>
         public static string? Validate(ChordMods mods, string? key, AppSettings? settings)
         {
             try
