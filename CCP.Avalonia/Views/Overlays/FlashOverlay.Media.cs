@@ -116,6 +116,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             {
                 StopFlashSound();
                 _stopSound = CoreAudio.PlayStoppable(path, FlashVoicePool.Volume(s.MasterVolume), "flash-sound");
+                _soundUntil = DateTime.Now.AddSeconds(seconds);
                 CoreTubeEvents.RaiseFlashAudioPlaying(FlashVoicePool.Caption(path));
                 if (s.AudioDuckingEnabled)
                 {
@@ -127,11 +128,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             catch (Exception ex) { Log.Debug("Flash: could not play sound: {E}", ex.Message); }
         }
 
+        private static DateTime _soundUntil = DateTime.MinValue;
+
+        /// <summary>WPF _soundPlayingForCurrentFlash: a voice line is playing right now (hydra
+        /// children spawned under it pay the 8 XP base).</summary>
+        internal static bool SoundPlaying => DateTime.Now < _soundUntil;
+
         /// <summary>WPF StopCurrentSound (engine stop, panic, a newer burst).</summary>
         internal static void StopFlashSound()
         {
             var stop = _stopSound;
             _stopSound = null;
+            _soundUntil = DateTime.MinValue;
             try { stop?.Invoke(); } catch { }
         }
 
