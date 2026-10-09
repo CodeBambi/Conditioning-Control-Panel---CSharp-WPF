@@ -37,13 +37,22 @@ public sealed class ProgramsBrowseTests
             EnsureAvalonia();
             Window? host = null;
             var previousLanguage = LocalizationManager.Instance.CurrentLanguage;
+            Func<ProgramTask, bool>? previousGate = null;
             try
             {
                 // The parity trunk raises keyword triggers and takes rituals, so every built-in
                 // program is enrollable; switch rituals off to see a refused card render.
+                // App startup seeds the gate; a headless test app never runs that, so seed it here.
+                previousGate = CoreProgram.TaskAvailableProvider;
+                CoreProgram.TaskAvailableProvider = global::ConditioningControlPanel.Avalonia.Platform.ProgramCapabilities.IsAvailable;
                 global::ConditioningControlPanel.Avalonia.Platform.ProgramCapabilities.RitualsAvailable = false;
                 LocalizationManager.Instance.SetLanguage("en");
+                // One free program with a required ritual: on screen, and never behind a Premium lock.
+                var ritual = BuiltInPrograms.All().First(p =>
+                    p.AllDays.SelectMany(d => d.Tasks).Any(t => t.Kind == ProgramTaskKind.Ritual && !t.Optional));
+                ritual.Tier = ProgramTier.Free;
                 var view = new ProgramsTabView { Width = 1200, Height = 900 };
+                view.UseProgramLibrary(new[] { ritual });
                 host = new Window { Width = 1200, Height = 900, Content = view };
                 host.Show();
                 Dispatcher.UIThread.RunJobs();
@@ -57,6 +66,7 @@ public sealed class ProgramsBrowseTests
             finally
             {
                 global::ConditioningControlPanel.Avalonia.Platform.ProgramCapabilities.RitualsAvailable = true;
+                CoreProgram.TaskAvailableProvider = previousGate;
                 LocalizationManager.Instance.SetLanguage(previousLanguage);
                 host?.Close();
                 Dispatcher.UIThread.RunJobs();

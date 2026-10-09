@@ -39,6 +39,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     if (map != null) { room.PersistDrawerStates(map); CoreSettings.Save(); }
                 }
                 else if (map != null) room.RestoreDrawerStates(map);
+                // Under v2 the room itself stays collapsed (its cells live on the Companion pages),
+                // so its own show edge never fires: repaint the roster here (WPF UpdateCompanionCardsUI).
+                if (visible) room.RefreshRoster();
 
                 InitializeCompanionFx(room);
 
