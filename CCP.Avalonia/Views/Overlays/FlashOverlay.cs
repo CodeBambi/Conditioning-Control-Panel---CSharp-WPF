@@ -72,6 +72,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             var screens = ScreenList.Enumerate(host);
             if (screens.Count == 0) return;
             _busy = true;
+            _fxHost = host;   // FlashOverlay.Fx.cs: hydra children re-read the screens
             CoreTubeEvents.RaiseFlashAboutToDisplay();   // WPF FlashService.FlashAboutToDisplay (tube#T5)
             var generation = _generation;
             var scheduled = false;
@@ -109,7 +110,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                     {
                         try
                         {
-                            if (refused || _closed || generation != _generation || Active.Count >= MaxConcurrent)
+                            if (refused || _closed || generation != _generation || Active.Count >= SpawnCap(CoreSettings.Current))
                             {
                                 bmp.Dispose();
                                 if (frames != null) foreach (var f in frames.Value.Frames) f.Dispose();
@@ -181,10 +182,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             if (clickable)
             {
                 w.MakeClickable();
-                // WPF OnFlashClicked: this window's lifetime ends, the tube reacts. ponytail: hydra
-                // multiply (CorruptionMode), haptics and the shatter/exit styles are not here yet.
-                w.Popped += () => CoreTubeEvents.RaiseFlashClicked();
+                // WPF OnFlashClicked: tube event, haptic, hydra (FlashOverlay.Fx.cs).
+                w.Popped += fromGaze => OnFlashPopped(w, fromGaze);
             }
+            lifetime = ResolveLifetime(lifetime, CoreSettings.Current);   // stay-until-popped / hydra child
+            rect = ApplyFx(w, rect, screen, lifetime, CoreSettings.Current, Rng);   // lucky, glow, corners, XP
             if (!X11Overlay.SetClickThrough(w, !clickable) || !X11Overlay.SetOpacity(w, 0) || !X11Overlay.SetOverrideRedirect(w, rect))
             {
                 if (!_warnedUnavailable) Log.Warning("Flash: the platform refused a click-through topmost overlay window; flashes skipped");

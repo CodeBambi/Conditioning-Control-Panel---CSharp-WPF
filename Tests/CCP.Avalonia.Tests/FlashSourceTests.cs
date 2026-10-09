@@ -133,7 +133,7 @@ public sealed class FlashSourceTests
                 w.MakeClickable();
                 Assert.True(w.IsHitTestVisible);
                 var pops = 0;
-                w.Popped += () => pops++;
+                w.Popped += _ => pops++;
                 w.Pop();
                 w.Pop();
                 Assert.Equal(1, pops);
