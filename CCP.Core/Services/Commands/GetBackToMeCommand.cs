@@ -106,6 +106,9 @@ namespace ConditioningControlPanel.Services.Commands
             // ModerationLog. IsAiGenerated propagates so canned fallbacks don't wear
             // the AI badge.
             if (AiProvider?.Invoke() is not { } ai) return;
+            // Scoped to this async method: the reply's own commands, executed inside the call, see this
+            // follow-up's token and are dropped if a panic cancels it meanwhile (audit #1987).
+            AiCommandService.FollowUpCancellation.Value = _cancellationToken;
             var result = await ai.GetBambiReplyExAsync($"[Token={token}, JsonOnly={jsonOnly}]");
             // A panic or switch-off during the AI round trip drops the reply and the nested commands.
             _cancellationToken.ThrowIfCancellationRequested();

@@ -642,9 +642,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
         /// Capture stays set a beat after the key so the X11 listener's copy of that same press
         /// (queued on the UI thread in either order) is not also a panic.
         /// </summary>
+        private bool _capturingPanicKey;
+
         private void BtnPanicKey_Click(object? sender, RoutedEventArgs e)
         {
-            if (TopLevel.GetTopLevel(this) is not { } top) return;
+            // WPF's click only sets _isCapturingPanicKey, so a second click is a no-op; here it
+            // would attach a second key handler that rebinds the key again on the NEXT press.
+            if (_capturingPanicKey || TopLevel.GetTopLevel(this) is not { } top) return;
+            _capturingPanicKey = true;
             MainShellWindow.CapturingPanicKey = true;
             SetButtonLabel(BtnPanicKey, "Press any key...");
             top.AddHandler(KeyDownEvent, OnCaptureKey, RoutingStrategies.Tunnel);
@@ -654,6 +659,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
 
             void Detach()
             {
+                _capturingPanicKey = false;
                 top.RemoveHandler(KeyDownEvent, OnCaptureKey);
                 if (top is Window w) w.Deactivated -= OnCancel;
             }

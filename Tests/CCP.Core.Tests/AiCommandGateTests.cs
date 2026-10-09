@@ -48,6 +48,7 @@ public sealed class AiCommandGateTests : IDisposable
         AiCommandService.LiveActionSink = null;
         GetBackToMeCommand.AiProvider = null;
         GetBackToMeCommand.SaySurface = null;
+        ConditioningControlPanel.Services.Companion.Brain.CompanionBrain.CommandExecutor = null;
     }
 
     private static AiCommandData Flash(int amount = 3) =>
@@ -199,5 +200,74 @@ public sealed class AiCommandGateTests : IDisposable
         await Task.Delay(300);
         Assert.Empty(said);
         Assert.Empty(_flashes);
+    }
+
+    // ---- audit #1987: the follow-up's reply runs its own commands inside the AI call (CompanionBrain.CommandExecutor) ----
+
+    /// <summary>An AI stand-in that, like the real providers, executes its reply's commands inside
+    /// GetBambiReplyExAsync once the test releases it.</summary>
+    public class ActingAi : System.Reflection.DispatchProxy
+    {
+        public readonly TaskCompletionSource Asked = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public readonly TaskCompletionSource Release = new();
+        public List<AiCommandData> ReplyCommands = new();
+        protected override object? Invoke(System.Reflection.MethodInfo? method, object?[]? args)
+        {
+            if (method?.Name == "GetBambiReplyExAsync") return Reply();
+            var t = method?.ReturnType;
+            return t != null && t.IsValueType && t != typeof(void) ? Activator.CreateInstance(t) : null;
+        }
+        private async Task<ConditioningControlPanel.Services.Moderation.AiReplyResult> Reply()
+        {
+            Asked.TrySetResult();
+            await Release.Task;
+            ConditioningControlPanel.Services.Companion.Brain.CompanionBrain.CommandExecutor?.Invoke(ReplyCommands);
+            return new ConditioningControlPanel.Services.Moderation.AiReplyResult("hi", true, null);
+        }
+    }
+
+    private ActingAi SeedActingAi()
+    {
+        var ai = System.Reflection.DispatchProxy.Create<ConditioningControlPanel.Services.AIService.IAiService, ActingAi>();
+        var acting = (ActingAi)(object)ai;
+        acting.ReplyCommands.Add(Flash(5));
+        GetBackToMeCommand.AiProvider = () => ai;
+        var service = new AiCommandService();
+        ConditioningControlPanel.Services.Companion.Brain.CompanionBrain.CommandExecutor = commands =>
+        {
+            service.BeginBatch();
+            foreach (var c in commands) service.ExecuteCommand(c);
+        };
+        return acting;
+    }
+
+    [Fact]
+    public async Task PanicDuringTheFollowUpRoundTripDropsTheReplysOwnCommands()
+    {
+        var acting = SeedActingAi();
+        Run(FollowUp());
+        await acting.Asked.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        AiCommandService.CancelAll();             // panic while the AI is answering
+        acting.Release.SetResult();               // the late reply executes its commands inline
+        Assert.DoesNotContain(_flashes, f => f.Amount == 5);
+    }
+
+    [Fact]
+    public async Task AFollowUpThatIsNotCancelledStillRunsItsReplysCommands()
+    {
+        var acting = SeedActingAi();
+        Run(FollowUp());
+        await acting.Asked.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        acting.Release.SetResult();
+        Assert.Contains(_flashes, f => f.Amount == 5);
+    }
+
+    [Fact]
+    public void AChatReplysCommandsRunEvenAfterAnEarlierPanic()
+    {
+        SeedActingAi();
+        AiCommandService.CancelAll();             // an earlier panic does not poison later chat replies
+        ConditioningControlPanel.Services.Companion.Brain.CompanionBrain.CommandExecutor!(new List<AiCommandData> { Flash(5) });
+        Assert.Contains(_flashes, f => f.Amount == 5);
     }
 }
