@@ -135,6 +135,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
                 AttentionZone.ViewModel?.Sync();
                 // The constellation's one-shot dormant sweep waits for the first time the tab is seen.
                 HeroZone.GetLogicalDescendants().OfType<RelationshipConstellation>().FirstOrDefault()?.PlayIntro();
+                // WPF UpdateCompanionCardsUI runs on the same show: the roster's levels and ring.
+                (WorkshopZone.DataContext as Runtime.WorkshopRuntimeVm)?.Parts.Roster.Refresh();
                 // ponytail: WPF also calls ChatZone.SyncThinking() here. This head's
                 // ChatThresholdView has no thinking clock to sync - WPF's dots are three
                 // RepeatBehavior=Forever Storyboards (CmpThinkingDotsStoryboard) and the port
