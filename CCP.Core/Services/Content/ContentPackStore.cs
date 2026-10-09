@@ -195,6 +195,9 @@ namespace ConditioningControlPanel.Services
             }
         }
 
+        /// <summary>The installed pack's folder (<c>.packs/&lt;guid&gt;</c>), or null when unmapped.</summary>
+        public string? GetPackFolder(string packId) => PackFolder(packId);
+
         private string? PackFolder(string packId)
         {
             var map = _settings().PackGuidMap;

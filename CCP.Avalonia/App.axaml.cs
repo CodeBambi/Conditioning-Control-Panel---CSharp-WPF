@@ -229,6 +229,7 @@ namespace ConditioningControlPanel.Avalonia
         internal static void StartContentPacks(ContentPackStore store)
         {
             ContentPackStore.Current = store;
+            ContentPackService.Current = new ContentPackService(store);   // network half: manifest, install, previews
             CoreProgram.ActivePackVideoCountProvider = () => ContentPackStore.Current?.GetAllActivePackVideos().Count ?? 0;
         }
 
