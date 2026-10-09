@@ -195,8 +195,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             var s = CoreSettings.Current;
             var progress = App.Achievements?.Progress;
             ShowCard(s.IsSeason0Og);
-            ApplyIdentityBadges(false, null, CoreAccount.IsWhitelisted);
-            TxtProfileViewerName.Text = s.UserDisplayName ?? "You";
+            ApplyOwnIdentityBadges();
+            TxtProfileViewerName.Text = OwnCardName();
             ShowOwnActions(true);
             ShowOwnDiscordDm();
             RefreshProfileChrome();
@@ -219,6 +219,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             TxtProfileViewerAchievements.Text = $"{unlocked} / {total}";
             Host?.SetProfileViewingSelf(true);
             Host?.ApplyOwnProfileWardrobe();
+            ApplyOwnPatreonPlates();
             ShowProfilePhoto(TxtProfileViewerName.Text ?? "", Helpers.AvatarPhotos.OwnUrl(256));   // WPF Browser.cs:1909
             SetXpMeter(s.PlayerLevel, s.PlayerXP);
             Host?.UpdateProfileShowcase(unlocked, total, progress?.UnlockedAchievements);
@@ -231,7 +232,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             var s = CoreSettings.Current;
             ShowCard(entry.IsSeason0Og);
             var isOwn = string.Equals(entry.DisplayName, s.UserDisplayName, StringComparison.OrdinalIgnoreCase);
-            ApplyIdentityBadges(false, null, isOwn && CoreAccount.IsWhitelisted);
+            if (isOwn) ApplyOwnIdentityBadges();
+            else ApplyIdentityBadges(false, null, false);
+            // WPF Browser.cs:2247: your own row reads the local tier, anyone else's the board row.
+            if (isOwn) ApplyOwnPatreonPlates();
+            else ApplyPatreonPlates(entry.PatreonTier, entry.IsPatreon && entry.PatreonTier >= 1);
             TxtProfileViewerName.Text = entry.DisplayName;
             ShowOwnActions(isOwn);
             ShowDiscordDm(entry.HasDiscord ? entry.DiscordId : null, entry.DisplayName);
@@ -266,7 +271,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             SetOnline(lookup.IsOnline, lookup.IsOnline ? "Online" : "Offline");
             if (string.Equals(name, CoreSettings.Current.UserDisplayName, StringComparison.OrdinalIgnoreCase))
             {
-                ApplyIdentityBadges(false, null, CoreAccount.IsWhitelisted);
+                ApplyOwnIdentityBadges();
                 Host?.ApplyOwnProfileWardrobe();
             }
             else
@@ -322,6 +327,70 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             TxtProfileViewerOnline.Foreground = brush;
             ProfileHeroAvatar.PresenceDot.Fill = brush;
         }
+
+        /// <summary>WPF Browser.cs:1951: the unified name, then the Discord custom name, then the Patreon name, then "You".</summary>
+        internal static string OwnCardName() => CoreSettings.Current.UserDisplayName
+            ?? Platform.AccountSeed.Discord?.CustomDisplayName ?? Platform.AccountSeed.Patreon?.DisplayName ?? "You";
+
+        /// <summary>WPF Browser.cs:1899 / :2254: your own card wears your Discord staff role and the whitelist plate.</summary>
+        private void ApplyOwnIdentityBadges()
+        {
+            var discord = Platform.AccountSeed.Discord;
+            ApplyIdentityBadges(discord?.IsStaff == true, discord?.StaffRole, CoreAccount.IsWhitelisted);
+        }
+
+        /// <summary>WPF Browser.cs:2060: the settings tier (a Discord sign-in with a linked Patreon has one too);
+        /// a whitelisted account with tier 0 still gets the tier plate and the banner.</summary>
+        private void ApplyOwnPatreonPlates()
+        {
+            var tier = CoreSettings.Current.PatreonTier;
+            ApplyPatreonPlates(tier, tier >= 1 || CoreAccount.IsWhitelisted);
+        }
+
+        /// <summary>WPF Browser.cs:2063-2115 and :2264-2315: the tier badge by the level plates, the tier plate by the
+        /// name, and the tier art (Prime subject at tier 3, Pink filter below). A picture that will not load hides its plate.</summary>
+        internal void ApplyPatreonPlates(int tier, bool hasPatreon)
+        {
+            var badge = hasPatreon && tier > 0 ? PatreonBadgeArt(tier) : null;
+            ProfilePatreonBadge.Source = badge;
+            ProfilePatreonBadge.IsVisible = badge != null;
+
+            var plate = hasPatreon ? PatreonBadgeArt(tier > 0 ? tier : 1) : null;
+            ProfilePatreonTierBadge.Source = plate;
+            ProfilePatreonTierBadge.IsVisible = plate != null;
+
+            // SEAM(csproj): "Pink filter.webp" and "prime subject.webp" sit in /Assets but only /Assets/*.png is
+            // compiled in, so this art is null (plate hidden) until the project links /Assets/*.webp under Resources.
+            var art = hasPatreon ? PatreonArt(tier >= 3 ? "prime subject.webp" : "Pink filter.webp") : null;
+            ImgPatreonTierBanner.Source = art;
+            ProfilePatreonTierBanner.IsVisible = art != null;
+        }
+
+        /// <summary>WPF LoadPatreonBadgeImage: tiers 1 to 3, anything else draws tier 1.</summary>
+        internal static string PatreonBadgeFile(int tier) => tier is 2 or 3 ? $"Patreon tier{tier}.png" : "Patreon tier1.png";
+
+        private static global::Avalonia.Media.Imaging.Bitmap? PatreonBadgeArt(int tier) => PatreonArt(PatreonBadgeFile(tier));
+
+        /// <summary>Tier livery is commerce chrome a mod must not restyle (as Controls/TierBadge), so it reads the
+        /// shipped copy and never a mod override. Decoded once per file.</summary>
+        private static global::Avalonia.Media.Imaging.Bitmap? PatreonArt(string file)
+        {
+            if (PatreonArtCache.TryGetValue(file, out var cached)) return cached;
+            global::Avalonia.Media.Imaging.Bitmap? bmp = null;
+            try
+            {
+                var uri = new Uri($"avares://CCP.Avalonia/Resources/{Uri.EscapeDataString(file)}");
+                if (global::Avalonia.Platform.AssetLoader.Exists(uri))
+                {
+                    using var stream = global::Avalonia.Platform.AssetLoader.Open(uri);
+                    bmp = new global::Avalonia.Media.Imaging.Bitmap(stream);
+                }
+            }
+            catch (Exception ex) { Log.Warning("Patreon art {File} would not load: {E}", file, ex.Message); }
+            return PatreonArtCache[file] = bmp;
+        }
+
+        private static readonly Dictionary<string, global::Avalonia.Media.Imaging.Bitmap?> PatreonArtCache = new();
 
         /// <summary>WPF ApplyProfileIdentityBadges: the staff pill's border encodes the role.</summary>
         private void ApplyIdentityBadges(bool isStaff, string? staffRole, bool isWhitelisted)
