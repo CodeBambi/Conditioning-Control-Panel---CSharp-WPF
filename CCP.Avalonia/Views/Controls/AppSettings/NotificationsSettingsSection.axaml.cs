@@ -21,6 +21,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             InitializeComponent();
             ChkIntakeNudge.IsCheckedChanged += ChkIntakeNudge_Changed;
             ChkSuppressPerkNotifications.IsCheckedChanged += ChkSuppressPerkNotifications_Changed;
+            ChkBannerPool.IsCheckedChanged += ChkBannerPool_Changed;
             SyncFromSettings();
         }
 
@@ -50,6 +51,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             {
                 ChkIntakeNudge.IsChecked = s.IntakeNudgeEnabled;
                 ChkSuppressPerkNotifications.IsChecked = s.SuppressPerkNotifications;
+                ChkBannerPool.IsChecked = s.BannerPoolEnabled;
             }
             finally { _isLoading = false; }
         }
@@ -65,6 +67,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
         {
             if (_isLoading) return;
             CoreSettings.Current.SuppressPerkNotifications = ChkSuppressPerkNotifications.IsChecked ?? false;
+            CoreSettings.Save();
+        }
+
+        /// <summary>WPF 7.1.5 ChkBannerPool_Changed: a live editor, saved now so the banner's next
+        /// pool draw reads it. Off drops only the pool beat.</summary>
+        private void ChkBannerPool_Changed(object? sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            CoreSettings.Current.BannerPoolEnabled = ChkBannerPool.IsChecked ?? true;
             CoreSettings.Save();
         }
     }

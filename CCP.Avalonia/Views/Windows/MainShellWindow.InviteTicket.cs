@@ -25,7 +25,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>The ticket's server read (tests swap the wire).</summary>
         internal Func<IInviteApi> InviteTicketApi { get; set; } = () => new InviteApi();
 
-        private InvitePanel? InvitesCard => Named<Tabs.ExclusivesTabView>("ExclusivesTab")?.FindControl<InvitePanel>("InvitesHost");
+        /// <summary>WPF 7.1.5 PlansVaultView.InvitesHost: the invites card lives on Settings &gt; Account &amp;
+        /// Plans (the Premium page copy keeps its panel hidden). Falls back to the Premium copy.</summary>
+        private InvitePanel? InvitesCard =>
+            Named<Tabs.AppSettingsTabView>("AppSettingsTab")?.FindControl<Views.Controls.AppSettings.AccountSettingsSection>("SectionAccount")
+                ?.Plans.FindControl<InvitePanel>("InvitesHost")
+            ?? PremiumInvitesCard;
+
+        private InvitePanel? PremiumInvitesCard => Named<Tabs.ExclusivesTabView>("ExclusivesTab")?.FindControl<InvitePanel>("InvitesHost");
 
         /// <summary>WPF InitializeInviteTicket: one delayed read, then every 30 min and on account change;
         /// every read the invites card makes repaints the ticket too.</summary>
@@ -40,6 +47,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _inviteTicketWobble = new DispatcherTimer { Interval = InviteTicketRule.NextWobble(_inviteTicketRng) };
             _inviteTicketWobble.Tick += (_, _) => WobbleInviteTicket();
             if (InvitesCard is { } card) card.Read += ApplyInviteTicket;
+            if (PremiumInvitesCard is { } premium && !ReferenceEquals(premium, InvitesCard)) premium.Read += ApplyInviteTicket;
             CoreAccount.UnifiedIdentityChanged += OnInviteTicketIdentityChanged;
             // Better than WPF (P01): no wobble ticks while the panel window is hidden.
             PropertyChanged += (_, e) => { if (e.Property == IsVisibleProperty) SyncInviteWobble(); };
@@ -116,12 +124,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         internal void BtnInviteTicket_Click(object? sender, RoutedEventArgs e) => OpenInvitesCard();
 
-        /// <summary>WPF OpenInvitesCard: the Premium tab, a forced read, and the card scrolled into view.
-        /// Refused under Lockdown (no veil on this head yet).</summary>
+        /// <summary>WPF 7.1.5 OpenInvitesCard: Settings &gt; Account &amp; Plans, a forced read, and the card
+        /// scrolled into view. Refused under Lockdown (no veil on this head yet).</summary>
         internal void OpenInvitesCard()
         {
             if (LockdownActive) return;
-            ShowTab("exclusives");
+            OpenAppSettingsSection("account");
             DispatcherTimer.RunOnce(async () =>
             {
                 try

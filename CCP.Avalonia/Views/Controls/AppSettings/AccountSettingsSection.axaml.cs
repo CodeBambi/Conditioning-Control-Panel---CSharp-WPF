@@ -59,6 +59,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             // at rather than sit on. The language hook is the one addition: the two TextBlocks are
             // driven from code, so nothing else would re-render them after a language change.
             RefreshTierBadge();
+            var presence = this.FindControl<CheckBox>("ChkFriendsPresence")!;
+            presence.IsCheckedChanged += ChkFriendsPresence_Changed;
+            RefreshFriendsPresence();
             EventHandler changed = (_, _) => global::Avalonia.Threading.Dispatcher.UIThread.Post(RefreshTierBadge);
             AttachedToVisualTree += (_, _) => { LocalizationManager.Instance.LanguageChanged += changed; RefreshTierBadge(); };
             DetachedFromVisualTree += (_, _) => LocalizationManager.Instance.LanguageChanged -= changed;
@@ -71,9 +74,45 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
         public void OnSectionShown()
         {
             RefreshTierBadge();
+            RefreshFriendsPresence();
             PlansView.RefreshVault();   // the plates can move between visits (sign-in, tier change)
             // Throttled inside (30 s): the invites card lives on this copy (WPF RefreshVaultCore).
             _ = PlansView.FindControl<Controls.Invites.InvitePanel>("InvitesHost")?.RefreshAsync();
+        }
+
+        private bool _refreshingPresence;
+
+        /// <summary>WPF FriendsPresenceSetting.Read: the friends service's live answer when it is up,
+        /// else the saved setting.</summary>
+        internal void RefreshFriendsPresence()
+        {
+            var chk = this.FindControl<CheckBox>("ChkFriendsPresence");
+            if (chk == null) return;
+            _refreshingPresence = true;
+            try
+            {
+                var svc = global::ConditioningControlPanel.Avalonia.Platform.FriendsHead.Service;
+                chk.IsChecked = svc?.Available == true ? svc.PresenceShared
+                    : CoreSettings.Current?.FriendsPresenceShared == true;
+            }
+            catch (Exception ex) { Log.Debug("friends presence row: {E}", ex.Message); }
+            finally { _refreshingPresence = false; }
+        }
+
+        /// <summary>WPF FriendsPresenceSetting.Write: through the service when it is up (it saves),
+        /// else straight to settings; answering here counts as answering the once-only ask.</summary>
+        private void ChkFriendsPresence_Changed(object? sender, RoutedEventArgs e)
+        {
+            if (_refreshingPresence || sender is not CheckBox chk) return;
+            bool on = chk.IsChecked == true;
+            try
+            {
+                var svc = global::ConditioningControlPanel.Avalonia.Platform.FriendsHead.Service;
+                if (svc?.Available == true) svc.PresenceShared = on;
+                else if (CoreSettings.Current is { } s) { s.FriendsPresenceShared = on; CoreSettings.Save(); }
+                PresenceAsk.MarkAsked();
+            }
+            catch (Exception ex) { Log.Debug("friends presence write: {E}", ex.Message); }
         }
 
         /// <summary>The Account &amp; Plans copy of the vault (header, plates, invites).</summary>

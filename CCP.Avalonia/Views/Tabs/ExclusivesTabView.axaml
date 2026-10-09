@@ -76,6 +76,37 @@
                 </Animation>
             </Style.Animations>
         </Style>
+        <!-- WPF StartExclusivesMotion: the spotlight art's Ken Burns drift, 1.00 to 1.07 and back
+             over 26 s. Class set from code under AllowAmbientLoops only. -->
+        <Style Selector="Image.kenburns">
+            <Style.Animations>
+                <Animation Duration="0:0:26" IterationCount="INFINITE" PlaybackDirection="Alternate"
+                           Easing="SineEaseInOut">
+                    <KeyFrame Cue="0%"><Setter Property="ScaleTransform.ScaleX" Value="1"/><Setter Property="ScaleTransform.ScaleY" Value="1"/></KeyFrame>
+                    <KeyFrame Cue="100%"><Setter Property="ScaleTransform.ScaleX" Value="1.07"/><Setter Property="ScaleTransform.ScaleY" Value="1.07"/></KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+        <!-- WPF ApplyFreeTodayPulse: gold glow where the tier allows glow, plus a 1.9 s breath
+             (opacity 0.72 to 1, scale 1 to 1.06) under AllowAmbientLoops. Both classes from code. -->
+        <Style Selector="Border.free-pill.glow">
+            <Setter Property="BoxShadow" Value="0 0 16 0 #B3FFD27A"/>
+        </Style>
+        <Style Selector="Border.free-pill.pulse">
+            <Style.Animations>
+                <Animation Duration="0:0:1.9" IterationCount="INFINITE" PlaybackDirection="Alternate"
+                           Easing="SineEaseInOut">
+                    <KeyFrame Cue="0%">
+                        <Setter Property="Opacity" Value="0.72"/>
+                        <Setter Property="ScaleTransform.ScaleX" Value="1"/><Setter Property="ScaleTransform.ScaleY" Value="1"/>
+                    </KeyFrame>
+                    <KeyFrame Cue="100%">
+                        <Setter Property="Opacity" Value="1"/>
+                        <Setter Property="ScaleTransform.ScaleX" Value="1.06"/><Setter Property="ScaleTransform.ScaleY" Value="1.06"/>
+                    </KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
     </UserControl.Styles>
 
     <!-- ================================================================
@@ -275,14 +306,11 @@
                                          don't already own it. Painted + pulsed by
                                          RefreshExclusivesTab; literal colours on purpose (no
                                          cross-dictionary StaticResource in a view). -->
-                                    <Border x:Name="SpotFreeToday"
+                                    <Border x:Name="SpotFreeToday" Classes="free-pill"
                                             CornerRadius="10" Padding="9,2" Margin="10,0,0,0"
                                             VerticalAlignment="Center" IsVisible="False"
                                             BorderThickness="1" BorderBrush="#CCFFF0C2"
                                             RenderTransformOrigin="50%,50%">
-                                        <Border.RenderTransform>
-                                            <ScaleTransform ScaleX="1" ScaleY="1"/>
-                                        </Border.RenderTransform>
                                         <Border.Background>
                                             <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
                                                 <GradientStop Color="#FFD27A" Offset="0"/>
@@ -483,7 +511,8 @@
                                                     </Border>
 
                                                     <!-- FREE TODAY pill: the chip's corner on an untiered card's free day -->
-                                                    <Border IsVisible="{Binding HasFreePill}"
+                                                    <Border IsVisible="{Binding HasFreePill}" Classes="free-pill"
+                                                            RenderTransformOrigin="50%,50%"
                                                             HorizontalAlignment="Right" VerticalAlignment="Top"
                                                             Margin="0,8,8,0" CornerRadius="10" Padding="9,3"
                                                             BorderThickness="1" BorderBrush="#CCFFF0C2">
@@ -531,7 +560,7 @@
                                                                         <GradientStop Color="#D9B478FF" Offset="1"/>
                                                                     </LinearGradientBrush>
                                                                 </Border.Background>
-                                                                <TextBlock Text="{loc:Str exclusives_chip_lab}"
+                                                                <TextBlock Text="{loc:Str plans_chip_unlock}"
                                                                            Foreground="White" FontSize="10" FontWeight="Bold"/>
                                                             </Border>
                                                         </StackPanel>
