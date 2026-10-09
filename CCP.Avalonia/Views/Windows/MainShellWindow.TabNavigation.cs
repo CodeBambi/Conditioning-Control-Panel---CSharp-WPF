@@ -11,8 +11,8 @@
 //
 // Stand-ins: none left. The four Companion pages, Friends and Leash all register through
 // RegisterNavTab (RegisterCompanionTabs / RegisterSocialTabs).
-// Zones scroll in WPF (PlayTab.ScrollToZone, AssetsTab.ScrollToZone); those helpers are not on
-// this head's views, so a zone pill lands on the page's top.
+// Zones scroll as in WPF: Play through ScrollPlayZoneFor (MainShellWindow.PlayTab.cs), Assets
+// through AssetsTabView.ScrollToZone.
 //
 // Every panel is resolved by x:Name through FindControl, never by generated field:
 // MainShellWindow.axaml.cs loads with AvaloniaXamlLoader.Load(this), which never assigns the
@@ -249,7 +249,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     // Nav rework zone pill "Scheduler & Ramp": the Studio rack's scheduler module.
                     case "ramp": StudioRack?.FocusRackEntry("scheduler"); RefreshSessionFeatureLock(); break;
 
-                    case "play": case "lab": case "playsessions": case "playeyes": MaybeShowFeatureIntro("play-wall", "play"); break;
+                    case "play": case "lab": case "playsessions": case "playeyes": MaybeShowFeatureIntro("play-wall", "play"); ScrollPlayZoneFor(tab); break;
                     case "awareness": MaybeShowFeatureIntro("awareness"); break;
                     case "lockdown": MaybeShowFeatureIntro("lockdown"); break;
                     case "blinktrainer": MaybeShowFeatureIntro("blinktrainer"); break;
