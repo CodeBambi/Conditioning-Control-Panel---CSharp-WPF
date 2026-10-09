@@ -174,7 +174,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                 w = new FlashOverlayWindow(a.Frames, FlashGifFrames.ScaleFrameDelay(a.Delay, CoreSettings.Current.FlashGifSpeedMultiplier));
             }
             else w = new FlashOverlayWindow(bmp);
-            if (!X11Overlay.SetClickThrough(w, true) || !X11Overlay.SetOpacity(w, 0) || !X11Overlay.SetOverrideRedirect(w, rect))
+            var clickable = CoreSettings.Current.FlashClickable;
+            if (clickable)
+            {
+                w.MakeClickable();
+                // WPF OnFlashClicked: this window's lifetime ends, the tube reacts. ponytail: hydra
+                // multiply (CorruptionMode), haptics and the shatter/exit styles are not here yet.
+                w.Popped += () => CoreTubeEvents.RaiseFlashClicked();
+            }
+            if (!X11Overlay.SetClickThrough(w, !clickable) || !X11Overlay.SetOpacity(w, 0) || !X11Overlay.SetOverrideRedirect(w, rect))
             {
                 if (!_warnedUnavailable) Log.Warning("Flash: the platform refused a click-through topmost overlay window; flashes skipped");
                 _warnedUnavailable = true;

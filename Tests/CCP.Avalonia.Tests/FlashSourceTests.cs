@@ -1,6 +1,11 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
+using Avalonia;
+using Avalonia.Headless;
+using CCP.Avalonia.Testing;
+using ConditioningControlPanel.Avalonia.Views.Overlays;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services.Flash;
 using Xunit;
@@ -110,5 +115,32 @@ public sealed class FlashSourceTests
             RemoteFlashSource.ResetForTests();
             try { Directory.Delete(dir, true); } catch { }
         }
+    }
+    /// <summary>WPF FlashClickable: a click pops THAT flash once (the tube hears it); other flashes live on.</summary>
+    [Fact]
+    public async Task A_clickable_flash_pops_once()
+    {
+        await AvaloniaTestDispatcher.RunAsync(() =>
+        {
+            if (Application.Current is null)
+                AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>().UseSkia()
+                    .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false }).SetupWithoutStarting();
+            var w = new FlashOverlayWindow();
+            var other = new FlashOverlayWindow();
+            try
+            {
+                Assert.False(w.IsHitTestVisible);   // click-through until asked
+                w.MakeClickable();
+                Assert.True(w.IsHitTestVisible);
+                var pops = 0;
+                w.Popped += () => pops++;
+                w.Pop();
+                w.Pop();
+                Assert.Equal(1, pops);
+                Assert.False(other.IsHitTestVisible);
+            }
+            finally { w.Close(); other.Close(); }
+            return Task.CompletedTask;
+        });
     }
 }

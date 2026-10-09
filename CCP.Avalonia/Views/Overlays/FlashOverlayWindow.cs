@@ -49,7 +49,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             IsHitTestVisible = false;
             _image = new Image { Source = picture, Stretch = Stretch.Uniform };
             Content = _image;
-            Closed += (_, _) => picture.Dispose();
+            Closed += (_, _) => { _closed = true; picture.Dispose(); };
         }
 
         /// <summary>An animated flash (GIF / animated WebP): WPF's heartbeat frame-stepper, one
@@ -89,8 +89,34 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         /// </summary>
         public void Run(double alpha, TimeSpan fade, TimeSpan lifetime)
         {
+            _alpha = alpha;
             Fade(0, alpha, fade);
-            DispatcherTimer.RunOnce(() => Fade(alpha, 0, fade, Close), lifetime);
+            DispatcherTimer.RunOnce(() => { if (!_popped) Fade(alpha, 0, fade, Close); }, lifetime);
+        }
+
+        private double _alpha;
+        private bool _closed;
+        private bool _popped;
+
+        /// <summary>Raised once when a clickable flash is clicked (WPF FlashService.OnFlashClicked).</summary>
+        internal event Action? Popped;
+
+        /// <summary>WPF FlashClickable: the picture takes the click and pops; off = click-through.</summary>
+        internal void MakeClickable()
+        {
+            IsHitTestVisible = true;
+            _image.IsHitTestVisible = true;
+            Background = new SolidColorBrush(Color.FromArgb(1, 0, 0, 0));   // a hit surface over transparent letterbox
+            PointerPressed += (_, e) => { e.Handled = true; Pop(); };
+        }
+
+        /// <summary>Cut this flash's own lifetime short: a quick fade, then close. Other flashes live on.</summary>
+        internal void Pop()
+        {
+            if (_popped) return;
+            _popped = true;
+            Popped?.Invoke();
+            Fade(_alpha, 0, TimeSpan.FromMilliseconds(180), Close);
         }
 
         /// <summary>WPF's heartbeat ramp - linear, alpha written in 1/32 steps (FADE_ALPHA_EPSILON) -
@@ -105,7 +131,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             {
                 var v = from + (to - from) * i / steps;
                 var last = i == steps;
-                DispatcherTimer.RunOnce(() => { X11Overlay.SetOpacity(this, v); if (last) done?.Invoke(); }, span * i / steps + TimeSpan.FromMilliseconds(1));
+                DispatcherTimer.RunOnce(() => { if (_closed) return; X11Overlay.SetOpacity(this, v); if (last) done?.Invoke(); }, span * i / steps + TimeSpan.FromMilliseconds(1));
             }
         }
     }
