@@ -690,9 +690,15 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
   never writes (WriteState returns before the temp; the dirty generation stays unsaved). WPF's parameterless ctor is
   unchanged. `CoreQuests.TrackProgramVerifierProvider` stays unseeded (it mutates); SessionFeatureLock, Marquee nudge,
   ProgramBanner, Chaster program_done and the Settings Today card stay unwired.
-  Option (b) (rejected): construct the full writing service now (timers, rollover) - a run could lapse on a head that
-  cannot run its days. Option (c) (rejected): load + rollover without writes - state shown would diverge from disk.
-  Option (d) (rejected): do not construct it until slice 3.
+  Option (b) (rejected): load and save. `ProgramState` has no `JsonExtensionData`, so an older Linux build that loads
+  and saves would silently drop fields a newer WPF build wrote; that rules out (b) for a shared profile.
+  Option (c) (rejected): run the startup repair/rollover. (c) can lapse a run started on WPF, because Linux cannot
+  complete its days. Option (d) (rejected): do not construct it until slice 3. (d) is safe, but it leaves slice 2's
+  read-only view with nothing to load and nothing to test against. Rationale for (a): every path that changes state
+  ends in `Save()` (ctor repair :561/:585, rollover :685/:709/:728, `TrackVerifier` :1094, nudge :1524, `Dispose`
+  :1718), and `LoadState` also writes (recovering a leftover `.tmp` it `File.Move`s it over `programs.json`, ~:1593).
+  Risk carried to slice 2: without rollover the loaded state can be days stale, so the run view must not present
+  `Today` as current, or must compute the date for display only without changing state.
 - Chose (a) on oracle-deep's advice via the supervisor (P44). Checkpoint B must decide JsonExtensionData vs a version
   lock for schema skew before this head writes. Reviewer checks: WPF path byte-identical (`public ProgramService()`
   chains to the same path, readOnly false); no write/move under readOnly; startup uses CreateReadOnly + Dispose.

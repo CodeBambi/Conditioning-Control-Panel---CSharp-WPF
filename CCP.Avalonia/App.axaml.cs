@@ -53,7 +53,7 @@ namespace ConditioningControlPanel.Avalonia
         /// <summary>WPF App.Programs (App.xaml.cs:2704), LOAD-ONLY on this head until the run panel and
         /// the session runner land (docs/avalonia-decisions.md 2026-10-09): no rollover, no timers, never
         /// writes programs.json. CoreQuests.TrackProgramVerifierProvider stays unseeded (it mutates).</summary>
-        internal static Services.Program.ProgramService? Programs { get; private set; }
+        internal static Services.Program.ProgramService? Programs { get; set; }
 
         /// <summary>The typed mantra game (WPF App.Mantra, built unconditionally at App.xaml.cs:3260).</summary>
         internal static MantraService Mantra { get; } = new();

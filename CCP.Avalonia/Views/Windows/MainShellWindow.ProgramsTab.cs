@@ -88,7 +88,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             };
         }
 
-        private static IBrush AccentBrush(string? hex)
+        internal static IBrush AccentBrush(string? hex)
         {
             try
             {
