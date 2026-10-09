@@ -168,7 +168,27 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                 appVersion = CoreReleaseContent.AppVersion,
             },
             modContent = (object?)null,
+            // WPF BackRoomHostService.BuildInit (:575): the Breakout station and both standalone doors
+            // read their access here. Without it access.js falls back to the demo on Windows and to the
+            // full game where chrome.webview is missing (play#25).
+            breakout = BreakoutEntitlementFor(Spec.Id),
+            breakoutStandalone = IsBreakoutPage(Spec.Id),
         };
+
+        private static bool IsBreakoutPage(string id)
+            => id.Equals("breakout", StringComparison.OrdinalIgnoreCase) || id.Equals("breakoutdemo", StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>WPF BreakoutAccess.Project: full = story to level 8 + Endless (Lab), demo = 3 levels.
+        /// An explicit demo door never expands, whatever the tier. Null for pages that are not Breakout.</summary>
+        internal static object? BreakoutEntitlementFor(string id, bool? fullAllowed = null)
+        {
+            bool demoDoor = id.Equals("breakoutdemo", StringComparison.OrdinalIgnoreCase);
+            if (!demoDoor && !IsBreakoutPage(id) && !id.Equals("backroom", StringComparison.OrdinalIgnoreCase)) return null;
+            bool full = fullAllowed ?? TierGate.RequiresLab(Loc.Get("launcher_game_breakout_title")).Allowed;
+            return full && !demoDoor
+                ? new { storyLimit = 8, endless = true, demo = false }
+                : new { storyLimit = 3, endless = false, demo = true };
+        }
 
         /// <summary>Host -&gt; page on either carrier: the string push (web-shim's __ccpRnPush) when
         /// the page installed it, else a message event on chrome.webview (WebView2's object carrier).
