@@ -153,23 +153,30 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         private void BtnDeeperCatalogue_Click(object? sender, RoutedEventArgs e)
             => _ = Platform.ExternalOpener.OpenAsync(TopLevel.GetTopLevel(this), MainShellWindow.DeeperCatalogueUrl);
-        // ponytail: import needs EnhancementLibrary.FindDuplicateOf/PromoteToLibrary, still WPF-only.
+        // ponytail: import needs EnhancementLibrary.FindDuplicateOf/PromoteToLibrary, still WPF-only;
+        // BtnDeeperImport is hidden in the axaml until they land.
         private void BtnDeeperImport_Click(object? sender, RoutedEventArgs e) { }
         private void BtnDeeperNewEnhancement_Click(object? sender, RoutedEventArgs e)
             => Owner?.BtnDeeperNewEnhancement_Click(sender, e);
         private void BtnDeeperOpenLibraryFolder_Click(object? sender, RoutedEventArgs e) => Owner?.OpenDeeperLibraryFolder();
         private void BtnDeeperOpenPlayer_Click(object? sender, RoutedEventArgs e) => Owner?.BtnDeeperOpenPlayer_Click();
-        // ponytail: StartTutorial(TutorialType.Deeper) - no TutorialService on this head.
+        // ponytail: StartTutorial(TutorialType.Deeper) - no TutorialService on this head;
+        // BtnDeeperTutorial is hidden in the axaml until tours are ported.
         private void BtnDeeperTutorial_Click(object? sender, RoutedEventArgs e) { }
-        private void BtnDeeperWebcamCalibrate_Click(object? sender, RoutedEventArgs e) { }
-        private void BtnDeeperWebcamManageConsent_Click(object? sender, RoutedEventArgs e) { }
-        private void BtnDeeperWebcamQuickRecal_Click(object? sender, RoutedEventArgs e) { }
-        private void BtnDeeperWebcamRevokeConsent_Click(object? sender, RoutedEventArgs e) { }
-        private void BtnDeeperWebcamStartStopTracker_Click(object? sender, RoutedEventArgs e) { }
+
+        /// <summary>Settings > Devices owns the camera on this head: the Deeper webcam block's buttons
+        /// run the same handlers its buttons do (consent, calibrate, quick recal, tracker start/stop).</summary>
+        private Controls.AppSettings.DevicesSettingsSection? Devices =>
+            Owner?.AppSettingsPage?.FindControl<Controls.AppSettings.DevicesSettingsSection>("SectionDevices");
+        private void BtnDeeperWebcamCalibrate_Click(object? sender, RoutedEventArgs e) => Devices?.BtnWebcamDebugCalibrate_Click(sender, e);
+        private void BtnDeeperWebcamManageConsent_Click(object? sender, RoutedEventArgs e) => Devices?.BtnWebcamReviewPrivacy_Click(sender, e);
+        private void BtnDeeperWebcamQuickRecal_Click(object? sender, RoutedEventArgs e) => Devices?.BtnWebcamDebugQuickRecal_Click(sender, e);
+        private void BtnDeeperWebcamRevokeConsent_Click(object? sender, RoutedEventArgs e) => Devices?.BtnWebcamRevokeConsent_Click(sender, e);
+        private void BtnDeeperWebcamStartStopTracker_Click(object? sender, RoutedEventArgs e) => Devices?.BtnWebcamDebugStart_Click(sender, e);
         private void BtnDeeperWelcomeDismiss_Click(object? sender, RoutedEventArgs e) => Owner?.DismissDeeperWelcomeCard();
         private void BtnDeeperWelcomeDemo_Click(object? sender, RoutedEventArgs e) => Owner?.BtnDeeperWelcomeDemo_Click();
         private void BtnDeeperWelcomeTour_Click(object? sender, RoutedEventArgs e) => Owner?.BtnDeeperWelcomeTour_Click();
-        private void BtnOpenDeviceSettings_Click(object? sender, RoutedEventArgs e) { }
+        private void BtnOpenDeviceSettings_Click(object? sender, RoutedEventArgs e) => Owner?.OpenDeviceSettings();
 
         private void DeeperPillAll_Click(object? sender, RoutedEventArgs e)
         {

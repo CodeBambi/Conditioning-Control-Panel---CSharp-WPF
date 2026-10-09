@@ -404,7 +404,8 @@
                          on the other premium tabs. -->
                     <StackPanel Grid.Column="1" Orientation="Horizontal"
                                 VerticalAlignment="Center" Margin="0,0,16,0">
-                        <Button x:Name="BtnDeeperTutorial"
+                        <!-- Hidden: tours are not ported (no TutorialService on this head). -->
+                        <Button x:Name="BtnDeeperTutorial" IsVisible="False"
                                 Theme="{StaticResource DeeperRoundButton}"
                                 ToolTip.Tip="{loc:Str deeper_tab_tutorial_tooltip}"
                                 Click="BtnDeeperTutorial_Click"
@@ -426,7 +427,8 @@
                                 Margin="0,0,8,0">
                             <TextBlock Text="{loc:Str deeper_tab_open_player}"/>
                         </Button>
-                        <Button x:Name="BtnDeeperImport"
+                        <!-- Hidden until EnhancementLibrary.FindDuplicateOf / PromoteToLibrary are ported. -->
+                        <Button x:Name="BtnDeeperImport" IsVisible="False"
                                 Theme="{StaticResource DeeperRoundButton}"
                                 ToolTip.Tip="Import a .ccpenh.json file into your library (or drag &amp; drop one anywhere on this tab)"
                                 Click="BtnDeeperImport_Click"
