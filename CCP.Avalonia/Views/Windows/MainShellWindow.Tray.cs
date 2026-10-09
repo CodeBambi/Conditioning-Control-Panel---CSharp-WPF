@@ -143,6 +143,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             }
             // WPF WindowChrome.cs:180: a confirmed library delete still in its undo grace is honoured.
             if (!e.Cancel) try { CommitPendingDeeperDeletesOnExit(); } catch { }
+            // WPF WindowChrome.cs:176: the Companion drawers' state, when quitting from that tab.
+            if (!e.Cancel) try { PersistCompanionDrawerStatesOnExit(); } catch { }
             base.OnClosing(e);
         }
 

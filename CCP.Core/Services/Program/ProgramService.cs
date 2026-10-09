@@ -167,15 +167,30 @@ public class ProgramService : IDisposable
     public static ProgramService CreateReadOnly() =>
         new(Path.Combine(CorePaths.UserData, "programs.json"), readOnly: true);
 
-    internal ProgramService(string statePath, bool readOnly)
+    /// <summary>True when this instance never writes: the head asked for it, or programs.json was
+    /// stamped by a newer build (<see cref="ProgramState.SchemaVersion"/>).</summary>
+    public bool IsReadOnly => _readOnly;
+
+    /// <summary>The service's clock; every "now" in this class reads it, so tests can step time.</summary>
+    internal Func<DateTime> Now { get; set; }
+
+    internal ProgramService(string statePath, bool readOnly, Func<DateTime>? now = null)
     {
         _statePath = statePath;
         _readOnly = readOnly;
+        Now = now ?? (() => DateTime.Now);
 
         State = LoadState();
         Library = BuiltInPrograms.All();
 
-        if (readOnly)
+        if (State.SchemaVersion > ProgramState.CurrentSchemaVersion)
+        {
+            Log.Warning("programs.json schema {Version} is newer than this build ({Current}); loading read-only",
+                State.SchemaVersion, ProgramState.CurrentSchemaVersion);
+            _readOnly = true;
+        }
+
+        if (_readOnly)
         {
             Log.Information("ProgramService initialized read-only. Active: {Program} day {Day}, library {Count}",
                 State.Active?.ProgramId ?? "none", State.Active?.CurrentDay ?? 0, Library.Count);
@@ -318,6 +333,14 @@ public class ProgramService : IDisposable
             return false;
         }
 
+        // programs-3a decision: a head that can never raise a required task's signal must not
+        // enroll it, or the run lapses on work nobody could do. Unseeded (WPF) everything passes.
+        if (UnavailableReason(program, CoreProgram.IsTaskAvailable) is { } missing)
+        {
+            reason = missing;
+            return false;
+        }
+
         if (!program.Validate(out var error))
         {
             reason = error;
@@ -325,6 +348,24 @@ public class ProgramService : IDisposable
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Required tasks the predicate says this build cannot complete. Optional tasks never count, and
+    /// a day's Ambient layer is not a task (SettleAmbientShortfallDay already stops it lapsing a day).
+    /// </summary>
+    public static IReadOnlyList<ProgramTask> UnavailableTasks(ProgramDefinition program, Func<ProgramTask, bool> isAvailable)
+        => program.AllDays.SelectMany(d => d.Tasks).Where(t => !t.Optional && !isAvailable(t)).ToList();
+
+    /// <summary>"Not available on this build yet: needs X, Y." or null when every required task can be done.</summary>
+    public static string? UnavailableReason(ProgramDefinition program, Func<ProgramTask, bool> isAvailable)
+    {
+        var needs = UnavailableTasks(program, isAvailable)
+            .Select(t => t.Kind == ProgramTaskKind.Ritual ? Localization.Loc.Get("programs_feature_rituals")
+                : t.Verifier == QuestCategory.KeywordTrigger ? Localization.Loc.Get("label_pro_keyword_triggers")
+                : t.Verifier?.ToString() ?? t.Id)   // every other required category is raised on both heads today
+            .Distinct().ToList();
+        return needs.Count == 0 ? null : Localization.Loc.GetF("programs_needs_feature", string.Join(", ", needs));
     }
 
     public ProgramEnrollment? Enroll(
@@ -340,7 +381,7 @@ public class ProgramService : IDisposable
             return null;
         }
 
-        var now = DateTime.Now;
+        var now = Now();
         var boundary = Math.Clamp(dayBoundaryHour ?? program.Rules.DefaultDayBoundaryHour, 0, 23);
 
         var enrollment = new ProgramEnrollment
@@ -428,7 +469,7 @@ public class ProgramService : IDisposable
         }
 
         enrollment.State = ProgramEnrollmentState.Paused;
-        enrollment.PausedAt = DateTime.Now;
+        enrollment.PausedAt = Now();
         MarkDirty();
         RaiseTodayChanged();
         Log.Information("Program {Program} paused on day {Day}", enrollment.ProgramId, enrollment.CurrentDay);
@@ -446,7 +487,7 @@ public class ProgramService : IDisposable
 
         enrollment.State = ProgramEnrollmentState.Active;
         enrollment.PausedAt = null;
-        enrollment.CurrentDayDate = ProgramClock.ProgramDate(DateTime.Now, enrollment.DayBoundaryHour);
+        enrollment.CurrentDayDate = ProgramClock.ProgramDate(Now(), enrollment.DayBoundaryHour);
 
         var record = enrollment.GetOrCreateRecord(enrollment.CurrentDay, enrollment.CurrentDayDate);
         record.ProgramDate = enrollment.CurrentDayDate;
@@ -491,7 +532,7 @@ public class ProgramService : IDisposable
         if (enrollment == null || program == null) return;
         if (enrollment.State != ProgramEnrollmentState.Lapsed) return;
 
-        enrollment.RestartForNewAttempt(DateTime.Now, program.Rules);
+        enrollment.RestartForNewAttempt(Now(), program.Rules);
         enrollment.GetOrCreateRecord(1, enrollment.CurrentDayDate);
         MarkDirty();
         Save();
@@ -599,7 +640,7 @@ public class ProgramService : IDisposable
             // user to update, and EvaluateRollover runs immediately after this - without the
             // re-anchor it would sweep every one of those days as an absence and lapse the run
             // again on the same launch that just repaired it.
-            enrollment.CurrentDayDate = ProgramClock.ProgramDate(DateTime.Now, enrollment.DayBoundaryHour);
+            enrollment.CurrentDayDate = ProgramClock.ProgramDate(Now(), enrollment.DayBoundaryHour);
             var today = enrollment.GetOrCreateRecord(enrollment.CurrentDay, enrollment.CurrentDayDate);
             today.ProgramDate = enrollment.CurrentDayDate;
 
@@ -672,7 +713,7 @@ public class ProgramService : IDisposable
             return;
         }
 
-        var today = ProgramClock.ProgramDate(DateTime.Now, enrollment.DayBoundaryHour);
+        var today = ProgramClock.ProgramDate(Now(), enrollment.DayBoundaryHour);
 
         // Settle the outgoing day before it is judged. Only the day that was current can carry
         // partial progress, so this is the only index worth sweeping.
@@ -726,7 +767,7 @@ public class ProgramService : IDisposable
         {
             enrollment.DaysOffRemaining = 0;
             enrollment.State = ProgramEnrollmentState.Lapsed;
-            enrollment.LapsedAt = DateTime.Now;
+            enrollment.LapsedAt = Now();
             MarkDirty();
             Save();
 
@@ -831,7 +872,7 @@ public class ProgramService : IDisposable
             // Pin the day this session was built for. The session outlives the day whenever it
             // crosses the boundary hour, and the completion belongs to the day that was prescribed.
             _expectedSessionDayIndex = day.DayIndex;
-            _expectedSessionProgramDate = State.Active?.CurrentDayDate ?? DateTime.Now.Date;
+            _expectedSessionProgramDate = State.Active?.CurrentDayDate ?? Now().Date;
             LastProgramSessionCompleted = false;
 
             return session;
@@ -1027,7 +1068,7 @@ public class ProgramService : IDisposable
         if (record.SessionCompleted) return;
 
         record.SessionCompleted = true;
-        record.SessionCompletedAt = DateTime.Now;
+        record.SessionCompletedAt = Now();
 
         // The day was on its way to being judged an absence when the work landed. Completing it
         // has to undo that verdict, not sit alongside it, or the record reads as missed AND done.
@@ -1283,8 +1324,8 @@ public class ProgramService : IDisposable
     {
         get
         {
-            if ((DateTime.Now - _videoLibraryProbedAt).TotalSeconds < 60) return _hasVideoLibrary;
-            _videoLibraryProbedAt = DateTime.Now;
+            if ((Now() - _videoLibraryProbedAt).TotalSeconds < 60) return _hasVideoLibrary;
+            _videoLibraryProbedAt = Now();
 
             try
             {
@@ -1349,7 +1390,7 @@ public class ProgramService : IDisposable
             return;
 
         record.DayCompleted = true;
-        record.CompletedAt = DateTime.Now;
+        record.CompletedAt = Now();
         MarkDirty();
 
         AwardDayXp(day);
@@ -1395,7 +1436,7 @@ public class ProgramService : IDisposable
         }
 
         record.DayCompleted = true;
-        record.CompletedAt = DateTime.Now;
+        record.CompletedAt = Now();
         MarkDirty();
 
         Log.Information(
@@ -1468,7 +1509,7 @@ public class ProgramService : IDisposable
     private void Graduate(ProgramDefinition program, ProgramEnrollment enrollment, ProgramDay day, ProgramDayRecord record)
     {
         enrollment.State = ProgramEnrollmentState.Graduated;
-        enrollment.GraduatedAt = DateTime.Now;
+        enrollment.GraduatedAt = Now();
 
         if (!State.GraduatedProgramIds.Contains(program.Id))
             State.GraduatedProgramIds.Add(program.Id);
@@ -1525,7 +1566,7 @@ public class ProgramService : IDisposable
             if (enrollment is not { State: ProgramEnrollmentState.Active } || program == null) return;
             if (enrollment.NudgeHour < 0 || enrollment.NudgeHour > 23) return;
 
-            var now = DateTime.Now;
+            var now = Now();
             if (now.Hour != enrollment.NudgeHour) return;
 
             var programDate = ProgramClock.ProgramDate(now, enrollment.DayBoundaryHour);
@@ -1617,7 +1658,7 @@ public class ProgramService : IDisposable
                 if (recovered == null) continue;
 
                 Log.Warning("Recovered program state from {Temp}", candidate);
-                if (!_readOnly)
+                if (!_readOnly && recovered.SchemaVersion <= ProgramState.CurrentSchemaVersion)
                     try { File.Move(candidate, _statePath, overwrite: true); } catch { }
                 return recovered;
             }
