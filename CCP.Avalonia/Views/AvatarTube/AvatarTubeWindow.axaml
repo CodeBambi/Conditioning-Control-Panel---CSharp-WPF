@@ -483,9 +483,7 @@
 
             <!-- Takeover countdown bar - thin pink bar under the avatar, drains toward the next
                  random Takeover action. Shown only while Takeover is running (driven in code-behind).
-                 ponytail: the WPF fill was horizontally scaled by the x:Named TakeoverCountdownScale
-                 (1.0 full -> 0 about to fire) from InitTakeoverCountdownBar, which lives in a partial
-                 this layer does not port. The transform is dropped, so the bar renders full. -->
+                 The fill is scaled 1.0 (full) to 0 (about to fire) by AvatarTubeWindow.TakeoverBar.cs. -->
             <Border x:Name="TakeoverCountdownBar"
                     ZIndex="5"
                     HorizontalAlignment="Center"

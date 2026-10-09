@@ -327,8 +327,9 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             AttachAwareness();   // WPF xaml.cs:317-322 (Reactions.cs)
             StartSpeechLoops();  // greeting, idle chatter, Trigger Mode, random bubble (Speech.cs)
 
-            // ponytail: WPF's OnLoaded also ran StartFloatingAnimation / StartFullscreenDetection
-            // and InitTakeoverCountdownBar; none has ported.
+            InitTakeoverCountdownBar();   // WPF xaml.cs:565 (AvatarTubeWindow.TakeoverBar.cs)
+            // ponytail: WPF's OnLoaded also ran StartFloatingAnimation / StartFullscreenDetection;
+            // neither has ported.
         }
 
         protected override void OnClosed(EventArgs e)

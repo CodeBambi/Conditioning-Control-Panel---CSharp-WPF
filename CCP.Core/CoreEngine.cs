@@ -39,6 +39,13 @@ namespace ConditioningControlPanel
         /// <summary>The head's bubble-count game (it owns the <see cref="IBubbleCountHost"/>).</summary>
         public static volatile BubbleCountScheduler? BubbleCount;
 
+        /// <summary>The head's layered audio bed (WPF App.LayeredAudio.Start(ignoreMasterToggle: true)),
+        /// started for an Audio-Only Hypno session (#668); null on a head with no layered audio.</summary>
+        public static volatile Action? AudioBedStart;
+
+        /// <summary>Stops the head's layered audio bed (WPF App.LayeredAudio.Stop()).</summary>
+        public static volatile Action? AudioBedStop;
+
         /// <summary>WPF StartEngine's arming matrix, minus the services no head here has.
         /// Not idempotent in TotalSessions, exactly as WPF; callers start only when stopped.</summary>
         public static void Start()
@@ -48,8 +55,6 @@ namespace ConditioningControlPanel
             CoreSettings.Save();
 
             // #668 Audio-Only Hypno (WPF :304): the visual features sit the session out.
-            // ponytail: WPF also starts the layered audio bed (LayeredAudio.Start(ignoreMasterToggle: true));
-            // no head here has it in Core yet - add it with the audio-layers port.
             bool audioOnly = s.AudioOnlySession;
             if (!audioOnly) CoreFlash.Start();   // it checks FlashEnabled itself
             if (!audioOnly && s.SubliminalEnabled) CoreSubliminal.Start();
@@ -60,6 +65,9 @@ namespace ConditioningControlPanel
             if (!audioOnly && s.PopQuizEnabled) PopQuiz?.Start();   // WPF StartStop.cs:393
             if (!audioOnly && s.BouncingTextEnabled) CoreBouncingText.Start();
             else CoreBouncingText.Stop();   // WPF: clean up any leftover state
+            // WPF StartStop.cs:333: the audio-only bed plays the layered tracks regardless of the
+            // standalone Audio Layers master toggle.
+            if (audioOnly) { try { AudioBedStart?.Invoke(); } catch (Exception ex) { Log.Warning(ex, "Audio-only bed failed to start"); } }
             if (!audioOnly && s.MindWipeEnabled)   // WPF StartStop.cs:366
             {
                 CoreMindWipe.Start(s.MindWipeFrequency, s.MindWipeVolume / 100.0);
@@ -91,6 +99,12 @@ namespace ConditioningControlPanel
                 LockCardScheduler.Instance.Stop();
                 PopQuiz?.Stop();   // closes an open quiz (WPF StartStop.cs:492)
                 CoreMindWipe.Stop();   // WPF StartStop.cs:489, also ends the loop
+                // WPF StartStop.cs:493: an audio-only session force-started the layered bed; stop it on
+                // session end unless the standalone Audio Layers master is on (then it keeps playing).
+                if (CoreSettings.Current?.AudioLayersEnabled != true)
+                {
+                    try { AudioBedStop?.Invoke(); } catch (Exception ex) { Log.Warning(ex, "Audio-only bed failed to stop"); }
+                }
                 _running = false;
                 StartedUtc = null;
                 ConditioningTime.OnEngineStopped(DateTime.Now);   // WPF StartStop.cs:540 StopConditioningTimeTracker

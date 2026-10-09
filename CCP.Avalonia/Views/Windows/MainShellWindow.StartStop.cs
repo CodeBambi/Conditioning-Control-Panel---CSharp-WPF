@@ -4,7 +4,7 @@
 // BtnStart_Click (stop-session dialog) is ConfirmStopSession (MainShellWindow.SessionRun.cs).
 // ponytail: still missing, each with no service on this head: the remote-control gate,
 // Relapse/TotalSessions achievements, the bubble/brain-drain/pop-quiz/autonomy/
-// ramp starts, the scheduler, the Presets "running" label and the hero FX.
+// the Presets "running" label and the hero FX.
 
 using Avalonia.Controls;
 using Avalonia.Data;
@@ -33,11 +33,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             {
                 Serilog.Log.Information("Start button: asking to stop the running session");
                 await ConfirmStopSession("dialog_stop_session_title", "dialog_stop_session_body");
-                if (!App.Sessions.IsRunning) StopEngine();
+                if (!App.Sessions.IsRunning) { NoteSchedulerManualStop(); StopEngine(); }
                 return;
             }
-            if (CoreEngine.IsRunning) { Serilog.Log.Information("Start button: stopping the engine"); StopEngine(); }
-            else StartEngine();
+            if (CoreEngine.IsRunning) { Serilog.Log.Information("Start button: stopping the engine"); NoteSchedulerManualStop(); StopEngine(); }
+            else { Scheduler.NoteManualStart(); StartEngine(); }   // WPF StartStop.cs:111
         }
 
         private void MenuJumpRightIn_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => RandomizeAndStart();
@@ -77,6 +77,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             {
                 if (gen != _engineGen || CoreEngine.IsRunning) return;
                 CoreEngine.Start();
+                StartRampIfEnabled();              // WPF StartEngine :398
                 PinkRushHost.Start();              // WPF StartEngine :309 App.SkillTree?.Start()
                 PinkFilterOverlay.Refresh(this);   // WPF App.Overlay.Start()
                 SpiralOverlay.Refresh(this);
@@ -100,6 +101,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // also retires the pulse timers so an old one cannot end the next run's bubbles.
             CancelAutonomyPulses();
             PinkRushHost.Stop();                   // WPF StartStop.cs:505 App.SkillTree?.Stop()
+            StopRampTimer();                       // WPF StartStop.cs:537: reset the ramped values
             App.StopDesktopOverlays(final: false);
             PopQuizHost.Instance.CloseAll();   // first: drops a queued quiz before cards close; WPF StartStop.cs:521
             LockCardWindow.ForceCloseAll();

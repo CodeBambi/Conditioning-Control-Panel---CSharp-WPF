@@ -549,6 +549,24 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
 
             _ = InitializePreviewAsync();
 
+            // WPF xaml.cs:282: the bus event, then the interactive tutorial's Part 2 queued by the
+            // New Enhancement dialog, started ~800 ms later so the spotlight bounds are laid out.
+            CoreTutorialEvents.Emit("WindowLoaded:DeeperEditorWindow");
+            if (CoreTutorialEvents.PendingPart2Tutorial is { } pendingPart2)
+            {
+                CoreTutorialEvents.PendingPart2Tutorial = null;
+                DispatcherTimer.RunOnce(() =>
+                {
+                    try
+                    {
+                        if (CoreTutorial.IsActive) CoreTutorial.Skip();
+                        CoreTutorial.Start(pendingPart2);
+                        if (CoreTutorial.IsActive) new global::ConditioningControlPanel.Avalonia.Views.Windows.TutorialOverlay(this).Show();
+                    }
+                    catch (Exception ex) { Log.Warning(ex, "DeeperEditor: tutorial Part 2 failed to start"); }
+                }, TimeSpan.FromMilliseconds(800));
+            }
+
             // ponytail: the WPF Loaded handler dispatched the interactive tutorial's Part 2 (queued
             // by the New Enhancement dialog) and, failing that, auto-launched the first-run editor
             // coachmarks once. THREE of the four things that note used to name have arrived and are
@@ -559,9 +577,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             //      step lists live in ConditioningControlPanel/Services/TutorialService.cs, so
             //      CoreTutorial.Start(name) is a silent no-op and a live overlay would open a dim
             //      sheet over a blank card. See StartEditorTutorial for the shape to restore.
-            //   2. The Part 2 hand-off needs TutorialEventBus.PendingPart2Tutorial
-            //      (ConditioningControlPanel/Services/TutorialEventBus.cs) and CoreTutorial
-            //      deliberately carries no event bus, so there is no seam to read it from.
+            //   2. The Part 2 hand-off is wired above (CoreTutorialEvents.PendingPart2Tutorial); it
+            //      waits on (1) and on the New Enhancement dialog setting it after Part 1.
             // The first-run auto-launch's "shown once" flag is NOT a blocker: WPF used
             // AppSettings.HasSeenDeeperEditorIntro and that is in Core (AppSettings.cs:7938).
         }
@@ -2443,14 +2460,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
                 // Avalonia's deferred TextChanged handlers fire and the flag stays clear.
                 UpdateTitle();
 
-                // ponytail: WPF also set TutorialEventBus.LastSavedEnhancementPath and emitted
-                // "FileSaved" so the HT walkthrough could advance to its follow-up card. Still
-                // blocked, and the blocker is NOT "the tutorial has not been ported" - the overlay
-                // has been (CCP.Avalonia/Views/Windows/TutorialOverlay.axaml.cs) and CoreTutorial is
-                // the seam. It is that CoreTutorial deliberately carries NO event bus: the
-                // OnEvent advance trigger crosses as an enum only, and the publisher side stays in
-                // ConditioningControlPanel/Services/TutorialEventBus.cs. Nothing here can emit, and
-                // with the seam unseeded on this head nothing would be listening either.
+                // WPF xaml.cs:4509: the HT walkthrough advances to its follow-up card on this.
+                CoreTutorialEvents.LastSavedEnhancementPath = path;
+                CoreTutorialEvents.Emit("FileSaved");
             }
             catch (Exception ex)
             {

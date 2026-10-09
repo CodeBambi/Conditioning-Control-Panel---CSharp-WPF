@@ -205,6 +205,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (_live)
             {
                 CoreTutorial.StepChanged += OnSeamStepChanged;
+                CoreTutorialEvents.Event += OnBusEvent;   // WPF TutorialOverlay.xaml.cs:65
                 CoreTutorial.Finished += OnSeamFinished;
             }
 
@@ -244,6 +245,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (_live)
             {
                 CoreTutorial.StepChanged -= OnSeamStepChanged;
+                CoreTutorialEvents.Event -= OnBusEvent;
                 CoreTutorial.Finished -= OnSeamFinished;
 
                 // The window going away while the tour is still running is exactly what WPF's
@@ -845,6 +847,22 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// click never reaches the button underneath. The latch is set synchronously, so a second
         /// press before the post lands does nothing.
         /// </summary>
+        /// <summary>WPF OnBusEvent / HandleBusEventOnUi (:303): an OnEvent step advances when its
+        /// event fires. ponytail: the WindowLoaded:* retarget half needs the step list Core does not
+        /// expose (look-ahead to the next step's TargetWindowTypeName).</summary>
+        internal void OnBusEvent(object? sender, string eventName)
+        {
+            if (!Dispatcher.UIThread.CheckAccess()) { Dispatcher.UIThread.Post(() => OnBusEvent(sender, eventName)); return; }
+            try
+            {
+                if (eventName.StartsWith("WindowLoaded:", StringComparison.Ordinal)) return;
+                if (CoreTutorial.CurrentStep is { } cs && cs.Advance == CoreTutorial.AdvanceTrigger.OnEvent
+                    && cs.AdvanceEventName == eventName)
+                    Advance();
+            }
+            catch { /* a tour never blocks on UI quirks */ }
+        }
+
         private void Advance()
         {
             if (_advanceFiredThisStep) return;
