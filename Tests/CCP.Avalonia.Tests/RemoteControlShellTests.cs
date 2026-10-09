@@ -60,6 +60,8 @@ public sealed class RemoteControlShellTests
         CoreSettings.ServiceProvider = () => service;
         var f = new FakeRelay();
         var relay = new RemoteRelay(() => "tok", () => "uid-1", "9.9.9", (_, _) => null, _ => { }, f) { AutoPoll = false };
+        var emoteNow = new DateTime(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc);
+        relay.Now = () => emoteNow;
         RemoteControlTabView.Relay = new Lazy<RemoteRelay>(() => relay);
         var clock = new SteppedClock();
         MainShellWindow.RemoteOverlayTime = clock;
@@ -87,6 +89,7 @@ public sealed class RemoteControlShellTests
             shell.UpdateStartButton();   // an engine refresh keeps the remote label (WPF :941)
             Assert.Equal("\U0001F3AE", shell.Named<TextBlock>("TxtStartIcon")!.Text);
             Assert.True(shell.Named<Control>("RemoteSessionIdle")!.IsVisible);   // no session running
+            Assert.Equal(MainShellWindow.RemoteOverlaySlowTick, shell.RemoteOverlayInterval);
 
             // A loud verb toasts for 2 s; a quiet one does not.
             var toast = shell.Named<Border>("RemoteCommandNotification")!;
@@ -98,6 +101,7 @@ public sealed class RemoteControlShellTests
             await relay.PollOnceAsync();
             Dispatcher.UIThread.RunJobs();
             Assert.Equal(1, Target(toast));
+            Assert.Equal(MainShellWindow.RemoteOverlayFastTick, shell.RemoteOverlayInterval);   // only while the toast is pending
             Assert.Equal(Loc.Get("cmd_spiral_enabled"), shell.Named<TextBlock>("TxtRemoteCommand")!.Text);
             clock.Step(TimeSpan.FromSeconds(1.9));
             shell.RemoteOverlayTick();
@@ -105,6 +109,7 @@ public sealed class RemoteControlShellTests
             clock.Step(TimeSpan.FromSeconds(0.1));
             shell.RemoteOverlayTick();
             Assert.Equal(0, Target(toast));
+            Assert.Equal(MainShellWindow.RemoteOverlaySlowTick, shell.RemoteOverlayInterval);   // back to WPF's 1 s
 
             // Idle controller: the orange subtitle.
             f.Poll = "{\"controller_connected\":true,\"controller_idle\":true}";
@@ -122,6 +127,16 @@ public sealed class RemoteControlShellTests
             await WaitFor(() => f.Paths.Contains("/v2/remote/emote"));
             Dispatcher.UIThread.RunJobs();
             Assert.Equal(Loc.Get("status_emote_sent"), shell.Named<TextBlock>("TxtEmoteStatusBig")!.Text);
+
+            // Enter in the big custom box sends it too, clears the box and keeps it as the ghost (WPF :362).
+            emoteNow = emoteNow.AddSeconds(1);
+            var box = shell.Named<TextBox>("TxtEmoteCustomBig")!;
+            box.Text = "  on my way ";
+            box.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Enter });
+            await WaitFor(() => f.Paths.Count(x => x == "/v2/remote/emote") == 2);
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal("", box.Text);
+            Assert.Equal("on my way", box.Watermark);
 
             // End Session: the relay stops, the overlay fades 200 ms then goes, Start comes back.
             var end = overlay.GetVisualDescendants().OfType<Button>().First(b => b.Content as string == Loc.Get("btn_end_session"));

@@ -112,9 +112,20 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (Named<ItemsControl>("LstEmotePresetsBigBottom") is { } bottom) bottom.ItemsSource = presets.Skip(3).ToList();
             if (Named<Border>("RemoteControlOverlay") is { } o) { o.IsVisible = true; o.Opacity = 1; }
             _remoteOverlayHidingAt = null;
-            _remoteOverlayTimer ??= new DispatcherTimer(TimeSpan.FromMilliseconds(100), DispatcherPriority.Background, (_, _) => RemoteOverlayTick());
+            _remoteOverlayTimer ??= new DispatcherTimer(RemoteOverlaySlowTick, DispatcherPriority.Background, (_, _) => RemoteOverlayTick());
             _remoteOverlayTimer.Start();
             RemoteOverlayTick();
+        }
+
+        /// <summary>WPF's 1 s session-info cadence; 100 ms only while a toast or fade-out is pending (P07).</summary>
+        internal static readonly TimeSpan RemoteOverlaySlowTick = TimeSpan.FromSeconds(1), RemoteOverlayFastTick = TimeSpan.FromMilliseconds(100);
+        internal TimeSpan? RemoteOverlayInterval => _remoteOverlayTimer?.Interval;
+
+        private void SetRemoteOverlayCadence()
+        {
+            if (_remoteOverlayTimer is not { } timer) return;
+            var want = _remoteToastShownAt != null || _remoteOverlayHidingAt != null ? RemoteOverlayFastTick : RemoteOverlaySlowTick;
+            if (timer.Interval != want) timer.Interval = want;
         }
 
         /// <summary>WPF HideRemoteControlOverlay (:915): fade 200 ms, then collapse; the toast stops too.</summary>
@@ -124,6 +135,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             o.Opacity = 0;
             _remoteToastShownAt = null;
             _remoteOverlayHidingAt = RemoteOverlayTime.GetTimestamp();
+            SetRemoteOverlayCadence();
         }
 
         /// <summary>The overlay's one timer (runs only while the overlay is up): WPF's 1 s session info
@@ -143,6 +155,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 _remoteToastShownAt = null;
                 if (Named<Border>("RemoteCommandNotification") is { } n) n.Opacity = 0;
             }
+            SetRemoteOverlayCadence();
             UpdateRemoteSessionInfo();
         }
 
@@ -170,6 +183,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 t.Text = RemoteCommands.LabelKeys.TryGetValue(action, out var k) ? Loc.Get(k) : action.Replace("_", " ");
             if (Named<Border>("RemoteCommandNotification") is { } n) n.Opacity = 1;
             _remoteToastShownAt = RemoteOverlayTime.GetTimestamp();
+            SetRemoteOverlayCadence();
         }
 
         /// <summary>WPF NotifyRemoteControllerJoined (:1481): the tray balloon (here the OS notification).</summary>

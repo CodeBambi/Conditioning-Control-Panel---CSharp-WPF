@@ -98,6 +98,16 @@ public sealed class RemoteControlTabTests
                 Assert.Equal("Good girl", preset.Text);
                 Assert.False(view.FindControl<Popup>("EmoteEditPopup")!.IsOpen);
 
+                // Enter in the custom box sends (WPF :339); with no session it says so and keeps the text.
+                var status = view.FindControl<TextBlock>("TxtEmoteStatus")!;
+                var custom = view.FindControl<TextBox>("TxtEmoteCustom")!;
+                custom.Text = "hello";
+                custom.RaiseEvent(new global::Avalonia.Input.KeyEventArgs { RoutedEvent = global::Avalonia.Input.InputElement.KeyDownEvent, Key = global::Avalonia.Input.Key.Enter });
+                for (var i = 0; i < 50 && string.IsNullOrEmpty(status.Text); i++) { Dispatcher.UIThread.RunJobs(); await Task.Yield(); }
+                Assert.Equal(Loc.Get("status_emote_no_session"), status.Text);
+                Assert.Equal("hello", custom.Text);
+                status.Text = "";
+
                 buttons.First(b => b != edit).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 for (var i = 0; i < 50 && string.IsNullOrEmpty(view.FindControl<TextBlock>("TxtEmoteStatus")!.Text); i++)
                 { Dispatcher.UIThread.RunJobs(); await Task.Yield(); }
