@@ -17,12 +17,8 @@
 //                              IsCatalogueAcceptedStatus), but the record-WRITE half is still out
 //                              because its parameter type SubmissionResult is head-only. The
 //                              AssetSubmitDialog it opens IS ported (Views/Dialogs/AssetSubmitDialog).
-//   HandleModDropAsync       - App.Mods.ReadManifest / InstallModAsync
-//                              (CCP.Core/Services/ModService.cs). CoreMods carries
-//                              the READ side of the mod seam (Affirmation, InstalledMods, the
-//                              colours); installing an archive is not on it. The MessageBox confirm
-//                              maps to Views/Dialogs/MessageDialog.ConfirmAsync, which this head
-//                              ships.
+//   HandleModDropAsync       - PORTED below (window-wide drop, MainShellWindow.SessionIO.cs):
+//                              Core ModService.PeekManifestAsync / App.Mods.InstallModAsync.
 //   BuildModCatalogueAsset   - CORRECTION: an earlier revision of this header said ModPackage and
 //   SafeDirectorySize          ModManifest are "not in Core". They ARE - CCP.Core/Models/
 //                              ModPackage.cs and ModManifest.cs - and CCP.Avalonia gets
@@ -40,11 +36,39 @@
 //   ModPreviewMaxPixels
 //   ModPreviewMaxBytes
 
+using System;
+using System.Threading.Tasks;
+using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Services;
+
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
     public partial class MainShellWindow
     {
-        // Deliberately empty - see the header. No member of this partial is referenced from
-        // MainShellWindow.axaml.
+        /// <summary>WPF HandleModDropAsync (ModCatalogue.cs:84): read the manifest, confirm with
+        /// name and author, install, toast the outcome.</summary>
+        internal async Task HandleModDropAsync(string ccpmodPath)
+        {
+            if (App.Mods == null) return;
+
+            var manifest = await ModService.PeekManifestAsync(ccpmodPath);
+            if (manifest == null)
+            {
+                App.Notifications.Show(Loc.GetF("toast_mod_install_failed_fmt", Loc.Get("msg_failed_to_install_mod")),
+                    Helpers.NotificationType.Error, TimeSpan.FromSeconds(8));
+                return;
+            }
+
+            if (!await Dialogs.MessageDialog.ConfirmAsync(this, Loc.Get("title_install_mod"),
+                    Loc.GetF("msg_confirm_install_mod_fmt", manifest.Name, manifest.Author))) return;
+
+            var result = await App.Mods.InstallModAsync(ccpmodPath);
+            if (result.Success)
+                App.Notifications.Show(Loc.GetF("toast_mod_installed_fmt", manifest.Name),
+                    Helpers.NotificationType.Success, TimeSpan.FromSeconds(8));
+            else
+                App.Notifications.Show(Loc.GetF("toast_mod_install_failed_fmt", result.ErrorMessage ?? Loc.Get("msg_failed_to_install_mod")),
+                    Helpers.NotificationType.Error, TimeSpan.FromSeconds(10));
+        }
     }
 }

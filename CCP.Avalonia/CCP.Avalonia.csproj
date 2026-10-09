@@ -194,6 +194,10 @@
     <!-- Profile hero banners (Core CosmeticsPool.Banners), compiled in as WPF ConditioningControlPanel.csproj:436. -->
     <AvaloniaResource Include="..\Assets\banners\*.png"
                       Link="Resources\banners\%(Filename)%(Extension)" />
+    <!-- Program browse art (Core ProgramArtPaths), single level like WPF ConditioningControlPanel.csproj:426.
+         hero_*.png waits for the run view, the only thing that names it. -->
+    <AvaloniaResource Include="..\Assets\programs\banner_*.png;..\Assets\programs\sigil_*.png;..\Assets\programs\plate_*.png"
+                      Link="Resources\programs\%(Filename)%(Extension)" />
     <!-- Sparse folders: only what a view names. -->
     <!-- Every skill node draws its art (WPF CreateSkillNode skills/{id}.png). -->
     <AvaloniaResource Include="..\Assets\skills\*.png" Link="Resources\skills\%(Filename)%(Extension)" />

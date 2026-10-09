@@ -80,7 +80,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 OpenCatalogue();
             };
             // WPF Window_Drop's Session/Preset cases (MainWindow.SessionIO.cs:1477-1484), scoped to
-            // this tab. ponytail: asset/zip/mod drops and the window-wide overlay are still WPF-only.
+            // this tab. Every other drop type is the window's (MainShellWindow.SessionIO.cs).
             DragDrop.SetAllowDrop(this, true);
             AddHandler(DragDrop.DropEvent, Tab_Drop);
             _startSessionLabel = BtnStartSession.Content;

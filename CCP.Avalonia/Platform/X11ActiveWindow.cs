@@ -45,8 +45,12 @@ internal static class X11ActiveWindow
     private static bool _tried;
     private static IntPtr _root, _active, _netWmName, _utf8, _wmName;
 
+    /// <summary>Set once by the test assembly's module initializer: no test may read the real desktop.</summary>
+    internal static bool Disabled;
+
     public static string ReadTitle()
     {
+        if (Disabled) return "";
         try
         {
             if (!_tried)

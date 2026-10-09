@@ -332,9 +332,11 @@
                                 <WrapPanel Orientation="Horizontal" ItemWidth="352" ItemHeight="216"/>
                             </ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="tabs:ExclusiveCardRow">
-                                <Border Margin="0,0,16,16"
+                        <ItemsControl.DataTemplates>
+                            <DataTemplate DataType="tabs:ExclusiveCardRow">
+                                <Border Name="ExCard" Margin="0,0,16,16"
+                                        fx:TierFxBorder.Tier="{Binding Tier}" fx:TierFxBorder.RimThickness="3"
+                                        Loaded="FxPart_Loaded" Unloaded="FxPart_Unloaded"
                                         CornerRadius="12"
                                         Background="#1A1A2E"
                                         BorderBrush="{Binding EdgeBrush}" BorderThickness="{Binding EdgeThickness}"
@@ -392,10 +394,13 @@
                                         </Border>
 
                                         <!-- FREE TODAY pill: the chip's corner on an untiered card's free day -->
-                                        <Border IsVisible="{Binding HasFreePill}"
+                                        <Border Name="FreePill" IsVisible="{Binding HasFreePill}"
                                                 HorizontalAlignment="Right" VerticalAlignment="Top"
                                                 Margin="0,8,8,0" CornerRadius="10" Padding="9,3"
-                                                BorderThickness="1" BorderBrush="#CCFFF0C2">
+                                                BorderThickness="1" BorderBrush="#CCFFF0C2"
+                                                RenderTransformOrigin="50%,50%"
+                                                Loaded="FxPart_Loaded" Unloaded="FxPart_Unloaded">
+                                            <Border.RenderTransform><ScaleTransform/></Border.RenderTransform>
                                             <Border.Background>
                                                 <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
                                                     <GradientStop Color="#FFD27A" Offset="0"/>
@@ -431,7 +436,8 @@
                                                 </RadialGradientBrush>
                                             </Border.Background>
                                             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                                                <TextBlock Text="🔒" FontSize="34" HorizontalAlignment="Center"/>
+                                                <TextBlock Name="VeilLock" Text="🔒" FontSize="34" HorizontalAlignment="Center"
+                                                           Loaded="FxPart_Loaded" Unloaded="FxPart_Unloaded"/>
                                                 <Border Margin="0,8,0,0" CornerRadius="10" Padding="10,4"
                                                         HorizontalAlignment="Center">
                                                     <Border.Background>
@@ -457,7 +463,62 @@
                                   </Grid>
                                 </Border>
                             </DataTemplate>
-                        </ItemsControl.ItemTemplate>
+                            <!-- WPF BuildComingSoonCard: same geometry, dark silhouette, breathing "?",
+                                 SOON badge, arrow cursor, no navigation. -->
+                            <DataTemplate DataType="tabs:ExclusiveTeaserRow">
+                                <Border Margin="0,0,16,16" CornerRadius="12" Background="#141126"
+                                        BorderBrush="#33B478FF" BorderThickness="1">
+                                    <Border ClipToBounds="True" CornerRadius="12">
+                                        <Border.Background>
+                                            <RadialGradientBrush>
+                                                <GradientStop Color="#5C2A1E46" Offset="0"/>
+                                                <GradientStop Color="#FF110E20" Offset="1"/>
+                                            </RadialGradientBrush>
+                                        </Border.Background>
+                                        <Grid>
+                                            <TextBlock Name="TeaserMark" Text="?" FontSize="64" FontWeight="SemiBold"
+                                                       Foreground="{Binding MarkBrush}"
+                                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                       Margin="0,0,0,34"
+                                                       Loaded="FxPart_Loaded" Unloaded="FxPart_Unloaded"/>
+                                            <Border VerticalAlignment="Bottom" Padding="12,26,12,10">
+                                                <Border.Background>
+                                                    <LinearGradientBrush StartPoint="50%,0%" EndPoint="50%,100%">
+                                                        <GradientStop Color="#000C0A18" Offset="0"/>
+                                                        <GradientStop Color="#E00C0A18" Offset="0.55"/>
+                                                        <GradientStop Color="#F20C0A18" Offset="1"/>
+                                                    </LinearGradientBrush>
+                                                </Border.Background>
+                                                <StackPanel>
+                                                    <TextBlock Text="{Binding Title}" FontWeight="SemiBold"
+                                                               FontSize="15" Foreground="White">
+                                                        <TextBlock.Effect>
+                                                            <DropShadowEffect Color="#FF69B4" BlurRadius="10"
+                                                                              OffsetX="0" OffsetY="0" Opacity="0.7"/>
+                                                        </TextBlock.Effect>
+                                                    </TextBlock>
+                                                    <TextBlock Text="{Binding Tagline}" Foreground="#9A93B8"
+                                                               FontSize="11" TextWrapping="Wrap"
+                                                               TextTrimming="CharacterEllipsis" MaxHeight="30"
+                                                               Margin="0,2,0,0"/>
+                                                </StackPanel>
+                                            </Border>
+                                            <Border HorizontalAlignment="Left" VerticalAlignment="Top"
+                                                    Margin="8,8,0,0" CornerRadius="10" Padding="8,2">
+                                                <Border.Background>
+                                                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                                                        <GradientStop Color="#FF69B4" Offset="0"/>
+                                                        <GradientStop Color="#B478FF" Offset="1"/>
+                                                    </LinearGradientBrush>
+                                                </Border.Background>
+                                                <TextBlock Text="{Binding Soon}" Foreground="White"
+                                                           FontSize="9" FontWeight="Bold"/>
+                                            </Border>
+                                        </Grid>
+                                    </Border>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.DataTemplates>
                     </ItemsControl>
 
                     <!-- Invites (WPF Controls/Invites/InvitePanel, InvitesHost). Hidden until the

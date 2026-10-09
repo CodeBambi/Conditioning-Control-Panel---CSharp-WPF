@@ -1,0 +1,104 @@
+{
+  "Active": {
+    "ProgramId": "first_week",
+    "CohortId": null,
+    "StartedAt": "2026-03-10T21:14:05.1234567+01:00",
+    "DayBoundaryHour": 4,
+    "NudgeHour": 20,
+    "CurrentDay": 3,
+    "CurrentDayDate": "2026-03-12T00:00:00+01:00",
+    "StrictMode": false,
+    "ShareLevel": 0,
+    "DaysOffRemaining": 1,
+    "AttemptNumber": 2,
+    "State": 1,
+    "PausedAt": "2026-03-12T22:01:00+01:00",
+    "GraduatedAt": null,
+    "LapsedAt": null,
+    "LapseAudited": false,
+    "LastNudgeDate": "2026-03-11T00:00:00+01:00",
+    "Records": {
+      "1": {
+        "DayIndex": 1,
+        "ProgramDate": "2026-03-10T00:00:00+01:00",
+        "SessionCompleted": true,
+        "SessionCompletedAt": "2026-03-10T21:40:33.5+01:00",
+        "TaskProgress": {
+          "mantra": 25
+        },
+        "CompletedTaskIds": [
+          "fw_d1_session",
+          "fw_d1_mantra"
+        ],
+        "DayCompleted": true,
+        "CompletedAt": "2026-03-10T21:41:00+01:00",
+        "Missed": false,
+        "DayOffSpent": false,
+        "IsReturnDay": false,
+        "AmbientMinutes": 12,
+        "RitualPhotos": {
+          "fw_d1_photo": "C:\\Users\\u\\AppData\\Roaming\\CCP\\ritual_\u00E9.jpg"
+        }
+      },
+      "2": {
+        "DayIndex": 2,
+        "ProgramDate": "2026-03-11T00:00:00+01:00",
+        "SessionCompleted": false,
+        "SessionCompletedAt": null,
+        "TaskProgress": {},
+        "CompletedTaskIds": [],
+        "DayCompleted": false,
+        "CompletedAt": null,
+        "Missed": true,
+        "DayOffSpent": true,
+        "IsReturnDay": false,
+        "AmbientMinutes": 0,
+        "RitualPhotos": {}
+      }
+    },
+    "BankedRewards": [
+      "fw_ch1_reward"
+    ],
+    "CompletedChapterIds": [],
+    "RewardGrantedAt": {
+      "fw_ch1_reward": "2026-03-10T21:41:00+01:00"
+    },
+    "IsActive": false,
+    "CompletedDayCount": 1,
+    "PerfectDayCount": 1
+  },
+  "History": [
+    {
+      "ProgramId": "first_week",
+      "CohortId": "c-2025-summer",
+      "StartedAt": "2025-07-01T19:00:00+02:00",
+      "DayBoundaryHour": 4,
+      "NudgeHour": 20,
+      "CurrentDay": 7,
+      "CurrentDayDate": "2025-07-07T00:00:00+02:00",
+      "StrictMode": true,
+      "ShareLevel": 1,
+      "DaysOffRemaining": 0,
+      "AttemptNumber": 1,
+      "State": 3,
+      "PausedAt": null,
+      "GraduatedAt": "2025-07-07T23:59:59.999+02:00",
+      "LapsedAt": null,
+      "LapseAudited": true,
+      "LastNudgeDate": null,
+      "Records": {},
+      "BankedRewards": [],
+      "CompletedChapterIds": [
+        "fw_ch1",
+        "fw_ch2"
+      ],
+      "RewardGrantedAt": {},
+      "IsActive": false,
+      "CompletedDayCount": 0,
+      "PerfectDayCount": 0
+    }
+  ],
+  "GraduatedProgramIds": [
+    "first_week"
+  ]
+}

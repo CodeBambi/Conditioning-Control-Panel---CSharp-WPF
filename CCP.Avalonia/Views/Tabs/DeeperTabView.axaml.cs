@@ -6,9 +6,11 @@ using System.IO;
 using System.Linq;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia;
 using Avalonia.Media;
+using Avalonia.Media.Immutable;
 using Avalonia.Threading;
 using ConditioningControlPanel.Avalonia.Views.Windows;
 using ConditioningControlPanel.Localization;
@@ -24,9 +26,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     ///
     /// The WPF code-behind is a pure relay: every handler is
     /// <c>if (Window.GetWindow(this) is MainWindow mw) mw.&lt;same name&gt;(...)</c>, plus the
-    /// mod-aware feature art and the FX lifecycle hook. The relay targets have not moved, so the
-    /// handlers are stubs with identical names so the eventual wiring diffs cleanly - but the
-    /// FEATURE ART is real again: Helpers.ModArt.TryLoad plus CoreMods.ModChanged is the same
+    /// mod-aware feature art and the FX lifecycle hook. Library rows, the welcome card, player,
+    /// folder and catalogue relay to MainShellWindow.DeeperHub.cs; import, tutorial and the webcam
+    /// card are still stubs (see docs/avalonia-parity.md). The FEATURE ART is real: Helpers.ModArt.TryLoad plus CoreMods.ModChanged is the same
     /// answer WPF's ModResourceResolver gives, and Assets/features/deeper.png is linked here.
     /// </summary>
     public partial class DeeperTabView : UserControl
@@ -39,6 +41,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             InitializeComponent();
             DataContext = new DeeperTabViewModel();
             ApplyFeatureArt();
+            AddHandler(KeyDownEvent, DeeperTab_KeyDown, RoutingStrategies.Tunnel);   // WPF PreviewKeyDown
         }
 
         protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
@@ -78,36 +81,94 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             DeeperSideArt.Background = new ImageBrush(art) { Stretch = Stretch.UniformToFill };
         }
 
-        // ponytail: needs MainWindow.OnDeeperTabVisibilityChanged (the header glyph's drift clock)
-        // and MainWindow.DeeperFx, wired when the FX layer moves to Core. On WPF this rode
-        // IsVisibleChanged; the Avalonia equivalent would be an IsVisibleProperty observer.
+        // WPF's IsVisibleChanged -> OnDeeperTabVisibilityChanged is the shell's SwitchTabFx here.
 
         /// <summary>WPF's <c>Window.GetWindow(this) as MainWindow</c>, written the way every other
         /// ported tab writes it (PlayTabView.axaml.cs:56).</summary>
         private MainShellWindow? Owner => TopLevel.GetTopLevel(this) as MainShellWindow;
 
-        // The index/filter slice is local and read-only. Editor, player, import, delete,
-        // catalogue and webcam actions stay explicit stubs until their head services move.
         private DeeperTabViewModel? ViewModel => DataContext as DeeperTabViewModel;
 
-        private void DeeperRow_MouseEnter(object? sender, PointerEventArgs e) { }
-        private void DeeperRow_MouseLeave(object? sender, PointerEventArgs e) { }
-        private void DeeperRow_Click(object? sender, PointerReleasedEventArgs e) { }
+        private static EnhancementLibraryEntry? EntryOf(object? sender) =>
+            ((sender as Control)?.DataContext as DeeperLibraryRowVm)?.Entry;
 
-        private void BtnDeeperCatalogue_Click(object? sender, RoutedEventArgs e) { }
+        private void DeeperRow_MouseEnter(object? sender, PointerEventArgs e) => Owner?.OnDeeperRowHover(sender as Control, true);
+        private void DeeperRow_MouseLeave(object? sender, PointerEventArgs e) => Owner?.OnDeeperRowHover(sender as Control, false);
+
+        /// <summary>WPF DeeperRow_Click (MainWindow.DeeperHub.cs:537): one left click selects the row
+        /// AND opens it in the editor; the right button belongs to the context menu.</summary>
+        private void DeeperRow_Click(object? sender, PointerReleasedEventArgs e)
+        {
+            if (e.InitialPressMouseButton != MouseButton.Left || EntryOf(sender) is not { } entry) return;
+            ViewModel?.Select(entry.FilePath);
+            this.FindControl<ItemsControl>("DeeperLibraryList")?.Focus();
+            Owner?.OpenDeeperFile(entry.FilePath);
+        }
+
+        private void DeeperRowMenuOpen_Click(object? sender, RoutedEventArgs e)
+        {
+            if (EntryOf(sender) is { } entry) Owner?.OpenDeeperFile(entry.FilePath);
+        }
+
+        private void DeeperRowMenuReveal_Click(object? sender, RoutedEventArgs e)
+        {
+            if (EntryOf(sender) is { } entry) MainShellWindow.RevealDeeperFile(entry.FilePath);
+        }
+
+        private async void DeeperRowMenuCopyPath_Click(object? sender, RoutedEventArgs e)
+        {
+            if (EntryOf(sender) is not { } entry || TopLevel.GetTopLevel(this)?.Clipboard is not { } clip) return;
+            try { await clip.SetTextAsync(DeeperTabViewModel.FullPath(entry.FilePath)); }
+            catch (Exception ex) { Serilog.Log.Debug("Deeper: copy path failed: {Error}", ex.Message); }
+        }
+
+        /// <summary>WPF DeeperLibraryList_PreviewKeyDown: Enter opens, Delete deletes, Up/Down move.</summary>
+        private void DeeperLibraryList_KeyDown(object? sender, KeyEventArgs e)
+        {
+            if (ViewModel is not { } model) return;
+            switch (e.Key)
+            {
+                case Key.Enter when model.SelectedEntry is { } open:
+                    Owner?.OpenDeeperFile(open.FilePath); e.Handled = true; break;
+                case Key.Delete when model.SelectedEntry is { } gone:
+                    Owner?.DeleteDeeperLibraryEntry(gone); e.Handled = true; break;
+                case Key.Up: ScrollToRow(model.MoveSelection(-1)); e.Handled = true; break;
+                case Key.Down: ScrollToRow(model.MoveSelection(+1)); e.Handled = true; break;
+            }
+        }
+
+        private void ScrollToRow(int index)
+        {
+            if (index >= 0) this.FindControl<ItemsControl>("DeeperLibraryList")?.ContainerFromIndex(index)?.BringIntoView();
+        }
+
+        /// <summary>WPF DeeperTab_PreviewKeyDown: Ctrl+F anywhere on the tab focuses the search box.</summary>
+        private void DeeperTab_KeyDown(object? sender, KeyEventArgs e)
+        {
+            if (e.Key != Key.F || !e.KeyModifiers.HasFlag(KeyModifiers.Control) || TxtDeeperSearch is not { } box) return;
+            box.Focus();
+            box.SelectAll();
+            e.Handled = true;
+        }
+
+        private void BtnDeeperCatalogue_Click(object? sender, RoutedEventArgs e)
+            => _ = Platform.ExternalOpener.OpenAsync(TopLevel.GetTopLevel(this), MainShellWindow.DeeperCatalogueUrl);
+        // ponytail: import needs EnhancementLibrary.FindDuplicateOf/PromoteToLibrary, still WPF-only.
         private void BtnDeeperImport_Click(object? sender, RoutedEventArgs e) { }
         private void BtnDeeperNewEnhancement_Click(object? sender, RoutedEventArgs e)
             => Owner?.BtnDeeperNewEnhancement_Click(sender, e);
-        private void BtnDeeperOpenLibraryFolder_Click(object? sender, RoutedEventArgs e) { }
-        private void BtnDeeperOpenPlayer_Click(object? sender, RoutedEventArgs e) { }
+        private void BtnDeeperOpenLibraryFolder_Click(object? sender, RoutedEventArgs e) => Owner?.OpenDeeperLibraryFolder();
+        private void BtnDeeperOpenPlayer_Click(object? sender, RoutedEventArgs e) => Owner?.BtnDeeperOpenPlayer_Click();
+        // ponytail: StartTutorial(TutorialType.Deeper) - no TutorialService on this head.
         private void BtnDeeperTutorial_Click(object? sender, RoutedEventArgs e) { }
         private void BtnDeeperWebcamCalibrate_Click(object? sender, RoutedEventArgs e) { }
         private void BtnDeeperWebcamManageConsent_Click(object? sender, RoutedEventArgs e) { }
         private void BtnDeeperWebcamQuickRecal_Click(object? sender, RoutedEventArgs e) { }
         private void BtnDeeperWebcamRevokeConsent_Click(object? sender, RoutedEventArgs e) { }
         private void BtnDeeperWebcamStartStopTracker_Click(object? sender, RoutedEventArgs e) { }
-        private void BtnDeeperWelcomeDismiss_Click(object? sender, RoutedEventArgs e) { }
-        private void BtnDeeperWelcomeTour_Click(object? sender, RoutedEventArgs e) { }
+        private void BtnDeeperWelcomeDismiss_Click(object? sender, RoutedEventArgs e) => Owner?.DismissDeeperWelcomeCard();
+        private void BtnDeeperWelcomeDemo_Click(object? sender, RoutedEventArgs e) => Owner?.BtnDeeperWelcomeDemo_Click();
+        private void BtnDeeperWelcomeTour_Click(object? sender, RoutedEventArgs e) => Owner?.BtnDeeperWelcomeTour_Click();
         private void BtnOpenDeviceSettings_Click(object? sender, RoutedEventArgs e) { }
 
         private void DeeperPillAll_Click(object? sender, RoutedEventArgs e)
@@ -150,8 +211,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             BtnDeeperPillWebcam.IsChecked = model.Webcam;
         }
 
-        private void DeeperRowDelete_Click(object? sender, RoutedEventArgs e) { }
-        private void DeeperRowPlay_Click(object? sender, RoutedEventArgs e) { }
+        private void DeeperRowDelete_Click(object? sender, RoutedEventArgs e)
+        {
+            if (EntryOf(sender) is not { } entry) return;
+            e.Handled = true;
+            Owner?.DeleteDeeperLibraryEntry(entry);
+        }
+
+        private void DeeperRowPlay_Click(object? sender, RoutedEventArgs e)
+        {
+            if (EntryOf(sender) is not { } entry) return;
+            e.Handled = true;
+            Owner?.PlayDeeperLibraryEntry(entry.FilePath);
+        }
         // WPF MainWindow.DeeperHub.cs:704.
         private void DeeperRowSubmit_Click(object? sender, RoutedEventArgs e)
         {
@@ -235,10 +307,56 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         {
             var result = DeeperLocalLibrary.Scan();
             _allEntries.Clear();
-            _allEntries.AddRange(result.Entries);
+            // A row in its undo grace period stays hidden although the file is still on disk
+            // (WPF MainWindow.DeeperHub.cs:733).
+            _allEntries.AddRange(result.Entries.Where(e => !PendingDeletes.ContainsKey(FullPath(e.FilePath))));
             _libraryError = result.HasError;
             ApplyFilter();
         }
+
+        /// <summary>Full path -> start timestamp of a delete waiting out its undo grace (the shell
+        /// owns the clock and the commit).</summary>
+        internal Dictionary<string, long> PendingDeletes { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        private string? _selectedPath;
+
+        /// <summary>Rebuilds the rows without a rescan - a submission badge changed.</summary>
+        public void Refresh() => ApplyFilter();
+
+        internal EnhancementLibraryEntry? SelectedEntry => FilteredEntries.FirstOrDefault(r => r.IsSelected)?.Entry;
+
+        /// <summary>WPF SelectDeeperRow (MainWindow.DeeperHub.cs:673). Returns the row index or -1.</summary>
+        internal int Select(string? path)
+        {
+            _selectedPath = path;
+            var index = -1;
+            for (var i = 0; i < FilteredEntries.Count; i++)
+            {
+                FilteredEntries[i].IsSelected = PathsEqual(FilteredEntries[i].Entry.FilePath, path);
+                if (FilteredEntries[i].IsSelected) index = i;
+            }
+            return index;
+        }
+
+        /// <summary>WPF MoveDeeperSelection: Up/Down from nothing lands on the first/last row.</summary>
+        internal int MoveSelection(int delta)
+        {
+            if (FilteredEntries.Count == 0) return -1;
+            var cur = -1;
+            for (var i = 0; i < FilteredEntries.Count; i++) if (FilteredEntries[i].IsSelected) cur = i;
+            var next = cur < 0 ? (delta > 0 ? 0 : FilteredEntries.Count - 1)
+                               : Math.Clamp(cur + delta, 0, FilteredEntries.Count - 1);
+            return Select(FilteredEntries[next].Entry.FilePath);
+        }
+
+        internal static string FullPath(string path)
+        {
+            try { return Path.GetFullPath(path); } catch { return path; }
+        }
+
+        internal static bool PathsEqual(string? a, string? b) =>
+            !string.IsNullOrEmpty(a) && !string.IsNullOrEmpty(b)
+            && string.Equals(FullPath(a), FullPath(b), StringComparison.OrdinalIgnoreCase);
 
         public void SetSearch(string? search)
         {
@@ -289,7 +407,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             var rows = DeeperFilter.Sort(
                 _allEntries.Where(entry => DeeperFilter.Matches(entry, criteria)), _sort, _descending);
             FilteredEntries.Clear();
-            foreach (var entry in rows) FilteredEntries.Add(BuildRow(entry));
+            foreach (var entry in rows)
+            {
+                var row = BuildRow(entry);
+                row.IsSelected = PathsEqual(entry.FilePath, _selectedPath);
+                FilteredEntries.Add(row);
+            }
             Notify(nameof(LibraryCountText), nameof(ShowLibraryEmpty), nameof(LibraryEmptyText),
                 nameof(PillAllCount), nameof(PillVideoCount), nameof(PillAudioCount),
                 nameof(PillHapticsCount), nameof(PillWebcamCount), nameof(ShowLibraryError),
@@ -310,8 +433,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             // WPF MainWindow.DeeperHub.cs:225,262-266.
             var eligible = MainShellWindow.IsCatalogueEligible(entry);
             var hasAuth = !string.IsNullOrEmpty(CoreSettings.Current.AuthToken);
+            var badge = ResolveSubmissionBadge(entry);
             return new DeeperLibraryRowVm
             {
+                ShowSubmissionBadge = badge.Show,
+                SubmissionBadgeGlyph = badge.Glyph,
+                SubmissionBadgeLabel = badge.Label,
+                SubmissionBadgeBg = badge.Bg,
+                SubmissionBadgeFg = badge.Fg,
+                SubmissionBadgeTooltip = badge.Tip,
                 ShowSubmitButton = eligible,
                 SubmitEnabled = eligible && hasAuth,
                 SubmitTooltip = Loc.Get(hasAuth
@@ -334,6 +464,33 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 ShowTimestamp = entry.LastModified != default,
                 Tags = tags,
                 ShowTags = tags.Count > 0,
+            };
+        }
+
+        // WPF MainWindow.DeeperHub.cs:299-347: the toast palette, translucent pill + solid text.
+        private static readonly IBrush SubPublishedBg = new ImmutableSolidColorBrush(Color.Parse("#334CAF50"));
+        private static readonly IBrush SubPendingBg = new ImmutableSolidColorBrush(Color.Parse("#33FFB347"));
+        private static readonly IBrush SubRejectedBg = new ImmutableSolidColorBrush(Color.Parse("#33FF6B6B"));
+        private static readonly IBrush SubPublishedFg = new ImmutableSolidColorBrush(Color.Parse("#7BE08A"));
+        private static readonly IBrush SubPendingFg = new ImmutableSolidColorBrush(Color.Parse("#FFC97A"));
+        private static readonly IBrush SubRejectedFg = new ImmutableSolidColorBrush(Color.Parse("#FF9B9B"));
+
+        /// <summary>The row's catalogue-submission pill from AppSettings.DeeperSubmissions, keyed by
+        /// canonical path; hidden when this file was never submitted.</summary>
+        internal static (bool Show, string Glyph, string Label, IBrush Bg, IBrush Fg, string Tip)
+            ResolveSubmissionBadge(EnhancementLibraryEntry entry)
+        {
+            var subs = CoreSettings.Current.DeeperSubmissions;
+            if (subs == null || !subs.TryGetValue(MainShellWindow.CanonicalCataloguePathKey(entry.FilePath), out var rec) || rec == null)
+                return (false, "", "", Brushes.Transparent, Brushes.White, "");
+            return (rec.Status ?? "").ToLowerInvariant() switch
+            {
+                "approved" or "published" => (true, "✅", Loc.Get("deeper_submission_badge_published"),
+                    SubPublishedBg, SubPublishedFg, Loc.Get("deeper_submission_badge_published_tip")),
+                "rejected" => (true, "⚠", Loc.Get("deeper_submission_badge_rejected"),
+                    SubRejectedBg, SubRejectedFg, Loc.Get("deeper_submission_badge_rejected_tip")),
+                _ => (true, "⏳", Loc.Get("deeper_submission_badge_pending"),
+                    SubPendingBg, SubPendingFg, Loc.Get("deeper_submission_badge_pending_tip")),
             };
         }
 
@@ -383,8 +540,23 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     /// <c>Run</c> takes a literal rather than a binding. The shared Core Entry is carried on the
     /// row VM so future head action handlers can consume the same parsed record.
     /// </summary>
-    public sealed class DeeperLibraryRowVm
+    public sealed class DeeperLibraryRowVm : INotifyPropertyChanged
     {
+        private bool _isSelected;
+        public event PropertyChangedEventHandler? PropertyChanged;
+
+        /// <summary>Keyboard/click selection; the row template paints it (WPF DataTrigger IsSelected).</summary>
+        public bool IsSelected
+        {
+            get => _isSelected;
+            set
+            {
+                if (_isSelected == value) return;
+                _isSelected = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsSelected)));
+            }
+        }
+
         public EnhancementLibraryEntry Entry { get; init; } = new();
         public string Name { get; init; } = "";
         public string MediaTypeIcon { get; init; } = "🎬";
