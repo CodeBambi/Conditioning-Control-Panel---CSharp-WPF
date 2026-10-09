@@ -1597,3 +1597,6 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-studio-lab: +195
 - Studio rack: 120ms panel crossfade and 260ms state-dot pop ported from WPF, tested on a stepped clock (fail-proven).
 - Lab, Lab-tab and Brain Drain rows re-audited with exact missing lists (still stub).
+
+## avalonia-port/panic-order-test: +60
+- PanicSurfacesTests checks WPF-cited ordering pairs, unique ids and a safety-critical set instead of one exact list, so branches that add a surface stop conflicting on it (P53).
