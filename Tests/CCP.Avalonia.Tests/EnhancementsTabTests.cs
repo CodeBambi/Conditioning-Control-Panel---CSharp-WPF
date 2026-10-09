@@ -71,9 +71,13 @@ public sealed class EnhancementsTabTests
             var nodes = tab.FindControl<Canvas>("SkillTreeCanvas")!.Children.OfType<Control>()
                 .Where(c => c.Tag is string).ToDictionary(c => (string)c.Tag!);
             // Owned: breathing green glow, FOREVER badge. Purchasable: pink glow, "💎 cost". Locked: blurred art, padlock.
-            Assert.Equal(Colors.LimeGreen, Assert.IsType<DropShadowEffect>(nodes["pink_hours"].Effect).Color);
+            // The glows are BoxShadow layers behind the node, never an Effect on it (AGENTS.md EFFECT/CACHE RULE).
+            static Border GlowOf(Control node) => Assert.IsType<Border>(((Panel)node).Children[0]);
+            Assert.Null(nodes["pink_hours"].Effect);
+            Assert.Equal(Colors.LimeGreen, GlowOf(nodes["pink_hours"]).BoxShadow[0].Color);
             var buyable = SkillDefinition.All.Single(x => x.Id == "sparkle_boost_2");
-            Assert.Equal(Colors.HotPink, Assert.IsType<DropShadowEffect>(nodes["sparkle_boost_2"].Effect).Color);
+            Assert.Null(nodes["sparkle_boost_2"].Effect);
+            Assert.Equal(Colors.HotPink, GlowOf(nodes["sparkle_boost_2"]).BoxShadow[0].Color);
             Assert.Contains($"💎 {buyable.Cost}", Texts(nodes["sparkle_boost_2"]));
             var locked = SkillDefinition.All.Single(x => x.Id == "lucky_bimbo");
             Assert.Null(nodes["lucky_bimbo"].Effect);
@@ -85,7 +89,7 @@ public sealed class EnhancementsTabTests
             var canvasTexts = tab.FindControl<Canvas>("SkillTreeCanvas")!.GetLogicalDescendants().OfType<TextBlock>().Select(t => t.Text).ToArray();
             Assert.Contains(Loc.Get("label_prestige"), canvasTexts);
             Assert.Contains(Loc.Get("label_active_bonuses"), canvasTexts);
-            Assert.Contains("1.10x", canvasTexts);
+            Assert.Contains($"{1.10:F2}x", canvasTexts);   // the machine's decimal mark, as WPF prints it
             var toggle = tab.GetLogicalDescendants().OfType<Border>().Single(b => b.Name == "DitzyStatsToggle");
             var panel = tab.GetLogicalDescendants().OfType<Border>().Single(b => b.Name == "DitzyStatsPanel");
             Assert.False(panel.IsVisible);
@@ -102,7 +106,7 @@ public sealed class EnhancementsTabTests
 
             // Breath: one clock, sine 0.38 <-> 0.72 over 3.8 s, on screen only.
             Assert.True(tab.FxRunning);
-            var glow = Assert.Single(tab.OwnedGlows, g => ReferenceEquals(g, nodes["pink_hours"].Effect));
+            var glow = Assert.Single(tab.OwnedGlows, g => ReferenceEquals(g, GlowOf(nodes["pink_hours"])));
             clock.Now += TimeSpan.FromSeconds(3.8).Ticks;
             tab.StepFx();
             Assert.Equal(0.72, glow.Opacity, 3);
