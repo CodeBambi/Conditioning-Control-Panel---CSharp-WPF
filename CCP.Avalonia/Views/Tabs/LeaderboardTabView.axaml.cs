@@ -154,9 +154,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         {
             e.Handled = true;
             if ((sender as Button)?.Tag is not string id || string.IsNullOrEmpty(id)) return;
-            _ = Platform.ExternalOpener.OpenAsync(TopLevel.GetTopLevel(this), DiscordTabView.DiscordProfileUrl(id));
+            _ = OpenLink(TopLevel.GetTopLevel(this), DiscordTabView.DiscordProfileUrl(id));
             Log.Information("Opened Discord profile for a leaderboard entry");
         }
+
+        /// <summary>Tests only: the door a chip opens a link through.</summary>
+        internal static Func<TopLevel?, string, Task<bool>> OpenLink = (top, url) => Platform.ExternalOpener.OpenAsync(top, url);
 
         /// <summary>True while the All-Time board is showing.</summary>
         internal bool IsAllTimeMode { get; private set; }
