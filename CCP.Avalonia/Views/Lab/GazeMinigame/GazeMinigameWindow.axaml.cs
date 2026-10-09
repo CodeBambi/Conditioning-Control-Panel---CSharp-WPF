@@ -472,9 +472,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
             SaveSelection();
         }
 
-        /// <summary>ponytail: the Packs list (GazePackRef) that would persist these roles is on the
-        /// head's GazeMinigameSettings, not on this twin, so a role survives the session only. The
-        /// in-memory _roles map is authoritative while the window is open.</summary>
         private void SaveSelection()
         {
             // Persist only assigned packs (Focus/Ignore); Off packs are rediscovered.
@@ -813,6 +810,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
             {
                 var dlg = new Views.Dialogs.WebcamConsentDialog();
                 await dlg.ShowDialogSafe(this);
+                if (_closed) return;   // closed while the dialog was up: Window_Closing already ran
                 if (!dlg.ConsentGiven)
                 {
                     ShowReadyBanner("Camera consent is required for the gaze minigame.");
@@ -824,7 +822,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
             if (!Tracker.IsRunning)
             {
                 ShowReadyBanner("Starting the webcam…");
-                if (!await Tracker.StartAsync())
+                var started = await Tracker.StartAsync();
+                if (_closed) return;   // closed during "Starting the webcam…": never suspend flashes after Window_Closing
+                if (!started)
                 {
                     ShowReadyBanner($"Couldn't start the webcam ({Tracker.LastError}). Check that no other app is using the camera.");
                     return;
@@ -1597,10 +1597,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
 
         private static readonly List<GazeMinigameWindow> Open = new();
 
-        /// <summary>The countdown or a round owns the (fullscreen) screen: panic ends it without arming the exit ladder.</summary>
         /// <summary>Tests: which half holds the Focus asset this round (the builder picks it at random).</summary>
         internal bool CorrectIsLeftForTest => _rounds[_currentRoundIdx].CorrectSide == GameSide.Left;
 
+        /// <summary>The countdown or a round owns the (fullscreen) screen: panic ends it without arming the exit ladder.</summary>
         internal static bool IsAnyRunning() => Open.Any(w => w._gameRunning || w.WindowState == WindowState.FullScreen);
 
         /// <summary>Closes every open game window; the countdown and ticker die in Window_Closing.</summary>
