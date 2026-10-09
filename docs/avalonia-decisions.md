@@ -637,3 +637,14 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
   calls `StopSpawnedServer` on exit, which stops only a server this app spawned.
 - Tests: `Tests/CCP.Avalonia.Tests/LocalAiSetupWizardTests.cs`, `Tests/CCP.Core.Tests/OllamaSetupServiceTests.cs`
   (fake binary and loopback API; no real ollama, pull or network).
+## 2026-10-09: Cosmetics ride every sync; an empty loadout goes only as the explicit clear (avalonia-port/audit-fix-ui, #1914)
+- Question: WPF `ProfileSyncService.BuildCosmeticsPayload` sends the sanitized settings loadout on every sync, and after a
+  load it sends an empty one too. This head kept a Customize save only in memory, so a logout, a cooldown or backoff
+  followed by exit, or a restart could lose it. Which empty-loadout rule should the fix use?
+- Options: (A) match WPF and send the empty loadout after a load; (B) send any non-empty loadout on every push, and an
+  empty one only while an in-memory `PendingCosmeticsClear` is set (an empty Customize save).
+- Chosen: B, advised by the supervisor (P44). Reason: WPF sends the empty loadout safely only because it adopts the cloud
+  loadout first (`AdoptCloudCosmetics`). This head does not adopt, so with A a fresh install would wipe the account's
+  cosmetics. Like WPF's, the flag is not persisted. Logout (`SyncPush.Reset`) drops it so it cannot reach the next account.
+- Tests: `Tests/CCP.Avalonia.Tests/ProfileCosmeticsSyncTests.cs` and the golden body in `SyncPushTests.FreshLinuxInstall_*`
+  (fake wire only). Pending owner confirmation of the sync contract (`server-sync-contract` row).

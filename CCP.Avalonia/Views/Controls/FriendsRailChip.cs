@@ -2,6 +2,7 @@
 // foot of the rail with a mint pill for friends online; a click opens the drawer upward over the rail.
 // ponytail: no unread badge (the feed is not on this head), no bump / hover lift, no tier plate, no
 // rail hold; Popup light-dismiss stands in for WPF's click-outside and host-moved watchers.
+using Avalonia.VisualTree;
 using System;
 using Avalonia;
 using Avalonia.Controls;
@@ -50,7 +51,12 @@ public sealed class FriendsRailChip : Grid
         Drawer.SettingsRequested += () => (TopLevel.GetTopLevel(this) as MainShellWindow)?.ShowTab("appsettings");
         Drawer.SignInRequested += () => { _popup.IsOpen = false; _ = (TopLevel.GetTopLevel(this) as MainShellWindow)?.OpenUnifiedLoginDialog(); };
         Drawer.InvitesRequested += () => { _popup.IsOpen = false; (TopLevel.GetTopLevel(this) as MainShellWindow)?.OpenInvitesCard(); };
-        PointerReleased += (_, e) => { if (e.InitialPressMouseButton == MouseButton.Left) { Toggle(); e.Handled = true; } };
+        // Avalonia routes the popup's input through the Popup to this chip; a click inside the drawer is not a chip click.
+        PointerReleased += (_, e) =>
+        {
+            if (e.Source is Visual s && (ReferenceEquals(s, Drawer) || Drawer.IsVisualAncestorOf(s))) return;
+            if (e.InitialPressMouseButton == MouseButton.Left) { Toggle(); e.Handled = true; }
+        };
         AttachedToVisualTree += (_, _) => Rebind();
         DetachedFromVisualTree += (_, _) => { _popup.IsOpen = false; Unwire(); Drawer.Unsubscribe(); };
         Rebind();

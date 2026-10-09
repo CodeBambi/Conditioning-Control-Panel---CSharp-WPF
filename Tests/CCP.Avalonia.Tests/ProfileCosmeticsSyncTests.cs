@@ -8,24 +8,26 @@ using ConditioningControlPanel;
 using ConditioningControlPanel.Avalonia.Platform;
 using ConditioningControlPanel.Avalonia.Views.Windows;
 using ConditioningControlPanel.Models;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Xunit;
 
 namespace CCP.Avalonia.Tests;
 
-/// <summary>WPF PersistOwnCosmetics on this head: a Customize save writes settings, repaints the card and pushes the
-/// loadout on /v2/user/sync - only that push carries <c>cosmetics</c>, the empty save is the explicit clear, and a
-/// cooldown-skipped save still rides the next push. Same class as the other sync tests (shared statics).</summary>
+/// <summary>WPF PersistOwnCosmetics + BuildCosmeticsPayload on this head (audit #1914): every push after the load
+/// carries the sanitized settings loadout, so no cooldown, logout or restart can lose a save; an empty loadout goes
+/// only as the explicit unequip-everything clear (this head does not adopt the cloud loadout, so an empty push from a
+/// fresh install would wipe the account). Same class as the other sync tests (shared statics).</summary>
 public sealed partial class AccountSeedTests
 {
     [Fact]
-    public void CustomizeSave_SavesRepaintsAndPushesCosmetics_OnlyOnThatPush_EmptyIsTheClear() => WithFreshInstall(async () =>
+    public void CustomizeSave_SavesRepaintsAndEveryPushCarriesTheLoadout_EmptyGoesOnlyAsTheClear() => WithFreshInstall(async () =>
     {
         var s = CoreSettings.Current;
         var old = s.ProfileCosmetics;
         var (wire, sync, _) = SignIn("u1", L40Profile("u1"));
         Assert.True(await AccountSeed.LoadProfileAsync());
-        Assert.Null(Assert.Single(wire.Syncs)["cosmetics"]);          // an ordinary push never carries it
+        Assert.Null(Assert.Single(wire.Syncs)["cosmetics"]);          // (a) fresh install: the empty loadout is left out
 
         async Task<JObject> NextSync(int count)
         {
@@ -53,23 +55,28 @@ public sealed partial class AccountSeedTests
                     Assert.Equal("bambi_silk_bow", (string?)body["cosmetics"]!["avatar_deco"]);
                     Assert.Equal(new[] { "bambi_plush_bunny" }, body["cosmetics"]!["charms"]!.Values<string>());
 
+                    // (c) an ordinary push carries the settings loadout too (WPF), sanitized: an unknown charm never goes up.
+                    s.ProfileCosmetics.Charms.Add("not_a_real_charm");
                     sync.UtcNow = () => T0.AddMinutes(2);
                     Assert.True(await sync.PushAsync("level-up"));
-                    Assert.Null(wire.Syncs.ElementAt(2)["cosmetics"]);                            // delivered once
+                    Assert.Equal(new[] { "bambi_plush_bunny" }, wire.Syncs.ElementAt(2)["cosmetics"]!["charms"]!.Values<string>());
 
-                    // Unequip everything: the empty loadout goes up as WPF's explicit clear.
+                    // (b) unequip everything: the empty loadout goes up once as WPF's explicit clear, then means "no change".
                     sync.UtcNow = () => T0.AddMinutes(3);
                     shell.PersistOwnCosmetics(new ProfileCosmetics());
-                    var clear = (JObject)(await NextSync(4))["cosmetics"]!;
-                    Assert.Equal(JTokenType.Null, clear["avatar_deco"]!.Type);
-                    Assert.Empty(clear["charms"]!);
+                    Assert.True(JToken.DeepEquals(JObject.Parse(JsonConvert.SerializeObject(new ProfileCosmetics())),
+                        (await NextSync(4))["cosmetics"]));                                      // golden clear body
                     Assert.False(shell.ProfilePage!.ProfileCharmSlot1.IsVisible);
-
-                    // Inside the cooldown the save is skipped, then rides the next push.
-                    Assert.False(await sync.PushCosmeticsAsync(new ProfileCosmetics { AvatarDeco = "bambi_silk_bow" }));
                     sync.UtcNow = () => T0.AddMinutes(4);
                     Assert.True(await sync.PushAsync("level-up"));
-                    Assert.Equal("bambi_silk_bow", (string?)wire.Syncs.Last()["cosmetics"]!["avatar_deco"]);
+                    Assert.False(sync.PendingCosmeticsClear);
+                    Assert.Null(wire.Syncs.ElementAt(4)["cosmetics"]);
+
+                    // (d) a clear skipped by the cooldown is dropped by logout, so the next account never gets it.
+                    Assert.False(await sync.PushCosmeticsAsync(new ProfileCosmetics()));
+                    Assert.True(sync.PendingCosmeticsClear);
+                    sync.Reset();
+                    Assert.False(sync.PendingCosmeticsClear);
                 }
                 finally { shell.Close(); Dispatcher.UIThread.RunJobs(); }
             });

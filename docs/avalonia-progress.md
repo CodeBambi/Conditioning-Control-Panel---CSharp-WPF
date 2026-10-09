@@ -789,7 +789,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/companion-room-refresh: +232
 - Companion hero card shows real state (WPF CompanionHeroRuntimeVm): name (from CoreMods), mod, flavour, level/XP, mute/show,
   AI and awareness pills, AI-access plate; mute/show/wake through the shell, Chat opens the tube input, Switch/Engine/Awareness
-  scroll the room, the plate opens Patreon; the room re-reads the hero on tab return. Rows stay stub (Tutorial chip placeholder).
+  scroll the room, the plate opens Settings · Account (audit-fix-ui: it was a no-op until ShowTab("patreon") redirected); the room re-reads the hero on tab return. Rows stay stub (Tutorial chip placeholder).
 - Evidence: CompanionHeroSyncTests (fail-proven; order-independent after the StartModsTests reset); live mute saved, 0 binding errors.
   Review: FIX -> fixed.
 
@@ -1153,7 +1153,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/friends-drawer: +1002
 - Core FriendsService (IUiTimer seam; WPF FriendsServiceApp); Avalonia friends rail chip + drawer (presence, requests, block/remove with
-  confirm, report, add by code), loopback-only in a sandbox, disposed on exit. FriendsDrawerTests (11), fail-proven. Rows stub.
+  confirm, report, add by code), loopback-only in a sandbox, disposed on exit. FriendsDrawerTests (10 methods, 15 cases; asserted, not fail-proven. audit-fix-ui adds AClickInsideTheDrawerKeepsItOpen, fail-proven in ~/ccp-port/evidence/audit-fix-ui/fail-proofs.txt). Rows stub.
 
 ## avalonia-port/chaos-shelves: +660
 - Chaos slice 2: ChaosMeta/Upgrades/Boons/Lessons/Reveal in Core, ChaosBench; WPF run effects keyed by id; the Avalonia hub's shelves spend
