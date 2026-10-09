@@ -112,6 +112,52 @@ public sealed class AvatarTubeMenuTests
         Assert.StartsWith("MUTED", tube.FindControl<TextBlock>("TxtSpeech")!.Text);
     });
 
+    [Fact]
+    public Task DetachedTube_ShowsShrinkGrowDismiss_AndTheScaleSteps() => Run(tube =>
+    {
+        var shrink = Item(tube, "MenuItemShrink");
+        var grow = Item(tube, "MenuItemGrow");
+        var dismiss = Item(tube, "MenuItemDismiss");
+        Assert.False(shrink.IsVisible);
+        Assert.False(grow.IsVisible);
+        Assert.False(dismiss.IsVisible);
+
+        Click(Item(tube, "MenuItemDetach"));
+        Assert.True(tube.IsDetached);
+        Assert.True(shrink.IsVisible);
+        Assert.True(grow.IsVisible);
+        Assert.True(dismiss.IsVisible);
+
+        double stock = tube.Width;
+        Click(grow);
+        Assert.Equal(1.25, tube.CurrentScale, 3);
+        Assert.Equal(1.25, CoreSettings.Current.AvatarTubeScale, 3);
+        Assert.Equal(stock * 1.25, tube.Width, 1);
+        Click(grow);
+        Click(grow);   // already at the stop
+        Assert.Equal(AvatarTubeWindow.MaxScale, tube.CurrentScale, 3);
+        Assert.False(grow.IsEnabled);
+        Assert.Equal(Loc.Get("menu_grow_max"), grow.Header as string);
+        Click(shrink);
+        Click(shrink);
+        Assert.Equal(1.0, tube.CurrentScale, 3);
+        Assert.Equal(stock, tube.Width, 1);
+
+        // Docked again she is stock size and the three items go away.
+        Click(grow);
+        Click(Item(tube, "MenuItemAttach"));
+        Assert.False(tube.IsDetached);
+        Assert.Equal(stock, tube.Width, 1);
+        Assert.False(shrink.IsVisible);
+
+        // Dismiss is a saved decision (#888) and she ends up docked and hidden.
+        Click(Item(tube, "MenuItemDetach"));
+        Click(dismiss);
+        Assert.False(CoreSettings.Current.AvatarEnabled);
+        Assert.False(tube.IsDetached);
+        Assert.False(tube.IsVisible);
+    });
+
     private static Task Run(Action<AvatarTubeWindow> body) => AvaloniaTestDispatcher.RunAsync(() =>
     {
         if (Application.Current is null)
@@ -122,6 +168,10 @@ public sealed class AvatarTubeMenuTests
         CoreSettings.ServiceProvider = () => service;
         var s = CoreSettings.Current;
         bool muted = s.AvatarMuted, trigger = s.TriggerModeEnabled, whispers = s.SubAudioMuted, detached = s.AvatarTubeDetached;
+        bool enabled = s.AvatarEnabled;
+        double scale = s.AvatarTubeScale;
+        s.AvatarEnabled = true;
+        s.AvatarTubeScale = 1.0;
         s.AvatarTubeDetached = false;
         s.AvatarMuted = false;
         s.TriggerModeEnabled = false;
@@ -145,7 +195,9 @@ public sealed class AvatarTubeMenuTests
             s.TriggerModeEnabled = trigger;
             s.SubAudioMuted = whispers;
             s.AvatarTubeDetached = detached;
-            CoreSettings.Save();
+            s.AvatarEnabled = enabled;
+            s.AvatarTubeScale = scale;
+            CoreSettings.SaveImmediate();   // a debounced write would die at the seal and leave this test on disk
             service.SealForReset();
             CoreSettings.ServiceProvider = null;
         }
