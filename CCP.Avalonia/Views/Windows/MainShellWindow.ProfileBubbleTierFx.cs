@@ -1,13 +1,12 @@
 // PORTED from ConditioningControlPanel/MainWindow/MainWindow.ProfileBubbleTierFx.cs (WPF 7.1.5).
 // The Basic / Prime neon on the profile bubble's rim: a small wobble every 8 seconds about its
-// resting -12 degree tilt, and a hover shows it big in a popup to the LEFT of the bubble, because
-// the account menu opens below it. Never over the badge itself. Motion follows the app's level.
+// resting -12 degree tilt, and it shows big in a popup to the LEFT of the bubble while the
+// account menu is open (the two travel together, owner 2026-10-09). Never over the bubble or the menu. Motion follows the app's level.
 using System;
 using Avalonia;
 using Avalonia.Animation.Easings;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
-using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Threading;
 using ConditioningControlPanel.Avalonia.Controls;
@@ -77,11 +76,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             catch (Exception ex) { Log.Debug("profile tier badge wobble failed: {E}", ex.Message); }
         }
 
-        private void ProfileTierBadge_MouseEnter(object? sender, PointerEventArgs e)
+        private void ShowProfileTierBig()
         {
             try
             {
-                if (ProfileTierBadgeSmall?.Source is not { } art) return;
+                if (ProfileTierBadgeSmall is not { IsVisible: true, Source: { } art }) return;
                 EnsureProfileTierFx();
                 if (ProfileTierBadgePopupHost is not { } popup || ProfileTierBadgeBigImage is not { } big) return;
                 big.Source = art;
@@ -108,7 +107,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             catch (Exception ex) { Log.Debug("profile tier badge hover failed: {E}", ex.Message); }
         }
 
-        private void ProfileTierBadge_MouseLeave(object? sender, PointerEventArgs e)
+        private void HideProfileTierBig()
         {
             if (ProfileTierBadgePopupHost is { } popup) popup.IsOpen = false;
         }

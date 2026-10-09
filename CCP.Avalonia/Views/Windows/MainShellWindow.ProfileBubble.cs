@@ -122,6 +122,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 // accumulates - Avalonia's Popup.Closed is a plain event with no dedupe.
                 popup.Closed += OnProfileBubblePopupClosed;
                 popup.IsOpen = true;
+                ShowProfileTierBig();
             }
             catch (Exception ex) { Log.Debug("OpenProfileBubbleMenu: {E}", ex.Message); }
         }
@@ -137,6 +138,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _profileBubbleOpenTimer?.Stop();
             _profileBubbleCloseTimer?.Stop();
             UnsubscribeProfileBubbleWatchers();
+            HideProfileTierBig();
             var popup = sender as Popup ?? ProfileBubblePopupHost;
             if (popup != null) popup.Closed -= OnProfileBubblePopupClosed;
         }

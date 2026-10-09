@@ -62,6 +62,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>Applies a sanitized wardrobe loadout - identical for your card and a viewed one.</summary>
         private void ApplyProfileWardrobe(ProfileCosmetics cosmetics)
         {
+            ApplyProfileCardCosmetics(cosmetics);   // banner, accent, title, pins (ProfileCosmetics.cs)
             ApplyProfileAvatarDecoration(cosmetics.AvatarDeco, cosmetics.DecoTransform);
             ApplyProfileCharms(cosmetics.Charms, cosmetics.CharmTransforms);
         }

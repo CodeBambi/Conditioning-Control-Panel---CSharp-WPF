@@ -1650,16 +1650,17 @@
                                    HorizontalAlignment="Right" VerticalAlignment="Bottom"
                                    Margin="0,0,-13,-6" IsVisible="False"
                                    RenderOptions.BitmapInterpolationMode="HighQuality"
-                                   RenderTransformOrigin="50%,50%"
-                                   PointerEntered="ProfileTierBadge_MouseEnter" PointerExited="ProfileTierBadge_MouseLeave">
+                                   RenderTransformOrigin="50%,50%">
                                 <Image.RenderTransform>
                                     <RotateTransform Angle="-12"/>
                                 </Image.RenderTransform>
                             </Image>
-                            <!-- Hover blows the badge up to the LEFT of the bubble: the account menu
-                                 owns the space below it, and the big copy never sits over the badge
-                                 itself (MainShellWindow.ProfileBubbleTierFx.cs). -->
-                            <Popup x:Name="ProfileTierBadgePopup" PlacementTarget="{Binding #ProfileBubbleTierBadge}"
+                            <!-- The big badge opens and closes WITH the account menu (owner, 2026-10-09:
+                                 the small badge was too fine a hover target). It sits to the LEFT of the
+                                 whole bubble, lifted clear of the menu: a popup is its own window, so one
+                                 laid over the bubble steals the pointer and the pair flickers
+                                 (MainShellWindow.ProfileBubbleTierFx.cs). -->
+                            <Popup x:Name="ProfileTierBadgePopup" PlacementTarget="{Binding #BtnProfileBubble}"
                                    Placement="Left" IsLightDismissEnabled="False" IsHitTestVisible="False" Focusable="False">
                                 <Image x:Name="ProfileTierBadgeBig" Height="72" Margin="12"
                                        RenderOptions.BitmapInterpolationMode="HighQuality"

@@ -104,6 +104,24 @@ public sealed class ProfileWardrobeTests
                     // Per-slot validation: a charm id in the decoration slot is not worn.
                     shell.ApplyViewedProfileWardrobe(new ProfileCosmetics { AvatarDeco = Charm1 });
                     Assert.False(deco.IsVisible);
+
+                    // The card paint: a banner, an accent and a title land on the hero, and come off again.
+                    var banner = page.FindControl<Border>("ProfileHeroBanner")!;
+                    var title = page.FindControl<TextBlock>("TxtProfileEquippedTitle")!;
+                    foreach (var bannerId in CosmeticsPool.BannerIds)
+                    {
+                        shell.ApplyViewedProfileWardrobe(new ProfileCosmetics { BannerId = bannerId });
+                        Assert.True(banner.Background != null, $"banner {bannerId} painted nothing");
+                    }
+                    var accent = ProfileCosmetics.AccentSwatches[0];
+                    shell.ApplyViewedProfileWardrobe(new ProfileCosmetics { Accent = accent, TitleId = Achievement.All.Keys.First() });
+                    Assert.Null(banner.Background);
+                    Assert.True(title.IsVisible);
+                    var edge = Assert.IsType<SolidColorBrush>(page.ProfileHeroCard.BorderBrush);
+                    var want = Color.Parse(accent);
+                    Assert.Equal((want.R, want.G, want.B), (edge.Color.R, edge.Color.G, edge.Color.B));
+                    shell.ApplyViewedProfileWardrobe(null);
+                    Assert.False(title.IsVisible);
                 }
                 finally { shell.Close(); }
             });
