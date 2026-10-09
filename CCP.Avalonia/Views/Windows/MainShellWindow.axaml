@@ -1613,11 +1613,11 @@
                          MainWindow.ProfileBubble.cs; the visuals are named here so that partial
                          can paint and animate them without template digging. -->
                     <Button x:Name="BtnProfileBubble" Width="34" Height="34" Margin="6,0,0,0"
-                            Click="BtnProfileBubble_Click" Cursor="Hand"
+                            Click="BtnProfileBubble_Click" Cursor="Hand" ClipToBounds="False"
                             PointerEntered="ProfileBubble_MouseEnter" PointerExited="ProfileBubble_MouseLeave">
                         <Button.Template>
                             <ControlTemplate TargetType="Button">
-                                <ContentPresenter
+                                <ContentPresenter ClipToBounds="False"
                                                  Content="{TemplateBinding Content}"
                                                  ContentTemplate="{TemplateBinding ContentTemplate}"/>
                             </ControlTemplate>
@@ -1648,13 +1648,23 @@
                                  Grid does not clip, so the negative margin hangs it past the circle. -->
                             <Image x:Name="ProfileBubbleTierBadge" Width="33" Stretch="Uniform"
                                    HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                                   Margin="0,0,-13,-6" IsVisible="False" IsHitTestVisible="False"
+                                   Margin="0,0,-13,-6" IsVisible="False"
                                    RenderOptions.BitmapInterpolationMode="HighQuality"
-                                   RenderTransformOrigin="0.5,0.5">
+                                   RenderTransformOrigin="50%,50%"
+                                   PointerEntered="ProfileTierBadge_MouseEnter" PointerExited="ProfileTierBadge_MouseLeave">
                                 <Image.RenderTransform>
                                     <RotateTransform Angle="-12"/>
                                 </Image.RenderTransform>
                             </Image>
+                            <!-- Hover blows the badge up to the LEFT of the bubble: the account menu
+                                 owns the space below it, and the big copy never sits over the badge
+                                 itself (MainShellWindow.ProfileBubbleTierFx.cs). -->
+                            <Popup x:Name="ProfileTierBadgePopup" PlacementTarget="{Binding #ProfileBubbleTierBadge}"
+                                   Placement="Left" IsLightDismissEnabled="False" IsHitTestVisible="False" Focusable="False">
+                                <Image x:Name="ProfileTierBadgeBig" Height="72" Margin="12"
+                                       RenderOptions.BitmapInterpolationMode="HighQuality"
+                                       RenderTransformOrigin="100%,50%" IsHitTestVisible="False"/>
+                            </Popup>
                         </Grid>
                     </Button>
                     <!-- The bubble's account menu. StaysOpen + manual close-grace timers, same

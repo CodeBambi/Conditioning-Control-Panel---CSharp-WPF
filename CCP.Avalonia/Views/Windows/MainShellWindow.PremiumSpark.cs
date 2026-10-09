@@ -44,8 +44,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         /// <summary>WPF RefreshProfileBubbleTierBadge: Basic (gold) / Prime (cyan) art on the
         /// bubble's rim from the canonical gates, the same rule as the spark; hidden when free.
-        /// ponytail: the hover blow-up popup and the 8 s wobble (ProfileBubbleTierFx) are not
-        /// ported; the badge sits still.</summary>
+        /// The hover blow-up and the 8 s wobble live in MainShellWindow.ProfileBubbleTierFx.cs.</summary>
         internal void RefreshProfileBubbleTierBadge()
         {
             if (Named<global::Avalonia.Controls.Image>("ProfileBubbleTierBadge") is not { } badge) return;
@@ -58,6 +57,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             };
             badge.Source = art;
             badge.IsVisible = art != null;
+            if (art != null) EnsureProfileTierFx();
         }
 
         private static global::Avalonia.Media.Imaging.Bitmap? Art(ref global::Avalonia.Media.Imaging.Bitmap? cache, ref bool tried, string file)
