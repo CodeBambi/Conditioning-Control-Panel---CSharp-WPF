@@ -147,6 +147,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                     break;
                 case "exit-done":
                 case "close":
+                case "pbp:exit":
+                    // WPF PieceByPieceHostService.cs:422: Esc / Leave on the chess menu has nothing to
+                    // wind down, so the frame IS the close.
                     Close();
                     break;
                 case "fire-payload" when Spec.Id == "dtrh":

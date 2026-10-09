@@ -96,6 +96,31 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
         private readonly Slider _sldShake, _sldEffect, _sldBackdropOpacity;
         private readonly ComboBox _cmbAccKey1, _cmbAccKey2;
 
+        /// <summary>WPF ChaosHubWindow.xaml.cs:108 LoadBanner: the title bar art and the faint flourish
+        /// behind the tabs. An absent file leaves the picture hidden (the void returns).</summary>
+        private void LoadBanner()
+        {
+            Show("BannerImage", ChaosArtFile("banner.png"));
+            Show("HubBackdrop", ChaosArtFile(System.IO.Path.Combine("hub", "backdrop.png")));
+
+            void Show(string name, string? path)
+            {
+                if (path == null || this.FindControl<Image>(name) is not { } image) return;
+                try { image.Source = new global::Avalonia.Media.Imaging.Bitmap(path); image.IsVisible = true; }
+                catch (Exception ex) { Log.Debug("[ChaosHub] {Name}: {E}", name, ex.Message); }
+            }
+        }
+
+        /// <summary>WPF ChaosArt.Roots: assets/Chaos under the user's assets folder first, then beside the exe.
+        /// SEAM(ship): CCP.Avalonia.csproj does not copy ConditioningControlPanel/assets/Chaos to the output yet.</summary>
+        internal static string? ChaosArtFile(string relative)
+        {
+            var candidates = new List<string>();
+            try { candidates.Add(System.IO.Path.Combine(CorePaths.EffectiveAssets, "Chaos", relative)); } catch { /* no assets folder yet */ }
+            candidates.Add(System.IO.Path.Combine(AppContext.BaseDirectory, "assets", "Chaos", relative));
+            return candidates.FirstOrDefault(System.IO.File.Exists);
+        }
+
         private T Part<T>(string name) where T : Control => this.FindControl<T>(name)
             ?? throw new InvalidOperationException($"ChaosHubWindow: no '{name}' in the XAML");
 
@@ -193,6 +218,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             _sldBackdropOpacity = Part<Slider>("SldBackdropOpacity");
             _cmbAccKey1 = Part<ComboBox>("CmbAccKey1");
             _cmbAccKey2 = Part<ComboBox>("CmbAccKey2");
+
+            LoadBanner();
 
             // The three drag strips. WPF hooked MouseLeftButtonDown -> DragMove().
             foreach (var strip in new Control[] { _titleBar, _menuTitleBar, _dragBar })

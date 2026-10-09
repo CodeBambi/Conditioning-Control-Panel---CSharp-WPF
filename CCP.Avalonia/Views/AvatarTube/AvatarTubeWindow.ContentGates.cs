@@ -125,7 +125,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
                 if (!ExplicitContentGate.IsAlreadyAcknowledged(promptSettings))
                 {
                     // Cancel, Esc and the close box all yield false: nothing switches.
-                    if (!await new ExplicitContentAcknowledgementDialog().ShowDialog<bool>(this)) return;
+                    if (!await new ExplicitContentAcknowledgementDialog().ShowDialogSafe<bool>(this)) return;
                     if (promptSettings != null)
                     {
                         ExplicitContentGate.MarkAcknowledged(promptSettings);

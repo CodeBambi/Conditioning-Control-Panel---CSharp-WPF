@@ -26,6 +26,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
     internal sealed partial class GameWindow
     {
         private BackRoomBridge? _backRoom;
+        private bool _openingRace;
         private AppSettings? _backRoomSettings;
 
         /// <summary>WPF BackRoomHostService.Media: one live deal for every room and Breakout window (the
@@ -102,8 +103,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                     _backRoom!.OnReady();
                     return true;
                 case "game-open":
-                    // ponytail: the race handoff (WPF OnRoomMessage) - refused until Racing has a host.
-                    if ((string?)o["game"] == "race") Post(new { type = "game-open-result", game = "race", ok = false, reason = "locked" });
+                    // WPF BackRoomHostService.OnRoomMessage: the door answers with the real ownership
+                    // result ("locked" without a racing purchase, "busy" while a race is up), then the
+                    // room winds down and the race opens once it has closed.
+                    if ((string?)o["game"] != "race" || _openingRace) return true;
+                    var refusal = RaceWindow.Refusal();
+                    Post(new { type = "game-open-result", game = "race", ok = refusal == null, reason = refusal });
+                    if (refusal != null) return true;
+                    _openingRace = true;
+                    // ponytail: WPF hands the race the room's own window and returns to the room after
+                    // (?raceReturn=1); this head opens the race in its own window and ends there.
+                    Closed += (_, _) => { if (RaceWindow.Refusal() == null) RaceWindow.Launch(); };
+                    _backRoom!.RequestClose("race");
                     return true;
                 default:
                     _backRoom!.Handle(o);

@@ -82,7 +82,10 @@
         </Border>
 
         <!-- ====================== cloud backup signpost ======================= -->
-        <Border Theme="{StaticResource SectionPanel}" Padding="0" Margin="0,0,0,10"
+        <!-- Follows the Account page's cloud backup card (SyncCloudSignpost): a row that scrolls to a
+             hidden card is a dead button. -->
+        <Border x:Name="CloudBackupSignpost" IsVisible="False"
+                Theme="{StaticResource SectionPanel}" Padding="0" Margin="0,0,0,10"
                 BorderBrush="{StaticResource SectionHueDataBorderBrush}">
             <Grid>
                 <Border CornerRadius="11" Background="{StaticResource SectionHueDataWashBrush}"/>

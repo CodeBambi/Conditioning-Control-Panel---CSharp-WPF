@@ -55,7 +55,33 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             CoreMods.ModChanged += OnModChangedRepaintArt;
             App.IntakePass.PassStateChanged += OnIntakePassStateChanged;
             LocalizationManager.Instance.LanguageChanged += OnIntakePassStateChanged;
+            Platform.WebcamTracker.Instance.StateChanged -= OnTrackerStateChanged;
+            Platform.WebcamTracker.Instance.StateChanged += OnTrackerStateChanged;
+            LocalizationManager.Instance.LanguageChanged += OnTrackerLanguageChanged;
             RefreshPlayCards();
+            RefreshTrackerUi();
+        }
+
+        private void OnTrackerStateChanged() => Dispatcher.UIThread.Post(() => RefreshTrackerUi());
+        private void OnTrackerLanguageChanged(object? sender, EventArgs e) => Dispatcher.UIThread.Post(() => RefreshTrackerUi());
+
+        /// <summary>WPF MainWindow.LabTab.cs UpdateLabTrackerUi + UpdateWebcamStatusChips, the Play door's
+        /// share: the chip's dot and line, the two Eyes cards' dimming and their "start tracking" pills
+        /// follow the tracker. Display only. <paramref name="live"/> is for tests.</summary>
+        internal void RefreshTrackerUi(bool? live = null)
+        {
+            try
+            {
+                var on = live ?? Platform.WebcamTracker.Instance.IsRunning;
+                var brush = this.FindResource(on ? "SuccessGreenBrush" : "TextMutedBrush") as IBrush;
+                if (brush != null) WebcamStatusChipPlayDot.Fill = brush;
+                TxtWebcamStatusChipPlay.Text = Loc.Get(on ? "rf_webcam_tracking" : "rf_webcam_stopped");
+                PlayGazeCard.Opacity = on ? 1.0 : 0.62;
+                PlayFocusCard.Opacity = on ? 1.0 : 0.62;
+                PlayGazeNeedsTracker.IsVisible = !on;
+                PlayFocusNeedsTracker.IsVisible = !on;
+            }
+            catch (Exception ex) { Log.Debug("RefreshTrackerUi: {E}", ex.Message); }
         }
 
         protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
@@ -63,6 +89,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             CoreMods.ModChanged -= OnModChangedRepaintArt;
             App.IntakePass.PassStateChanged -= OnIntakePassStateChanged;
             LocalizationManager.Instance.LanguageChanged -= OnIntakePassStateChanged;
+            Platform.WebcamTracker.Instance.StateChanged -= OnTrackerStateChanged;
+            LocalizationManager.Instance.LanguageChanged -= OnTrackerLanguageChanged;
             base.OnDetachedFromVisualTree(e);
         }
 

@@ -325,7 +325,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             => BtnWebcamDebugStart.Content = Platform.WebcamTracker.Instance.IsRunning ? "Stop tracking" : "Start tracking";
 
         /// <summary>WPF BtnWebcamReviewPrivacy_Click: the consent dialog as review; Cancel changes nothing.</summary>
-        private async void BtnWebcamReviewPrivacy_Click(object? sender, RoutedEventArgs e)
+        internal async void BtnWebcamReviewPrivacy_Click(object? sender, RoutedEventArgs e)
         {
             try
             {
@@ -338,7 +338,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
 
         /// <summary>WPF BtnWebcamDebugStart_Click (MainWindow.LabTab.cs:495): stop if running; else
         /// consent when stale, then start off the UI thread and log the outcome.</summary>
-        private async void BtnWebcamDebugStart_Click(object? sender, RoutedEventArgs e)
+        internal async void BtnWebcamDebugStart_Click(object? sender, RoutedEventArgs e)
         {
             try
             {
@@ -381,7 +381,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
 
         /// <summary>WPF BtnWebcamDebugCalibrate_Click (MainWindow.LabTab.cs:754): consent when stale,
         /// start tracking if off (left running, as WPF), then the 16-point window.</summary>
-        private async void BtnWebcamDebugCalibrate_Click(object? sender, RoutedEventArgs e)
+        internal async void BtnWebcamDebugCalibrate_Click(object? sender, RoutedEventArgs e)
         {
             try
             {
@@ -406,7 +406,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
         }
 
         /// <summary>WPF BtnWebcamDebugQuickRecal_Click (MainWindow.LabTab.cs:1153).</summary>
-        private async void BtnWebcamDebugQuickRecal_Click(object? sender, RoutedEventArgs e)
+        internal async void BtnWebcamDebugQuickRecal_Click(object? sender, RoutedEventArgs e)
         {
             try
             {
@@ -470,7 +470,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
         /// <para>WPF also refreshes three blink-trainer rows; here the Blink Trainer page re-reads
         /// consent whenever it is shown, and the debug cursor does not exist on this head.</para>
         /// </summary>
-        private async void BtnWebcamRevokeConsent_Click(object? sender, RoutedEventArgs e)
+        internal async void BtnWebcamRevokeConsent_Click(object? sender, RoutedEventArgs e)
         {
             try
             {

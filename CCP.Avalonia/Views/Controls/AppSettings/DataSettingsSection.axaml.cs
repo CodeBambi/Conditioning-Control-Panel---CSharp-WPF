@@ -44,11 +44,30 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             base.OnAttachedToVisualTree(e);
             if (CoreSettings.Service is { } svc) svc.CurrentReplaced += OnCurrentReplaced;
             SyncFromSettings();
+            WatchCloudCard();
+        }
+
+        private IDisposable? _cloudCardWatch;
+
+        /// <summary>The "Go to account backup" row shows only while the Account page's cloud backup card
+        /// does (WPF shows both for a cloud identity; the port's card is hidden until backup is ported).</summary>
+        private void WatchCloudCard()
+        {
+            _cloudCardWatch?.Dispose();
+            _cloudCardWatch = null;
+            var card = this.FindAncestorOfType<Tabs.AppSettingsTabView>()
+                ?.FindControl<AccountSettingsSection>("SectionAccount")
+                ?.FindControl<Border>("CloudSettingsBackupSection");
+            if (card == null) { CloudBackupSignpost.IsVisible = false; return; }
+            _cloudCardWatch = card.GetObservable(IsVisibleProperty)
+                .Subscribe(new global::Avalonia.Reactive.AnonymousObserver<bool>(v => CloudBackupSignpost.IsVisible = v));
         }
 
         protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
         {
             if (CoreSettings.Service is { } svc) svc.CurrentReplaced -= OnCurrentReplaced;
+            _cloudCardWatch?.Dispose();
+            _cloudCardWatch = null;
             base.OnDetachedFromVisualTree(e);
         }
 
