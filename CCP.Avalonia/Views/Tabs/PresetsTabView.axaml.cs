@@ -279,8 +279,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         private SessionManager? _sessionManager;
 
-        private IReadOnlyList<Session> _availableSessions =
-            Session.GetAllSessions().Where(session => session.IsAvailable).ToArray();
+        // Every session, locked ones included: WPF lists them and only disables Start
+        // ("🔒 Coming Soon", MainWindow.SessionIO.cs:971-972).
+        private IReadOnlyList<Session> _availableSessions = Session.GetAllSessions().ToArray();
         private Session? _selectedSession;
 
         private static string InitialRackSourceFilter() =>
@@ -313,7 +314,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         {
             ArgumentNullException.ThrowIfNull(manager);
             _sessionManager = manager;
-            _availableSessions = manager.AllSessions.Where(session => session.IsAvailable).ToArray();
+            _availableSessions = manager.AllSessions.ToArray();
             _selectedSession = null;
             RackSourceChips.Children.Clear();
             RackDifficultyChips.Children.Clear();
@@ -639,8 +640,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// <summary>Four source chips (single-select) and four difficulty dots (independent).</summary>
         private void SeedRackToolbar()
         {
-            // Counts come from the same available Core catalogue as the rows; unavailable
-            // placeholders must never make the rack claim that they can be selected.
+            // Counts come from the same Core catalogue as the rows (WPF EnumerateRackSessions:
+            // locked sessions are listed and counted; only their Start button is disabled).
             var builtIn = _availableSessions.Count(session => session.Source == SessionSource.BuiltIn);
             var custom = _availableSessions.Count(session => session.Source == SessionSource.Custom);
             var imported = _availableSessions.Count(session => session.Source == SessionSource.Imported);
@@ -1008,7 +1009,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         {
             if (sender is not Border row || !e.GetCurrentPoint(row).Properties.IsLeftButtonPressed)
                 return;
-            if (row.Tag is not Session session || !session.IsAvailable) return;
+            if (row.Tag is not Session session) return;
 
             row.Focus();
             SelectSession(session);
@@ -1018,7 +1019,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private void SessionRow_KeyDown(object? sender, KeyEventArgs e)
         {
             if (e.Key is not (Key.Enter or Key.Space) ||
-                sender is not Border { Tag: Session session } || !session.IsAvailable)
+                sender is not Border { Tag: Session session })
                 return;
 
             SelectSession(session);
@@ -1027,8 +1028,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         private void SelectSession(Session session)
         {
-            if (!session.IsAvailable) return;
-
             _selectedSession = session;
             _selectedPreset = null;
             RefreshPresetsList();
@@ -1036,7 +1035,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             PresetButtonsPanel.IsVisible = false;
             SessionDetailScroller.IsVisible = true;
             SessionButtonsPanel.IsVisible = true;   // WPF SessionIO.cs:923/:971
-            BtnStartSession.IsEnabled = true;
+            ApplyStartButton();
             BtnExportSession.IsEnabled = true;   // WPF SessionIO.cs:973
             SessionSpoilerPanel.IsVisible = false;
             SetRevealLabel("btn_reveal_details");
@@ -1127,8 +1126,26 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         /// <summary>The session button's text while a session runs (WPF sets its Content per tick);
         /// null puts the localised Start label back. A TextBlock, so no '_' becomes an access key.</summary>
-        internal void SetSessionButtonLabel(string? text) =>
-            BtnStartSession.Content = text is null ? _startSessionLabel : new TextBlock { Text = text };
+        internal void SetSessionButtonLabel(string? text)
+        {
+            _sessionButtonRunning = text is not null;
+            if (text is null) ApplyStartButton();
+            else BtnStartSession.Content = new TextBlock { Text = text };
+        }
+
+        private bool _sessionButtonRunning;
+
+        /// <summary>WPF SessionIO.cs:971-972: a locked session greys Start and reads "🔒 Coming Soon".
+        /// While a session runs the button is Stop, so it keeps its running label and stays live.</summary>
+        private void ApplyStartButton()
+        {
+            var locked = _selectedSession is { IsAvailable: false };
+            if (_selectedSession is not null) BtnStartSession.IsEnabled = !locked || _sessionButtonRunning;
+            if (_sessionButtonRunning) return;
+            BtnStartSession.Content = locked
+                ? new TextBlock { Text = "🔒 " + Loc.Get("label_coming_soon") }
+                : _startSessionLabel;
+        }
 
         private void RefreshSessionRackSelection()
         {

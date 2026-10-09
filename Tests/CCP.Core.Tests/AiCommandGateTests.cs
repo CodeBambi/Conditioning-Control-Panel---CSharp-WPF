@@ -209,7 +209,10 @@ public sealed class AiCommandGateTests : IDisposable
     public class ActingAi : System.Reflection.DispatchProxy
     {
         public readonly TaskCompletionSource Asked = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        public readonly TaskCompletionSource Release = new();
+        // Asynchronous on purpose: the reply never runs inline on the releasing (test) thread. That forces
+        // the interleaving a loaded machine produces anyway, when Release completes before the reply reaches
+        // its await. Tests must therefore wait for the reply's side effect and never assert right after SetResult.
+        public readonly TaskCompletionSource Release = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public List<AiCommandData> ReplyCommands = new();
         protected override object? Invoke(System.Reflection.MethodInfo? method, object?[]? args)
         {
@@ -251,19 +254,25 @@ public sealed class AiCommandGateTests : IDisposable
         await acting.Asked.Task.WaitAsync(TimeSpan.FromSeconds(10));
         AiCommandService.CancelAll();             // panic while the AI is answering
         acting.Release.SetResult();               // the late reply executes its commands inline
-        Assert.DoesNotContain(_flashes, f => f.Amount == 5);
         // The cancelled follow-up finishes on the posted continuation and reports "didn't fire" through the
-        // static LiveActionSink; wait for it here, or it lands in the next test's feed.
+        // static LiveActionSink; wait for it here, or it lands in the next test's feed. Only after that
+        // has the reply's executor run, so only then does the assertion prove anything.
         await reported.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.DoesNotContain(_flashes, f => f.Amount == 5);
     }
 
     [Fact]
     public async Task AFollowUpThatIsNotCancelledStillRunsItsReplysCommands()
     {
         var acting = SeedActingAi();
+        var flashed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        FlashImageCommand.Surface = (a, ms, s) => { _flashes.Add((a, ms, s)); if (a == 5) flashed.TrySetResult(); return true; };
         Run(FollowUp());
         await acting.Asked.Task.WaitAsync(TimeSpan.FromSeconds(10));
         acting.Release.SetResult();
+        // The reply runs on another thread (always under ActingAi, and on a loaded machine regardless), so wait
+        // for its flash instead of asserting before it has run (flake: two push gates, 2026-10-09).
+        await flashed.Task.WaitAsync(TimeSpan.FromSeconds(10));
         Assert.Contains(_flashes, f => f.Amount == 5);
     }
 

@@ -97,6 +97,45 @@ public sealed class BugReportWorkflowTests
         });
     }
 
+    /// <summary>Audit #1289, WPF BugReportWindow.xaml.cs:87-101: a recent hang_*.txt ticks
+    /// "include log" and names the freeze; a suggestion is left alone.</summary>
+    [Fact]
+    public async Task RecentFreezePreTicksIncludeLogAndShowsHint()
+    {
+        await AvaloniaTestDispatcher.RunAsync(async () =>
+        {
+            EnsureAvalonia();
+            var logs = Path.Combine(ConditioningControlPanel.CorePaths.UserData, "logs");
+            Directory.CreateDirectory(logs);
+            var hang = Path.Combine(logs, "hang_audit1289.txt");
+            File.WriteAllText(hang, "freeze");
+            var at = File.GetLastWriteTime(hang);
+            try
+            {
+                var (owner, dialog, closed) = OpenDialog(new BugReportService(new RecordingHandler(_ =>
+                    Task.FromResult(Response(HttpStatusCode.OK, "{}")))), ReportKind.Bug);
+                try
+                {
+                    Assert.True(dialog.FindControl<CheckBox>("ChkIncludeAppLog")!.IsChecked);
+                    var hint = dialog.FindControl<TextBlock>("TxtHangHint")!;
+                    Assert.True(hint.IsVisible);
+                    Assert.Equal(Loc.GetF("bug_report_hang_attached_hint", at.ToString("d")), hint.Text);
+                }
+                finally { Close(owner, dialog); await closed; }
+
+                (owner, dialog, closed) = OpenDialog(new BugReportService(new RecordingHandler(_ =>
+                    Task.FromResult(Response(HttpStatusCode.OK, "{}")))), ReportKind.Suggestion);
+                try
+                {
+                    Assert.False(dialog.FindControl<CheckBox>("ChkIncludeAppLog")!.IsChecked);
+                    Assert.False(dialog.FindControl<TextBlock>("TxtHangHint")!.IsVisible);
+                }
+                finally { Close(owner, dialog); await closed; }
+            }
+            finally { File.Delete(hang); }
+        });
+    }
+
     [Fact]
     public async Task SuggestionOmitsLogsAndSteps_AndUsesSuggestionMarker()
     {
