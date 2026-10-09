@@ -13,6 +13,12 @@ using ConditioningControlPanel.Services;
 
 namespace ConditioningControlPanel
 {
+    /// <summary>The WPF pack URI for a billboard card's art (Core stores the bare Resources path).</summary>
+    internal static class BillboardPoster
+    {
+        internal static string Uri(Services.BillboardCard card) => "pack://application:,,,/Resources/" + card.Poster;
+    }
+
     /// <summary>
     /// The visible dashboard slide. Its art and copy update together when navigating.
     /// </summary>
@@ -242,7 +248,7 @@ namespace ConditioningControlPanel
                 // Missing art must leave the words readable over the shade, not throw.
                 var art = new BitmapImage();
                 art.BeginInit();
-                art.UriSource = new Uri(Services.DashboardBillboard.PosterUri(card), UriKind.Absolute);
+                art.UriSource = new Uri(BillboardPoster.Uri(card), UriKind.Absolute);
                 art.CacheOption = BitmapCacheOption.OnLoad;
                 art.EndInit();
                 art.Freeze();

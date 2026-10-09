@@ -264,6 +264,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// view's visibility instead. Called by SettingsTabView.</summary>
         internal void OnDashboardTabVisibilityChanged(bool visible)
         {
+            if (visible) ResettleBrowserFold();   // WPF :1135, the fold's backstop
             if (!visible || _dashboardIntroQueued) return;
             if (CoreSession.IsSessionRunning) return; // re-shown mid-session, not a launch
             _dashboardIntroQueued = true;

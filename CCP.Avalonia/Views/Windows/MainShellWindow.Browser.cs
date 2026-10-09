@@ -146,7 +146,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         /// <summary>Back to the selected site's homepage. Shared by the reload button and the
         /// remote video-stop path, exactly as on WPF.</summary>
-        private void NavigateBrowserToCurrentSiteHome() => NavigateBrowser(SiteHomeUrl());
+        private void NavigateBrowserToCurrentSiteHome()
+        {
+            RevealDashboardBrowser("reload");   // WPF Browser.cs:3153 / :603 (site-toggle)
+            NavigateBrowser(SiteHomeUrl());
+        }
 
         /// <summary>The site radios' one entry point. Click, not IsCheckedChanged, for the WPF
         /// reason (#867) and an Avalonia one: clicking the site you are already on must still take
@@ -179,6 +183,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // WPF's FocusBrowserSurface, minus the pop-out branch: there is no browser pop-out
             // window on this head, so the embedded surface is always the one to bring forward.
             ShowTab("settings");
+            RevealDashboardBrowser("focus-surface");   // WPF Browser.cs:349
             Activate();
 
             // Move the radios to match the URL, deselecting both for an external link so that
