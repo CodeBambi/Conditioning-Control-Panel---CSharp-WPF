@@ -175,9 +175,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
         {
             var src = Icon;
             _txtGlyph.Text = Glyph ?? "";
-            _imgIconHost.Background = src is null
-                ? null
-                : new ImageBrush(src) { Stretch = Stretch.UniformToFill, AlignmentY = AlignmentY.Center };
+            // A direct draw, never an ImageBrush: the mosaic repaints every frame over its ambient
+            // layer and a brush fill re-rendered its tile into a fresh surface each time (ArtFill).
+            ConditioningControlPanel.Avalonia.Controls.Fx.ArtFill.Paint(_imgIconHost, src, Stretch.UniformToFill, AlignmentY.Center);
             _imgIconHost.IsVisible = src is not null;
             _glyphHost.IsVisible = src is null && !string.IsNullOrEmpty(Glyph);
         }
