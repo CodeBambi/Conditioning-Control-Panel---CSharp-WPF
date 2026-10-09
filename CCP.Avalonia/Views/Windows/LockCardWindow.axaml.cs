@@ -579,11 +579,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 var xpAmount = (50 * _requiredRepeats) + 200;
                 if (_strictMode) xpAmount = (int)(xpAmount * 1.5);
                 CoreProgression.AddXP(xpAmount, "LockCard");
+                // WPF AchievementService.TrackLockCardCompletion:544, the quest half (programs-3a decision).
+                App.Quests?.TrackLockCardCompleted();
             }
 
-            // ponytail: the other two calls stay stubbed and have no Core seam to reach through.
-            // App.Achievements.TrackLockCardCompletion(completionTime, _totalCharsTyped,
-            //   _totalErrors, _requiredRepeats) - ConditioningControlPanel/Services/Progression/AchievementService.cs
+            // ponytail: the rest stays stubbed and has no Core seam to reach through.
+            // App.Achievements.TrackLockCardCompletion's achievement half (TotalLockCardsCompleted,
+            //   Chaster notes) - ConditioningControlPanel/Services/Progression/AchievementService.cs
             // App.LockCard.NotifyCompleted(_phrase, _totalErrors, _requiredRepeats) (!_isTest only)
             //   - ConditioningControlPanel/Services/LockCard/LockCardService.cs
             Log.Information("Lock Card completed - {Repeats} repeats in {Time:F1}s with {Errors} errors{Test}",
