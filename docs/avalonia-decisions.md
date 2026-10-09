@@ -637,3 +637,13 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
   calls `StopSpawnedServer` on exit, which stops only a server this app spawned.
 - Tests: `Tests/CCP.Avalonia.Tests/LocalAiSetupWizardTests.cs`, `Tests/CCP.Core.Tests/OllamaSetupServiceTests.cs`
   (fake binary and loopback API; no real ollama, pull or network).
+## 2026-10-09: Program enrollment stays disabled until the run panel exists (avalonia-port/rows-program-enroll)
+- Question: the ProgramEnrollDialog is fully ported; should the shell Enroll button now call ProgramService.CanEnroll ->
+  dialog -> Enroll (writes programs.json, starts the day clock and nudges) although Avalonia has no run panel or
+  session runner yet?
+- Option A (chosen): no persistence change. Test the dialog headless, keep the row stub listing the caller, the run panel
+  and the session runner; the Enroll caller lands together with the run panel, never without it.
+- Option B (rejected): wire Enroll now. The user would hold a running program with no way to complete its days, so it
+  would lapse.
+- Chose A on the supervisor's advice (P44). Reason: no lapsing enrollments.
+- Tests: `Tests/CCP.Avalonia.Tests/ProgramEnrollDialogTests.cs`.

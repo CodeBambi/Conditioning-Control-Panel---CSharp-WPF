@@ -9,7 +9,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
     /// <c>WebHost.InvokeScriptAsync</c> behind a navigation fence.
     ///
     /// <para>This exists because the two windows had grown five copies of the same rules:
-    /// <see cref="HostsMatchIgnoringWww"/> and <see cref="Unquote"/> byte for byte, the
+    /// a host fence and <see cref="Unquote"/> byte for byte, the
     /// largest-&lt;video&gt; finder four times over with four different tails, a path comparison the
     /// editor inlined and the player named <c>PathsEqual</c>, and the media extension list twice.
     /// Three of those are SECURITY predicates: a fence that drifts on one window and not the other
@@ -17,28 +17,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
     /// one of the two files; this layer owns both.</para>
     ///
     /// <para>Deliberately NOT in CCP.Core. Nothing here is portable logic the engine wants - it is
-    /// this head's WebKitGTK quirks (the quote stripping) and this head's narrower re-statement of
-    /// rules Core already owns properly. Core's <c>UrlSafety.HostMatches</c> +
-    /// <c>DeeperConfig.PreviewHostAllowlist</c> and <c>UrlSafety.IsSafeLocalAbsolute</c> ARE those
-    /// rules; they are <c>internal</c> and CCP.Avalonia is not named in
-    /// CCP.Core/Properties/AssemblyInfo.cs, which is the only reason these narrower stand-ins exist
-    /// at all. When that one line lands, this class shrinks rather than growing.</para>
+    /// this head's WebKitGTK quirks (the quote stripping). The host fence calls Core's
+    /// <c>UrlSafety.HostMatches</c> + <c>DeeperConfig.PreviewHostAllowlist</c>, the same rule WPF's
+    /// NavigationStarting enforced.</para>
     /// </summary>
     internal static class DeeperPreview
     {
         // ---- Fences ---------------------------------------------------------------------
 
-        /// <summary>Host equality that ignores a leading "www." (the sites in the original
-        /// allowlist redirect between the two forms). Deliberately NOT a domain-suffix match: a
-        /// subdomain is a DIFFERENT host here, because both callers pin to the host of the one page
-        /// the project named rather than admitting a whole domain the way the allowlist did.</summary>
-        internal static bool HostsMatchIgnoringWww(string? a, string? b)
-        {
-            static string Strip(string? h) =>
-                (h ?? "").StartsWith("www.", StringComparison.OrdinalIgnoreCase) ? h![4..] : (h ?? "");
-            var (x, y) = (Strip(a), Strip(b));
-            return x.Length > 0 && x.Equals(y, StringComparison.OrdinalIgnoreCase);
-        }
+        /// <summary>WPF's IsAllowedPreviewHost / IsAllowedPlayerHost plus the https check both
+        /// windows ran beside it (DeeperEditorWindow.xaml.cs:664, EnhancementPlayerWindow.xaml.cs:1775):
+        /// the first hop AND every later hop must be https on an allowlisted domain.</summary>
+        internal static bool IsAllowedPreviewHost(Uri? u)
+            => u != null && u.Scheme == Uri.UriSchemeHttps
+               && ConditioningControlPanel.Services.Deeper.UrlSafety.HostMatches(
+                   u, ConditioningControlPanel.Services.Deeper.DeeperConfig.PreviewHostAllowlist);
 
         /// <summary>Full-path equality for the local-file fence. Full paths on both sides because
         /// the engine round-trips the URL through file:// encoding and hands <c>LocalPath</c> back

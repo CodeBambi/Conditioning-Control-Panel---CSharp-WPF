@@ -731,6 +731,7 @@
   "exclusives_badge_beta": "BETA",
   "exclusives_chip_unlocked": "잠금 해제됨",
   "exclusives_chip_lab": "✨ 랩 액세스",
+  "exclusives_not_on_this_build": "이 빌드에서는 아직 사용할 수 없습니다.",
   "exclusives_chip_pass_ready": "주간 패스 사용 가능",
   "exclusives_enter": "열기",
   "tab_fyp": "추천",

@@ -1512,3 +1512,29 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-companion-editors: +478
 - Prompt editor: Save keeps only edited boxes (`ActivePersonaPromptText` moved to Core), unticking clears the community prompt, and the X asks Save/Discard/Cancel (`btn_discard` added in 9 languages).
 - Attention style editor: Test spawns a bouncing topmost test target that panic closes (`attention-test` surface), and the preview shadows are back. attention-target-editor is now wired; the prompt and phrase editors stay stub.
+
+## avalonia-port/rows-mod-picker: +43
+- dialogs-mod-picker re-audited: unreachable on WPF too, parity holds; row stays stub with that note (x:Names match plus port-only TitleBar/TxtDownload).
+- Stale WPF cite MainWindow.xaml.cs:610-611 -> 587-588 (ledger + 3 comments); stale WPF first-run comment corrected.
+- Cherry-picked CornerGif frame-stepping + SettingsService leaked-save disarm flake fixes (from rows-companion-editors).
+
+## avalonia-port/rows-friends-drawer: +452
+- Friends drawer card: Invite / Poke / Send a watch actions with their inline pickers over Core FriendsService (Goon/chess tiles shut: hosts WPF-only).
+- Results after fold fly over the chip's window; folded drawer unsubscribes; poke hover; shut-tile string in 9 languages.
+- 2 headless tests over a fake wire (fail-proven x5 and x3; the second opens via the rail-chip click and checks the folded-drawer word); rows stay stub (feed, trails, tables, leash, juice, rail-chip extras remain).
+
+## avalonia-port/rows-program-enroll: +135
+- ProgramEnrollDialog headless test (contract gate, Strict unavailable, clock results, Escape, Cancel), each fail-proven; row stays stub (caller, run panel, session runner missing).
+- Decision logged: Enroll caller lands only together with the run panel (no lapsing enrollments).
+
+## avalonia-port/rows-asset-submit: +289
+- dialogs-asset-submit wired: preset Share + session rack ☁ open AssetSubmitDialog -> Core CatalogueClient submit/record/badge/toast; auth + affirmation gates as WPF (AssetSubmitWireTests, 4 fail-proofs).
+- Live (sandbox) limited to listing/disabled state; mod (MEGA) branch still waits on shell-mod-catalogue.
+
+## avalonia-port/rows-companion-workshop: +465
+- Workshop Library cell: the per-mod video link editor now works on Avalonia (add/preview/delete/save), and its rules live in Core `VideoLinkPool`, which WPF also uses.
+- Roster cards show each companion's level, name, tooltip and an accent ring on the active one; switching companion and assigning a personality are still missing (stub).
+
+## avalonia-port/rows-deeper-editor: +583
+- Deeper editor plays local audio through LibVLC (clock, seek, end, real length, panic surface). Editor and player previews use Core's host allowlist on every hop.
+- Player: Create new and Open in editor work (re-read, one editor per file, recent). The dialog picker remembers the last folder.
