@@ -8,11 +8,13 @@ using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Headless;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.LogicalTree;
 using CCP.Avalonia.Testing;
 using ConditioningControlPanel.Avalonia.Platform;
 using ConditioningControlPanel.Avalonia.Views.Controls;
 using ConditioningControlPanel.Avalonia.Views.Overlays;
+using ConditioningControlPanel.Controls.Friends;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Services.Friends;
@@ -34,14 +36,132 @@ public sealed class FriendsDrawerTests
     private sealed class Wire : HttpMessageHandler
     {
         public readonly List<string> Ops = new();
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage r, CancellationToken ct)
+        /// <summary>The bodies of every "send" (poke / invite / watch), in order.</summary>
+        public readonly List<string> Sends = new();
+        /// <summary>When set, a "send" waits for it: the answer is still out while the test folds the drawer.</summary>
+        public TaskCompletionSource? HoldSends;
+        public string StateBody = State;
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage r, CancellationToken ct)
         {
             var op = r.RequestUri!.AbsolutePath.Split('/').Last();
             lock (Ops) Ops.Add(op);
-            var body = op == "state" ? State : op == "poll" ? """{"ok":true,"online":[],"inbox":[],"receipts":[]}""" : """{"ok":true}""";
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body) });
+            if (op == "send") { Sends.Add(await r.Content!.ReadAsStringAsync(ct)); if (HoldSends != null) await HoldSends.Task; }
+            var body = op == "state" ? StateBody : op == "poll" ? """{"ok":true,"online":[],"inbox":[],"receipts":[]}"""
+                : op == "send" ? """{"ok":true,"status":"sent"}""" : """{"ok":true}""";
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body) };
         }
     }
+
+    /// <summary>Lets a click's async handler finish: dispatcher turns, no clock.</summary>
+    private static async Task Until(Func<bool> done)
+    {
+        for (var i = 0; i < 500 && !done(); i++)
+            await global::Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() => { }, global::Avalonia.Threading.DispatcherPriority.Background);
+    }
+
+    private static void Click(Control root, string tag) =>
+        Tagged<Button>(root, tag)!.RaiseEvent(new global::Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+
+    /// <summary>WPF FriendsDrawer.BuildCard + Pickers: the card's three actions open their picker inline, and a
+    /// poke chip, a flavour chip and the HT box each send through the service and word the answer in the row.</summary>
+    [Fact]
+    public Task TheCardsPickersSendAPokeAWatchAndAnInvite() => AvaloniaTestDispatcher.RunAsync(async () =>
+    {
+        var (svc, wire) = Service();
+        var d = new FriendsRailChip(svc).Drawer;
+        await svc.RefreshAsync();
+        d.Toggle("u_on");
+        foreach (var act in new[] { "invite", "poke", "watch" }) Assert.NotNull(Tagged<Button>(d, "friends-action:" + act));
+        Assert.Null(d.OpenPicker);
+
+        Click(d, "friends-action:poke");
+        Assert.Equal("poke", d.OpenPicker);
+        Assert.Equal(PokeSet.Shipped.Count, Tagged<WrapPanel>(d, "friends-picker:poke")!.Children.Count);
+        Click(d, "friends-poke:" + PokeSet.Shipped[0]);
+        await Until(() => Tagged<TextBlock>(d, "friends-result") != null);
+        Assert.Equal(Loc.Get(FriendsDrawerRules.SendResultKey(SendResult.Sent)), Tagged<TextBlock>(d, "friends-result")!.Text);
+        // A second poke inside the cooldown is refused by the service (PokeSet.CooldownSeconds) and never sent.
+        Assert.Equal(SendResult.TooFast, await d.PokeAsync("u_on", PokeSet.Shipped[1]));
+        Assert.Single(wire.Sends);
+        d.Render();
+        Assert.Contains("\"kind\":\"poke\"", wire.Sends[0]);
+        Assert.Contains("\"poke\":\"" + PokeSet.Shipped[0] + "\"", wire.Sends[0]);
+        Assert.Equal(Loc.Get(FriendsDrawerRules.SendResultKey(SendResult.TooFast)), Tagged<TextBlock>(d, "friends-result")!.Text);
+
+        Click(d, "friends-action:watch");
+        Assert.Equal("watch", d.OpenPicker);
+        Click(d, "friends-flavour:trance");
+        await Until(() => wire.Sends.Count == 2 && Tagged<TextBlock>(d, "friends-result")?.Text == Loc.Get(FriendsDrawerRules.SendResultKey(SendResult.Sent)));
+        Click(d, "friends-watch-tab:ht");
+        var box = Tagged<TextBox>(d, "friends-ht-box")!;
+        Assert.False(Tagged<Button>(d, "friends-ht-send")!.IsEnabled);
+        box.Text = "ht-1234!";
+        Assert.Equal("1234", box.Text);   // digits only, as typed (FriendsDrawerRules.NormaliseHtId)
+        Assert.True(Tagged<Button>(d, "friends-ht-send")!.IsEnabled);
+        Click(d, "friends-ht-send");
+        Assert.Equal(SendResult.Sent, await d.SendWatchAsync("u_on", new WatchRef(WatchKind.Flavour, "pink", "Pink")));
+        Assert.Contains(wire.Sends, s => s.Contains("\"kind\":\"flavour\"") && s.Contains("\"id\":\"trance\""));
+        Assert.Contains(wire.Sends, s => s.Contains("\"kind\":\"ht\"") && s.Contains("\"id\":\"" + FriendsDrawerRules.NormaliseHtId("ht-1234!") + "\""));
+
+        // The Goon room and the chess board are not hosted on this head: those tiles are shut and say why.
+        Click(d, "friends-action:invite");
+        Assert.Equal("invite", d.OpenPicker);
+        foreach (var shut in new[] { InviteDestination.Goon, InviteDestination.Chess })
+            Assert.False(Tagged<Button>(d, "friends-invite:" + shut)!.IsEnabled);
+        Click(d, "friends-invite:" + InviteDestination.BackRoom);
+        Assert.Equal(SendResult.Sent, await d.InviteAsync("u_on", InviteDestination.Ramp, null));
+        Assert.Contains(wire.Sends, s => s.Contains("\"kind\":\"invite\"") && s.Contains("\"destination\":\"backroom\""));
+
+        // Pressing the lit action again folds its picker; folding the card forgets it.
+        Click(d, "friends-action:invite");
+        Assert.Null(d.OpenPicker);
+        d.OpenPickerFor("u_on", "poke");
+        d.Toggle("u_on");
+        Assert.Null(d.OpenPicker);
+    });
+
+    /// <summary>WPF ShowResult: a send answered after the drawer folded says so outside, over the rail chip's
+    /// window (the drawer itself sits in a popup root, then detached). Driven from the rail chip's click.</summary>
+    [Fact]
+    public Task ASendAnsweredAfterTheDrawerFoldsFliesOverTheChipsWindow() => AvaloniaTestDispatcher.RunAsync(async () =>
+    {
+        if (global::Avalonia.Application.Current is null)
+            global::Avalonia.AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>().UseSkia()
+                .UseHeadless(new global::Avalonia.Headless.AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false }).SetupWithoutStarting();
+        var (svc, wire) = Service();
+        var chip = new FriendsRailChip(svc) { Width = 200, HorizontalAlignment = global::Avalonia.Layout.HorizontalAlignment.Left, VerticalAlignment = global::Avalonia.Layout.VerticalAlignment.Bottom };
+        var host = new Window { Width = 1000, Height = 700, Content = chip };
+        try
+        {
+            host.Show();
+            await svc.RefreshAsync();
+            var at = chip.TranslatePoint(new Point(24, 24), host)!.Value;
+            global::Avalonia.Headless.HeadlessWindowExtensions.MouseDown(host, at, MouseButton.Left);
+            global::Avalonia.Headless.HeadlessWindowExtensions.MouseUp(host, at, MouseButton.Left);
+            Assert.True(chip.IsOpen);
+            var d = chip.Drawer;
+            d.Toggle("u_on");
+            Click(d, "friends-action:poke");
+            wire.HoldSends = new TaskCompletionSource();
+            Click(d, "friends-poke:" + PokeSet.Shipped[0]);
+            await Until(() => wire.Sends.Count == 1);
+            // Esc folds the picker, then the drawer (WPF OnKey).
+            foreach (var _ in new[] { 1, 2 }) d.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Escape });
+            Assert.False(chip.IsOpen);
+            wire.HoldSends.SetResult();
+            await Until(() => host.OwnedWindows.OfType<FloatingWord>().Any());
+            var word = Assert.Single(host.OwnedWindows.OfType<FloatingWord>());
+            Assert.Equal(Loc.Get(FriendsDrawerRules.SendResultKey(SendResult.Sent)), word.GetLogicalDescendants().OfType<TextBlock>().Single().Text);
+
+            // Folded, the drawer no longer redraws on every snapshot (P07).
+            var row = Tagged<Border>(d, "friends-row:u_on");
+            wire.StateBody = State.Replace("\"Zed\"", "\"Zoe\"");
+            await svc.RefreshAsync();
+            Assert.Equal("Zoe", svc.Snapshot.Friends.Single(f => f.Id == "u_off").Name);
+            Assert.Same(row, Tagged<Border>(d, "friends-row:u_on"));
+        }
+        finally { foreach (var w in host.OwnedWindows.ToArray()) w.Close(); host.Close(); }
+    });
 
     /// <summary>Ticks only when the test says so; <see cref="Restarted"/> completes on the first Start after a tick.</summary>
     private sealed class FakeTimer : IUiTimer
@@ -109,6 +229,41 @@ public sealed class FriendsDrawerTests
         d.ToggleBlocked();
         Assert.NotNull(Tagged<Border>(d, "friends-blocked:u_bad"));
     });
+
+    /// <summary>audit #1976: a click inside the drawer routes through the Popup to the chip; it must
+    /// not toggle the drawer shut (WPF's HWND popup never reached the chip at all).</summary>
+    [Fact]
+    public Task AClickInsideTheDrawerKeepsItOpen() => AvaloniaTestDispatcher.RunAsync(async () =>
+    {
+        if (Application.Current is null)
+            AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>()
+                .UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                .SetupWithoutStarting();
+        var (svc, _) = Service();
+        var chip = new FriendsRailChip(svc);
+        await svc.RefreshAsync();
+        var w = new Window { Width = 400, Height = 600, Content = new StackPanel { VerticalAlignment = global::Avalonia.Layout.VerticalAlignment.Bottom, Children = { chip } } };
+        w.Show();
+        try
+        {
+            Click(w, chip);
+            Assert.True(chip.IsOpen);
+            var code = Tagged<TextBlock>(chip.Drawer, "friends-my-code")!;
+            Click(TopLevel.GetTopLevel(code)!, code);
+            Assert.True(chip.IsOpen);
+            Click(w, chip);
+            Assert.False(chip.IsOpen);
+        }
+        finally { w.Close(); }
+    });
+
+    private static void Click(TopLevel top, Control c)
+    {
+        var p = c.TranslatePoint(new Point(c.Bounds.Width / 2, c.Bounds.Height / 2), top)!.Value;
+        top.MouseDown(p, global::Avalonia.Input.MouseButton.Left);
+        top.MouseUp(p, global::Avalonia.Input.MouseButton.Left);
+        global::Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+    }
 
     [Fact]
     public Task BlockAsksFirstAndAcceptAndUnblockGoToTheWire() => AvaloniaTestDispatcher.RunAsync(async () =>

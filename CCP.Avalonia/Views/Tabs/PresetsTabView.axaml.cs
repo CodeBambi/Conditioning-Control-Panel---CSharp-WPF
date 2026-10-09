@@ -30,7 +30,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     /// ponytail: needs JustDropOrdersService and the tab FX clock, wired when those move to
     /// Core. Reveal spoilers and the Catalogue chip are wired. The remaining wiring points,
     /// all named in the XAML, are:
-    ///   BtnSharePreset /
     ///   BtnSelectCornerGif / ChkCornerGifEnabled / RbCornerTL..BR /
     ///   SliderCornerGifSize + SliderCornerGifOpacity / CmbRackSort.SelectionChanged /
     ///   preset chip clicks and IsVisibleChanged -> OnPresetsTabVisibilityChanged (the card-sheen
@@ -54,6 +53,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             CmbRackSort.SelectionChanged += CmbRackSort_SelectionChanged;
             TxtRackSearch.TextChanged += TxtRackSearch_TextChanged;
             BtnExportPreset.Click += BtnExportPreset_Click;
+            // WPF BtnSharePreset_Click (MainWindow.PresetIO.cs:192).
+            BtnSharePreset.Click += async (_, _) =>
+            {
+                if (_selectedPreset is { IsDefault: false } p && Shell is { } owner) await owner.SharePresetToCatalogueAsync(p);
+            };
             BtnLoadPreset.Click += BtnLoadPreset_Click;
             BtnSaveOverPreset.Click += BtnSaveOverPreset_Click;
             BtnDeletePreset.Click += BtnDeletePreset_Click;
@@ -76,7 +80,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 OpenCatalogue();
             };
             // WPF Window_Drop's Session/Preset cases (MainWindow.SessionIO.cs:1477-1484), scoped to
-            // this tab. ponytail: asset/zip/mod drops and the window-wide overlay are still WPF-only.
+            // this tab. Every other drop type is the window's (MainShellWindow.SessionIO.cs).
             DragDrop.SetAllowDrop(this, true);
             AddHandler(DragDrop.DropEvent, Tab_Drop);
             _startSessionLabel = BtnStartSession.Content;
@@ -275,8 +279,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         private SessionManager? _sessionManager;
 
-        private IReadOnlyList<Session> _availableSessions =
-            Session.GetAllSessions().Where(session => session.IsAvailable).ToArray();
+        // Every session, locked ones included: WPF lists them and only disables Start
+        // ("🔒 Coming Soon", MainWindow.SessionIO.cs:971-972).
+        private IReadOnlyList<Session> _availableSessions = Session.GetAllSessions().ToArray();
         private Session? _selectedSession;
 
         private static string InitialRackSourceFilter() =>
@@ -309,7 +314,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         {
             ArgumentNullException.ThrowIfNull(manager);
             _sessionManager = manager;
-            _availableSessions = manager.AllSessions.Where(session => session.IsAvailable).ToArray();
+            _availableSessions = manager.AllSessions.ToArray();
             _selectedSession = null;
             RackSourceChips.Children.Clear();
             RackDifficultyChips.Children.Clear();
@@ -319,9 +324,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             RefreshLocalizedDetails();
         }
 
-        // ---- placeholder furniture + Core-backed session rack --------------------
+        // ---- Takeaway empty state + Core-backed session rack --------------------
         //
-        // The Takeaway strip remains render furniture until its store moves. The preset rail and
+        // The Takeaway strip paints WPF's empty state until the order drawer moves. The preset rail and
         // the session rack read Core (Preset, AppSettings.UserPresets, Session).
 
         private void SeedRailRackAndTakeaway()
@@ -351,8 +356,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 PresetCardsPanel.Children.Insert(at++, PresetChip(preset));
         }
 
-        /// <summary>WPF's SelectPreset (MainWindow.Presets.cs:461). Share stays disabled: the
-        /// preset Share-to-catalogue submission is split out (shell-preset-io).</summary>
+        /// <summary>WPF's SelectPreset (MainWindow.Presets.cs:461).</summary>
         private void SelectPreset(Preset preset)
         {
             _selectedPreset = preset;
@@ -383,6 +387,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             BtnSaveOverPreset.IsEnabled = !preset.IsDefault;
             BtnDeletePreset.IsEnabled = !preset.IsDefault;
             BtnExportPreset.IsEnabled = true;
+            BtnSharePreset.IsEnabled = !preset.IsDefault;
             UpdatePresetShareStatusBadge(preset);
             RefreshSessionRackSelection();
         }
@@ -635,8 +640,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// <summary>Four source chips (single-select) and four difficulty dots (independent).</summary>
         private void SeedRackToolbar()
         {
-            // Counts come from the same available Core catalogue as the rows; unavailable
-            // placeholders must never make the rack claim that they can be selected.
+            // Counts come from the same Core catalogue as the rows (WPF EnumerateRackSessions:
+            // locked sessions are listed and counted; only their Start button is disabled).
             var builtIn = _availableSessions.Count(session => session.Source == SessionSource.BuiltIn);
             var custom = _availableSessions.Count(session => session.Source == SessionSource.Custom);
             var imported = _availableSessions.Count(session => session.Source == SessionSource.Imported);
@@ -899,9 +904,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             export.Click += (_, e) => { e.Handled = true; ExportSession(session); };
             actions.Children.Add(export);
             // WPF SessionIO.cs:453-457: delete only where SessionManager.DeleteSession can succeed.
-            // ponytail: the share (☁) button needs the catalogue submission write path on this head.
             if (session.Source != SessionSource.BuiltIn)
             {
+                // WPF SessionBtn_Share (MainWindow.SessionIO.cs:1827).
+                var share = RowAction("☁", Loc.Get("tooltip_share_to_catalogue"), danger: false);
+                share.IsEnabled = true;
+                share.Click += async (_, e) =>
+                {
+                    e.Handled = true;
+                    if (Shell is { } owner) await owner.ShareSessionToCatalogueAsync(session);
+                };
+                actions.Children.Add(share);
                 var delete = RowAction("\U0001F5D1", Loc.Get("tooltip_delete_session"), danger: true);
                 delete.IsEnabled = true;
                 delete.Click += (_, e) => { e.Handled = true; ConfirmDeleteSession(session); };
@@ -996,7 +1009,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         {
             if (sender is not Border row || !e.GetCurrentPoint(row).Properties.IsLeftButtonPressed)
                 return;
-            if (row.Tag is not Session session || !session.IsAvailable) return;
+            if (row.Tag is not Session session) return;
 
             row.Focus();
             SelectSession(session);
@@ -1006,7 +1019,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private void SessionRow_KeyDown(object? sender, KeyEventArgs e)
         {
             if (e.Key is not (Key.Enter or Key.Space) ||
-                sender is not Border { Tag: Session session } || !session.IsAvailable)
+                sender is not Border { Tag: Session session })
                 return;
 
             SelectSession(session);
@@ -1015,8 +1028,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         private void SelectSession(Session session)
         {
-            if (!session.IsAvailable) return;
-
             _selectedSession = session;
             _selectedPreset = null;
             RefreshPresetsList();
@@ -1024,7 +1035,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             PresetButtonsPanel.IsVisible = false;
             SessionDetailScroller.IsVisible = true;
             SessionButtonsPanel.IsVisible = true;   // WPF SessionIO.cs:923/:971
-            BtnStartSession.IsEnabled = true;
+            ApplyStartButton();
             BtnExportSession.IsEnabled = true;   // WPF SessionIO.cs:973
             SessionSpoilerPanel.IsVisible = false;
             SetRevealLabel("btn_reveal_details");
@@ -1115,8 +1126,26 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         /// <summary>The session button's text while a session runs (WPF sets its Content per tick);
         /// null puts the localised Start label back. A TextBlock, so no '_' becomes an access key.</summary>
-        internal void SetSessionButtonLabel(string? text) =>
-            BtnStartSession.Content = text is null ? _startSessionLabel : new TextBlock { Text = text };
+        internal void SetSessionButtonLabel(string? text)
+        {
+            _sessionButtonRunning = text is not null;
+            if (text is null) ApplyStartButton();
+            else BtnStartSession.Content = new TextBlock { Text = text };
+        }
+
+        private bool _sessionButtonRunning;
+
+        /// <summary>WPF SessionIO.cs:971-972: a locked session greys Start and reads "🔒 Coming Soon".
+        /// While a session runs the button is Stop, so it keeps its running label and stays live.</summary>
+        private void ApplyStartButton()
+        {
+            var locked = _selectedSession is { IsAvailable: false };
+            if (_selectedSession is not null) BtnStartSession.IsEnabled = !locked || _sessionButtonRunning;
+            if (_sessionButtonRunning) return;
+            BtnStartSession.Content = locked
+                ? new TextBlock { Text = "🔒 " + Loc.Get("label_coming_soon") }
+                : _startSessionLabel;
+        }
 
         private void RefreshSessionRackSelection()
         {
@@ -1321,118 +1350,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             return file?.TryGetLocalPath();
         }
 
-        /// <summary>Three pinned receipts, the "+n more" toggle, the shop door, and three tray
-        /// rows behind it. The tray host stays collapsed, as PaintTakeawayShelf leaves it.</summary>
+        /// <summary>WPF PaintTakeawayShelf (MainWindow.Takeaway.cs:107) with an empty drawer and the
+        /// door withheld: no chips, no tray rows, no count, the shelf collapsed and the empty sentence
+        /// shown. This head has neither JustDropOrdersService (the device-token order drawer) nor
+        /// JustDropService.DoorAvailable, so that is exactly what WPF paints for it - never sample
+        /// orders. The Community Catalogue chip and Export stay live on the same line.</summary>
         private void SeedTakeaway()
         {
-            // PaintTakeawayShelf pins up to three receipts, then the "+n more" toggle, then
-            // the door. ONE receipt here: the strip never wraps and never scrolls sideways,
-            // and at the render proof's 1100px the fill is ~330px, so a second receipt would
-            // push the door off the clip and leave its ControlTheme unproven. With three or
-            // fewer orders there is no overflow, so the toggle (SdTakeawayChipAccent, a
-            // two-setter Border variant of the chip below it) is correctly absent too.
-            TakeawayShelf.Children.Add(TakeawayChip("Slow Sink", 30, "AUG 09"));
-            TakeawayShelf.Children.Add(DoorChip());
-
-            // The tray renders EVERY order the drawer returned, not just the pinned ones.
-            TakeawayTray.Children.Add(TrayRow("Velvet Hour", 45, "AUG 12", Loc.Get("takeaway_today")));
-            TakeawayTray.Children.Add(TrayRow("Slow Sink", 30, "AUG 09", Loc.GetF("takeaway_days_ago", 3)));
-            TakeawayTray.Children.Add(TrayRow("Static Bloom", 20, "JUL 28", Loc.GetF("takeaway_days_ago", 15)));
-
-            TxtTakeawayCount.Text = Loc.GetF("sd_takeaway_kept", 3);
-        }
-
-        private Border TakeawayChip(string name, int minutes, string date)
-        {
-            var line = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-            line.Children.Add(new TextBlock
-            {
-                Text = "📦",
-                FontSize = 12,
-                VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(0, 0, 6, 0),
-            });
-            line.Children.Add(new TextBlock { Text = name, MaxWidth = 120, Theme = TabTheme("SdTakeawayChipTitle") });
-            line.Children.Add(new TextBlock { Text = Loc.GetF("sd_takeaway_meta", minutes, date), Theme = TabTheme("SdTakeawayChipMeta") });
-
-            // The copy element sits INSIDE the chip; its handler marks the click handled, or
-            // copying a link would also start playing the drop.
-            var copy = new Border
-            {
-                Theme = TabTheme("SdTakeawayCopy"),
-                Child = new TextBlock
-                {
-                    Text = "🔗",
-                    FontSize = 10,
-                    HorizontalAlignment = HorizontalAlignment.Center,
-                    VerticalAlignment = VerticalAlignment.Center,
-                },
-            };
-            ToolTip.SetTip(copy, Loc.Get("tooltip_takeaway_copy_link"));
-            line.Children.Add(copy);
-
-            var chip = new Border { Theme = TabTheme("SdTakeawayChip"), Child = line };
-            ToolTip.SetTip(chip, Loc.Get("tooltip_takeaway_replay"));
-            return chip;
-        }
-
-        private Border DoorChip()
-        {
-            var line = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-            line.Children.Add(new TextBlock
-            {
-                Text = "+",
-                Foreground = Brush("PinkBrush"),
-                FontSize = 15,
-                FontWeight = FontWeight.Bold,
-                VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(0, 0, 6, 0),
-            });
-            line.Children.Add(new TextBlock
-            {
-                Text = Loc.Get("sd_takeaway_order"),
-                Foreground = Brush("PinkBrush"),
-                FontSize = 12,
-                FontWeight = FontWeight.SemiBold,
-                VerticalAlignment = VerticalAlignment.Center,
-            });
-
-            var chip = new Border { Theme = TabTheme("SdTakeawayChipDoor"), Child = line };
-            ToolTip.SetTip(chip, Loc.Get("tooltip_takeaway_order_drop"));
-            return chip;
-        }
-
-        private Border TrayRow(string name, int minutes, string date, string age)
-        {
-            var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto,Auto,Auto") };
-
-            var box = new TextBlock
-            {
-                Text = "📦",
-                FontSize = 12,
-                VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(0, 0, 7, 0),
-            };
-            Grid.SetColumn(box, 0);
-            grid.Children.Add(box);
-
-            var title = new TextBlock { Text = name, Theme = TabTheme("SdTakeawayRowTitle") };
-            Grid.SetColumn(title, 1);
-            grid.Children.Add(title);
-
-            var mins = new TextBlock { Text = Loc.GetF("takeaway_row_min", minutes), MinWidth = 58, Theme = TabTheme("SdTakeawayRowMeta") };
-            Grid.SetColumn(mins, 2);
-            grid.Children.Add(mins);
-
-            var when = new TextBlock { Text = date, MinWidth = 62, Theme = TabTheme("SdTakeawayRowMeta") };
-            Grid.SetColumn(when, 3);
-            grid.Children.Add(when);
-
-            var howLong = new TextBlock { Text = age, MinWidth = 78, Theme = TabTheme("SdTakeawayRowAge") };
-            Grid.SetColumn(howLong, 4);
-            grid.Children.Add(howLong);
-
-            return new Border { Theme = TabTheme("SdTakeawayRow"), Child = grid };
+            TakeawayShelf.Children.Clear();
+            TakeawayTray.Children.Clear();
+            TakeawayTrayHost.IsVisible = false;
+            TxtTakeawayCount.Text = "";
+            TakeawayShelf.IsVisible = false;
+            TxtTakeawayEmpty.IsVisible = true;
         }
 
         // ---- shared shapes (MakeRackPill / MakeRackMeta) ---------------------------

@@ -288,8 +288,15 @@ namespace ConditioningControlPanel.Services
             try
             {
                 if (_playing) return;
-                // WPF VideoService.cs:3013: the head's do-not-disturb rule reschedules, never drops.
+                // WPF VideoService.cs:3013: a do-not-disturb app in front reschedules, never drops.
+                // The head's rule (ShouldDefer, Windows foreground) or Core's DndGuard (X11 seam).
                 if (ShouldDefer?.Invoke() == true) { ScheduleNext(SkipRetrySeconds); return; }
+                if (Services.UI.DndGuard.ShouldSuppressVideos())
+                {
+                    Services.UI.DndGuard.LogSuppressionThrottled("scheduled video");
+                    ScheduleNext(SkipRetrySeconds);
+                    return;
+                }
                 if (!Trigger()) ScheduleNext();
             }
             catch (Exception ex)

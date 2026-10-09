@@ -36,12 +36,25 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         /// <summary>Paint one face frame. The chain player's draw hook; safe to call directly.</summary>
         public void DrawFace(string? text, bool small = false, bool flat = false)
         {
-            try { _faceView.Draw(string.IsNullOrEmpty(text) ? RestFace : text, small, flat); }
+            try
+            {
+                var face = string.IsNullOrEmpty(text) ? RestFace : text;
+                bool changed = _faceView.Face != face;
+                _faceView.Draw(face, small, flat);
+                if (changed) FaceChanged?.Invoke(this, face);
+            }
             catch (Exception ex) { Log.Debug(ex, "[EmiDesk] DrawFace failed"); }
         }
 
         /// <summary>The face string on the glass right now (test seam).</summary>
         internal string? FaceText => _faceView.Face;
+
+        /// <summary>The face on the glass right now. The dock chip's mini face mirrors it (EmiDock).</summary>
+        public string Face => _faceView.Face ?? RestFace;
+
+        /// <summary>Raised with the new face string on every frame that changes it (WPF binds
+        /// EmiDock.MiniFace onto EmiFace.Face; Avalonia has no such property, so this is the feed).</summary>
+        public event EventHandler<string>? FaceChanged;
 
         /// <summary>The pose key that is up (test seam).</summary>
         internal string PoseKey => _pose;

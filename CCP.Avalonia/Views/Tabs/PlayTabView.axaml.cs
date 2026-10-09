@@ -53,13 +53,29 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             base.OnAttachedToVisualTree(e);
             CoreMods.ModChanged -= OnModChangedRepaintArt;
             CoreMods.ModChanged += OnModChangedRepaintArt;
+            App.IntakePass.PassStateChanged += OnIntakePassStateChanged;
+            LocalizationManager.Instance.LanguageChanged += OnIntakePassStateChanged;
+            RefreshPlayCards();
         }
 
         protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
         {
             CoreMods.ModChanged -= OnModChangedRepaintArt;
+            App.IntakePass.PassStateChanged -= OnIntakePassStateChanged;
+            LocalizationManager.Instance.LanguageChanged -= OnIntakePassStateChanged;
             base.OnDetachedFromVisualTree(e);
         }
+
+        // The shell shows a tab by flipping IsVisible (P01), which is WPF's ShowTab "play" arrival.
+        protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+        {
+            base.OnPropertyChanged(change);
+            if (change.Property == IsVisibleProperty && IsVisible && VisualRoot != null) RefreshPlayCards();
+        }
+
+        // The pass is spent (or entitlement lands) off the UI thread.
+        private void OnIntakePassStateChanged(object? sender, EventArgs e) =>
+            Dispatcher.UIThread.Post(RefreshPlayCards);
 
         /// <summary>Every art plate on the wall: WPF's ImageSource for ImageSource.</summary>
         internal static readonly (string Plate, string Art, Stretch Fit)[] HeroPlates =
@@ -101,19 +117,51 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             }
         }
 
-        /// <summary>WPF MainWindow.PlayTab.cs RefreshPlayCards: the tier bands, from the same
-        /// TierGate verdicts the launch handlers consult. Decoration only.</summary>
+        /// <summary>WPF MainWindow.PlayTab.cs RefreshPlayCards: the tier bands (the same TierGate
+        /// verdicts the launch handlers consult), the FREE TODAY stamps and the Graded Intake's pass
+        /// states. Decoration only. Never throws.</summary>
         internal void RefreshPlayCards()
         {
-            PlayLockBreakout.IsVisible = !TierGate.RequiresLab(Loc.Get("launcher_game_breakout_title")).Allowed;
-            PlayLockDtrh.IsVisible = !TierGate.RequiresLab(Loc.Get("launcher_game_dtrh_title"), "dtrh").Allowed;
-            PlayLockArcademy.IsVisible = !TierGate.RequiresLab(Loc.Get("launcher_game_arcademy_title")).Allowed;
-            PlayLockGaze.IsVisible = !TierGate.RequiresLab(Loc.Get("label_gaze_minigame")).Allowed;
-            PlayLockFocusGaze.IsVisible = !TierGate.RequiresLab(Loc.Get("label_focus_gaze")).Allowed;
-            PlayLockRemote.IsVisible = !TierGate.RequiresPremium(Loc.Get("tab_remote_control"), "remote").Allowed;
-            PlayLockLockdown.IsVisible = !TierGate.RequiresPremium(Loc.Get("tab_lockdown_mode")).Allowed;
-            PlayLockBlink.IsVisible = !TierGate.RequiresPremium(Loc.Get("tab_blink_trainer")).Allowed;
-            PlayLockFyp.IsVisible = !TierGate.RequiresPremium(Loc.Get("tab_fyp"), "fyp").Allowed;
+            try
+            {
+                PlayLockBreakout.IsVisible = !TierGate.RequiresLab(Loc.Get("launcher_game_breakout_title")).Allowed;
+                PlayLockDtrh.IsVisible = !TierGate.RequiresLab(Loc.Get("launcher_game_dtrh_title"), "dtrh").Allowed;
+                PlayLockArcademy.IsVisible = !TierGate.RequiresLab(Loc.Get("launcher_game_arcademy_title")).Allowed;
+                PlayLockGaze.IsVisible = !TierGate.RequiresLab(Loc.Get("label_gaze_minigame")).Allowed;
+                PlayLockFocusGaze.IsVisible = !TierGate.RequiresLab(Loc.Get("label_focus_gaze")).Allowed;
+                PlayLockRemote.IsVisible = !TierGate.RequiresPremium(Loc.Get("tab_remote_control"), "remote").Allowed;
+                PlayLockLockdown.IsVisible = !TierGate.RequiresPremium(Loc.Get("tab_lockdown_mode")).Allowed;
+                PlayLockBlink.IsVisible = !TierGate.RequiresPremium(Loc.Get("tab_blink_trainer")).Allowed;
+                PlayLockFyp.IsVisible = !TierGate.RequiresPremium(Loc.Get("tab_fyp"), "fyp").Allowed;
+
+                // FREE TODAY (WPF :145): only on a door that is otherwise shut - an owner gets no gift.
+                bool premium = CoreEntitlement.HasPremium;
+                PlayBadgeRemote.FreeToday = !premium && CoreEntitlement.IsFreeToday("remote");
+                PlayBadgeFyp.FreeToday = !premium && CoreEntitlement.IsFreeToday("fyp");
+
+                RefreshPlayIntakeCard();
+            }
+            catch (Exception ex) { Log.Debug("RefreshPlayCards: {E}", ex.Message); }
+        }
+
+        /// <summary>WPF MainWindow.PlayTab.cs:183 RefreshPlayIntakeCard, read from the same
+        /// IntakePassService the page's gate reads. Premium: nothing; Available: no band, the
+        /// announcement and the "where" button; Spent / NeedsLogin: band + the page's own copy.</summary>
+        private void RefreshPlayIntakeCard()
+        {
+            var state = App.IntakePass.State;
+            PlayLockIntake.IsVisible = state is not (IntakePassState.Premium or IntakePassState.Available);
+            BtnPlayIntakePassHome.IsVisible = state == IntakePassState.Available;
+            var days = IntakePassService.DaysUntilNextPass;
+            TxtPlayIntakeState.Text = state switch
+            {
+                IntakePassState.Available => Loc.Get("pl6_intake_state_available"),
+                // Two keys rather than one with a {0}: "unlocks in 1 days" gets screenshotted.
+                IntakePassState.Spent => days == 1 ? Loc.Get("intake_gate_spent_body_one_day") : Loc.GetF("intake_gate_spent_body", days),
+                IntakePassState.NeedsLogin => Loc.Get("intake_gate_login_body"),
+                _ => string.Empty,
+            };
+            TxtPlayIntakeState.IsVisible = state != IntakePassState.Premium;
         }
 
         // ---- zones (WPF PlayTabView.xaml.cs:43-90) ------------------------------------------
@@ -202,8 +250,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         // ---- EYES --------------------------------------------------------------------------
 
-        private void BtnOpenDeviceSettings_Click(object? sender, RoutedEventArgs e) => Owner?.ShowTab("appsettings");
+        /// <summary>WPF <c>mw.OpenDeviceSettings()</c>: Settings door, Devices section.</summary>
+        private void BtnOpenDeviceSettings_Click(object? sender, RoutedEventArgs e) => Owner?.OpenDeviceSettings();
 
+        /// <summary>
+        /// RESTORED, on the condition the previous note set: "the day an entitlement seam exists".
+        /// It does — <c>TierGate</c> is CCP.Core/Services/TierGate.cs over <c>CoreEntitlement</c> —
+        /// so this is MainWindow.LabTab.cs:770 verbatim: Tier 2 checked BEFORE the window is
+        /// constructed, because the Lab smokescreen is a tab-wide overlay and not a gate on this
+        /// door. The window runs on the webcam tracker (consent, start, calibration gates as WPF).
+        ///
+        /// <para>The seam is seeded by Platform.AccountSeed, so a Tier 2 account opens the window.</para>
+        /// </summary>
         private void BtnGazeMinigame_Click(object? sender, RoutedEventArgs e) => OpenGazeMinigame();
 
         internal void OpenGazeMinigame()
@@ -231,6 +289,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         // ---- MORE --------------------------------------------------------------------------
 
-        private void BtnPlayLoom_Click(object? sender, RoutedEventArgs e) => Owner?.ShowTab("studio");
+        /// <summary>Loom NAVIGATES to the one editor: WPF OpenStudioModule("spiral").</summary>
+        private void BtnPlayLoom_Click(object? sender, RoutedEventArgs e) => Owner?.OpenStudioModule("spiral");
     }
 }

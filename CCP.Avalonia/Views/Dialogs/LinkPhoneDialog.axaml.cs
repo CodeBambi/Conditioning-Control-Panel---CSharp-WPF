@@ -1,12 +1,12 @@
 using System;
-using System.Runtime.InteropServices;
-using Avalonia;
+using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Markup.Xaml;
-using Avalonia.Media.Imaging;
-using Avalonia.Platform;
 using Avalonia.Threading;
+using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Services;
+using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 {
@@ -16,32 +16,31 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     /// its own device token, so this desktop session is never invalidated. Codes live
     /// ~3 minutes; a countdown timer auto-refreshes the UI state on expiry.
     ///
-    /// PORTED from ConditioningControlPanel/Dialogs/LinkPhoneDialog.xaml.cs. Deviations:
-    ///  - <c>V2AuthService.AuthorizeMobileLinkAsync</c> and QRCoder both live in the WPF head,
-    ///    so <see cref="FetchCode"/> is a stub with placeholder data. Everything downstream of it
-    ///    - the ABC-DEF formatting, the countdown, the expiry reset - is the original logic.
-    ///  - The stub runs from the constructor, not from <c>Loaded</c>, so the headless render does
-    ///    not depend on <c>Loaded</c> timing: a placeholder that never ran would be
-    ///    indistinguishable from one that failed.
-    ///  - <c>Unloaded</c> -> <c>Closed</c> for stopping the timer. --render-all runs every view in
-    ///    one process; a 1s timer still ticking against a closed window is pure noise.
-    ///  - <c>DragMove()</c> -> <c>BeginMoveDrag(e)</c>. No logging: the stub has nothing to log
-    ///    (Serilog IS referenced by this head — the earlier note saying otherwise was wrong).
-    ///
-    /// <para><b>Nothing opens this window, on purpose.</b> The Settings tab's "Link phone" button
-    /// is refused at <c>CCP.Avalonia/Views/Tabs/SettingsTabView.axaml.cs</c> precisely because the
-    /// dialog would open and display <c>ABCDEF</c> as if it were a live one-time auth code. Do not
-    /// add a call site before <c>V2AuthService.AuthorizeMobileLinkAsync</c> is reachable — a
-    /// render-only placeholder is safe, a shown one is not.</para>
+    /// PORTED from ConditioningControlPanel/Dialogs/LinkPhoneDialog.xaml.cs over the same Core
+    /// <see cref="V2AuthService.AuthorizeMobileLinkAsync"/> and QRCoder. Deviations:
+    ///  - The fetch runs on <c>Opened</c> (WPF <c>Loaded</c>); the timer stops on <c>Closed</c>.
+    ///  - <c>DragMove()</c> -> <c>BeginMoveDrag(e)</c>.
+    ///  - <see cref="Auth"/> and <see cref="Clock"/> are test seams (fake wire, stepped clock).
     /// </summary>
     public partial class LinkPhoneDialog : Window
     {
+        /// <summary>Test seam: the auth client the next dialog uses.</summary>
+        internal static Func<V2AuthService> Auth = () => new V2AuthService();
+        /// <summary>Test seam: the clock the countdown reads (WPF DateTimeOffset.UtcNow).</summary>
+        internal static TimeProvider Clock = TimeProvider.System;
+
+        private readonly V2AuthService _v2Auth = Auth();
         private readonly DispatcherTimer _countdown = new() { Interval = TimeSpan.FromSeconds(1) };
         private readonly Image _imgQrCode;
         private readonly TextBlock _txtLinkCode;
         private readonly TextBlock _txtStatus;
         private readonly Button _btnRefresh;
         private DateTimeOffset _expiresAt;
+        private bool _fetching;
+
+        /// <summary>The fetch in flight (tests await it).</summary>
+        internal Task Fetch { get; private set; } = Task.CompletedTask;
+        internal bool CountdownRunning => _countdown.IsEnabled;
 
         public LinkPhoneDialog()
         {
@@ -51,46 +50,71 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             _txtLinkCode = this.FindControl<TextBlock>("TxtLinkCode")!;
             _txtStatus = this.FindControl<TextBlock>("TxtStatus")!;
             _btnRefresh = this.FindControl<Button>("BtnRefresh")!;
+            _txtStatus.Text = Loc.Get("status_link_phone_fetching");
 
-            _countdown.Tick += Countdown_Tick;
-            _btnRefresh.Click += (_, _) => FetchCode();
+            _countdown.Tick += (_, _) => Tick();
+            _btnRefresh.Click += (_, _) => Fetch = FetchCodeAsync();
             this.FindControl<Button>("BtnClose")!.Click += (_, _) => Close();
             PointerPressed += Window_PointerPressed;
+            // --render-all shows every dialog; it must never reach the account server.
+            Opened += (_, _) => { if (!RenderProof.Rendering) Fetch = FetchCodeAsync(); };
             Closed += (_, _) => _countdown.Stop();
-
-            FetchCode();
         }
 
-        /// <summary>
-        /// ponytail: needs V2AuthService.AuthorizeMobileLinkAsync + QRCoder, wired when they move
-        /// to Core. Until then this hands the real display path a placeholder code and expiry, so
-        /// the formatting, the QR scaling and the countdown are all still exercised.
-        /// </summary>
-        private void FetchCode()
+        private async Task FetchCodeAsync()
         {
+            if (_fetching) return;
+            _fetching = true;
             _countdown.Stop();
             _btnRefresh.IsEnabled = false;
+            _txtStatus.Text = Loc.Get("status_link_phone_fetching");
+            _imgQrCode.Source = null;
+            _txtLinkCode.Text = "--- ---";
 
-            var code = "ABCDEF";
+            try
+            {
+                var result = await _v2Auth.AuthorizeMobileLinkAsync();
+                if (!result.Success || string.IsNullOrEmpty(result.LinkCode))
+                {
+                    _txtStatus.Text = result.Error switch
+                    {
+                        "not_logged_in" => "You need to be logged in to link a phone.",
+                        "invalid_auth_token" => "Your session has expired — please log in again.",
+                        "legacy_user_reauth_required" => "Your session has expired — please log in again.",
+                        "rate_limited" => "Too many codes requested. Wait a minute and try again.",
+                        _ => $"Couldn't get a link code ({result.Error ?? "unknown error"}). Try again."
+                    };
+                    _btnRefresh.IsEnabled = true;
+                    return;
+                }
 
-            // Format ABC-DEF for readability; the app strips the dash on entry.
-            _txtLinkCode.Text = code.Length == 6 ? $"{code[..3]}-{code[3..]}" : code;
-            RenderQr($"ccpmobile://link?c={code}");
+                // Format ABC-DEF for readability; the app strips the dash on entry.
+                var code = result.LinkCode;
+                _txtLinkCode.Text = code.Length == 6 ? $"{code[..3]}-{code[3..]}" : code;
+                RenderQr(result.QrPayload ?? $"ccpmobile://link?c={code}");
 
-            _expiresAt = DateTimeOffset.UtcNow.AddMinutes(3);
-            _countdown.Start();
-            Countdown_Tick(null, EventArgs.Empty);
+                _expiresAt = result.ExpiresAt;
+                if (!IsVisible) return; // closed while fetching: no timer for a closed window
+                _countdown.Start();
+                Tick();
+            }
+            finally
+            {
+                _fetching = false;
+                if (!_countdown.IsEnabled) _btnRefresh.IsEnabled = true;
+            }
         }
 
-        private void Countdown_Tick(object? sender, EventArgs e)
+        /// <summary>WPF Countdown_Tick.</summary>
+        internal void Tick()
         {
-            var remaining = _expiresAt - DateTimeOffset.UtcNow;
+            var remaining = _expiresAt - Clock.GetUtcNow();
             if (remaining <= TimeSpan.Zero)
             {
                 _countdown.Stop();
                 _imgQrCode.Source = null;
                 _txtLinkCode.Text = "--- ---";
-                _txtStatus.Text = "Code expired — get a new one.";
+                _txtStatus.Text = Loc.Get("msg_link_phone_code_expired");
                 _btnRefresh.IsEnabled = true;
                 return;
             }
@@ -98,37 +122,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             _txtStatus.Text = $"Code expires in {remaining.Minutes}:{remaining.Seconds:D2}";
         }
 
-        /// <summary>
-        /// Placeholder stand-in for the QRCoder render (dark-pink modules on the white card).
-        /// A real payload needs the generator; a 25x25 bitmap blown up to 220 still proves the
-        /// Image draws and that BitmapInterpolationMode="None" keeps the modules square.
-        /// </summary>
+        /// <summary>WPF RenderQr: QRCoder ECC M, 10 px modules, dark pink #8B0A50 on white.</summary>
         private void RenderQr(string payload)
         {
-            const int n = 25;
-            var bmp = new WriteableBitmap(new PixelSize(n, n), new Vector(96, 96), PixelFormats.Bgra8888, AlphaFormat.Opaque);
-            using (var fb = bmp.Lock())
+            try
             {
-                var row = new byte[fb.RowBytes];
-                for (var y = 0; y < n; y++)
-                {
-                    for (var x = 0; x < n; x++)
-                    {
-                        // Deterministic from the payload so a different code looks different, and
-                        // a 7x7 finder square in each of the three usual corners.
-                        var finder = (x < 7 || x >= n - 7) && y < 7 || x < 7 && y >= n - 7;
-                        var dark = finder
-                            ? x % 6 != 1 && y % 6 != 1
-                            : ((x * 7 + y * 13 + payload.Length) % 5) < 2;
-                        row[x * 4 + 0] = dark ? (byte)0x50 : (byte)0xFF; // B
-                        row[x * 4 + 1] = dark ? (byte)0x0A : (byte)0xFF; // G
-                        row[x * 4 + 2] = dark ? (byte)0x8B : (byte)0xFF; // R
-                        row[x * 4 + 3] = 0xFF;
-                    }
-                    Marshal.Copy(row, 0, fb.Address + y * fb.RowBytes, fb.RowBytes);
-                }
+                using var generator = new QRCoder.QRCodeGenerator();
+                using var data = generator.CreateQrCode(payload, QRCoder.QRCodeGenerator.ECCLevel.M);
+                var bytes = new QRCoder.PngByteQRCode(data).GetGraphic(10, new byte[] { 0x8B, 0x0A, 0x50 }, new byte[] { 0xFF, 0xFF, 0xFF });
+                _imgQrCode.Source = new global::Avalonia.Media.Imaging.Bitmap(new System.IO.MemoryStream(bytes));
             }
-            _imgQrCode.Source = bmp;
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "[LinkPhone] Failed to render QR code");
+                _txtStatus.Text = Loc.Get("msg_link_phone_qr_failed");
+            }
         }
 
         private void Window_PointerPressed(object? sender, PointerPressedEventArgs e)

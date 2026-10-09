@@ -1,8 +1,17 @@
 using System;
+using System.Threading.Tasks;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Media;
+using ConditioningControlPanel.Avalonia.Platform;
+using ConditioningControlPanel.Avalonia.Views.Dialogs;
+using ConditioningControlPanel.Avalonia.Views.Controls;
+using ConditioningControlPanel.Avalonia.Views.Windows;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services;
+using ConditioningControlPanel.Services.Chaster;
 using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
@@ -10,19 +19,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
     /// <summary>
     /// SETTINGS · ACCOUNT, ported from the WPF head.
     ///
-    /// <para><see cref="RefreshTierBadge"/> is live: it reads <c>CoreAccount</c>, which is the
-    /// account seam (CCP.Core/CoreAccount.cs). It asks exactly the two properties the WPF original
-    /// asks, in the same order - <c>HasLabAccess</c> then <c>HasPremiumAccess</c> - so the badge can
-    /// never claim an entitlement the gates would refuse. On this head the seam is unseeded, which
-    /// means signed out and not entitled, so the card paints "sign in": that is the honest reading
-    /// of a head with no OAuth flow and no token store, not a placeholder.</para>
-    ///
-    /// <para>The two link buttons are live too - Avalonia's <c>Launcher</c> is the cross-platform
-    /// stand-in for WPF's <c>Process.Start(UseShellExecute)</c>, and the URLs are the same two
-    /// constants MainWindow carries.</para>
-    ///
-    /// <para>The login/link/backup/export buttons stay stubs: each needs a provider service (OAuth,
-    /// cloud backup) that this head does not have. See the notes on each.</para>
+    /// <para>Every card is live except cloud backup/restore and GDPR export (hidden until
+    /// ProfileSync's calls reach Core). Providers come from <c>AccountSeed</c>; the tier card asks
+    /// <c>CoreAccount</c> exactly what WPF asks (<c>HasLabAccess</c> then <c>HasPremiumAccess</c>).</para>
     /// </summary>
     public partial class AccountSettingsSection : UserControl, IAppSettingsSection
     {
@@ -64,8 +63,23 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             presence.IsCheckedChanged += ChkFriendsPresence_Changed;
             RefreshFriendsPresence();
             EventHandler changed = (_, _) => global::Avalonia.Threading.Dispatcher.UIThread.Post(() => { RefreshTierBadge(); RefreshProviderRows(); });
-            AttachedToVisualTree += (_, _) => { LocalizationManager.Instance.LanguageChanged += changed; RefreshTierBadge(); };
-            DetachedFromVisualTree += (_, _) => LocalizationManager.Instance.LanguageChanged -= changed;
+            RefreshChaster();
+            // Chaster row (Mich, rows-login-phone): repaint on profile/link/lock changes while attached (P41).
+            Action chasterChanged = () => global::Avalonia.Threading.Dispatcher.UIThread.Post(RefreshChaster);
+            ChasterService? chaster = null;
+            AttachedToVisualTree += (_, _) =>
+            {
+                LocalizationManager.Instance.LanguageChanged += changed;
+                if ((chaster = ChasterHead.Service) is { } c) { c.ProfileChanged += chasterChanged; c.LinkChanged += chasterChanged; c.LockChanged += chasterChanged; }
+                RefreshTierBadge();
+                RefreshChaster();
+            };
+            DetachedFromVisualTree += (_, _) =>
+            {
+                LocalizationManager.Instance.LanguageChanged -= changed;
+                if (chaster is { } c) { c.ProfileChanged -= chasterChanged; c.LinkChanged -= chasterChanged; c.LockChanged -= chasterChanged; }
+                chaster = null;
+            };
         }
 
         /// <summary>
@@ -77,6 +91,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             RefreshTierBadge();
             RefreshProviderRows();
             RefreshFriendsPresence();
+            RefreshChaster();
             PlansView.RefreshVault();   // the plates can move between visits (sign-in, tier change)
             // Throttled inside (30 s): the invites card lives on this copy (WPF RefreshVaultCore).
             _ = PlansView.FindControl<Controls.Invites.InvitePanel>("InvitesHost")?.RefreshAsync();
@@ -180,10 +195,64 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
         private void BtnLinkPatreon_Click(object? sender, RoutedEventArgs e) => _ = LinkProviderAsync("patreon", "BtnLinkPatreon");
         private void BtnLinkDiscord_Click(object? sender, RoutedEventArgs e) => _ = LinkProviderAsync("discord", "BtnLinkDiscord");
 
+        private Window? Owner => TopLevel.GetTopLevel(this) as Window;
+
+        // ---- Chaster (WPF AccountSettingsSection.xaml.cs RefreshChaster) ----
+
+        /// <summary>The Chaster row: the account's picture and name plus the lock, or Not linked.</summary>
+        internal void RefreshChaster()
+        {
+            try
+            {
+                var chaster = ChasterHead.Service;
+                var linked = chaster?.IsLinked == true;
+                var profile = linked ? chaster!.Profile : null;
+                Find<Control>("ChasterBadge").IsVisible = linked;
+                Find<TextBlock>("TxtChasterStatus").Text = Loc.Get("chaster_account_name") + " · " + (linked
+                    ? profile?.Username ?? Loc.Get("chaster_account_linked")
+                    : Loc.Get("label_not_connected"));
+                var snapshot = chaster?.Lock;
+                Find<TextBlock>("TxtChasterInfo").Text = !linked ? Loc.Get("chaster_account_hint")
+                    : snapshot == null ? Loc.Get("chaster_account_nolock")
+                    : string.IsNullOrWhiteSpace(snapshot.Title) ? Loc.Get("chaster_lock_untitled") : snapshot.Title!;
+                Find<TextBlock>("TxtBtnChasterLink").Text = Loc.Get(linked ? "chaster_unlink" : "chaster_link");
+                Find<Button>("BtnChasterLink").IsEnabled = chaster != null && !chaster.IsLinking;
+            }
+            catch (Exception ex) { Log.Debug("chaster settings row: {E}", ex.Message); }
+        }
+
+        private void BtnChasterOpen_Click(object? sender, RoutedEventArgs e) => Shell?.ShowTab("chaster");
+
+        private async void BtnChasterLink_Click(object? sender, RoutedEventArgs e)
+        {
+            var chaster = ChasterHead.Service;
+            if (chaster == null || chaster.IsLinking) return;
+            try
+            {
+                if (chaster.IsLinked)
+                {
+                    if (Owner is { } owner) await Tabs.ChasterTabView.ConfirmAndUnlinkAsync(owner);
+                }
+                else
+                {
+                    Find<Button>("BtnChasterLink").IsEnabled = false;
+                    var top = TopLevel.GetTopLevel(this);
+                    // A sandbox never opens the real consent page: only its loopback stand-in.
+                    await chaster.LinkAsync(url =>
+                    {
+                        if (ChasterHead.BrowserUrl(url) is { } u)
+                            global::Avalonia.Threading.Dispatcher.UIThread.Post(() => _ = Platform.ExternalOpener.OpenAsync(top, u));
+                    });
+                }
+            }
+            catch (Exception ex) { Log.Debug("chaster link from settings: {E}", ex.Message); }
+            finally { RefreshChaster(); }
+        }
+
+
         // ponytail: cloud settings backup - ProfileSyncService.BackupSettingsAsync /
-        // GetSettingsBackupInfoAsync / RestoreSettingsFromCloudAsync, all still in the WPF head and
-        // not in this layer's seam. CCP.Avalonia/Views/Windows/MainShellWindow.CloudBackup.cs holds
-        // the restore path's LOCAL-WINS field list and is where these belong.
+        // GetSettingsBackupInfoAsync / RestoreSettingsFromCloudAsync, all still in the WPF head.
+        // CloudSettingsBackupSection stays hidden until they land (MainShellWindow.CloudBackup.cs).
         private void BtnBackupSettingsNow_Click(object? sender, RoutedEventArgs e) { }
         private void BtnRestoreSettings_Click(object? sender, RoutedEventArgs e) { }
 

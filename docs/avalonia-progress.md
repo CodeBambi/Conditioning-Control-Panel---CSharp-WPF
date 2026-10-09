@@ -789,7 +789,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/companion-room-refresh: +232
 - Companion hero card shows real state (WPF CompanionHeroRuntimeVm): name (from CoreMods), mod, flavour, level/XP, mute/show,
   AI and awareness pills, AI-access plate; mute/show/wake through the shell, Chat opens the tube input, Switch/Engine/Awareness
-  scroll the room, the plate opens Patreon; the room re-reads the hero on tab return. Rows stay stub (Tutorial chip placeholder).
+  scroll the room, the plate opens Settings · Account (audit-fix-ui: it was a no-op until ShowTab("patreon") redirected); the room re-reads the hero on tab return. Rows stay stub (Tutorial chip placeholder).
 - Evidence: CompanionHeroSyncTests (fail-proven; order-independent after the StartModsTests reset); live mute saved, 0 binding errors.
   Review: FIX -> fixed.
 
@@ -1153,7 +1153,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/friends-drawer: +1002
 - Core FriendsService (IUiTimer seam; WPF FriendsServiceApp); Avalonia friends rail chip + drawer (presence, requests, block/remove with
-  confirm, report, add by code), loopback-only in a sandbox, disposed on exit. FriendsDrawerTests (11), fail-proven. Rows stub.
+  confirm, report, add by code), loopback-only in a sandbox, disposed on exit. FriendsDrawerTests (10 methods, 15 cases; asserted, not fail-proven. audit-fix-ui adds AClickInsideTheDrawerKeepsItOpen, fail-proven in ~/ccp-port/evidence/audit-fix-ui/fail-proofs.txt). Rows stub.
 
 ## avalonia-port/chaos-shelves: +660
 - Chaos slice 2: ChaosMeta/Upgrades/Boons/Lessons/Reveal in Core, ChaosBench; WPF run effects keyed by id; the Avalonia hub's shelves spend
@@ -1496,3 +1496,171 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/help-attach: +224
 - Every WPF tab ? (33 SetHelpContent buttons + Intake Pass) is now attached from shell startup through an x:Name table; all 23 help loops can be opened (ctrl-help-popover, feat-help-loops: stub -> wired).
 - New HelpButtonsTests: a WPF-source table scan, plus a shell walk that clicks every ?; fail-proven.
+
+## avalonia-port/reset-close: +105
+- The test isolation hook closes app windows a test left open and resets StartupLadder, so passive startup cards no longer leak between tests (P52).
+- Proven by a fixed-order leaky pair (LeakedWindowIsolationTests). B fails with the close commented out.
+
+## avalonia-port/rows-settings-account: +659
+- Settings · Account: provider cards, login/logout/link, Patreon reconnect, Chaster card and presence switch are wired. Backup/restore/export are still hidden (row stays stub).
+- 4 fail-proven shell tests on fake providers; ProviderLinkResponseRules moved to Core.
+
+## avalonia-port/rows-settings-devices: +196
+- Settings → Devices camera picker and ↻ live over V4L2 sysfs (metadata nodes skipped, WPF log lines verbatim); row stays stub
+- WebcamDevicePickerTests (fake sysfs, fail-proven); live props in evidence/rows-settings-devices
+
+## avalonia-port/rows-companion-editors: +478
+- Prompt editor: Save keeps only edited boxes (`ActivePersonaPromptText` moved to Core), unticking clears the community prompt, and the X asks Save/Discard/Cancel (`btn_discard` added in 9 languages).
+- Attention style editor: Test spawns a bouncing topmost test target that panic closes (`attention-test` surface), and the preview shadows are back. attention-target-editor is now wired; the prompt and phrase editors stay stub.
+
+## avalonia-port/rows-mod-picker: +43
+- dialogs-mod-picker re-audited: unreachable on WPF too, parity holds; row stays stub with that note (x:Names match plus port-only TitleBar/TxtDownload).
+- Stale WPF cite MainWindow.xaml.cs:610-611 -> 587-588 (ledger + 3 comments); stale WPF first-run comment corrected.
+- Cherry-picked CornerGif frame-stepping + SettingsService leaked-save disarm flake fixes (from rows-companion-editors).
+
+## avalonia-port/rows-friends-drawer: +452
+- Friends drawer card: Invite / Poke / Send a watch actions with their inline pickers over Core FriendsService (Goon/chess tiles shut: hosts WPF-only).
+- Results after fold fly over the chip's window; folded drawer unsubscribes; poke hover; shut-tile string in 9 languages.
+- 2 headless tests over a fake wire (fail-proven x5 and x3; the second opens via the rail-chip click and checks the folded-drawer word); rows stay stub (feed, trails, tables, leash, juice, rail-chip extras remain).
+
+## avalonia-port/rows-program-enroll: +135
+- ProgramEnrollDialog headless test (contract gate, Strict unavailable, clock results, Escape, Cancel), each fail-proven; row stays stub (caller, run panel, session runner missing).
+- Decision logged: Enroll caller lands only together with the run panel (no lapsing enrollments).
+
+## avalonia-port/rows-asset-submit: +289
+- dialogs-asset-submit wired: preset Share + session rack ☁ open AssetSubmitDialog -> Core CatalogueClient submit/record/badge/toast; auth + affirmation gates as WPF (AssetSubmitWireTests, 4 fail-proofs).
+- Live (sandbox) limited to listing/disabled state; mod (MEGA) branch still waits on shell-mod-catalogue.
+
+## avalonia-port/rows-companion-workshop: +465
+- Workshop Library cell: the per-mod video link editor now works on Avalonia (add/preview/delete/save), and its rules live in Core `VideoLinkPool`, which WPF also uses.
+- Roster cards show each companion's level, name, tooltip and an accent ring on the active one; switching companion and assigning a personality are still missing (stub).
+
+## avalonia-port/rows-deeper-editor: +583
+- Deeper editor plays local audio through LibVLC (clock, seek, end, real length, panic surface). Editor and player previews use Core's host allowlist on every hop.
+- Player: Create new and Open in editor work (re-read, one editor per file, recent). The dialog picker remembers the last folder.
+
+## avalonia-port/audit-fix-media: +382
+- Audit fixes for #1778/#1843/#1933/#1932/#1935: overlap layer loop, media-folder fallback, panic-safe grace pause, bubble count LibVLC skip, hermetic Buttplug test.
+- Each fix has a real-path test proven red by a break (evidence/audit-fix-media/fail-proofs.txt); gate GATE-OK.
+
+## avalonia-port/rows-companion-cards: +668
+- Her Room: live attention gauge (AttentionCopy/ConstellationMath shared from Core), runtime dormant constellation with shimmer, chat History transcript window, SyncBrain on provider pick; "patreon" key opens Settings/Account like WPF.
+- Rows: attention-gauge and constellation are wired; chat-threshold (link chip, wheel relay) and hero-card (tutorial chip) stay stub.
+
+## avalonia-port/rows-inbox: +317
+- shell-inbox: server announcement routed via the startup Inbox (Core V2AuthService fetch + account dismissal), row/popup dismiss record both halves; 3 tests, fail-proven x4.
+- Row stays stub (modal ladder, intake nudge, other posters).
+
+## avalonia-port/audit-fix-safety: +257
+- Closes 7 still-open P1/P2 audit findings (#1790, #1987 x2, #1982, #1956, #1833, #1937): rebind double-capture, a CRLF scan test, a late follow-up reply's effects after a panic (both heads), a refused pink filter overwriting settings, Lockdown counted as busy, a held lock card replaying on stop, and remote session-end stops moved to the UI thread.
+- Each fix has a fail-proven headless or Core test.
+
+## avalonia-port/audit-fix-misc: +273
+- Closes seven open P0-P2 audit findings (#2096 #1763 #1908 #1456 #1318 #1313 #1289): the update tooltip key, the passive recap no longer staying on top, the rack toolbar layout, locked sessions shown as "Coming Soon", `**bold**` in help text, and the freeze pre-tick in the bug report.
+- Each Avalonia fix has a test that was seen to fail when the fix was broken; #1763 was checked with a string script.
+
+## avalonia-port/flake-followup: +12
+- Fixes the intermittent Core test `AiCommandGateTests.AFollowUpThatIsNotCancelledStillRunsItsReplysCommands`, which failed in the rows-roadmap and rows-takeaway push gates. The test now waits for the reply's flash instead of asserting the moment it releases the AI. Test-only change.
+
+## avalonia-port/rows-roadmap: +149
+- shell-roadmap stub -> wired: completion chime (WPF Exclamation) and keyboard-reachable nodes with a focus border; RoadmapNodeTests (2, fail-proven); live nodes screenshot in evidence/avalonia-port/rows-roadmap.
+- Mod-gated Roadmap sub-tab visibility recorded as missing under shell-ui-updates.
+
+## avalonia-port/rows-takeaway: +70
+- shell-takeaway: sample Takeaway orders replaced with WPF's empty state (no drawer/door on this head); headless test fail-proven, live sandbox check, binding errors 0.
+- Row stays stub: drawer, door, chips, tray and actions still missing.
+
+## avalonia-port/audit-fix-ui: +194
+- Closed the open P1/P2 audit items from #1974 (hint relocalises), #1976 (drawer click-inside), #1914 (cosmetics ride every sync; empty only as the explicit clear), #1899 (patreon -> Settings · Account), #1847 (right-dock input cut), plus 2 doc corrections (#1976, #1837).
+- Each fix has a real-path test proven to fail when the fix is broken (evidence/audit-fix-ui/fail-proofs.txt); gate OK.
+
+## avalonia-port/rows-settings-perf-emidesk: +999
+- EMI Desk summon chord: Core rules (WPF delegates), X11 XGrabKey arm at startup/rebind, live rebind from Settings; row stays stub (Offers/Glass/Spice unread).
+- Performance: DND app picker (X11 window owners) + one Core DndGuard for both heads; TierBadge follows live motion change.
+
+## avalonia-port/rows-mod-creator: +759
+- Mod Creator Pools & Triggers + Personalities panels ported (manifest round-trip as WPF); achievement slots from Core ModAchievementSlots (registry, not 16 hand-listed).
+- Re-export keeps Advanced manifest sections; row still stub (Advanced/UiArt/ArtFraming/Barks/Mantras/EventAudio/Portraits/Emotes remain).
+
+## avalonia-port/rows-emi-dock-picker: +193
+- EmiRingPicker on Core EmiSuggester/EmiState pins + EmiTargets catalogue + ring card art (views-emi-ring-picker -> wired).
+- EmiDock mini face mirrors the widget via EmiDeskWindow.FaceChanged; knock (TryKnock/EmiKnockMachine) still missing (ctrl-emi-dock stays stub).
+
+## avalonia-port/rows-gaze-minigame: +329
+- Gaze minigame now plays image rounds on WebcamTracker. Settings and pack library moved to Core (git mv). Flash is paused during the game, vibration goes to the haptics service, and panic closes the game.
+- Row stays stub: video rounds, animated GIFs, 4 reward effects and the reward audio are still missing.
+
+## avalonia-port/rows-chaster-tab: +679
+- Circe's mood meter, CirceSays bubbles (tab page + rail) and the shell's CirceLines picking; rail chip pulse/pip pop/peek spring-in/idle swing+breath.
+- Ledger: ctrl-chaster-rail-chip and views-chaster-circe-mood wired; duplicate views-tab-chaster row merged.
+
+## avalonia-port/rows-studio-lab: +195
+- Studio rack: 120ms panel crossfade and 260ms state-dot pop ported from WPF, tested on a stepped clock (fail-proven).
+- Lab, Lab-tab and Brain Drain rows re-audited with exact missing lists (still stub).
+
+## avalonia-port/panic-order-test: +60
+- PanicSurfacesTests checks WPF-cited ordering pairs, unique ids and a safety-critical set instead of one exact list, so branches that add a surface stop conflicting on it (P53).
+
+## avalonia-port/rows-exclusives: +400
+- Vault: tier plates read the access gates, 3px/4px tier livery, two coming-soon teasers, and one visibility-gated 24fps clock for padlock breath, FREE TODAY pulse, Ken Burns and sheens.
+- Duplicate shell-exclusives ledger rows merged; both rows stay stub (re-tint, hover lift, launches and hero art still missing).
+
+## avalonia-port/rows-profile-cards: +663
+- Profile bubble paints identity, tier and account doors and reacts to XP/level/achievements; the public-profile door is live (row stays stub).
+- Profile FX wired: card stagger, search glow, OG border loop gated per P01; spiral/vat/faucet blocked on DescentService, privacy panel on a sync payload change (P44).
+
+## avalonia-port/rows-play-tab: +487
+- Play wall matches WPF's 2026-09-18 layout: GAMES zone with Breakout covers, Graded Intake states and FREE TODAY stamps; Devices and Loom buttons open the right section. Game buttons stay disabled because this head has no host for them.
+- Start caret "Jump right in" (RandomizeAndStart) ported, refused while a session holds the lock; tests fail-proven and checked live.
+
+## avalonia-port/rows-session-io: +629
+- Window-wide file drop (session/preset/mod/assets/zip/folder/unrecognised + overlay) over a new Core `DropRules` that WPF also calls; a single media file offers Add to Library only (decision logged).
+- Session-lock ribbon pulses on a refused change; `WindowDropTests` (8, incl. session/preset/mod) + `SessionIoTests.RefusedChangePulsesTheLockRibbon`, all fail-proven.
+
+## avalonia-port/rows-programs-tab: +362
+- Programs browse cards + intro popup show WPF's banner/sigil/plate art via new Core ProgramArtPaths (shared with WPF ProgramArt).
+- Enroll/run panel still unwired (decision A); slice plan in briefs/programs-run-plan.md.
+
+## avalonia-port/rows-she-listening: +132
+- She's Listening: title-bar mic privacy pill (click/Enter = disarm), armed-disc pulse, open-models button; 5 fail-proven assertions in SheListeningTests.
+- Rows shell-she-listening / views-tab-she-listening stay stub (sherpa KWS, bark lines, grammar gaps).
+
+## avalonia-port/rows-keyword-triggers: +606
+- Awareness custom trigger list (add/import/9 row editors), OCR combos persisted, OCR access gate + panel resync; 9-language strings; 3 fail-proven tests.
+- Rows stay stub: KeywordTriggerService/ScreenOcr/KeywordHighlight runtime (no Linux keystroke source) not ported.
+
+## avalonia-port/rows-patreon-subscribestar: +234
+- Premium celebration is back: a Patreon or SubscribeStar tier change, or the launch re-check, shows one card per tier (none for an invite week), via the presenter or Inbox. 2 fail-proven tests; live sandbox run showed the card.
+- shell-patreon and shell-subscribestar stay stub, with an exact missing list (live tier rise, unlockables/programs/profile-bubble repaint).
+
+## avalonia-port/rows-descent-fuse: +933
+- Fuse rail chip (tiers, flash-out at zero, Spiral Room door) and the zero-show stage visual are ported; both rows are now wired.
+- 2 fail-proven headless tests and a sandbox Keincheck run. win/shell descent-fuse rows stay stub (openers, sounds, dimming).
+
+## avalonia-port/rows-awareness-privacy: +661
+- Z5 privacy card on real settings: consent-gated dial, deny/allow chips, pause, wipe; WPF older-pipeline band whenever awareness is on (v2 observer still missing; decision logged).
+- "Set up local" opens the local-AI wizard (untested); tests can no longer read the real desktop (X11ActiveWindow.Disabled); duplicate awareness ledger rows merged.
+
+## avalonia-port/programs-run-1: +346
+- Avalonia builds ProgramService at startup in load-only, read-only mode (CHECKPOINT A). It never writes programs.json, does no rollover and runs no timers, and it is disposed on exit. WPF's ctor path is unchanged.
+- 7 tests, all fail-proven: a byte round-trip of a WPF-shape fixture under a pinned time zone, plus no-write, temp-recovery, corrupt-file, no-lapse, startup-audit-skipped and startup-scan checks.
+
+## avalonia-port/rows-deeper-hub: +883
+- Deeper hub: open/play/context menu/keyboard selection/two-step delete with undo + trash, submission badge, welcome Demo/Tour/Dismiss, row hover lift; shell-deeper-fx now wired.
+- Still stub: import, watcher, duration probe, demo seeding, tutorial, webcam card, sticky accepted toast.
+
+## avalonia-port/rows-enhancements: +846
+- Enhancements tab draws WPF node states, header, secret cards, owned-glow breath, gradient drift and hover pop. XP multiplier and time math moved to Core SkillTreeRules (WPF delegates).
+- shell-enhancements-fx is wired. Still missing: purchase click, the PRO panels, the lucky toast.
+
+## avalonia-port/programs-run-2: +867
+- Read-only Programs run view of a saved enrollment; stale days read LAST SAVED, not TODAY (CHECKPOINT A); no lifecycle/session controls, no writes.
+- ProgramsRunViewTests (shell path, 7 breaks fail-proven) + Keincheck temp-profile screenshot with programs.json byte-identical.
+
+## avalonia-port/rows-dashboard: +987
+- Dashboard FX funnel wired (RefreshFx on motion/performance/window changes, vault CTA breath, FeatureCard parks at peak); browser fold and billboard ported (BrowserFoldRule and DashboardBillboard moved to Core); billboard and fold rows now wired.
+- Still stubs: dashboard-fx (? box, logo, rail, browser sweep), hero-fx (untouched).
+
+## avalonia-port/rows-login-phone: +684
+- Link phone dialog is real: Core mobile-link code, QRCoder QR, countdown and expiry. Sign in via Web polls Core V2DeviceCodeService, which moved from the WPF head with `git mv`. dialogs-login and dialogs-link-phone are now wired.
+- Unopenable sign-in links are copied with WPF's prompt. The home Discord button opens the invite. 5 headless tests on a stepped clock, all fail-proven.

@@ -1,10 +1,12 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
-using System.Linq;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
+using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services.UI;
 using Serilog;
@@ -21,8 +23,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
     ///
     /// A motion-level change re-evaluates the loaded ambient loops through
     /// <see cref="global::ConditioningControlPanel.Avalonia.Controls.AmbientFxCanvas.Env.MotionGateChanged"/>, as WPF's
-    /// MainWindow.CmbMotionLevel_SelectionChanged did. Still a stub, named: the DND app picker
-    /// enumerates windows through Win32 and this head has no do-not-disturb guard yet.
+    /// MainWindow.CmbMotionLevel_SelectionChanged did. The DND app picker and the guard read X11
+    /// window owners (Platform/X11Windows); the guard itself is Core DndGuard.
     /// </summary>
     public partial class PerformanceSettingsSection : UserControl
     {
@@ -110,6 +112,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             CoreSettings.Current.PerformanceMode = ChkPerformanceMode.IsChecked ?? false;
             Log.Information("Performance mode set to {Enabled}", CoreSettings.Current.PerformanceMode);
             CoreSettings.Save();
+            // The tier feeds Env.AllowAmbientLoops/AllowGlow, so running loops re-read it now
+            // (improvement: WPF re-evaluated only on the next activation).
+            global::ConditioningControlPanel.Avalonia.Controls.AmbientFxCanvas.Env.RaiseMotionGateChanged();
         }
 
         private void ChkAutoPerformance_Changed(object? sender, RoutedEventArgs e)
@@ -187,22 +192,33 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             CoreSettings.Save();
         }
 
-        /// <summary>WPF BtnDndPickApp_Click: a menu of the apps with a window; listed ones show ticked
-        /// and inert. Linux finds no main-window handles, so it reads "set2_dnd_pick_empty" there.</summary>
+        /// <summary>The picker's source (X11 window owners). A seam so tests never read the desktop.</summary>
+        internal static Func<List<string>> RunningApps = OperatingSystem.IsWindows()
+            ? Platform.DoNotDisturbGuard.RunningWindowedProcesses   // user32 main windows
+            : Platform.X11Windows.RunningWindowedProcesses;
+
+        /// <summary>
+        /// WPF BtnDndPickApp_Click (:172): a menu of every process that owns a window; already-listed
+        /// ones are ticked and inert, a pick appends to the list.
+        /// </summary>
         private void BtnDndPickApp_Click(object? sender, RoutedEventArgs e)
         {
             try
             {
-                var running = Platform.DoNotDisturbGuard.RunningWindowedProcesses();
+                var running = RunningApps();
+                Log.Information("[DND] app picker opened: {Apps}", string.Join(", ", running));
                 var menu = new ContextMenu { Placement = PlacementMode.Bottom, MaxHeight = 420 };
                 if (running.Count == 0)
-                    menu.Items.Add(new MenuItem { Header = global::ConditioningControlPanel.Localization.Loc.Get("set2_dnd_pick_empty"), IsEnabled = false });
+                {
+                    menu.Items.Add(new MenuItem { Header = Loc.Get("set2_dnd_pick_empty"), IsEnabled = false });
+                }
                 else
                 {
-                    var already = CoreSettings.Current.DndProcessList ?? new System.Collections.Generic.List<string>();
+                    var already = CoreSettings.Current.DndProcessList ?? new List<string>();
                     foreach (var name in running)
                     {
-                        var item = new MenuItem { Header = name };
+                        // A TextBlock header: a bare string would lose its first '_' as an access key.
+                        var item = new MenuItem { Header = new TextBlock { Text = name } };
                         if (already.Contains(name, StringComparer.OrdinalIgnoreCase))
                         {
                             item.ToggleType = MenuItemToggleType.CheckBox;
@@ -217,13 +233,20 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
                         menu.Items.Add(item);
                     }
                 }
-                BtnDndPickApp.ContextMenu = menu;
+                PickerMenu = menu;
                 menu.Open(BtnDndPickApp);
             }
-            catch (Exception ex) { Log.Warning(ex, "[DND] app picker failed to open"); }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "[DND] app picker failed to open");
+            }
         }
 
-        /// <summary>WPF AddDndProcess: re-parses the BOX (an unblurred edit survives the pick).</summary>
+        /// <summary>The last menu the picker opened (tests read it).</summary>
+        internal ContextMenu? PickerMenu { get; private set; }
+
+        /// <summary>Appends one picked process and repaints the box. Re-parses the BOX, not the stored
+        /// list, so an edit not yet blurred out of is kept (WPF AddDndProcess :223).</summary>
         internal void AddDndProcess(string processName)
         {
             var list = DndProcessList.Parse(TxtDndProcesses.Text);

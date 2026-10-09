@@ -18,7 +18,7 @@
 // knob that does not exist here.
 //
 // Registered by this batch: "enhancements" (MainShellWindow.EnhancementsFx.cs) and
-// "availablesubjects" (MainShellWindow.SubjectsFx.cs). "settings" (MosaicFx), "programs", "play"
+// "availablesubjects" (MainShellWindow.SubjectsFx.cs), "settings" (MosaicFx, InitializeDashboardFx). "programs", "play"
 // and "exclusives" belong to files this layer does not own and are still unregistered.
 
 using System;

@@ -83,32 +83,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             catch (Exception ex) { Log.Debug("RefreshAccountChip failed: {E}", ex.Message); }
         }
 
-        /// <summary>The bubble face: initials on the roster's deterministic gradient (the same face
-        /// the leaderboard gives this user) when signed in, a slate "?" when not. Repaints the menu
-        /// when it is open. WPF RefreshProfileBubble.</summary>
-        internal void RefreshProfileBubble()
-        {
-            if (Named<global::Avalonia.Controls.Shapes.Ellipse>("ProfileBubbleFill") is not { } fill
-                || Named<TextBlock>("ProfileBubbleInitials") is not { } initials) return;
-            try
-            {
-                if (CoreAccount.IsLoggedIn)
-                {
-                    var display = CoreAccount.DisplayName;
-                    initials.Text = LeaderboardEntryData.BuildInitials(display);
-                    fill.Fill = LeaderboardRow.BuildAvatarBrush(display);
-                }
-                else
-                {
-                    initials.Text = "?";
-                    fill.Fill = ProfileBubbleNeutralBrush;
-                }
-                initials.IsVisible = true;
-                if (ProfileBubblePopupHost?.IsOpen == true) RefreshProfileMenu();
-            }
-            catch (Exception ex) { Log.Debug("RefreshProfileBubble: {E}", ex.Message); }
-        }
-
         /// <summary>The menu's identity rows: name + tier badge, the reachable achievement count and
         /// the Log out / Sign in caption. WPF RefreshProfileMenu (the Level/XP rail is painted by
         /// UpdateLevelDisplay).</summary>

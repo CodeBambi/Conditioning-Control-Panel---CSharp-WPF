@@ -47,11 +47,7 @@
 //   private Action? _onDebugTongueOut
 //   private Action<GazeSide>? _onDebugGazeSide
 //   private Action<WebcamTrackingState>? _onPillStateChanged
-//   private EventHandler<bool>? _onMicListeningChanged
-//   private EventHandler<bool>? _onWakeListeningChanged
-//   private void WireMicActivePill(…)
-//   internal void UpdateMicPill(…)
-//   private void MicActivePill_Click(…)
+//   (WireMicActivePill / UpdateMicPill / MicActivePill_Click: PORTED, MainShellWindow.SheListening.cs)
 //   private void WireWebcamActivePill(…)
 //   private const int RapidBlinkRecalCount
 //   private const int RapidBlinkRecalWindowMs

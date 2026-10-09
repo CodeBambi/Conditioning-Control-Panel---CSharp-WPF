@@ -93,14 +93,20 @@ namespace ConditioningControlPanel.Avalonia
         /// the Haptics tab's "Quest complete" routing row decides how it feels.</summary>
         internal static void PlayQuestCompletionEffects()
         {
+            PlayExclamationChime("quest-complete");  // the haptic still posts if the chime fails
+            _ = CoreHaptics.Service?.PostEvent(ConditioningControlPanel.Services.Haptics.Core.HapticEventKind.QuestComplete);
+        }
+
+        /// <summary>Linux stand-in for WPF's SystemSounds.Exclamation: the bundled chime at master volume.</summary>
+        internal static void PlayExclamationChime(string tag)
+        {
             try
             {
                 CoreAudio.PlayOneShot(
                     System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", "chime1.mp3"),
-                    Math.Clamp(CoreSettings.Current.MasterVolume / 100f, 0f, 1f), "quest-complete");
+                    Math.Clamp(CoreSettings.Current.MasterVolume / 100f, 0f, 1f), tag);
             }
-            catch (Exception ex) { Serilog.Log.Debug("Quest chime failed: {E}", ex.Message); } // the haptic still posts
-            _ = CoreHaptics.Service?.PostEvent(ConditioningControlPanel.Services.Haptics.Core.HapticEventKind.QuestComplete);
+            catch (Exception ex) { Serilog.Log.Debug("Chime failed: {E}", ex.Message); }
         }
 
         /// <summary>The mod service (WPF App.Mods), or null on the headless render path.</summary>
@@ -150,7 +156,7 @@ namespace ConditioningControlPanel.Avalonia
         /// <summary>
         /// WPF App.xaml.cs SeedAskSeams + NoticeSurface: the asks service and the oversize-prompt toast.
         /// ponytail: SessionOptions/StartSession stay unseeded (no session launcher on this head, so no
-        /// Session cards), Busy knows a session, video, lock card, bubble count and pop quiz (not grace pause), and a Watch link opens in the external
+        /// Session cards), Busy knows a session, video, lockdown, lock card, bubble count and pop quiz (not grace pause, Mantra, a connected remote controller or the startup ladder, which WPF also counts), and a Watch link opens in the external
         /// browser - WPF's own fallback when its embedded browser cannot take it.
         /// </summary>
         internal static void SeedCompanionTubeSeams()
@@ -171,7 +177,8 @@ namespace ConditioningControlPanel.Avalonia
                 Views.AvatarTube.AvatarTubeWindow.Live?.RunOnAvatar(() => Views.AvatarTube.AvatarTubeWindow.Live?.GigglePriority(text, aiGenerated: false));
             ConditioningControlPanel.Services.Companion.Asks.CompanionAskService.BusyProvider = () => CoreSession.IsSessionRunning
                 || CoreEngine.Video?.IsPlaying == true || Views.Windows.LockCardWindow.IsAnyOpen()
-                || Views.Windows.BubbleCountWindow.IsAnyOpen() || Views.Windows.PopQuizWindow.IsAnyOpen();
+                || Views.Windows.BubbleCountWindow.IsAnyOpen() || Views.Windows.PopQuizWindow.IsAnyOpen()
+                || ConditioningControlPanel.Services.LockdownService.Current?.IsActive == true;   // WPF App.xaml.cs:696
             ConditioningControlPanel.Services.Companion.Asks.CompanionAskService.OpenLink = url =>
             {
                 if (Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps)
@@ -508,12 +515,17 @@ namespace ConditioningControlPanel.Avalonia
                 DescentCountdown = new Services.Descent.DescentCountdownService();
                 DescentCountdown.Start();
                 Platform.ProgressionHead.Start();   // idle gate, conditioning-time tick, level-up toast + sound
+                // WPF MainWindow.Marquee.cs:688: the server announcement check, 7 s after the shell opens.
+                // A sandbox never reaches the real proxy (the dailyFree rule above).
+                if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("CCP_USERDATA_DIR")))
+                    Views.Windows.MainShellWindow.AnnouncementClient = () => new V2AuthService();
                 if (Platform.AccountSeed.Seed())
                 {
                     // Unit 7c, with the logout clear: the push, XP banking and its two triggers (WPF
                     // MainWindow OnLevelUp -> sync, ProfileSyncService.AttachXpNudge outside sessions).
                     var sync = Platform.AccountSeed.Sync = new SyncPush(
-                        () => Achievements?.Progress?.UnlockedAchievements, () => Sessions?.IsRunning == true)
+                        () => Achievements?.Progress?.UnlockedAchievements, () => Sessions?.IsRunning == true,
+                        sanitizeCosmetics: Views.Windows.MainShellWindow.SanitizeOwnWardrobe)
                         { Countdown = DescentCountdown };
                     CoreProgression.AddXPProvider = ProgressionBank.Add;
                     ProgressionBank.LevelUp += level => sync.PushAsync($"level-up {level}");
@@ -788,6 +800,7 @@ namespace ConditioningControlPanel.Avalonia
                     shell.RefreshEntitlementVeils(persist: true);
                     shell.RefreshExclusivesTab();
                     shell.RefreshNavPremiumTags();
+                    shell.RefreshProfileBubble();   // WPF OnPatreonTierChanged
                 });
                 dailyFree.TodayChanged += RepaintVeils;
                 // WPF NavPremiumTags.cs:118 / Lab.cs:435: a spent or refunded pass moves the star and the vault.
@@ -874,6 +887,12 @@ namespace ConditioningControlPanel.Avalonia
                 shell.StartPanicKey();
                 // platform#1: typed keyword triggers ride the panic hook's key events (WPF KeywordTriggerService).
                 Platform.KeywordTriggerHead.Start();
+                // EMI Desk summon chord (WPF MainWindow.xaml.cs:246 arms it from the shell's Loaded).
+                Views.Windows.EmiDesk.EmiDeskService.Instance.ApplyHotkey();
+                // Do-not-disturb reads the foreground app from X (WPF DoNotDisturbGuard: user32).
+                ConditioningControlPanel.Services.UI.DndGuard.ForegroundProcess = OperatingSystem.IsWindows()
+                    ? Platform.DoNotDisturbGuard.ForegroundProcessName   // user32 (merge: Windows half)
+                    : Platform.X11Windows.ForegroundProcess;
                 // Linux: one toast naming the distro's install command for any missing runtime library
                 // (docs/avalonia-linux-install.md). dlopen off the UI thread; nothing when all load.
                 Dispatcher.UIThread.Post(async () =>
@@ -1007,7 +1026,8 @@ namespace ConditioningControlPanel.Avalonia
         /// first use. A Linux profile that already has files in UserData/assets keeps using it -
         /// nothing is moved and nothing switches silently. A CCP_USERDATA_DIR sandbox (tests, live
         /// checks), an unknown home or an unreadable legacy folder also keep UserData/assets, so
-        /// nothing outside the sandbox is created. Decided once per process.
+        /// nothing outside the sandbox is created; so does a home where ~/ccp media cannot be
+        /// created (read-only or Flatpak-confined). Decided once per process.
         /// </summary>
         internal static string DefaultAssetsPath(bool isLinux, string home, string userData, bool sandboxed)
         {
@@ -1029,7 +1049,9 @@ namespace ConditioningControlPanel.Avalonia
             }
             var media = Path.Combine(home, "ccp media");
             CorePaths.EnsureCustomAssetsDirectories(media);
-            return media;
+            if (Directory.Exists(media)) return media;
+            Serilog.Log.Warning("Media folder: could not create {Media}; keeping {Legacy}", media, legacy);
+            return legacy;
         }
 
         /// <summary>The exit save, after Takeover hands back what a pulse borrowed - else a boosted
@@ -1089,6 +1111,7 @@ namespace ConditioningControlPanel.Avalonia
             // never rewrites the file (or rotates its .bak) - it may be shared with the WPF head.
             try { if (Achievements is { IsDirty: true } a) a.Save(); } catch { /* the store logs write failures */ }
             try { Quests?.Dispose(); } catch { /* WPF App.OnExit:6104; saves only when dirty */ }
+            try { Programs?.Dispose(); } catch { /* WPF App.OnExit:6309; idempotent after StopPrograms */ }
             try { MediaHistory?.Dispose(); } catch { /* WPF App.OnExit:6231; flushes the final entries */ }
             try { (Platform.FriendsHead.Service as IDisposable)?.Dispose(); } catch { /* WPF App.OnExit: the friends poll stops */ }
             try { Brain?.Dispose(); } catch { /* WPF App.OnExit:6121; flushes the turn log */ }

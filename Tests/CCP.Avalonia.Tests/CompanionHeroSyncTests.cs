@@ -1,6 +1,7 @@
 using System.Linq;
 using System.Threading.Tasks;
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
@@ -72,6 +73,19 @@ public sealed class CompanionHeroSyncTests
             shell.ShowTab("companion");             // re-read on return, not on a timer
             Dispatcher.UIThread.RunJobs();
             Assert.Equal(5, vm.Level);
+
+            // audit #1899: the dim AI plate lands on Settings \u00b7 Account (WPF ShowTab("patreon") -> ShowAppInfoPopup).
+            var plate = global::Avalonia.LogicalTree.LogicalExtensions.GetLogicalDescendants(shell)
+                .OfType<global::Avalonia.Controls.Button>().First(b => b.Name == "AiPlateButton");
+            plate.BringIntoView();
+            Dispatcher.UIThread.RunJobs();
+            var at = plate.TranslatePoint(new Point(plate.Bounds.Width / 2, plate.Bounds.Height / 2), shell)!.Value;
+            shell.MouseDown(at, global::Avalonia.Input.MouseButton.Left);
+            shell.MouseUp(at, global::Avalonia.Input.MouseButton.Left);
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(global::Avalonia.LogicalTree.LogicalExtensions.GetLogicalDescendants(shell)
+                .OfType<global::Avalonia.Controls.Control>().First(c => c.Name == "AppSettingsTab").IsVisible);
+            Assert.True(shell.AppSettingsPage!.FindControl<global::Avalonia.Controls.RadioButton>("SectionPillAccount")!.IsChecked);
         }
         finally
         {

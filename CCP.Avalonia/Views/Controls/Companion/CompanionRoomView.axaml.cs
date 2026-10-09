@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.VisualTree;
+using Avalonia.LogicalTree;
+using System.Linq;
 using Avalonia.Threading;
 
 namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
@@ -33,6 +35,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
             // Z2/Z3 over the brain (WPF CompanionRoomVm builds ChatThresholdRuntimeVm / MemoryDiaryRuntimeVm).
             ChatZone.ViewModel = ChatThresholdViewModel.CreateLive();
             MemoryZone.ViewModel = MemoryDiaryViewModel.CreateLive();
+            // WPF SetAiProviderMode -> CompanionRoom.SyncBrain (MainWindow.CompanionRoom.cs:300). Posted:
+            // the drawer raises Provider before it writes the settings these zones read.
+            if (EngineZone.DataContext is EngineRoomVm engine)
+                engine.PropertyChanged += (_, e) =>
+                {
+                    if (e.PropertyName == nameof(EngineRoomVm.Provider)) Dispatcher.UIThread.Post(SyncBrain, DispatcherPriority.Normal);
+                };
+        }
+
+        /// <summary>WPF CompanionRoomRuntimeVm.SyncBrain: provider, entitlement and budget changed.</summary>
+        internal void SyncBrain()
+        {
+            HeroZone.ViewModel?.Sync();
+            ChatZone.ViewModel?.Sync();
+            AttentionZone.ViewModel?.Sync();
         }
 
         // =====================================================================================
@@ -112,9 +129,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
                 // The zone re-reads its own state rather than being told what to do: it may well
                 // have changed while the tab was hidden, and a resume that restored the state at
                 // park time would be a lie.
+                AwarenessZone.StartRefresh();   // WPF IsVisibleChanged -> StartRefresh (re-reads first)
                 AwarenessZone.SyncCursorBlink();
                 ChatZone.ViewModel?.Sync();
                 MemoryZone.ViewModel?.Sync();
+                AttentionZone.ViewModel?.Sync();
+                // The constellation's one-shot dormant sweep waits for the first time the tab is seen.
+                HeroZone.GetLogicalDescendants().OfType<RelationshipConstellation>().FirstOrDefault()?.PlayIntro();
+                // WPF UpdateCompanionCardsUI runs on the same show: the roster's levels and ring.
+                (WorkshopZone.DataContext as Runtime.WorkshopRuntimeVm)?.Parts.Roster.Refresh();
                 // ponytail: WPF also calls ChatZone.SyncThinking() here. This head's
                 // ChatThresholdView has no thinking clock to sync - WPF's dots are three
                 // RepeatBehavior=Forever Storyboards (CmpThinkingDotsStoryboard) and the port
@@ -132,6 +155,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
             {
                 HeroZone.StopAmbientLoop();
                 AwarenessZone.StopCursorBlink();
+                AwarenessZone.StopRefresh();
             }
             catch (InvalidOperationException) { /* already torn down */ }
         }

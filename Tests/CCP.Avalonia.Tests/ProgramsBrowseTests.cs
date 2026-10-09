@@ -197,6 +197,49 @@ public sealed class ProgramsBrowseTests
         });
     }
 
+    /// <summary>
+    /// WPF ProgramsTab.cs:633-660: every shipped program's card wears its own banner strip and an
+    /// accent crest masked by its sigil (or day 1's plate), and the bare glyph steps aside.
+    /// </summary>
+    [Fact]
+    public async Task OpenedTabDressesEveryCardWithBannerAndCrest()
+    {
+        await AvaloniaTestDispatcher.RunAsync(() =>
+        {
+            EnsureAvalonia();
+            Window? host = null;
+            try
+            {
+                var view = new ProgramsTabView();
+                host = new Window { Width = 1200, Height = 900, Content = view };
+                host.Show();
+                Dispatcher.UIThread.RunJobs();
+
+                var rows = view.FindControl<ListBox>("ProgramLibraryList")!.Items.Cast<ProgramBrowseItem>().ToArray();
+                Assert.Equal(BuiltInPrograms.All().Count, rows.Length);
+                Assert.All(rows, row =>
+                {
+                    Assert.True(row.BannerVisible, row.ProgramId);
+                    Assert.IsType<global::Avalonia.Media.Imaging.Bitmap>(row.BannerArt);
+                    Assert.True(row.ArtVisible && !row.IconOnlyVisible, row.ProgramId);
+                    Assert.IsType<global::Avalonia.Media.Imaging.Bitmap>(
+                        Assert.IsType<global::Avalonia.Media.ImageBrush>(row.ArtMask).Source);
+                });
+
+                // The realized card actually shows the band (not just a populated row model).
+                var masked = view.GetVisualDescendants().OfType<global::Avalonia.Controls.Shapes.Rectangle>()
+                    .Where(r => r.OpacityMask is global::Avalonia.Media.ImageBrush && r.IsEffectivelyVisible);
+                Assert.NotEmpty(masked);
+            }
+            finally
+            {
+                host?.Close();
+                Dispatcher.UIThread.RunJobs();
+            }
+            return Task.CompletedTask;
+        });
+    }
+
     private static void EnsureAvalonia()
     {
         if (Application.Current is not null) return;

@@ -13,7 +13,7 @@ namespace ConditioningControlPanel.Avalonia
     public partial class App
     {
         /// <summary>WPF App.Programs: the multi-day Training Programs runtime.</summary>
-        internal static ProgramService? Programs { get; private set; }
+        internal static ProgramService? Programs { get; set; }
 
         /// <summary>WPF App.xaml.cs:2165. After Settings, Progression and Quests (the verifier seam is
         /// QuestService.UpdateQuestProgress -> CoreQuests.TrackProgramVerifierProvider).</summary>

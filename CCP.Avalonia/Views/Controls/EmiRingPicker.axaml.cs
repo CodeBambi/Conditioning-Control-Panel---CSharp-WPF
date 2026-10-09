@@ -3,12 +3,13 @@ using System.Collections.Generic;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
-using Avalonia.Controls.Shapes;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Styling;
+using ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Services.EmiDesk;
 using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Controls
@@ -18,35 +19,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
     ///
     /// PORTED from ConditioningControlPanel/Views/Controls/EmiRingPicker.xaml.cs. The WPF control
     /// keeps no list of its own: the tiles ARE <c>EmiState.Pins</c>, written through
-    /// <c>EmiSuggester</c>. <c>EmiSuggester</c> and <c>EmiTargets</c> are still WPF-head only, so
-    /// this port carries a PLACEHOLDER catalogue and pin set (see the ponytail note) that must be
-    /// deleted, not kept, when the store moves to Core. <c>ModResourceResolver</c> is NOT a
-    /// blocker any more - <see cref="CoreModArt"/> plus <c>Helpers.ModArt</c> answer that half on
-    /// this head; what is missing is the per-target art NAME, see <c>BuildTileFace</c>.
+    /// <c>EmiSuggester</c> (Core) over this head's <c>EmiTargets</c> catalogue - the same store the
+    /// ring window's right-click pin writes. Tile art is the ring's own <c>EmiRingWindow.AddArt</c>.
     /// </summary>
     public partial class EmiRingPicker : UserControl
     {
-        // ponytail: placeholder catalogue + pin set. EmiSuggester/EmiState are the ONLY pin store;
-        // replace both with EmiTargets.All / EmiSuggester.IsPinned / TogglePin / ClearPins when
-        // they move to Core. Ids are real so emi_desk_target_<id> resolves to real labels.
-        private sealed record Target(string Id, Color Hue, bool Locked)
-        {
-            public string Label { get { try { return Loc.Get("emi_desk_target_" + Id); } catch { return Id; } } }
-        }
-        private static readonly Target[] Catalogue =
-        {
-            new("sessions", Color.Parse("#FF69B4"), false),
-            new("flashes", Color.Parse("#FFB84E"), false),
-            new("videos", Color.Parse("#5EA8FF"), false),
-            new("subliminals", Color.Parse("#B47BFF"), false),
-            new("bubbles", Color.Parse("#5CE0A5"), false),
-            new("spiral", Color.Parse("#E85CE0"), false),
-            new("loom", Color.Parse("#FF7E6B"), true),
-            new("arcademy", Color.Parse("#5ED4E8"), true),
-        };
-        private const int MaxPins = 6;
-        private readonly HashSet<string> _pins = new(StringComparer.Ordinal) { "sessions", "spiral" };
-
         /// <summary>Suppresses the toggle handler while the code is setting boxes.</summary>
         private bool _loading;
 
@@ -105,14 +82,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
                 _ringTiles.Clear();
                 _ringLocked.Clear();
 
-                foreach (var t in Catalogue)
+                foreach (var t in EmiTargets.All)
                 {
+                    if (!t.Available) continue;
+
                     bool locked = t.Locked;
                     var tile = new ToggleButton
                     {
                         Theme = (ControlTheme)this.FindResource("EmiRingTile")!,
                         Content = BuildTileFace(t, locked),
-                        IsChecked = _pins.Contains(t.Id),
+                        IsChecked = EmiSuggester.IsPinned(t.Id),
                         IsEnabled = !locked,
                         Tag = t.Id,
                     };
@@ -136,23 +115,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
             }
         }
 
-        /// <summary>The target's flat hue with its name on a strip.
-        /// <para>ponytail: the WPF ring paints a card PNG behind this, and the portable half of
-        /// that lookup is <c>CoreModArt.OverridePath</c> today (<c>Helpers.ModArt</c> is the
-        /// head-side loader). What is still missing is the NAME to look up: the WPF resolver is
-        /// handed a per-target art path that <c>Target</c> does not carry on this head, so there
-        /// is nothing to resolve yet. The flat-hue branch is the one the WPF control takes when a
-        /// target has no art, so it is not a stand-in - it is one of the two real
-        /// branches.</para></summary>
-        private static Control BuildTileFace(Target t, bool locked)
+        /// <summary>The card art (or medallion plate) with its name on a strip; the flat hue only
+        /// when the art fails to load. WPF EmiCardFace.AddArt(iconSize: 34, stripReserve: 14).</summary>
+        private static Control BuildTileFace(EmiTarget t, bool locked)
         {
             var grid = new Grid();
-
-            grid.Children.Add(new Rectangle
-            {
-                Fill = new SolidColorBrush(t.Hue) { Opacity = locked ? 0.28 : 0.62 },
-                IsHitTestVisible = false,
-            });
+            var hue = Color.FromRgb((byte)(t.Hue >> 16), (byte)(t.Hue >> 8), (byte)t.Hue);
+            EmiRingWindow.AddArt(grid, new EmiRingCard(t.Id, t.LabelKey, hue, locked, false, t.ThumbPath, t.ThumbIsIcon),
+                iconSize: 34, stripReserve: 14);
 
             var strip = new Border
             {
@@ -183,7 +153,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
             {
                 if (sender is not ToggleButton tb || tb.Tag is not string id) return;
 
-                bool nowPinned = TogglePin(id);
+                bool nowPinned = EmiSuggester.TogglePin(id);
                 if (tb.IsChecked != nowPinned)
                 {
                     _loading = true;
@@ -191,7 +161,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
                     finally { _loading = false; }
                 }
 
-                // ponytail: EmiState.SaveNow() and App.EmiDesk.RefreshRing() go here when wired.
+                // The ledger is debounced; a deliberate act should survive a hard kill.
+                EmiState.SaveNow();
+                RefreshRing();
                 Refresh();
             }
             catch (Exception ex)
@@ -200,14 +172,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
             }
         }
 
-        /// <summary>Placeholder for EmiSuggester.TogglePin: refuses a seventh pin, returns the
-        /// pinned state the store ended up in.</summary>
-        private bool TogglePin(string id)
+        /// <summary>A fan that happens to be open shows the change now (WPF App.EmiDesk.RefreshRing).</summary>
+        private static void RefreshRing()
         {
-            if (_pins.Remove(id)) return false;
-            if (_pins.Count >= MaxPins) return false;
-            _pins.Add(id);
-            return true;
+            try { EmiDeskService.Instance.Window?.RebuildRing(); }
+            catch (Exception ex) { Log.Debug(ex, "[EmiDesk] ring refresh after pin failed"); }
         }
 
         /// <summary>"Let her choose": drop every pin and hand the six slots back to the scores.</summary>
@@ -215,7 +184,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
         {
             try
             {
-                _pins.Clear(); // ponytail: EmiSuggester.ClearPins() + EmiState.SaveNow() when wired
+                if (EmiSuggester.ClearPins() > 0)
+                {
+                    EmiState.SaveNow();
+                    RefreshRing();
+                }
 
                 _loading = true;
                 try
@@ -238,12 +211,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
         {
             try
             {
-                int pins = _pins.Count;
-                bool full = pins >= MaxPins;
+                int pins = 0;
+                try { pins = EmiState.Current.Pins.Count; }
+                catch (Exception ex) { Log.Debug(ex, "[EmiDesk] pin count failed"); }
+
+                bool full = pins >= EmiSuggester.MaxPins;
 
                 HintText = full
                     ? Loc.Get("emi_desk_ring_full")
-                    : Loc.GetF("emi_desk_ring_count", pins, MaxPins);
+                    : Loc.GetF("emi_desk_ring_count", pins, EmiSuggester.MaxPins);
                 CanReset = pins > 0;
 
                 _txtHint.Text = HintText;

@@ -4,7 +4,8 @@
 // BtnStart_Click (stop-session dialog) is ConfirmStopSession (MainShellWindow.SessionRun.cs).
 // ponytail: still missing, each with no service on this head: the remote-control gate,
 // Relapse/TotalSessions achievements, the bubble/brain-drain/pop-quiz/autonomy/
-// the Presets "running" label and the hero FX.
+// ramp starts, the scheduler, the Presets "running" label and the hero FX.
+// MenuJumpRightIn_Click / RandomizeAndStart (:132) are ported.
 
 using Avalonia.Controls;
 using Avalonia.Data;
@@ -42,25 +43,22 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private void MenuJumpRightIn_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => RandomizeAndStart();
 
-        /// <summary>WPF MainWindow.StartStop.cs:142 RandomizeAndStart, "Jump right in": a fun,
-        /// non-overwhelming mix with random pacing, then start. Refused whole mid-session (it used
-        /// to re-roll the prescribed mix and start nothing). Setters clamp, so the ranges are safe.</summary>
-        internal void RandomizeAndStart()
+        /// <summary>WPF StartStop.cs:142 "Jump right in": a fun, non-overwhelming mix with random
+        /// pacing, then Start. Refused whole mid-session (it used to re-roll a prescribed mix).
+        /// Setters clamp, so the ranges are always safe.</summary>
+        internal void RandomizeAndStart(System.Random? rng = null)
         {
             if (RefuseActionIfSessionLocked("jump-right-in")) return;
+            rng ??= new System.Random();
             var s = CoreSettings.Current;
-            if (s != null)
-            {
-                var rng = new System.Random();
-                s.FlashEnabled = true;
-                s.FlashFrequency = rng.Next(20, 81);
-                s.SimultaneousImages = rng.Next(2, 9);
-                s.SubliminalEnabled = true;
-                s.SubliminalFrequency = rng.Next(3, 13);
-                s.SpiralEnabled = rng.Next(2) == 0;
-                s.PinkFilterEnabled = rng.Next(2) == 0;
-                CoreSettings.Save();
-            }
+            s.FlashEnabled = true;
+            s.FlashFrequency = rng.Next(20, 81);
+            s.SimultaneousImages = rng.Next(2, 9);
+            s.SubliminalEnabled = true;
+            s.SubliminalFrequency = rng.Next(3, 13);
+            s.SpiralEnabled = rng.Next(2) == 0;
+            s.PinkFilterEnabled = rng.Next(2) == 0;
+            CoreSettings.Save();
             if (!CoreEngine.IsRunning) StartEngine();
         }
 

@@ -165,8 +165,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 Open = () => new AnnouncementPopup(id, title, message, imageUrl, linkUrl, theme).Show(),
                 Dismiss = () =>
                 {
-                    try { CoreSettings.Current.DismissedAnnouncementId = id; }
+                    try { CoreSettings.Current.DismissedAnnouncementId = id; CoreSettings.Save(); }
                     catch (Exception ex) { Log.Debug("Announcement row dismiss: {E}", ex.Message); }
+                    RecordAnnouncementDismissal(id);   // the per-account half (MainShellWindow.Announcement.cs)
                 },
             });
         }

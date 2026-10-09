@@ -181,6 +181,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     // ponytail: videoUp is false until the head has a VideoService.IsPlaying.
                     var passive = SessionSummaryPresentation.Decide(false, LockCardWindow.IsAnyOpen(),
                         PopQuizWindow.IsAnyOpen(), BubbleCountWindow.IsAnyOpen()) == SessionSummaryPresentation.Mode.Passive;
+                    dialog.Topmost = !passive;   // WPF MainWindow.Presets.cs:1799
                     if (passive)
                     {
                         _liveSessionRecap?.Close();

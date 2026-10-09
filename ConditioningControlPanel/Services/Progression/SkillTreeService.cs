@@ -176,96 +176,18 @@ public class SkillTreeService : IDisposable
     /// <summary>
     /// Calculate the total XP multiplier from all active skills
     /// </summary>
-    public double GetTotalXpMultiplier()
-    {
-        var settings = App.Settings?.Current;
-        if (settings == null) return 1.0;
-
-        double multiplier = 1.0;
-
-        // Sparkle Boost skills (additive)
-        if (HasSkill("sparkle_boost_1")) multiplier += 0.10;
-        if (HasSkill("sparkle_boost_2")) multiplier += 0.15;
-        if (HasSkill("sparkle_boost_3")) multiplier += 0.20;
-
-        // Streak Power (0.5% per streak day, max 15%)
-        if (HasSkill("streak_power"))
-        {
-            var streakBonus = Math.Min(settings.CurrentStreak * 0.005, 0.15);
-            multiplier += streakBonus;
-        }
-
-        // Time-based bonuses
-        var hour = DateTime.Now.Hour;
-
-        // Night Shift (11pm-5am = 23:00-5:00)
-        if (HasSkill("night_shift") && (hour >= 23 || hour < 5))
-        {
-            multiplier += 0.50;
-        }
-
-        // Early Bird (5am-8am)
-        if (HasSkill("early_bird_bimbo") && hour >= 5 && hour < 8)
-        {
-            multiplier += 0.50;
-        }
-
-        // World event boost (additive, capped, and 0.0 unless an event is running).
-        // ADDITIVE ON PURPOSE: the one multiplicative term below already triples
-        // whatever it lands on, and an event that multiplied instead of added would
-        // stack with it into a number nobody costed. Capped inside LiveEventService
-        // (MaxXpBoost) so a bad server value can nudge the rate, never mint a level.
-        // Dormant in this build — nothing arms LiveEventService, so this adds +0.0.
-        multiplier += LiveEventService.ClampXpBoost(App.LiveEvent?.XpBoost ?? 0.0);
-
-        // Pink Rush (active window)
-        multiplier *= PinkRushRules.XpFactor(settings); // 3x during Pink Rush
-
-        return multiplier;
-    }
+    public double GetTotalXpMultiplier() =>
+        App.Settings?.Current is { } settings
+            ? SkillTreeRules.GetTotalXpMultiplier(settings, DateTime.Now.Hour, App.LiveEvent?.XpBoost ?? 0.0)
+            : 1.0;
 
     /// <summary>
     /// Get multiplier breakdown for display
     /// </summary>
-    public List<(string Source, double Value)> GetMultiplierBreakdown()
-    {
-        var breakdown = new List<(string Source, double Value)>();
-        var settings = App.Settings?.Current;
-        if (settings == null) return breakdown;
-
-        breakdown.Add((Loc.Get("skill_mult_base"), 1.0));
-
-        if (HasSkill("sparkle_boost_1"))
-            breakdown.Add((Loc.Get("skill_mult_sparkle_boost"), 0.10));
-        if (HasSkill("sparkle_boost_2"))
-            breakdown.Add((Loc.Get("skill_mult_extra_sparkly"), 0.15));
-        if (HasSkill("sparkle_boost_3"))
-            breakdown.Add((Loc.Get("skill_mult_maximum_sparkle"), 0.20));
-
-        if (HasSkill("streak_power") && settings.CurrentStreak > 0)
-        {
-            var streakBonus = Math.Min(settings.CurrentStreak * 0.005, 0.15);
-            breakdown.Add((Loc.GetF("skill_mult_streak_power_days", settings.CurrentStreak), streakBonus));
-        }
-
-        var hour = DateTime.Now.Hour;
-        if (HasSkill("night_shift") && (hour >= 23 || hour < 5))
-            breakdown.Add((Loc.Get("skill_mult_night_shift"), 0.50));
-        if (HasSkill("early_bird_bimbo") && hour >= 5 && hour < 8)
-            breakdown.Add((Loc.Get("skill_mult_early_bird"), 0.50));
-
-        // Kept in step with GetTotalXpMultiplier above. Omitted entirely when no event
-        // is running, which is every build until the event engine ships — an "Event +0%"
-        // row would advertise a feature that does not exist yet.
-        var eventBoost = LiveEventService.ClampXpBoost(App.LiveEvent?.XpBoost ?? 0.0);
-        if (eventBoost > 0.0)
-            breakdown.Add((Loc.Get("skill_mult_event_boost"), eventBoost));
-
-        if (settings.PinkRushActive && HasSkill("pink_rush"))
-            breakdown.Add((Loc.Get("skill_mult_pink_rush_active"), 2.0)); // Shows as +200% (3x total)
-
-        return breakdown;
-    }
+    public List<(string Source, double Value)> GetMultiplierBreakdown() =>
+        App.Settings?.Current is { } settings
+            ? SkillTreeRules.GetMultiplierBreakdown(settings, DateTime.Now.Hour, App.LiveEvent?.XpBoost ?? 0.0)
+            : new List<(string Source, double Value)>();
 
     #endregion
 
@@ -748,24 +670,8 @@ public class SkillTreeService : IDisposable
     /// <summary>
     /// Get formatted total conditioning time for display
     /// </summary>
-    public string GetFormattedConditioningTime()
-    {
-        var settings = App.Settings?.Current;
-        if (settings == null) return Loc.Get("skill_time_zero");
-
-        var totalMinutes = settings.TotalConditioningMinutes;
-        var hours = (int)(totalMinutes / 60);
-        var minutes = (int)(totalMinutes % 60);
-
-        if (hours >= 24)
-        {
-            var days = hours / 24;
-            hours = hours % 24;
-            return Loc.GetF("skill_time_dhm", days, hours, minutes);
-        }
-
-        return Loc.GetF("skill_time_hm", hours, minutes);
-    }
+    public string GetFormattedConditioningTime() =>
+        App.Settings?.Current is { } settings ? SkillTreeRules.FormatConditioningTime(settings) : Loc.Get("skill_time_zero");
 
     #endregion
 

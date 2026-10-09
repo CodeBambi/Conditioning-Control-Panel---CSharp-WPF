@@ -537,7 +537,7 @@ public class SpiralRoomTests
             AppFile("MainWindow", "MainWindow.ProfileSpiral.cs"), StringComparison.Ordinal);
 
         Assert.Contains("main.ShowTab(SpiralRoom.TabKey)",
-            AppFile("Controls", "DescentFuseRailChip.cs"), StringComparison.Ordinal);
+            File.ReadAllText(Path.Combine(ProductDir, "Controls", "DescentFuseRailChip.cs")), StringComparison.Ordinal);   // WPF head: CCP.Avalonia has a twin
 
         // The first light navigates through the same door and then plays in the room.
         var director = AppFile("Services", "Descent", "DescentShowDirector.cs");
@@ -618,7 +618,7 @@ public class SpiralRoomTests
     [Fact]
     public void TheFuseChipContributesNoDoorMedallionMarkup()
     {
-        var chip = AppFile("Controls", "DescentFuseRailChip.cs");
+        var chip = File.ReadAllText(Path.Combine(ProductDir, "Controls", "DescentFuseRailChip.cs"));   // WPF head: CCP.Avalonia has a twin
         Assert.DoesNotContain("<Viewbox Grid.Column=\"0\" Width=\"40\"", chip, StringComparison.Ordinal);
 
         // ...and it is code-built, so there is no .xaml beside it to grow one later.

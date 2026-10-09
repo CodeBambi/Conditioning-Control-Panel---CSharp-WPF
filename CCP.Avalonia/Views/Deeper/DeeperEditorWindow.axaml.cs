@@ -70,11 +70,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
     ///   <item><b>The browser preview.</b> Real: the https pre-flight, a per-navigation host
     ///         fence, and the page's own &lt;video&gt; driven and read back through
     ///         <c>WebHost.InvokeScriptAsync</c>, so duration, playhead, play/pause and seek
-    ///         describe the video rather than a free-running timer. Two things WPF had are NOT
-    ///         reproduced and both WIDEN what it allowed: the first hop is pinned to the project
-    ///         URL's own host instead of <c>DeeperConfig.PreviewHostAllowlist</c> (internal to
-    ///         Core), and there is no per-instance user-data folder, so the preview shares a cookie
-    ///         jar with every other WebHost. Stubbed because NativeWebView has no counterpart at
+    ///         describe the video rather than a free-running timer. One thing WPF had is NOT
+    ///         reproduced and it WIDENS what it allowed: there is no per-instance user-data
+    ///         folder, so the preview shares a cookie jar with every other WebHost. Stubbed because NativeWebView has no counterpart at
     ///         all: ZoomFactor, ContainsFullScreenElementChanged (and the fullscreen reparent it
     ///         drove), and AddScriptToExecuteOnDocumentCreatedAsync.</item>
     ///   <item><b>Win32.</b> <c>WindowChromeHelper.ApplyDarkTitleBar</c> (DwmSetWindowAttribute),
@@ -110,11 +108,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         private bool _isDirty;
         private bool _suppressDirty;
 
-        // ponytail: needs a decoder for AUDIO (NAudio's AudioFileReader + AudioWaveformResult, or
-        // a portable replacement). Local audio is the last branch where the two numbers every
-        // drawing path reads are driven directly; remote AND local video both poll the page's
-        // media element now (PollBrowserTimeAsync).
+        // ponytail: the waveform peaks still need a decoder (WPF AudioWaveformCache, NAudio). Local
+        // audio PLAYBACK is real (_localAudio); remote AND local video poll the page's media element.
         private double[]? _waveformPeaks;
+        private IDeeperLocalAudio? _localAudio;
+
+        /// <summary>Open editors (UI thread): the panic sweep and the player's one-editor-per-file
+        /// dedupe walk this, as WPF walked Application.Current.Windows.</summary>
+        private static readonly List<DeeperEditorWindow> s_open = new();
+        internal static IReadOnlyList<DeeperEditorWindow> OpenEditors => s_open;
         private bool _isPlaying;
 
         // Common
@@ -227,6 +229,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             // SystemDecorations="None" plus a hand-drawn bar, which would cost this resizable
             // window its native move/resize/maximize for a colour. Left native and untinted.
             Closed += (_, _) => { try { (Owner as Window)?.Activate(); } catch { } };
+            Opened += (_, _) => s_open.Add(this);
+            Closed += (_, _) => s_open.Remove(this);
 
             Loaded += DeeperEditorWindow_Loaded;
             KeyDown += DeeperEditorWindow_KeyDown;
@@ -664,6 +668,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
                 // A swap from a URL to a local file must blank the old page first, or its audio
                 // keeps playing behind the waveform this method is about to show.
                 StopBrowserPreview();
+                DisposeLocalAudio();
 
                 var source = _enhancement.MediaSource;
 
@@ -708,14 +713,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         ///
         /// <para><b>The fence crosses.</b> <c>WebHost.AllowNavigation</c> runs for every navigation
         /// the engine starts - the first hop and every redirect, link and script-driven hop after
-        /// it - which is what NavigationStarting was for. What it is pinned TO is weaker on that
-        /// first hop: <c>UrlSafety.HostMatches</c> and <c>DeeperConfig.PreviewHostAllowlist</c> are
-        /// both <c>internal</c> to CCP.Core and this head is not in Core's InternalsVisibleTo, so
-        /// the fence pins the engine to whatever host the project's own URL named. A shared
-        /// .ccpenh.json can therefore aim the preview at an https host WPF would have refused;
-        /// every hop after it is fenced, which is the leg WPF's pre-flight never saw. Copying the
-        /// allowlist into this head would be a second copy of a security rule, which is why the
-        /// sibling player refused it too.</para>
+        /// it - which is what NavigationStarting was for, and it applies the same rule
+        /// (<see cref="DeeperPreview.IsAllowedPreviewHost"/>).</para>
         ///
         /// <para><b>The profile does not.</b> WPF gave this preview its own
         /// <c>browser_data_deeper_editor</c> folder so a hostile page could not read the main
@@ -739,7 +738,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
                 // engine. Host only in the log - a signed media URL's query string must not land in
                 // crash.log, which is the same rule WebHost's own blocked-navigation line follows.
                 if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)
-                    || uri.Scheme != Uri.UriSchemeHttps)
+                    || !DeeperPreview.IsAllowedPreviewHost(uri))
                 {
                     Log.Warning("DeeperEditor: preview source refused ({Host})", uri?.Host ?? "unparseable");
                     ShowPlaceholder();
@@ -758,9 +757,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
 
                 // Assigned BEFORE Source: the gate is read at navigation time and a Source set
                 // first can start navigating before the predicate is in place.
-                var pinned = uri.Host;
-                BrowserPreview.AllowNavigation = u =>
-                    u.Scheme == Uri.UriSchemeHttps && DeeperPreview.HostsMatchIgnoringWww(u.Host, pinned);
+                BrowserPreview.AllowNavigation = DeeperPreview.IsAllowedPreviewHost;
                 BrowserPreview.Source = uri;
                 _browserNavigated = true;
                 _browserPollDisabled = false;
@@ -961,17 +958,72 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             _playheadTimer?.Start();
         }
 
-        /// <summary>ponytail: needs NAudio (WaveOutEvent + AudioFileReader) and the waveform peak
-        /// extractor. The canvas and its Path are here and <see cref="UpdateWaveformPath"/> is real,
-        /// so wiring peaks in later is a one-line assignment to <c>_waveformPeaks</c>.</summary>
-        private Task InitializeAudioAsync(string path)
+        /// <summary>WPF DeeperEditorWindow.xaml.cs:1189. Playback, duration, seek and end-of-clip
+        /// are real through <see cref="DeeperLocalAudio"/>. ponytail: the waveform peak extractor
+        /// (AudioWaveformCache) is not; wiring peaks in later is one assignment to
+        /// <c>_waveformPeaks</c>.</summary>
+        private async Task InitializeAudioAsync(string path)
         {
             BrowserPreview.IsVisible = false;
             VideoPreview.IsVisible = false;
             PreviewPlaceholder.IsVisible = false;
             WaveformCanvas.IsVisible = true;
-            Log.Debug("DeeperEditor: local audio preview unavailable on this head: {Path}", path);
-            return Task.CompletedTask;
+
+            IDeeperLocalAudio? audio = null;
+            try { audio = await DeeperLocalAudio.Open(path); }
+            catch (Exception ex) { Log.Warning(ex, "DeeperEditor: audio playback init failed"); }
+            if (audio == null) { Log.Debug("DeeperEditor: local audio unavailable: {Path}", path); return; }
+            // Swapped or closed while the parse ran: this clip is no longer the project's.
+            if (_playbackDisposed || _localAudio != null || !string.Equals(_enhancement.MediaSource, path, StringComparison.Ordinal))
+            {
+                audio.Dispose();
+                return;
+            }
+
+            _localAudio = audio;
+            audio.Ended += () => Dispatcher.UIThread.Post(() =>
+            {
+                if (_localAudio != audio) return;
+                _isPlaying = false;
+                _playheadTimer?.Stop();
+                _currentSeconds = 0;
+                TxtCurrentTime.Text = FormatTime(_currentSeconds);
+                UpdatePlayheadPosition();
+                BtnPlayPause.Content = "\u25b6";
+            });
+            _totalSeconds = audio.DurationSeconds;
+            TxtTotalTime.Text = FormatTime(_totalSeconds);
+            UpdateWaveformPath();
+            RebuildTimelineRuler();
+            RebuildRegionVisuals();
+            RebuildHapticVisuals();
+            RebuildEffectVisuals();
+            RebuildRuleVisuals();
+            UpdatePlayheadPosition();
+        }
+
+        private void DisposeLocalAudio()
+        {
+            var a = _localAudio;
+            _localAudio = null;
+            if (a == null) return;
+            _isPlaying = false;
+            BtnPlayPause.Content = "\u25b6";
+            a.Dispose();
+        }
+
+        /// <summary>Panic (P06): every open editor stops its local audio. WPF's KillAllAudio never
+        /// reached the editor's WaveOutEvent; a panic that leaves a clip playing is worse.</summary>
+        internal static void PauseAllForPanic()
+        {
+            foreach (var ed in s_open)
+            {
+                if (ed._localAudio == null || !ed._isPlaying) continue;
+                ed._localAudio.Pause();
+                ed._isPlaying = false;
+                ed._playheadTimer?.Stop();
+                ed.BtnPlayPause.Content = "\u25b6";
+            }
         }
 
         private void ShowPlaceholder()
@@ -1004,11 +1056,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             if (source.Contains('*')) return false;
             // Reject UNC and extended-length prefixes: a shared .ccpenh.json pointing at
             // \\attacker-smb\share\beacon would leak the user's NTLM hash on first access.
-            // ponytail: Core's UrlSafety.IsSafeLocalAbsolute is internal and CCP.Avalonia is not in
-            // its InternalsVisibleTo list, so the same two rejections are inlined here. Drop this
-            // block and call UrlSafety the moment the head is added to that attribute.
-            if (source.StartsWith("\\\\", StringComparison.Ordinal)) return false;   // UNC
-            if (source.StartsWith("\\\\?\\", StringComparison.Ordinal)) return false; // extended-length
+            if (!ConditioningControlPanel.Services.Deeper.UrlSafety.IsSafeLocalAbsolute(source)) return false;
             if (!IOPath.IsPathRooted(source)) return false;
             return File.Exists(source);
         }
@@ -1057,10 +1105,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         /// reads as having done nothing - which is what happened. Local VIDEO takes this branch
         /// too: it is a hosted media document, so the page owns the clock there as well.
         ///
-        /// <para>ponytail: LOCAL AUDIO has no decoder, so nothing on that branch can play. It is
-        /// refused rather than mimed: without a decoder <c>_totalSeconds</c> stays 0, the tick
-        /// below returns on its own, and flipping the glyph to ⏸ over silence is a control lying
-        /// about state. Same refusal covers a local video the machine has no web engine for.</para>
+        /// <para>Local audio drives <see cref="_localAudio"/> as WPF drove WaveOutEvent. With no
+        /// player (libvlc missing, unparseable file) a press is refused rather than mimed: a pause
+        /// glyph over silence is a control lying about state. Same refusal covers a local video the
+        /// machine has no web engine for.</para>
         /// </summary>
         private void BtnPlayPause_Click(object? sender, RoutedEventArgs e)
         {
@@ -1072,8 +1120,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             }
             // Nothing to play and no clock to run: leave the glyph alone. A press then reads as
             // having done nothing, which is what happened.
-            if (_totalSeconds <= 0) return;
+            if (_localAudio == null || _totalSeconds <= 0) return;
             _isPlaying = !_isPlaying;
+            if (_isPlaying) _localAudio.Play(); else _localAudio.Pause();
             BtnPlayPause.Content = _isPlaying ? "⏸" : "▶";
             if (_isPlaying) _playheadTimer?.Start(); else _playheadTimer?.Stop();
         }
@@ -1084,11 +1133,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             // runs whether or not we think anything is playing.
             if (_browserNavigated) { _ = PollBrowserTimeAsync(); return; }
             if (_isScrubbing) return;
-            if (!_isPlaying || _totalSeconds <= 0) return;
-            // ponytail: LOCAL AUDIO only now - video reaches the branch above. The WPF tick read
-            // AudioFileReader.CurrentTime. With no decoder, advance by the timer interval so the
-            // playhead, the readout and any time-driven redraw stay honest about elapsed time.
-            _currentSeconds = Math.Min(_totalSeconds, _currentSeconds + 0.08);
+            if (_localAudio == null) return;
+            // The pre-play duration can be a header estimate; re-lay the timeline only on a change.
+            var duration = _localAudio.DurationSeconds;
+            if (duration > 0 && Math.Abs(duration - _totalSeconds) > 0.05)
+            {
+                _totalSeconds = duration;
+                TxtTotalTime.Text = FormatTime(_totalSeconds);
+                RebuildTimelineRuler();
+                RebuildRegionVisuals();
+                RebuildHapticVisuals();
+                RebuildEffectVisuals();
+                RebuildRuleVisuals();
+            }
+            // WPF read AudioFileReader.CurrentTime here.
+            _currentSeconds = Math.Min(_totalSeconds, _localAudio.PositionSeconds);
             TxtCurrentTime.Text = FormatTime(_currentSeconds);
             UpdatePlayheadPosition();
         }
@@ -1104,9 +1163,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
                     CultureInfo.InvariantCulture, "l.currentTime={0:0.###};", _currentSeconds),
                     scrollIntoView: true));
             }
-            // ponytail: LOCAL AUDIO needs a decoder's seek - the WPF version pushed the new position
-            // to AudioFileReader.CurrentTime here. Local video seeks through the branch above,
-            // because it is a hosted media element like the remote one.
+            else if (_localAudio != null)
+            {
+                // WPF pushed the new position to AudioFileReader.CurrentTime.
+                try { _localAudio.PositionSeconds = _currentSeconds; }
+                catch (Exception ex) { Log.Debug(ex, "DeeperEditor: local audio seek failed"); }
+            }
             UpdatePlayheadPosition();
         }
 
@@ -2339,7 +2401,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
 
         /// <summary>EnhancementLibrary.LastDirectory: where the last save or open happened,
         /// falling back to the library folder.</summary>
-        private static string LastDirectory
+        internal static string LastDirectory
         {
             get
             {
@@ -2365,7 +2427,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             var dir = IOPath.GetDirectoryName(path);
             if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir!);
             File.WriteAllText(path, EnhancementSerializer.Save(e));
+            TouchRecent(path, dir);
+        }
 
+        /// <summary>EnhancementLibrary.TouchRecent (+ RememberDirectory when <paramref name="dir"/>
+        /// is given): EnhancementLibrary.Open records the opened file the same way.</summary>
+        internal static void TouchRecent(string path, string? dir = null)
+        {
             try
             {
                 var settings = CoreSettings.Current;
@@ -2692,6 +2760,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             try
             {
                 var enhancement = EnhancementSerializer.LoadFromFile(path);
+                TouchRecent(path);
                 TeardownPreview();
                 LoadEnhancement(enhancement, path);
                 _ = InitializePreviewAsync();
@@ -3104,12 +3173,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         /// <summary>WPF disposed MediaPlayer, Media, WaveOutEvent and AudioFileReader here. The
         /// video half needs nothing: <see cref="TeardownPreview"/> runs first and blanks the page,
         /// which is what releases a hosted media element.
-        /// ponytail: the audio half is still a decoder this head does not have.</summary>
+        /// The audio half is <see cref="DisposeLocalAudio"/>.</summary>
         private void DisposePlayback()
         {
+            _playbackDisposed = true;
+            DisposeLocalAudio();
             _isPlaying = false;
             _waveformPeaks = null;
         }
+
+        private bool _playbackDisposed;
 
         // ---------------------------------------------------------------------------------
         // Preview fullscreen / audio-player surface
@@ -3129,10 +3202,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         // it - degraded, but not a lie: no control here claims fullscreen is on.
         //
         // Two members that were stubbed for a WebView2 reason are GONE rather than stubbed, because
-        // the gate in InitializeBrowserAsync now does their job: IsAllowedPreviewHost (a static
-        // that returned false and had no caller) and OnBrowserNavigationStarting. The half of
-        // IsAllowedPreviewHost that is still missing is the first-hop allowlist, and that is a Core
-        // visibility change, not a member of this file.
+        // the gate in InitializeBrowserAsync now does their job (DeeperPreview.IsAllowedPreviewHost).
         // ---------------------------------------------------------------------------------
 
         // The preview's own state. _fsTransitionInFlight and _isPreviewFullscreen are read by
@@ -3210,12 +3280,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         // and an empty method captioned "needs LibVLCSharp" is advice to build a second time
         // source. End-of-media needs no member at all: an HTML media element that has ended seeks
         // itself back to 0 on the next play(), which is exactly what WPF's Stop()+seek existed to
-        // fake. Only the audio twin survives, because the audio branch is still unported.
-
-        /// <summary>ponytail: needs NAudio WaveOutEvent.PlaybackStopped - reset the play/pause
-        /// glyph at the end of a local AUDIO file. Video no longer needs a twin of this: the
-        /// poll reads <c>paused</c> off the media element.</summary>
-        private void OnWaveOutPlaybackStopped(object? sender, EventArgs args) { }
+        // fake. The audio twin (WaveOutEvent.PlaybackStopped) is IDeeperLocalAudio.Ended, handled
+        // in InitializeAudioAsync.
     }
 
     /// <summary>
@@ -3228,10 +3294,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
     /// Nothing about it is editor-specific - the next layer that touches Views/Dialogs/ should
     /// move it there and point the two callers at the new namespace.</para>
     ///
-    /// <para>The Discard label is a hardcoded English constant: CCP.Core's language files carry
-    /// <c>btn_save</c> and <c>btn_cancel</c> but no <c>btn_discard</c>, and adding one is a Core
-    /// change this layer does not own. WPF's third button was localized by Windows itself, so this
-    /// is a real regression for the eight non-English languages - one JSON key wide.</para>
+    /// <para>All three labels are loc keys (<c>btn_save</c>, <c>btn_discard</c>, <c>btn_cancel</c>):
+    /// WPF's were localized by Windows itself. Also used by CompanionPromptEditorDialog's X prompt.</para>
     ///
     /// Built in code rather than XAML for the same ownership reason (a .axaml would be a second
     /// new file). Chrome copied from MessageDialog.axaml: DarkerBgBrush window, PinkBrush 18-bold
@@ -3241,9 +3305,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
     internal sealed class UnsavedChangesDialog : Window
     {
         internal enum Choice { Save, Discard, Cancel }
-
-        // ponytail: hardcoded until CCP.Core's language files gain a btn_discard key.
-        private const string DiscardLabel = "Discard";
 
         /// <summary>Render/design constructor, on the real close-path strings so the PNG proves
         /// the localization lookups as well as the layout. Internal, like MessageDialog's.</summary>
@@ -3264,7 +3325,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
 
             var save = MakeButton(Loc.Get("btn_save"), "ActionButton", Choice.Save);
             save.IsDefault = true;
-            var discard = MakeButton(DiscardLabel, "SecondaryButton", Choice.Discard);
+            var discard = MakeButton(Loc.Get("btn_discard"), "SecondaryButton", Choice.Discard);
             discard.Margin = new Thickness(0, 0, 10, 0);
             var cancel = MakeButton(Loc.Get("btn_cancel"), "SecondaryButton", Choice.Cancel);
             cancel.IsCancel = true;

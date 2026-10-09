@@ -1,6 +1,6 @@
 // PORTED-IN-PART from ConditioningControlPanel/MainWindow/MainWindow.EnhancementsFx.cs (256 lines).
 //
-// ONE of this file's three effects is live here: the hero ambient. EnhancementsTabView.axaml
+// All three of this file's effects are live; the hero ambient is here. EnhancementsTabView.axaml
 // already carries the <fx:AmbientFxCanvas x:Name="SkillTreeFx"/> the WPF tab has, and nothing was
 // starting it - the tree drew on bare background paint. EnsureEnhancementsFx composes it with the
 // WPF tuning (DustField at 0.55) and registers it with RegisterTabFx, so it parks on the way out
@@ -10,31 +10,15 @@
 //
 // The canvas gates itself on the performance tier, window activation and its own visibility, so
 // none of WPF's Activated/Deactivated/StateChanged subscriptions are needed for it - that whole
-// funnel existed for the owned-node AnimationClock, which is not here. See below.
+// funnel existed for the owned-node AnimationClock, which the tab now gates itself. See below.
 //
-// The two micro effects stay notes, because both attach to nodes that do not exist on this head:
-//
-//   * the owned-node breath (a single AnimationClock shared by every owned node's
-//     DropShadowEffect, 0.38<->0.72 over 3.8s). Its enrolment point is RegisterOwnedNodeGlow,
-//     called from MainWindow.Enhancements.cs's DrawSkillTree. EnhancementsTabView now draws the
-//     real Core tree (owned nodes included) but as static nodes with no DropShadowEffect, so
-//     there is still no glow to enrol. The Avalonia twin is one Animation with IterationCount.Infinite and
-//     PlaybackDirection.Alternate over DropShadowEffect.OpacityProperty, plus the window
-//     Activated/Deactivated/PropertyChanged(WindowState) hooks WPF used to park it.
-//   * the node hover pop (1.25 over 250ms in, 200ms out). Lives on the node visual and belongs to
-//     whoever draws it, i.e. EnhancementsTabView, which this layer does not own.
-//
-// Also not here: EnhancementsAmbientAllowed / EnhancementsFxOnScreen. Both are re-expressed
-// inside AmbientFxCanvas.Evaluate() for the one loop that survived; a second copy of the gate
-// with no second consumer would be a lie about what it gates.
-//
-// Members of the WPF file still dropped (12):
-//   private const double OwnedNodeGlowMinOpacity / MaxOpacity / GlowSeconds
-//   private const double SkillNodeHoverScale, private const int SkillNodeHoverInMs / OutMs
-//   private readonly List<DropShadowEffect> _ownedNodeGlows
-//   private AnimationClock? _ownedNodeGlowClock
-//   private void ApplyEnhancementsFxLoops / ResetOwnedNodeGlows / RegisterOwnedNodeGlow /
-//   ApplyOwnedNodeBreath / StopOwnedNodeGlowClock / ApplySkillNodeHover
+// The two micro effects live on the tab that draws the nodes (EnhancementsTabView.axaml.cs):
+// the owned-node breath (one 24fps clock for every owned glow, 0.38<->0.72 over 3.8s, also
+// drifting the two CreateAnimatedSkillTreeBrush gradients) parks when the tab is hidden or the
+// window is inactive/minimised and rests at the static glow under Off/Reduced or the Performance
+// tier, as ApplyOwnedNodeBreath; the node hover pop (1.25, 250ms in / 200ms out, z-lift) is a
+// TransformOperationsTransition, snapped when MotionLevel is Off, as ApplySkillNodeHover.
+// Deviation: Avalonia's BackEaseOut has a fixed amplitude, WPF's pop used 0.4.
 
 using System;
 using Avalonia.Controls;

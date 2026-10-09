@@ -2,12 +2,11 @@
 // the dashboard Today card's decoration: banner art, accent-derived fog and sheen, sparkles, an
 // ambient loop and a hover parallax. Two blockers, only one of them a missing service.
 //
-// 1. THE ENTRY POINT NAMES TYPES THIS HEAD DOES NOT HAVE.
-//    ApplyProgramBannerArt(ProgramDefinition?, Brush?) is the only door in, and ProgramDefinition
-//    is ConditioningControlPanel/Models/Program/ProgramDefinition.cs - it did NOT move to Core. So
-//    did its art resolver: ResolveProgramBannerArt is one line, `ProgramArt.Banner(program)`, and
-//    ProgramArt (ConditioningControlPanel/Services/Program/ProgramArt.cs) returns a WPF ImageSource
-//    from a pack:// URI. There is no caller here either - the card is refreshed by
+// 1. NO CALLER: THE CARD SHOWS THE ACTIVE ENROLLMENT, AND THIS HEAD HAS NONE.
+//    ApplyProgramBannerArt(ProgramDefinition?, Brush?) is the only door in. ProgramDefinition is in
+//    Core, and so is the art's file chain (Services/Program/ProgramArtPaths.Banner, resolved here by
+//    Helpers.ModArt.FirstOf - the browse cards already use it). What is missing is a writing ProgramService on
+//    this head (it is load-only until programs slice 3) (docs/avalonia-parity.md row shell-programs-tab): the card is refreshed by
 //    MainWindow.ProgramsTab / .DashboardFx, also stubs. ProgramBannerAccentColor's fallback,
 //    FxTheme.GlowColor (ConditioningControlPanel/Services/FxTheme.cs), has an equivalent here in
 //    the FxGlowColor resource of CCP.Avalonia/Theme/Colors.xaml.

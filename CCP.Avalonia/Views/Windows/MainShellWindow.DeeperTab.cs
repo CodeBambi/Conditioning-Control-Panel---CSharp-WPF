@@ -5,9 +5,8 @@
 // WHAT IS REAL HERE: opening the Deeper tab. BtnDeeper_Click navigates, retires the rail pulse
 // flag (HasSeenDeeperTab, CCP.Core/Models/AppSettings.cs:7929) through CoreSettings, and shows or
 // hides the welcome card from HasSeenDeeperWelcome (:7935). DismissDeeperWelcomeCard writes the
-// other flag and folds the card. NOTHING CALLS DismissDeeperWelcomeCard YET - its three WPF
-// callers (BtnDeeperWelcomeTour / Demo / Dismiss) relay from DeeperTabView.axaml.cs, which this
-// layer does not own; it is internal so that relay needs no Core change when it lands.
+// other flag and folds the card; the card's tour / demo / dismiss buttons relay to it from
+// DeeperTabView.axaml.cs through MainShellWindow.DeeperHub.cs.
 //
 // THE x:NAME HAZARD APPLIES TWICE HERE, and both hops go through FindControl for that reason.
 // This window loads with AvaloniaXamlLoader.Load(this), so "DeeperTab" is reached with Named<T>.
@@ -21,15 +20,12 @@
 // guards its own programmatic sets. It is not this partial's job any more; a second copy here
 // would be a second writer for one setting.
 //
+// LIBRARY ACTIONS (open, play, delete, folder, demo) are in MainShellWindow.DeeperHub.cs.
 // STILL OUT, and why:
-//   The library, the player and the editor - OpenDeeperFile, OpenInDeeperPlayer,
-//   OpenDeeperEditorFromPlayer, OpenInDeeperEditorForMedia, RefreshDeeperLibraryUI,
-//   OnDeeperLibraryChanged, BtnDeeperImport_Click, ImportEnhancementFiles, DeleteDeeperLibraryEntry,
-//   OpenDeeperBundledDemo, HandlePendingFileOpen. All of them go through App.EnhancementLibrary
-//   (ConditioningControlPanel/Services/Deeper/EnhancementLibrary.cs). The Deeper windows on this
-//   head reach a library of their own; the SHELL has no reference to one and there is no seam.
-//   InitializeDeeperHub / ReloadDeeperLibraryFromDisk are stubs in MainShellWindow.DeeperHub.cs,
-//   which this layer does not own, so BtnDeeper_Click leaves that pair out rather than half-scan.
+//   OpenInDeeperPlayer, OpenDeeperEditorFromPlayer, OpenInDeeperEditorForMedia,
+//   HandlePendingFileOpen (file-association entry points), OnDeeperLibraryChanged (no watcher),
+//   BtnDeeperImport_Click / ImportEnhancementFiles (EnhancementLibrary.FindDuplicateOf /
+//   PromoteToLibrary are WPF-only).
 //   The browser half - OnDeeperBrowserBound/Unbound, RefreshBrowserWebcamButton,
 //   BtnWebcamTracking_Click, MaybePromptBrowserWebcamForEnhancement, OnBrowserEnhanceMatchChanged,
 //   ChkForceShowBambiCloud_Changed, ToggleEnhanceIfPossible_Changed. WebView2 plus WebcamTrackingState.
@@ -44,8 +40,7 @@
 //   (U3); the lookup -> toast -> picker -> download -> player chain is at the bottom of this file.)
 //   IsImportableEnhancementPath is pure and would compile, and is held back with
 //   ImportEnhancementFiles, its only caller.
-//   SwitchToDeeperLibraryTab, MaybePromptMandatoryVideoEnhancement, BtnDeeperOpenPlayer_Click,
-//   BtnDeeperOpenLibraryFolder_Click - all relays into the above.
+//   MaybePromptMandatoryVideoEnhancement (with its "Don't ask again" fold).
 //
 // NOT BLOCKED, RESTORED: BtnDeeperNewEnhancement_Click. It used to be listed on the line above with
 // the other library relays and that was wrong - the only thing it takes from EnhancementLibrary is
@@ -92,10 +87,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             }
 
             UpdateDeeperWelcomeCardVisibility();
-            // ponytail: WPF also calls InitializeDeeperHub() + ReloadDeeperLibraryFromDisk() here.
-            // Both are stubs in MainShellWindow.DeeperHub.cs (App.EnhancementLibrary), not owned
-            // by this layer - a half-scan that filled the list from nothing would read as an empty
-            // library rather than an unported one.
+            // The rescan rides ShowTab's "deeper" case (SwitchTabFx), as on WPF.
         }
 
         /// <summary>
@@ -136,9 +128,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// (Views/Deeper/DeeperEditorWindow.axaml.cs and its inlined file-ops region).
         ///
         /// <para>The "deeper_new" bark fires first, where WPF fires it, through
-        /// <see cref="CoreBark"/>. Still dropped: the editor's <c>Closed</c> handler, which
-        /// refreshed the hub list - still a stub in MainShellWindow.DeeperHub.cs, so there is no
-        /// list to refresh yet.</para>
+        /// <see cref="CoreBark"/>. The editor goes through OpenDeeperEditor, whose Closed handler
+        /// refreshes the hub list as WPF's does.</para>
         /// </summary>
         internal async void BtnDeeperNewEnhancement_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
         {
@@ -160,7 +151,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     MediaType = dialog.SelectedMediaType,
                     MediaSource = dialog.SelectedSource,
                 };
-                new Views.Deeper.DeeperEditorWindow(enhancement, null).Show(this);
+                OpenDeeperEditor(enhancement, null);   // closing it refreshes the hub list
             }
             catch (Exception ex)
             {
@@ -283,14 +274,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         /// <summary>WPF's opener (MainWindow.xaml.cs:674): a downloaded enhancement auto-plays in
         /// the player, tagged "catalogue". False on a parse failure -> the OpenError toast.</summary>
-        // ponytail: a new player window per open; WPF's ShowOrActivate reuses one. Add a
-        // single-instance guard when the player gets one on this head.
         private bool OpenCatalogueEnhancement(string path)
         {
             try
             {
                 var enhancement = ConditioningControlPanel.Services.Deeper.EnhancementSerializer.LoadFromFile(path);
-                new Views.Deeper.EnhancementPlayerWindow(enhancement, "catalogue").Show(this);
+                ShowOrActivateDeeperPlayer().LoadEnhancementFromMemory(enhancement, "catalogue");
                 return true;
             }
             catch (Exception ex)

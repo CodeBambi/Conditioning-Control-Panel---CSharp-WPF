@@ -52,7 +52,7 @@ here record where and why the port chose something, and who advised.
 | 2026-09-29 | Lock-card voice D4: consent and model delivery | download the model; drop-in only | As WPF: voice needs `CoreSpeech.IsAvailable`, `MicConsentGiven` and the setting; audio stays in memory. No download (WPF has none). `SpeechEngine.DefaultModelRoots` searches the install folder, then `CorePaths.UserData/Models/vosk` (AppImage/Flatpak folders are read-only); WPF keeps searching only its install folder. | oracle-deep (oracle-lockcard-voice) |
 | 2026-09-29 | First-run wizard "Choose a content folder": defer the picker until the wizard closes (WPF FirstRunWizard.xaml.cs:1175) or open it at once? | defer (WPF); open at once | Open at once, owned by the wizard (user-reported: the deferred click looked like it did nothing). WPF deferred only to avoid a modal-on-modal Win32 folder browser; the portal picker is not one. Same code as the shell's picker (`MainShellWindow.PickAssetsFolder`: #1053 guard, settings write, images/videos, confirmation); the button then shows the chosen folder and the post-close pick is gone. Deliberate, user-requested improvement; WPF unchanged. Proof: `FirstRunFolderPickerTests`, evidence/avalonia-port/firstrun-folder-picker. | supervisor (user report) |
 | 2026-09-29 | App-level 18+ gate (Welcomed but never accepted): the WPF body says "By clicking \"Yes\"" over Yes/No buttons; this head's MessageDialog.ConfirmAsync has OK/Cancel | keep "Yes" verbatim; change the word to "OK" | "OK", so the sentence names the button actually on screen; the rest of the body, the title and the default-to-Cancel are verbatim (`MainShellWindow.AgeGateBody`, `FirstRunGateDeadClickTests`). | supervisor review |
-| 2026-09-29 | Default media folder on Linux (CustomAssetsPath empty) | UserData/assets (WPF); `~/ccp media` | Linux: `~/ccp media` (images/, videos/, audio/, wallpapers/ created on first use via `CorePaths.EnsureCustomAssetsDirectories`); both pickers start there. A profile whose UserData/assets already holds files keeps it (logged; nothing moved). Windows keeps UserData/assets. The #1053 guard accepts it. Proof: `LinuxMediaDefaultTests`. | user |
+| 2026-09-29 | Default media folder on Linux (CustomAssetsPath empty) | UserData/assets (WPF); `~/ccp media` | Linux: `~/ccp media` (images/, videos/, audio/, wallpapers/ created on first use via `CorePaths.EnsureCustomAssetsDirectories`); both pickers start there. A profile whose UserData/assets already holds files keeps it (logged; nothing moved); so does a home where `~/ccp media` cannot be created (read-only/confined). Windows keeps UserData/assets. The #1053 guard accepts it. Proof: `LinuxMediaDefaultTests`. | user |
 | 2026-09-29 | Avatar tube placement units: WPF saved AvatarTubeLeft/Top in DIPs; Avalonia `Window.Position` is physical px | store px (new key/version); keep WPF's DIPs and convert | Keep DIPs, no new key: save `px / DesktopScaling`, restore `dip * DesktopScaling` then clamp half-on-screen (WPF ClampAvatarPosition), so a WPF-written file reads unchanged. Docking itself is px end to end, like WPF's GetWindowRect route. Restore waits for the real scaling (KWin maps first at DesktopScaling 1; `ScalingChanged` redoes it). Mixed-DPI monitors convert with the tube's current scaling, not the target monitor's. AvatarTubeScale is neither read nor written (no Ctrl+scroll zoom yet). | worker |
 | 2026-09-29 | Shell Viewbox stretch when the window aspect differs from the 1585:901 design canvas | Fill always (WPF); Uniform always; Fill within a tolerance band | Shell Viewbox: Fill (WPF parity) while the window's aspect is within ±15% of the 1585:901 canvas; outside that, Uniform, top-aligned and centred horizontally, with bands in DarkerBgBrush. Reason: a user-reported portrait maximize (1113×1979 logical at 1.79 scaling) stretched everything about 2.2× vertically. WPF has the same defect; this is a deliberate improvement. Every landscape screen from 16:10 to 16:9 is unchanged from WPF. Proof: `ShellResizeMaximizeTests`. | oracle-deep |
 | 2026-09-29 | Avalonia sync body | full WPF body; loaded-or-known only | Keys absent unless loaded or known. Starts as `unified_id`/`xp`/`level`/`descent_epoch`/`achievements`; fields are added per ported feature, each citing the server's merge rule. Shape is Core `SyncBody` (WPF's exact order; WPF sets `Field.All`, bytes unchanged, `SyncBodyGoldenTests`). See ~/ccp-port/briefs/oracle-sync-push.md | oracle-deep |
@@ -637,3 +637,83 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
   calls `StopSpawnedServer` on exit, which stops only a server this app spawned.
 - Tests: `Tests/CCP.Avalonia.Tests/LocalAiSetupWizardTests.cs`, `Tests/CCP.Core.Tests/OllamaSetupServiceTests.cs`
   (fake binary and loopback API; no real ollama, pull or network).
+## 2026-10-09: Cosmetics ride every sync; an empty loadout goes only as the explicit clear (avalonia-port/audit-fix-ui, #1914)
+- Question: WPF `ProfileSyncService.BuildCosmeticsPayload` sends the sanitized settings loadout on every sync, and after a
+  load it sends an empty one too. This head kept a Customize save only in memory, so a logout, a cooldown or backoff
+  followed by exit, or a restart could lose it. Which empty-loadout rule should the fix use?
+- Options: (A) match WPF and send the empty loadout after a load; (B) send any non-empty loadout on every push, and an
+  empty one only while an in-memory `PendingCosmeticsClear` is set (an empty Customize save).
+- Chosen: B, advised by the supervisor (P44). Reason: WPF sends the empty loadout safely only because it adopts the cloud
+  loadout first (`AdoptCloudCosmetics`). This head does not adopt, so with A a fresh install would wipe the account's
+  cosmetics. Like WPF's, the flag is not persisted. Logout (`SyncPush.Reset`) drops it so it cannot reach the next account.
+- Tests: `Tests/CCP.Avalonia.Tests/ProfileCosmeticsSyncTests.cs` and the golden body in `SyncPushTests.FreshLinuxInstall_*`
+  (fake wire only). Pending owner confirmation of the sync contract (`server-sync-contract` row).
+## 2026-10-09: Program enrollment stays disabled until the run panel exists (avalonia-port/rows-program-enroll)
+- Question: the ProgramEnrollDialog is fully ported; should the shell Enroll button now call ProgramService.CanEnroll ->
+  dialog -> Enroll (writes programs.json, starts the day clock and nudges) although Avalonia has no run panel or
+  session runner yet?
+- Option A (chosen): no persistence change. Test the dialog headless, keep the row stub listing the caller, the run panel
+  and the session runner; the Enroll caller lands together with the run panel, never without it.
+- Option B (rejected): wire Enroll now. The user would hold a running program with no way to complete its days, so it
+  would lapse.
+- Chose A on the supervisor's advice (P44). Reason: no lapsing enrollments.
+- Tests: `Tests/CCP.Avalonia.Tests/ProgramEnrollDialogTests.cs`.
+## 2026-10-09: a panic drops a getbacktome follow-up's late reply commands on both heads (avalonia-port/audit-fix-safety)
+- Question (audit #1987): the follow-up's AI reply runs its own effect commands inside `GetBambiReplyExAsync`
+  (`CompanionBrain.CommandExecutor`), before `GetBackToMeCommand` checks its cancellation, so a panic during the round
+  trip still fired them. Shared Core: WPF had the same gap.
+- Option A (chosen): Core fix. `GetBackToMeCommand` sets an `AsyncLocal` ambient token (its own follow-up token, cancelled
+  by `AiCommandService.CancelAll`) around its AI call; `AiCommandService.ExecuteCommand` drops, logged and before any
+  side effect, every command while that token is cancelled. Chat replies and user-triggered commands never see the token.
+  Option B (rejected): no code change; correct the progress-doc claim that a late reply is dropped.
+- Chose A on the supervisor's advice (P44). WPF behaviour changes for safety only: after a panic the late follow-up
+  reply's effects no longer fire. Tests: `Tests/CCP.Core.Tests/AiCommandGateTests.cs` (panic drops, uncancelled runs,
+  chat reply runs).
+
+## 2026-10-09: window-wide drop, single media file offers only "Add to Asset Library" (avalonia-port/rows-session-io)
+- Question: WPF `ImportDroppedFilesAsync` (MainWindow.SessionIO.cs:1470) asks Play / Edit / Add-to-Library for a single
+  playable file, and imports enhancements into `App.EnhancementLibrary`. This head has no Deeper player, editor or
+  enhancement library yet.
+- Option A (chosen): the same prompt with the library choice only (`dlg_media_drop_library` / `dlg_media_drop_cancel`),
+  then Core `AssetImportService` (copies, never moves); an enhancement drop shows `deeper_import_library_not_ready`,
+  WPF's own string for a missing library. Option B (rejected): import media without asking. Option C (rejected): ignore
+  media and enhancement drops.
+- Chose A on the supervisor's advice (P44). No file format changes; WPF has no Lockdown refusal on drops, so none is
+  added. Play/Edit stay missing until the Deeper player/editor rows land. Tests: `Tests/CCP.Avalonia.Tests/WindowDropTests.cs`.
+## 2026-10-09: Z5 privacy card shows WPF's "older pipeline" band whenever awareness is on (avalonia-port/rows-awareness-privacy)
+- Question: the v2 observer/ledger (`AwarenessObserver`, `AwarenessLive`, `ActivityLedger`) is not on this head, so WPF's own
+  rule (`IsLegacyPipeline = on && !AwarenessObserver.IsEnabled`) puts the card in its legacy state whenever awareness is on.
+  The band says incognito, the deny list and page titles are not protected. Here page titles do reach the AI (true), but the
+  deny list and incognito drop ARE enforced by `WindowAwarenessService.PassesPrivacyRules`, so 2 of 3 claims over-warn.
+- Option A (chosen): show the WPF band verbatim. Over-warning is the safe direction; no new strings.
+- Option B: head-specific copy in 9 languages. Option C: enforce the title allow list on the legacy path (behaviour change).
+- Chose A on the supervisor's advice (P44). Nothing the card claims as protected is unenforced; the wire reads "not reported",
+  the JSON stays empty, known apps stay empty (no ledger). Wipe deletes `awareness_ledger.json` + `.tmp` only (the legacy poll
+  keeps no history beyond the window in front). Test `Tests/CCP.Avalonia.Tests/AwarenessPrivacyCardTests.cs`.
+- Follow-up: once the v2 observer is ported the band hides as on WPF, and B or C can be revisited then.
+
+## 2026-10-09: Linux reads programs.json load-only before the run panel exists (avalonia-port/programs-run-1)
+- Question (programs CHECKPOINT A, ~/ccp-port/briefs/programs-run-plan.md): slice 1 is the first time the Linux head
+  touches `<userdata>/programs.json`, a file it may share with the WPF head, while it still has no run panel and no
+  session runner. May it read it, write it, and run the startup repair/rollover (which can lapse a run)?
+- Option (a) (chosen): load-only and read-only. `ProgramService.CreateReadOnly()` (Core) loads the file (and the same
+  `.tmp` recovery as WPF, without moving the temp), skips RepairSpuriousLapse and EvaluateRollover, starts no timers and
+  never writes (WriteState returns before the temp; the dirty generation stays unsaved). WPF's parameterless ctor is
+  unchanged. `CoreQuests.TrackProgramVerifierProvider` stays unseeded (it mutates); SessionFeatureLock, Marquee nudge,
+  ProgramBanner, Chaster program_done and the Settings Today card stay unwired.
+  Option (b) (rejected): load and save. `ProgramState` has no `JsonExtensionData`, so an older Linux build that loads
+  and saves would silently drop fields a newer WPF build wrote; that rules out (b) for a shared profile.
+  Option (c) (rejected): run the startup repair/rollover. (c) can lapse a run started on WPF, because Linux cannot
+  complete its days. Option (d) (rejected): do not construct it until slice 3. (d) is safe, but it leaves slice 2's
+  read-only view with nothing to load and nothing to test against. Rationale for (a): every path that changes state
+  ends in `Save()` (ctor repair :561/:585, rollover :685/:709/:728, `TrackVerifier` :1094, nudge :1524, `Dispose`
+  :1718), and `LoadState` also writes (recovering a leftover `.tmp` it `File.Move`s it over `programs.json`, ~:1593).
+  Risk carried to slice 2: without rollover the loaded state can be days stale, so the run view must not present
+  `Today` as current, or must compute the date for display only without changing state. Also: a cloud sync can
+  replace the file while Linux is running; read-only makes that harmless here, but it matters for slice 3.
+- Chose (a) on oracle-deep's advice via the supervisor (P44). Checkpoint B must decide JsonExtensionData vs a version
+  lock for schema skew before this head writes. Reviewer checks: WPF path byte-identical (`public ProgramService()`
+  chains to the same path, readOnly false); no write/move under readOnly; startup uses CreateReadOnly + Dispose.
+  Tests: `Tests/CCP.Core.Tests/ProgramServiceReadOnlyTests.cs` (WPF-shape fixture byte round-trip under
+  TZ=Europe/Berlin; no write on Save/Dispose; temp recovery untouched; corrupt file untouched; no lapse after 10 days; startup lapse audit skipped),
+  `Tests/CCP.Avalonia.Tests/ProgramServiceStartupTests.cs`.

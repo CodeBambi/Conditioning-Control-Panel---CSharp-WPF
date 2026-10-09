@@ -61,6 +61,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             BtnWebcamDebugQuickRecal.Click += BtnWebcamDebugQuickRecal_Click;
             BtnWebcamDebugCalibrate.Click += BtnWebcamDebugCalibrate_Click;
             BtnWebcamDebugTrackerTest.Click += BtnWebcamDebugTrackerTest_Click;
+            CmbWebcamDevice.SelectionChanged += CmbWebcamDevice_SelectionChanged;
+            BtnWebcamDeviceRefresh.Click += BtnWebcamDeviceRefresh_Click;
 
             SyncFromSettings();
             PopulateMicDevices();
@@ -76,6 +78,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             // hook, so the mic list is re-enumerated here too.
             SyncFromSettings();
             PopulateMicDevices();
+            PopulateWebcamDevices();   // WPF OnSectionShown -> RefreshDeviceSettingsLists
             _lockdown = LockdownService.Current;
             if (_lockdown != null) { _lockdown.LockdownActivated += OnLockdownChanged; _lockdown.LockdownDeactivated += OnLockdownChanged; }
             ApplyLockdownHold();
@@ -97,7 +100,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
         }
 
         // A cloud restore or a factory reset swaps the instance; repaint from it, on the UI thread.
-        private void OnCurrentReplaced() => Dispatcher.UIThread.Post(SyncFromSettings);
+        private void OnCurrentReplaced() => Dispatcher.UIThread.Post(() => { SyncFromSettings(); PopulateWebcamDevices(); });
 
         // =====================================================================================
         //  seed
@@ -242,8 +245,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
         /// Platform/WebcamTracker). Privacy info, Start tracking and Revoke are live.
         ///
         /// Quick Recal and Tracker Test are live over the tracker's gaze feed.
-        /// <para>ponytail: the device/monitor combos and the debug cursor stay DISABLED with a
-        /// stated reason: device enumeration and the cursor overlay are not ported. The status pill stays
+        /// The camera picker is live over <see cref="Platform.V4l2Cameras"/>.
+        /// <para>ponytail: the monitor combo and the debug cursor stay DISABLED with a
+        /// stated reason: calibration follows its own window's screen and the cursor overlay is not ported. The status pill stays
         /// at its <c>rf_webcam_stopped</c> literal for the same reason (no OnTrackingStateChanged).</para>
         /// </summary>
         private void RefreshWebcamAvailability()
@@ -255,15 +259,66 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             BtnWebcamDebugQuickRecal.IsEnabled = has;
             BtnWebcamDebugTrackerTest.IsEnabled = has;
             BtnWebcamDebugCalibrate.IsEnabled = has;
-            foreach (var c in new Control[] { CmbWebcamDevice, BtnWebcamDeviceRefresh, CmbWebcamMonitor, ChkWebcamDebugCursor })
+            CmbWebcamDevice.IsEnabled = has;
+            BtnWebcamDeviceRefresh.IsEnabled = has;
+            foreach (var c in new Control[] { CmbWebcamMonitor, ChkWebcamDebugCursor })
             {
                 c.IsEnabled = false;   // IsEnabled only - never IsChecked, which would fire the handler
                 ToolTip.SetShowOnDisabled(c, true);
-                ToolTip.SetTip(c, "Not available on this build yet (needs device selection or the gaze cursor overlay).");
+                ToolTip.SetTip(c, "Not available on this build yet (needs monitor selection or the gaze cursor overlay).");
             }
             if (!has)
                 AppendWebcamDebugLog("No webcam tracking engine on this build — camera controls are unavailable.");
             RefreshWebcamStartLabel();
+        }
+
+        private bool _webcamDevicePopulating;   // Items.Clear()/SelectedItem raise SelectionChanged
+
+        /// <summary>WPF PopulateWebcamCombo (MainWindow.LabTab.cs:1372), over sysfs instead of DirectShow.
+        /// Selection matches the saved /dev/videoN number, since V4L2 numbers are not contiguous.</summary>
+        private int PopulateWebcamDevices()
+        {
+            var devices = Platform.V4l2Cameras.Enumerate();
+            _webcamDevicePopulating = true;
+            try
+            {
+                CmbWebcamDevice.Items.Clear();
+                if (devices.Count == 0)
+                {
+                    CmbWebcamDevice.Items.Add(new ComboBoxItem { Content = "(no cameras detected)", Tag = -1, IsEnabled = false });
+                    CmbWebcamDevice.SelectedIndex = 0;
+                    return 0;
+                }
+                int saved = CoreSettings.Current.WebcamDeviceIndex, target = 0;
+                for (int i = 0; i < devices.Count; i++)
+                {
+                    CmbWebcamDevice.Items.Add(new ComboBoxItem { Content = $"[{devices[i].Index}] {devices[i].Name}", Tag = devices[i].Index });
+                    if (devices[i].Index == saved) target = i;
+                }
+                CmbWebcamDevice.SelectedIndex = target;
+                return devices.Count;
+            }
+            finally { _webcamDevicePopulating = false; }
+        }
+
+        /// <summary>WPF CmbWebcamDevice_SelectionChanged (MainWindow.LabTab.cs:1410), log line verbatim.</summary>
+        private void CmbWebcamDevice_SelectionChanged(object? sender, SelectionChangedEventArgs e)
+        {
+            if (_webcamDevicePopulating) return;
+            if (CmbWebcamDevice.SelectedItem is not ComboBoxItem item || item.Tag is not int idx || idx < 0) return;
+            var s = CoreSettings.Current;
+            if (s.WebcamDeviceIndex == idx) return;
+            s.WebcamDeviceIndex = idx;
+            s.WebcamDeviceName = item.Content?.ToString() ?? "";
+            CoreSettings.Save();
+            AppendWebcamDebugLog($"Camera set to {item.Content}. {(Platform.WebcamTracker.Instance.IsRunning ? "Stop and Start tracking to apply." : "Will be used on next Start.")}");
+        }
+
+        /// <summary>WPF BtnWebcamDeviceRefresh_Click (MainWindow.LabTab.cs:1427): counts real devices, not items (#291).</summary>
+        private void BtnWebcamDeviceRefresh_Click(object? sender, RoutedEventArgs e)
+        {
+            int found = PopulateWebcamDevices();
+            AppendWebcamDebugLog(found == 0 ? "Re-scanned cameras: none detected." : $"Re-scanned cameras: {found} found.");
         }
 
         private void RefreshWebcamStartLabel()
@@ -580,6 +635,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             _loading = false;
         });
 
+        private bool _capturingPanicKey;
+
         /// <summary>
         /// WPF BtnPanicKey_Click (MainWindow.UiUpdates.cs:2440) + the capture branch of
         /// OnGlobalKeyPressed (MainWindow.xaml.cs:916): no dialog, the button reads "Press any
@@ -590,7 +647,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
         /// </summary>
         private void BtnPanicKey_Click(object? sender, RoutedEventArgs e)
         {
-            if (TopLevel.GetTopLevel(this) is not { } top) return;
+            // WPF's click only sets _isCapturingPanicKey, so a second click is a no-op; here it
+            // would attach a second key handler that rebinds the key again on the NEXT press.
+            if (_capturingPanicKey || TopLevel.GetTopLevel(this) is not { } top) return;
+            _capturingPanicKey = true;
             MainShellWindow.CapturingPanicKey = true;
             SetButtonLabel(BtnPanicKey, "Press any key...");
             top.AddHandler(KeyDownEvent, OnCaptureKey, RoutingStrategies.Tunnel);
@@ -600,6 +660,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
 
             void Detach()
             {
+                _capturingPanicKey = false;
                 top.RemoveHandler(KeyDownEvent, OnCaptureKey);
                 if (top is Window w) w.Deactivated -= OnCancel;
             }

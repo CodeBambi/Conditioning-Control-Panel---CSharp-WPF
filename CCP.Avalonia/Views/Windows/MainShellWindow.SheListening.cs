@@ -7,9 +7,9 @@
 //
 // The mic opens through MainShellWindow.VoiceCommands.cs (the wake loop / push-to-talk feeding
 // Core VoiceCommands) exactly under WPF's conditions; every repaint here reconciles it, so arm,
-// Stop, revoke and an entitlement lapse all open or close it. ponytail: not here - sherpa wake
-// engine (calibration shows WPF's "not installed" notice), UpdateMicPill, SetSheListeningStatusPulse,
-// BtnSL_OpenModels.
+// Stop, revoke and an entitlement lapse all open or close it. The title-bar mic pill (WPF
+// MainWindow.LabTab.cs UpdateMicPill) lives here too. ponytail: not here - sherpa wake engine
+// (calibration shows WPF's "not installed" notice).
 //
 // _slLoading, not _isLoading: a partial-class field is declared once, and Avalonia's CheckBox
 // raises IsCheckedChanged on a programmatic set, so seeding needs its own guard.
@@ -160,6 +160,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// </summary>
         internal void RefreshSheListeningStatus()
         {
+            UpdateMicPill(); // WPF SheListening.cs:423: every arm/disarm flows through here
             var tab = SheListeningPage;
             if (tab == null) return;
 
@@ -172,6 +173,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             tab.BtnSL_MicMaster.Foreground = armed
                 ? new SolidColorBrush(Color.FromRgb(0xFF, 0xB0, 0xB0))
                 : new SolidColorBrush(Color.FromRgb(0x90, 0xEE, 0x90));
+
+            // WPF SheListening.cs:436-448: the disc breathes only while armed; the folder button is up
+            // exactly while the status line is about a model, decided on every path.
+            SetSheListeningStatusPulse(armed);
+            tab.BtnSL_OpenModels.IsVisible = !available && SpeechModelIsTheProblem();
 
             if (!available)
             {
@@ -268,6 +274,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             CoreSettings.Save();
             Log.Information("Microphone consent revoked");
             RefreshSheListeningTab();
+        }
+
+        /// <summary>WPF WireMicActivePill (MainWindow.xaml.cs:3594): repaint the pill on every capture
+        /// change. The event fires off the capture thread, so it is posted.</summary>
+        private void InitializeMicActivePill()
+        {
+            // Merge 2026-10-09: the repaint wiring lives in MainShellWindow.SafetyPills.cs (InitializeSafetyPills);
+            // this keeps the keyboard half of the privacy stop.
+            if (Named<Border>("MicActivePill") is { } pill)
+                pill.KeyDown += (_, e) =>   // P17: the privacy stop is keyboard-reachable
+                {
+                    if (e.Key is not (global::Avalonia.Input.Key.Enter or global::Avalonia.Input.Key.Space)) return;
+                    e.Handled = true;
+                    try { DisarmVoiceMic(); } catch (Exception ex) { Log.Warning(ex, "MicActivePill key failed"); }
+                };
         }
 
         /// <summary>WPF SL_Calibrate_Click's first branch: this head has no sherpa wake engine

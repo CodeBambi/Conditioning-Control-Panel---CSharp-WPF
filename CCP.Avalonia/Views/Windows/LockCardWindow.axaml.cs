@@ -1164,6 +1164,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private static Action? _heldForQuiz;
 
+        /// <summary>Forget a card held behind a pop quiz. An engine stop calls this BEFORE closing the
+        /// quizzes, or the last quiz closing would replay the card (and its mic) mid-stop; WPF's stop
+        /// drops deferred interactions the same way.</summary>
+        internal static void DropHeld() => _heldForQuiz = null;
+
         static LockCardWindow() =>
             PopQuizWindow.AllClosed += () => { var r = _heldForQuiz; _heldForQuiz = null; r?.Invoke(); };
 

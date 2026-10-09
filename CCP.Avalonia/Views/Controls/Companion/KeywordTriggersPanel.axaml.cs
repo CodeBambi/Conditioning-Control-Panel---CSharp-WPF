@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
+using ConditioningControlPanel.Localization;
 using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
@@ -20,8 +21,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
     /// as <c>MainWindow.KeywordTriggers.cs</c>. The panel used to hardcode both masters ON, which
     /// showed the detail rows over a source that was switched off.</para>
     ///
-    /// <para><b>Still stubbed:</b> everything that needs a live service - <c>App.ScreenOcr</c>,
-    /// <c>App.KeywordHighlight</c> and the trigger-row builder. Named at each one below.</para>
+    /// <para>The trigger list (add, import, per-row editors) is in KeywordTriggersPanel.TriggerList.cs.
+    /// <b>Still stubbed:</b> the live services - <c>App.ScreenOcr</c>, <c>App.KeywordHighlight</c>
+    /// and the KeywordTriggerService engine that would fire these triggers.</para>
     /// </summary>
     public partial class KeywordTriggersPanel : UserControl
     {
@@ -44,14 +46,24 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
             _txtHighlightOffHint = this.FindControl<TextBlock>("TxtHighlightOffHint")!;
             _highlightDurationPanel = this.FindControl<StackPanel>("HighlightDurationPanel")!;
 
-            // platform#1: the custom-trigger list, Add and Import live in KeywordTriggersPanel.Rows.cs.
-            WireTriggerList();
-            // ponytail: needs App.ScreenOcr / App.KeywordHighlight. Both are live Win32/OCR
-            // services with no Core seam at all (there is no CoreOcr), so these two combos have
-            // nothing to push a mode to on this head. Deliberately NOT persisted meanwhile: a
-            // combo that stores a mode nothing reads is a control claiming a setting took effect.
-            this.FindControl<ComboBox>("CmbOcrConfirmation")!.SelectionChanged += (_, _) => { };
-            this.FindControl<ComboBox>("CmbOcrHighlightMode")!.SelectionChanged += (_, _) => { };
+            this.FindControl<Button>("BtnAddKeywordTrigger")!.Click += (_, _) => AddTrigger();
+            this.FindControl<Button>("BtnImportFromCustomTriggers")!.Click += async (_, _) => await ImportFromCustomTriggersAsync();
+            // WPF KeywordTriggers.cs:135-151 persists both; the OCR scanner / highlight overlay
+            // that read them are not on this head yet (ponytail: ScreenOcrService, KeywordHighlightService).
+            var confirm = this.FindControl<ComboBox>("CmbOcrConfirmation")!;
+            confirm.SelectionChanged += (_, _) =>
+            {
+                if (_isLoading || confirm.SelectedIndex < 0) return;
+                CoreSettings.Current.OcrConfirmationScans = confirm.SelectedIndex + 1;
+                CoreSettings.Save();
+            };
+            var mode = this.FindControl<ComboBox>("CmbOcrHighlightMode")!;
+            mode.SelectionChanged += (_, _) =>
+            {
+                if (_isLoading || mode.SelectedIndex < 0) return;
+                CoreSettings.Current.OcrHighlightAll = mode.SelectedIndex == 0;
+                CoreSettings.Save();
+            };
 
             SyncFromSettings();
 
@@ -68,12 +80,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         {
             base.OnAttachedToVisualTree(e);
             if (CoreSettings.Service is { } svc) svc.CurrentReplaced += OnCurrentReplaced;
+            LocalizationManager.Instance.LanguageChanged += OnLanguageChanged;
             SyncFromSettings();
         }
 
         protected override void OnDetachedFromVisualTree(global::Avalonia.VisualTreeAttachmentEventArgs e)
         {
             if (CoreSettings.Service is { } svc) svc.CurrentReplaced -= OnCurrentReplaced;
+            LocalizationManager.Instance.LanguageChanged -= OnLanguageChanged;
             base.OnDetachedFromVisualTree(e);
         }
 
@@ -96,10 +110,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
                 Set("SliderScreenOcrInterval", Math.Clamp(s.ScreenOcrIntervalMs / 1000.0, 2, 10));
                 Set("SliderKeywordHighlightDuration", Math.Clamp(s.KeywordHighlightDurationMs / 1000.0, 0.3, 5.0));
 
+                this.FindControl<ComboBox>("CmbOcrConfirmation")!.SelectedIndex = Math.Clamp(s.OcrConfirmationScans - 1, 0, 2);
+                this.FindControl<ComboBox>("CmbOcrHighlightMode")!.SelectedIndex = s.OcrHighlightAll ? 0 : 1;
+
                 // The masters themselves live on the Awareness tab; this panel only follows them.
-                SetScreenOcrDetail(s.ScreenOcrEnabled);
+                // WPF SyncKeywordRescuePanelUi ANDs the OCR one with KeywordTriggerService.HasAccess.
+                SetScreenOcrDetail(s.ScreenOcrEnabled && HasAccess());
                 SetHighlightDetail(s.KeywordHighlightEnabled);
-                RefreshKeywordTriggerList();
             }
             catch (Exception ex)
             {
@@ -109,6 +126,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
             {
                 _isLoading = false;
             }
+            RefreshTriggerList();
 
             void Set(string name, double value)
             {

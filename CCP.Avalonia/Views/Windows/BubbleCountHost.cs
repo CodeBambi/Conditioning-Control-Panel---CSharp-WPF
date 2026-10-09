@@ -29,6 +29,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             CoreEngine.Video?.IsPlaying == true || LockCardWindow.IsAnyOpen() || PopQuizWindow.IsAnyOpen();
 
         // The app seeds CoreDispatch (AvaloniaCoreDispatch), but headless tests do not: every door hops onto the UI thread.
+        // WPF skips the game outright when the shared LibVLC is unusable (BubbleCountService.cs:373):
+        // opening it would end as a failed count and, in strict mode, retry forever.
+        public bool CanPlay => Platform.LibVlcAudio.Shared != null;
+
         public void Show(string path, int difficulty, bool strict, Action<bool> onComplete) => Dispatcher.UIThread.Invoke(() =>
             BubbleCountWindow.ShowOnAllMonitors(path, (BubbleCountScheduler.Difficulty)difficulty, strict, onComplete));
 

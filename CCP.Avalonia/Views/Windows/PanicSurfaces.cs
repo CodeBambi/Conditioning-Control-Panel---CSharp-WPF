@@ -32,6 +32,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             new("ai-followups", _ => MainShellWindow.CancelPendingAi()),
             // WPF MainWindow.xaml.cs:1726: standalone Lab minigames first; the engine stop never reaches them.
             new("blink-trainer", _ => Overlays.BlinkTrainerSession.Stop()),
+            new("gaze-minigame", _ => Lab.GazeMinigame.GazeMinigameWindow.CloseAllForPanic(), Lab.GazeMinigame.GazeMinigameWindow.IsAnyRunning),   // ends before the camera stop below
             new("mantra", _ => MantraWindow.StopForPanic()),                // WPF KillAllAudio -> Mantra?.Dispose()
             new("chaos", _ => Chaos.ChaosRunHost.ForceShutdown(), () => Chaos.ChaosRunHost.IsDescending),
             // WPF PanicStopEverySurface (:1992): the toys go to zero, bypassing throttles and gates.
@@ -48,6 +49,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // WPF :2005 "tube speech": voice line, bubble, thinking + listening dots (tube#T2).
             new("tube", _ => AvatarTube.AvatarTubeWindow.PanicSilenceLive()),
             new("lock-cards", _ => MainShellWindow.StopLockCards()),      // WPF LockCardService.Stop(dismissOpenCards: true)
+            new("attention-test", _ => Overlays.AttentionTestTarget.CloseAll()),   // the style editor's Test target (P06; WPF left it up)
+            new("deeper-editor-audio", _ => Deeper.DeeperEditorWindow.PauseAllForPanic()),   // P06; WPF left it playing
             new("camera", _ => MainShellWindow.StopCameraForPanic()),     // decision C: last, fire-and-forget
         };
 

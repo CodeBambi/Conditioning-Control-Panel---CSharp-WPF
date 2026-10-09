@@ -51,7 +51,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
             //  · Roster.CompanionCardClicked / PersonalityAssignRequested — MainWindow's
             //    CompanionCard_Click / BtnCompanionPersonality_Click (MainWindow.Patreon.cs), which
             //    switch the active companion through App.Companion. No seam on this head.
-            //  · Library.AddVideoLinkRequested — MainWindow's per-mod Hypnotube link pool.
             //  · Community.Browse/Import/Export/RefreshPromptsRequested — the community-prompt
             //    service, still in the WPF head.
         }

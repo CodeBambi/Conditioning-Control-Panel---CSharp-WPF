@@ -12,6 +12,7 @@ using Avalonia.Styling;
 using Avalonia.VisualTree;
 using ConditioningControlPanel.Avalonia.Controls;
 using ConditioningControlPanel.Services;
+using Env = ConditioningControlPanel.Avalonia.Controls.AmbientFxCanvas.Env;
 
 namespace ConditioningControlPanel.Avalonia.Views.Features
 {
@@ -273,7 +274,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             _depth?.Refresh();
         }
 
-        /// <summary>The glow and the ring share one 3.5s clock so the tile pulses as one object.</summary>
+        /// <summary>WPF FeatureCard.RefreshFx (:613): re-reads the motion/tier/focus gates. Called by
+        /// the shell's ApplyDashboardFxLoops on a motion/performance change and window activation.</summary>
+        internal void RefreshFx() => ApplyActiveState();
+
+        /// <summary>True while the breath clock runs (test seam).</summary>
+        internal bool IsBreathing => _breath != null;
+
+        /// <summary>WPF AmbientAllowed (:622): visibility + window focus + motion + tier.</summary>
+        private bool AmbientAllowed =>
+            IsEffectivelyVisible
+            && (TopLevel.GetTopLevel(this) is not Window w || (w.IsActive && w.WindowState != WindowState.Minimized))
+            && Env.AllowAmbientLoops;
+
+        /// <summary>The glow and the ring share one 3.5s clock so the tile pulses as one object.
+        /// WPF ApplyActiveBreath (:643): when ambient motion is not allowed both park at PEAK.</summary>
         private void ApplyActiveBreath(bool active)
         {
             _breath?.Cancel();

@@ -15,7 +15,8 @@ namespace CCP.Avalonia.Tests;
 /// <summary>User bug: after leaving Play its ambient loops (the old ember hero, the tier badges and rims) kept showing through other
 /// pages. WPF's IsVisible folds in the ancestors (AmbientFxCanvas.cs:601/664); Avalonia's does
 /// not, so the canvas on the hidden tab kept ticking and invalidating. Leaving the tab must stop
-/// its clock and coming back must restart it.</summary>
+/// its clock and coming back must restart it. The ember canvas left with the descent hero (WPF
+/// 2026-09-18 relayout); the tier badges and lapping rims are what still animate on Play.</summary>
 public sealed class PlaySpiralBleedTests
 {
     [Fact]

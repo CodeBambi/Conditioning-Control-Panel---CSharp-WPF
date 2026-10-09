@@ -69,9 +69,8 @@
                      ScrollViewer on purpose: the tree canvas is 3760dip wide, so a dust field
                      parented to it would size a surface eight screens wide to draw a viewport's
                      worth of sparks.
-                     ponytail: StartLayers/RegisterTabFx is MainWindow.EnhancementsFx.cs's job
-                     (DustField at 0.55 intensity, parked on tab switch); wired when that moves to
-                     Core. The canvas parks itself when unloaded either way. -->
+                     Started by MainShellWindow.EnhancementsFx.cs (DustField at 0.55 intensity,
+                     parked on tab switch). The canvas parks itself when unloaded either way. -->
                 <fx:AmbientFxCanvas x:Name="SkillTreeFx"/>
 
                 <!-- ponytail: local drop of SkillTreeScrollViewerStyle

@@ -65,6 +65,8 @@ public class TestIsolationTests
         CoreSettings.ServiceProvider = () => null;
         File.WriteAllText(settingsFile, "{\"leaked\":true}");
         File.WriteAllText(stray, "{}");
+        var leaked = new ConditioningControlPanel.Services.SettingsService();
+        leaked.Save();   // armed, as a test that ends inside the debounce leaves it
         snapshot.Restore();
 
         Assert.Equal(user, CoreAccount.UnifiedUserId);
@@ -73,5 +75,6 @@ public class TestIsolationTests
         Assert.Equal(hadFile, File.Exists(settingsFile));
         if (hadFile) Assert.Equal(before, File.ReadAllText(settingsFile));
         Assert.False(File.Exists(stray));
+        Assert.False(leaked.HasPendingSave);
     }
 }

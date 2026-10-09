@@ -149,6 +149,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     Platform.OsNotifications.Show(Loc.Get("app_title"), Loc.Get("tray_balloon_body"), ShowFromTray);
                 }
             }
+            // WPF WindowChrome.cs:180: a confirmed library delete still in its undo grace is honoured.
+            if (!e.Cancel) try { CommitPendingDeeperDeletesOnExit(); } catch { }
             base.OnClosing(e);
         }
 

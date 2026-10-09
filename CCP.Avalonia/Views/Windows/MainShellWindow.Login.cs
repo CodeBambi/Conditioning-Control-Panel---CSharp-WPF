@@ -49,6 +49,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 // Sign-in, startup restore and logout all land here; WPF repaints the header on
                 // each (Login.cs:198 UpdateLevelDisplay, OnProfileLoaded).
                 UpdateLevelDisplay();
+                RefreshProfileBubble();   // WPF UpdateXPBarLoginState: the bubble paints the same identity
                 // WPF UpdatePatreonUI -> RefreshEntitlementVeils: an account change moves every veil.
                 RefreshEntitlementVeils(persist: accountChanged);
                 // WPF Patreon.cs:294: the pass is per-account, so sign-in/out moves the intake door.
@@ -82,7 +83,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         /// <summary>WPF BtnQuickLogout_Click (AccountSeed.Logout carries the pre-logout sync and progression clear).</summary>
-        internal async void Logout()
+        internal async void Logout() => await LogoutAsync();
+
+        internal async Task LogoutAsync()
         {
             await AccountSeed.Logout();
             UpdateQuickLoginUI(accountChanged: true);

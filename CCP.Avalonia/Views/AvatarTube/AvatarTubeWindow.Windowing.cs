@@ -208,11 +208,15 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             // WPF's transparent margin was click-through (layered window); an X11 window takes
             // clicks on every pixel, so cut her input down to her side of the seam or the shell
             // under that margin goes dead: left of it on a left dock, right of the mirrored art's
-            // left edge on a right dock. Detach gives the whole window back.
-            var input = plan.Side == DockSide.Right
-                ? new PixelRect(mirroredLeftInset, 0, Math.Max(0, size.Width - mirroredLeftInset), size.Height)
-                : new PixelRect(0, 0, size.Width - rightInset, size.Height);
-            Platform.X11Overlay.SetInputRect(this, input);
+            // left edge on a right dock; floating over the shell cuts both margins (audit #1847).
+            // Detach gives the whole window back.
+            InputRect = plan.Side switch
+            {
+                DockSide.Left => new PixelRect(0, 0, size.Width - rightInset, size.Height),
+                DockSide.Right => new PixelRect(mirroredLeftInset, 0, Math.Max(0, size.Width - mirroredLeftInset), size.Height),
+                _ => new PixelRect(leftInset, 0, Math.Max(0, size.Width - leftInset - rightInset), size.Height),
+            };
+            Platform.X11Overlay.SetInputRect(this, InputRect);
         }
 
         private string? _lastDockDecision;
@@ -224,6 +228,9 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             foreach (var sc in Screens.All) u = u is { } r ? r.Union(sc.Bounds) : sc.Bounds;
             return u ?? new PixelRect(-100000, -100000, 200000, 200000);
         }
+
+        /// <summary>The attached tube's input region (window px) as last set by <see cref="UpdatePosition"/>.</summary>
+        internal PixelRect? InputRect { get; private set; }
 
         /// <summary>WPF RestoreSavedPlacement: a detached tube comes back where it was left, with at
         /// least half of it on a connected screen.</summary>

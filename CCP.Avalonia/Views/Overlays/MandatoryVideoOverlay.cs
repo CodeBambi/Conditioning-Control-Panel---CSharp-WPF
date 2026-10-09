@@ -370,8 +370,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         }
 
         /// <summary>The first Esc/panic press of a clip pauses it behind the card for up to 60 s; the
-        /// panic key only when panic does not override everything (PanicOverridesAll off).</summary>
+        /// panic key only when panic does not override everything (PanicOverridesAll off).
+        /// Never throws: a failure here returns false so the panic press still stops everything.</summary>
         internal bool TryGracePause(bool fromPanicKey)
+        {
+            try { return GracePause(fromPanicKey); }
+            catch (Exception ex) { Log.Warning(ex, "VideoService: grace pause failed; panic proceeds"); return false; }
+        }
+
+        private bool GracePause(bool fromPanicKey)
         {
             if (!ConditioningControlPanel.Services.Safety.PanicPolicy.AllowGracePause(fromPanicKey,
                     ConditioningControlPanel.Services.Safety.PanicPolicy.OverrideEnabled(CoreSettings.Current))) return false;
@@ -575,7 +582,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             }
         }
 
-        private static void PlayPop()
+        internal static void PlayPop()
         {
             var path = Path.Combine(AppContext.BaseDirectory, "Resources", "sounds", "bubbles", new[] { "Pop.mp3", "Pop2.mp3", "Pop3.mp3" }[Random.Shared.Next(3)]);
             CoreAudio.PlayOneShot(path, 0.6f * (CoreSettings.Current.MasterVolume / 100f), "target-pop");
@@ -596,13 +603,31 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             {
                 _layer = layer;
                 Due = due;
+                Root = Build(text, size, out _w, out _h);
+                double aw = layer.Bounds.Width > 0 ? layer.Bounds.Width : _w * 3, ah = layer.Bounds.Height > 0 ? layer.Bounds.Height : _h * 3;
+                _minX = Math.Min(150, aw * 0.08);
+                _minY = Math.Min(100, ah * 0.08);
+                _maxX = Math.Max(_minX + _w, aw - _minX);
+                _maxY = Math.Max(_minY + _h, ah - _minY);
+                _x = _minX + r.NextDouble() * Math.Max(0, _maxX - _w - _minX);
+                _y = _minY + r.NextDouble() * Math.Max(0, _maxY - _h - _minY);
+                var a = r.NextDouble() * Math.PI * 2;
+                (_vx, _vy) = (Math.Cos(a) * Speed, Math.Sin(a) * Speed);
+                Place();
+                layer.Children.Add(Root);
+            }
+
+            /// <summary>WPF AttentionTargetVisual.Build: the styled pill for the current settings, sized
+            /// like WPF. Shared with the editor's Test target (AttentionTestTarget).</summary>
+            internal static Border Build(string text, int size, out double w, out double h)
+            {
                 var s = CoreSettings.Current;
                 Color C(string? hex, Color fb) => Color.TryParse(hex, out var c) ? c : fb;
                 var pink = Color.FromRgb(255, 20, 147);
                 var floating = s.AttentionFloatingText;
                 var border = !floating && s.AttentionShowBorder;
                 var label = new OutlinedText(text, size, s.AttentionFont, new SolidColorBrush(C(s.AttentionTextColor, pink)));
-                Root = new Border
+                var root = new Border
                 {
                     Background = floating ? Brushes.Transparent : new LinearGradientBrush
                     {
@@ -617,21 +642,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                     Cursor = new Cursor(StandardCursorType.Hand),
                     Child = label,
                 };
-                _w = Math.Max(label.Width + 60, 150);
-                _h = Math.Max(label.Height + 40, 60);
-                Root.Width = _w;
-                Root.Height = _h;
-                double aw = layer.Bounds.Width > 0 ? layer.Bounds.Width : _w * 3, ah = layer.Bounds.Height > 0 ? layer.Bounds.Height : _h * 3;
-                _minX = Math.Min(150, aw * 0.08);
-                _minY = Math.Min(100, ah * 0.08);
-                _maxX = Math.Max(_minX + _w, aw - _minX);
-                _maxY = Math.Max(_minY + _h, ah - _minY);
-                _x = _minX + r.NextDouble() * Math.Max(0, _maxX - _w - _minX);
-                _y = _minY + r.NextDouble() * Math.Max(0, _maxY - _h - _minY);
-                var a = r.NextDouble() * Math.PI * 2;
-                (_vx, _vy) = (Math.Cos(a) * Speed, Math.Sin(a) * Speed);
-                Place();
-                layer.Children.Add(Root);
+                w = Math.Max(label.Width + 60, 150);
+                h = Math.Max(label.Height + 40, 60);
+                root.Width = w;
+                root.Height = h;
+                return root;
             }
 
             public double X => _x;
