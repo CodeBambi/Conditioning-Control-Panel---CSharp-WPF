@@ -73,6 +73,7 @@ namespace ConditioningControlPanel
                 CoreMindWipe.Start(s.MindWipeFrequency, s.MindWipeVolume / 100.0);
                 if (s.MindWipeLoop) CoreMindWipe.StartLoop(s.MindWipeVolume / 100.0);
             }
+            if (!audioOnly && s.BrainDrainEnabled) CoreBrainDrain.Start();   // WPF StartStop.cs:378 (studio#3)
 
             _running = true;
             StartedUtc = DateTime.UtcNow;
@@ -99,6 +100,7 @@ namespace ConditioningControlPanel
                 LockCardScheduler.Instance.Stop();
                 PopQuiz?.Stop();   // closes an open quiz (WPF StartStop.cs:492)
                 CoreMindWipe.Stop();   // WPF StartStop.cs:489, also ends the loop
+                CoreBrainDrain.Stop();   // WPF StartStop.cs:490
                 // WPF StartStop.cs:493: an audio-only session force-started the layered bed; stop it on
                 // session end unless the standalone Audio Layers master is on (then it keeps playing).
                 if (CoreSettings.Current?.AudioLayersEnabled != true)
@@ -146,6 +148,7 @@ namespace ConditioningControlPanel
                 case "bubbles": if (on) CoreBubbles.Start(); else CoreBubbles.Stop(); break;
                 case "video": if (on) Video?.Start(); else Video?.Stop(); break;   // WPF VideoFeatureControl ChkEnable
                 case "bubblecount": if (on) BubbleCount?.Start(); else BubbleCount?.Stop(); break;   // WPF BubbleCountFeatureControl ChkEnable
+                case "braindrain": if (on) CoreBrainDrain.Start(); else CoreBrainDrain.Stop(); break;   // WPF BrainDrainFeatureControl ChkEnable
             }
         }
     }
