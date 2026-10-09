@@ -333,6 +333,14 @@ public class ProgramService : IDisposable
             return false;
         }
 
+        // programs-3a decision: a head that can never raise a required task's signal must not
+        // enroll it, or the run lapses on work nobody could do. Unseeded (WPF) everything passes.
+        if (UnavailableReason(program, CoreProgram.IsTaskAvailable) is { } missing)
+        {
+            reason = missing;
+            return false;
+        }
+
         if (!program.Validate(out var error))
         {
             reason = error;
@@ -340,6 +348,24 @@ public class ProgramService : IDisposable
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Required tasks the predicate says this build cannot complete. Optional tasks never count, and
+    /// a day's Ambient layer is not a task (SettleAmbientShortfallDay already stops it lapsing a day).
+    /// </summary>
+    public static IReadOnlyList<ProgramTask> UnavailableTasks(ProgramDefinition program, Func<ProgramTask, bool> isAvailable)
+        => program.AllDays.SelectMany(d => d.Tasks).Where(t => !t.Optional && !isAvailable(t)).ToList();
+
+    /// <summary>"Not available on this build yet: needs X, Y." or null when every required task can be done.</summary>
+    public static string? UnavailableReason(ProgramDefinition program, Func<ProgramTask, bool> isAvailable)
+    {
+        var needs = UnavailableTasks(program, isAvailable)
+            .Select(t => t.Kind == ProgramTaskKind.Ritual ? Localization.Loc.Get("programs_feature_rituals")
+                : t.Verifier == QuestCategory.KeywordTrigger ? Localization.Loc.Get("label_pro_keyword_triggers")
+                : t.Verifier?.ToString() ?? t.Id)   // every other required category is raised on both heads today
+            .Distinct().ToList();
+        return needs.Count == 0 ? null : Localization.Loc.GetF("programs_needs_feature", string.Join(", ", needs));
     }
 
     public ProgramEnrollment? Enroll(

@@ -395,6 +395,14 @@ namespace ConditioningControlPanel.Avalonia
                 // Lock back from lockdown_recovery.json before anything reads them.
                 LockdownService.RecoverIfNeeded();
                 LockdownService.Current = new LockdownService();
+                // WPF App.xaml.cs:3295: quest credit for each completed lockdown of 20+ minutes.
+                // LastActiveDuration is set in Deactivate before the event fires.
+                var lockdown = LockdownService.Current;
+                lockdown.LockdownDeactivated += () =>
+                {
+                    try { Quests?.TrackLockdownCompleted(lockdown.LastActiveDuration); }
+                    catch (Exception ex) { Serilog.Log.Debug(ex, "Lockdown quest credit failed"); }
+                };
 
                 // Mod art: the same Core chain WPF's ModResourceResolver walks. Answers from the
                 // active mod once StartMods (below) seeds CoreMods; before that every answer is "no override".
@@ -690,6 +698,9 @@ namespace ConditioningControlPanel.Avalonia
                 };
                 SeedLevelAchievements(Achievements);
                 StartQuests();
+                // programs-3a decision: refuse programs whose required tasks this head never raises
+                // (WPF leaves it unseeded = all available). Seeded before the service so it is never unset.
+                CoreProgram.TaskAvailableProvider = Platform.ProgramCapabilities.IsAvailable;
                 Programs = Services.Program.ProgramService.CreateReadOnly();
 
                 // CoreProgram: its pack-video and roadmap providers stay unseeded - this head has no

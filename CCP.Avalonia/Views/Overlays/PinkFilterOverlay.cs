@@ -50,6 +50,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
 
         private static readonly List<TintOverlayWindow> Windows = new();
 
+        /// <summary>WPF AchievementService:239 - quest minutes while the tint is on screen.</summary>
+        internal static readonly OverlayQuestMinutes QuestMinutes = new(m => App.Quests?.TrackPinkFilterMinutes(m));
+
         /// <summary>The tint is on screen now.</summary>
         internal static bool IsShowing => Windows.Count > 0;
         private static int[] _shownOn = Array.Empty<int>();
@@ -118,6 +121,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                 Windows.Add(w);
             }
             _shownOn = want;
+            QuestMinutes.Follow(Windows.Count > 0);
             Log.Debug("Pink filter showing on {Count} screen(s) at {Opacity}%", Windows.Count, s.PinkFilterOpacity);
         }
 
@@ -130,6 +134,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             }
             Windows.Clear();
             _shownOn = Array.Empty<int>();
+            QuestMinutes.Follow(false);
             if (_hookedOwner is not null) { _hookedOwner.Closed -= OnOwnerClosed; _hookedOwner = null; }
         }
 

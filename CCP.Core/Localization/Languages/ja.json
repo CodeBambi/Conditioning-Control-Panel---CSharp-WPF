@@ -4741,6 +4741,8 @@
   "programs_locked_hint": "サポーター向けプログラムは、有効な支援で解除されます。",
   "programs_unavailable": "このプログラムは今は開始できません。",
   "programs_unavailable_title": "利用できません",
+  "programs_needs_feature": "このビルドではまだ利用できません：{0} が必要です。",
+  "programs_feature_rituals": "儀式",
   "programs_day_counter": "{0}日目 / {1}",
   "programs_attempt": "{0}回目",
   "programs_days_off_left": "残りの休養日：{0}",

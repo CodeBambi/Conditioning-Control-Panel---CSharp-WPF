@@ -4741,6 +4741,8 @@
   "programs_locked_hint": "Los programas para colaboradoras se desbloquean con un aporte activo.",
   "programs_unavailable": "Este programa no se puede empezar ahora mismo.",
   "programs_unavailable_title": "No disponible",
+  "programs_needs_feature": "Aún no disponible en esta versión: necesita {0}.",
+  "programs_feature_rituals": "Rituales",
   "programs_day_counter": "Día {0} / {1}",
   "programs_attempt": "Intento {0}",
   "programs_days_off_left": "Días libres restantes: {0}",
