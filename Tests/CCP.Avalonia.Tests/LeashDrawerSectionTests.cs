@@ -124,7 +124,7 @@ public sealed class LeashDrawerSectionTests
 
                 var holder = section.HolderCards.Single();
                 var menu = holder.Menu();
-                var release = menu.Items.OfType<MenuItem>().Single();
+                var release = menu.Items.OfType<MenuItem>().Single(m => (m.Tag as string) == "leash-menu-release");
                 Assert.Equal("leash-menu-release", release.Tag);
                 release.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
                 Assert.Equal("leash-release-confirm", confirmTag);
