@@ -150,6 +150,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     }
 
                     await FirstRunWizard.Run(this);
+                    // WPF MainWindow.xaml.cs:581: EMI's welcome show follows the wizard on the same
+                    // one-launch path, only for a player who accepted the age gate.
+                    OfferWelcomeShowAfterFirstRun();
                 }
                 catch (Exception ex)
                 {
