@@ -199,4 +199,45 @@ public sealed class SectionTabStripFxTests
             finally { w.Close(); }
         });
     }
+
+    /// <summary>WPF NavPillHelpTests: every pill with a help line wears a "?" badge that is a
+    /// sibling of the pill (never inside it) and leaves the row its size; a pill that opens its
+    /// own window asks first and only "Open it" raises the request.</summary>
+    [Fact]
+    public async Task HelpBadgesSitBesideThePills_AndAWindowPillAsksFirst()
+    {
+        await WithStrip((strip, _) =>
+        {
+            string key = strip.PillKeys.First();
+            var badge = strip.HelpBadgeFor(key);
+            Assert.NotNull(badge);
+            var pill = strip.PillFor(key)!;
+            Assert.Same(pill.Parent, badge!.Parent);                        // siblings in one host
+            Assert.DoesNotContain(badge, pill.GetVisualDescendants());
+            Assert.Equal(pill.Bounds.Width, ((Control)pill.Parent!).Bounds.Width, 1);
+            Assert.False(string.IsNullOrEmpty(SectionTabStrip.HelpText(NavStripRules.Pills(NavSections.Studio).First(t => t.Key == key))));
+            Assert.NotNull(ToolTip.GetTip(badge));
+
+            var window = NavSections.AllTabs.FirstOrDefault(t => t.Kind == NavTabKind.Window);
+            if (window != null && NavSections.SectionForTab(window.Key) is { } section
+                && NavStripRules.Pills(section).Any(t => t.Key == window.Key))
+            {
+                strip.Show(section, NavSections.DefaultTab(section));
+                Dispatcher.UIThread.RunJobs();
+                int asked = 0;
+                strip.TabRequested += t => { if (t.Key == window.Key) asked++; };
+                strip.ChooseForTests(window.Key);
+                Assert.Equal(window.Key, strip.ConfirmingKey);
+                Assert.Equal(0, asked);
+                strip.AnswerConfirmForTests(open: false);
+                Assert.Null(strip.ConfirmingKey);
+                Assert.Equal(0, asked);
+                strip.ChooseForTests(window.Key);
+                strip.AnswerConfirmForTests(open: true);
+                Assert.Equal(1, asked);
+                Assert.Null(strip.ConfirmingKey);
+            }
+            return Task.CompletedTask;
+        });
+    }
 }
