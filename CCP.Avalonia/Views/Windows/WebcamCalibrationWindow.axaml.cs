@@ -443,12 +443,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             return final;
         }
 
-        /// <summary>WPF App.ApplyCalibrationScreenPlacement: start on the monitor the last calibration
-        /// ran on (matched by pixel origin) so Maximized lands there; unknown monitor: leave it.</summary>
+        /// <summary>WPF App.ApplyCalibrationScreenPlacement: start on the tracking monitor picked in
+        /// Settings > Devices (WebcamCalibrationScreen; Primary by default) so Maximized lands there.</summary>
         internal static void PlaceOnCalibratedScreen(Window window)
         {
-            if (Tracker.Calibration?.MonitorBounds is not { } mb || window.Screens is not { } screens) return;
-            if (screens.All.FirstOrDefault(s => s.Bounds.X == mb.X && s.Bounds.Y == mb.Y) is not { } sc) return;
+            if (Platform.WebcamScreen.Resolve(window.Screens) is not { } sc) return;
             window.WindowStartupLocation = WindowStartupLocation.Manual;
             window.Position = sc.Bounds.Position;
         }
