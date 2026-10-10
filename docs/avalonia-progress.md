@@ -1702,3 +1702,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/main-20261009-compat: +199
 - Compat for main sync #6: BillboardContract/NavSections into Core, QuestsOpen/GameAvailable head seams, LegacyBillboard keeps the Avalonia slideshow, WPF scan tests via SourceRoots/Assets. GATE-OK.
+
+## avalonia-port/rows-possession-lockdown: +278
+- views-tab-lockdown: blood-red theme + 600 ms activation flash + Video/BubbleCount Strict greys wired, restored on exit (10 fail-proofs; theme live; Bubble Count hold decided at Lockdown event like WPF, not on rack re-attach). Row still stub: Possession readout, Dose keeper.
+- shell-possession untouched: ~12.1k-line subsystem needs a slice plan (P33).
