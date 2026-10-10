@@ -75,6 +75,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             BuildTiles();
             HookVeil();
             HookFx();
+            PaintSoundButton();
         }
 
         /// <summary>WPF OnShown; its FX half is FxOnShown (LauncherWindow.Fx.cs).</summary>

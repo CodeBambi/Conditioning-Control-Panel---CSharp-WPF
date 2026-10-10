@@ -37,10 +37,8 @@
 //   internal void BtnCustomizeCompanion_Click(…)
 //   internal void BtnManagePhrases_Click(…)
 //   private void UpdatePhraseCountDisplay(…)
-//   private void RestoreCompanionSectionStates(…)
-//   internal const string CompanionEngineDrawerKey
-//   internal const string CompanionWorkshopDrawerKey
-//   internal void PersistCompanionDrawerStates(…)
+//   (RestoreCompanionSectionStates / PersistCompanionDrawerStates and the two drawer keys are
+//    ported: CompanionRoomView.Restore/PersistDrawerStates, called from MainShellWindow.CompanionFx.cs)
 //   internal void SliderIdleInterval_ValueChanged(…)
 //   internal void SliderBubbleDuration_ValueChanged(…)
 //   internal void ChkTriggerMode_Changed(…)

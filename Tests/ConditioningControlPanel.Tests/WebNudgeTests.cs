@@ -26,66 +26,43 @@ public class WebNudgeTests
     //  1. the Web App door is a launcher, not a tab
     // =====================================================================================
 
+    /// <summary>Nav rework (2026-10-06): the Web App door LEFT the rail (Play > Games carries
+    /// a Web App tile). The launcher itself survives as OpenWebAppFromNav at the canonical URL,
+    /// through BrowserLauncher (clipboard fallback for machines with no default browser).</summary>
     [Fact]
-    public void TheWebDoorIsALauncherNotATab()
+    public void TheWebAppLeftTheRailButKeepsItsLauncher()
     {
         var xaml = ReadSource("MainWindow", "MainWindow.xaml");
-        var door = Regex.Match(xaml, "<Button x:Name=\"DoorWebApp\".*?</Button>", RegexOptions.Singleline);
-        Assert.True(door.Success, "DoorWebApp is gone from MainWindow.xaml");
-
-        // Its own handler: NavDoor_Click on a Tag with no NavDoorMap row is a logged no-op,
-        // which for this door would mean a dead click on the one thing it exists to do.
-        Assert.Contains("Click=\"DoorWebApp_Click\"", door.Value);
-        Assert.DoesNotContain("Click=\"NavDoor_Click\"", door.Value);
+        Assert.DoesNotContain("x:Name=\"DoorWebApp\"", xaml);
 
         var tabNav = ReadSource("MainWindow", "MainWindow.TabNavigation.cs");
-
-        // NOT in NavDoorMap - a map row drags in a default tab, a ShowTab case and a palette
-        // door row (PaletteDoorParityTests), none of which a browser link has.
-        var map = Regex.Match(tabNav, @"NavDoorMap =\s*\{.*?\};", RegexOptions.Singleline);
-        Assert.True(map.Success, "NavDoorMap has moved or changed shape");
-        Assert.DoesNotContain("webapp", map.Value);
-
-        // In the launcher list and the parts switch instead, so the rail walker can animate it.
-        Assert.Contains("NavLauncherDoors = { \"webapp\" }", tabNav);
-        Assert.Contains("\"webapp\" => (DoorWebApp, null, null)", tabNav);
-
-        // The click goes through BrowserLauncher (clipboard fallback for the machines with no
-        // default browser) at the canonical destination.
         Assert.Contains("WebAppUrl = \"https://app.cclabs.app\"", tabNav);
+        var open = Regex.Match(tabNav, @"internal void OpenWebAppFromNav\(\).*?\n        \}", RegexOptions.Singleline);
+        Assert.True(open.Success, "OpenWebAppFromNav is gone");
+        Assert.Contains("BrowserLauncher.OpenUrlOrPrompt(WebAppUrl", open.Value);
+        Assert.Contains("RetireWebBannerBeat()", open.Value);
     }
 
+    /// <summary>The rail foot's order is frozen: Circe's tab, the fuse chip, the Settings gear,
+    /// EMI's dock, then Friends last (the owner: the bottom of the rail is the profile bubble,
+    /// the gear sits where 7.0.5 had it).</summary>
     [Fact]
-    public void TheWebDoorSitsAboveSettingsInThePinnedCluster()
+    public void ThePinnedFootOrderIsFrozen()
     {
         var xaml = ReadSource("MainWindow", "MainWindow.xaml");
-
-        // The cluster's first landmark was the spiral medallion until Circe's tab took its slot.
-        var spiral = xaml.IndexOf("x:Name=\"ChasterRail\"", StringComparison.Ordinal);
-        var web = xaml.IndexOf("x:Name=\"DoorWebApp\"", StringComparison.Ordinal);
-        var settings = xaml.IndexOf("x:Name=\"DoorSettings\"", StringComparison.Ordinal);
-
-        Assert.True(spiral >= 0 && web >= 0 && settings >= 0, "a pinned-cluster landmark is gone");
-        Assert.True(spiral < web && web < settings,
-            "DoorWebApp left its slot between the divider and DoorSettings in the pinned cluster");
+        var order = new[] { "ChasterRail", "FuseRailChip", "DoorSettings", "EmiDockChip", "FriendsChip" }
+            .Select(n => xaml.IndexOf("x:Name=\"" + n + "\"", StringComparison.Ordinal)).ToArray();
+        Assert.All(order, i => Assert.True(i >= 0, "a pinned-foot landmark is gone"));
+        for (int i = 1; i < order.Length; i++)
+            Assert.True(order[i - 1] < order[i], "the rail foot is out of order");
+        // ...and the gear is below the last section row.
+        Assert.True(xaml.IndexOf("x:Name=\"DoorLibrary\"", StringComparison.Ordinal) < order[0]);
     }
 
+    /// <summary>The web app art stays a permanent mod slot (the Play > Games tile may wear it).</summary>
     [Fact]
-    public void TheRailWalksLauncherDoorsAndFollowsTheirModArt()
+    public void TheWebAppArtStaysAModSlot()
     {
-        var navRail = ReadSource("MainWindow", "MainWindow.NavRail.cs");
-
-        // CacheNavDoorRows must walk NavDoorMap + the launchers: a door missing from the walk
-        // renders frozen at its authored collapsed size while every row around it grows.
-        var cache = Regex.Match(navRail, @"private void CacheNavDoorRows\(\).*?\n        \}", RegexOptions.Singleline);
-        Assert.True(cache.Success, "CacheNavDoorRows has moved or changed shape");
-        Assert.Contains("Concat(NavLauncherDoors)", cache.Value);
-
-        // The hover nudge subscribes from ChromeFx's list; a row left out just feels dead.
-        var chromeFx = ReadSource("MainWindow", "MainWindow.ChromeFx.cs");
-        Assert.Contains("DoorWebApp", chromeFx);
-
-        // And the art is a permanent mod slot like every other door.
         var slots = ReadSource("Windows", "ModCreatorWindow.UiArt.cs");
         Assert.Contains("nav/door_webapp.png", slots);
     }

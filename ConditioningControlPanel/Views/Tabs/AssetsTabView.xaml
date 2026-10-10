@@ -85,9 +85,31 @@
         <!-- Header with title and actions -->
         <Grid Grid.Row="0" Margin="0,0,0,10">
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <TextBlock Text="{loc:Str section_assets_content_packs}" Style="{StaticResource SectionHeader}"
-                           FontSize="18" VerticalAlignment="Center"/>
+                <TextBlock Text="{loc:Str section_assets_content_packs}" Style="{StaticResource SectionHeader}" VerticalAlignment="Center"/>
                 <Button x:Name="HelpBtnAssets" x:FieldModifier="internal" Style="{StaticResource HelpButtonStyle}" VerticalAlignment="Center" Margin="8,0,0,0" Tag="Assets"/>
+                <!-- LIBRARY > FOLDERS (nav rework 2026-10-06): the assets folder picker that used to
+                     hide in the Home System pill popup. The page is a fixed-height grid, so the zone
+                     is this chip in the header row rather than a new row that would cost the
+                     browser its floor; the presets it goes with sit in the browser bar
+                     (CmbAssetPresets). ScrollToZone("folders") glows both. -->
+                <Border x:Name="ZoneFolders" x:FieldModifier="internal" Margin="14,0,0,0" Padding="10,3,4,3"
+                        CornerRadius="99" VerticalAlignment="Center"
+                        Background="{DynamicResource DarkerBgBrush}" BorderThickness="1"
+                        BorderBrush="{DynamicResource GlassBorderBrush}"
+                        ToolTip="{loc:Str library_folders_tip}">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{loc:Str nav_tab_folders}" Foreground="{StaticResource TextMutedBrush}"
+                                   FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <TextBlock x:Name="TxtAssetsFolderPath" x:FieldModifier="internal" MaxWidth="280"
+                                   Foreground="{StaticResource TextLightBrush}" FontSize="11"
+                                   TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                        <Button x:Name="BtnPickAssetsFolder" x:FieldModifier="internal"
+                                Content="{loc:Str library_folders_pick}"
+                                Style="{StaticResource OutlineButton}" Padding="10,3" FontSize="11" Margin="8,0,0,0"
+                                Click="BtnPickAssetsFolder_Click"
+                                ToolTip="{loc:Str tooltip_set_custom_assets_folder}"/>
+                    </StackPanel>
+                </Border>
             </StackPanel>
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                 <Button x:Name="BtnRefreshPacks" Content="{loc:Str btn_refresh_2}"
@@ -122,110 +144,221 @@
              (InitializeRemoteMediaPicker) rather than declaring Click/ValueChanged handlers:
              the chip rows are built from FypOnlineCoordinator.Catalog and from live settings
              lists, so the same code that fills them owns their events. -->
-        <Border Grid.Row="1" Style="{StaticResource SectionPanel}" Padding="12">
+        <Border x:Name="RemoteMediaBlock" x:FieldModifier="internal" Grid.Row="1"
+                Style="{StaticResource SectionPanel}" Padding="12">
+            <!-- Nav polish wave 3 (owner: "look at how many pills we got there"): ONE decision
+                 visible at a time. Source as a segmented bar, flavour as six cards, everything
+                 finer behind one Fine-tune row. Colours are painted per element from
+                 MainWindow.Assets.cs (cards and rows wear their flavour's tint), so these
+                 templates just bind Background / BorderBrush. Found from code with
+                 TryFindResource on the hosts, which walks up through this Border. -->
+            <Border.Resources>
+                <!-- One segment of the source bar. Lit = solid Pink, dark text. -->
+                <Style x:Key="RemoteSourceSegment" TargetType="ToggleButton">
+                    <Setter Property="Cursor" Value="Hand"/>
+                    <Setter Property="MinHeight" Value="30"/>
+                    <Setter Property="FontSize" Value="12.5"/>
+                    <Setter Property="FontWeight" Value="SemiBold"/>
+                    <Setter Property="Padding" Value="16,0"/>
+                    <Setter Property="Foreground" Value="#D8FFFFFF"/>
+                    <Setter Property="Focusable" Value="False"/>
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="ToggleButton">
+                                <Border x:Name="Bd" Background="Transparent" CornerRadius="15"
+                                        Padding="{TemplateBinding Padding}"
+                                        MinHeight="{TemplateBinding MinHeight}">
+                                    <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="Bd" Property="Background" Value="#1FFFFFFF"/>
+                                    </Trigger>
+                                    <Trigger Property="IsChecked" Value="True">
+                                        <Setter TargetName="Bd" Property="Background" Value="{DynamicResource PinkBrush}"/>
+                                        <Setter Property="Foreground" Value="#FF15121F"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+                <!-- A flavour card: plate + hover lift. Content is built in code. -->
+                <Style x:Key="RemoteFlavourTile" TargetType="Button">
+                    <Setter Property="Cursor" Value="Hand"/>
+                    <Setter Property="Height" Value="72"/>
+                    <Setter Property="Margin" Value="0,0,8,0"/>
+                    <Setter Property="BorderThickness" Value="1"/>
+                    <Setter Property="Focusable" Value="False"/>
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="Button">
+                                <Grid>
+                                    <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                            BorderBrush="{TemplateBinding BorderBrush}"
+                                            BorderThickness="{TemplateBinding BorderThickness}"
+                                            CornerRadius="10"/>
+                                    <Border x:Name="Lift" Background="#12FFFFFF" CornerRadius="10"
+                                            Visibility="Collapsed" IsHitTestVisible="False"/>
+                                    <ContentPresenter Margin="1" HorizontalAlignment="Stretch"
+                                                      VerticalAlignment="Stretch"/>
+                                </Grid>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="Lift" Property="Visibility" Value="Visible"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+                <!-- A catalog niche as a LIST row: switch, name, its subreddits. The whole row
+                     is the toggle. Content is built in code. -->
+                <Style x:Key="RemoteNichePill" TargetType="ToggleButton">
+                    <Setter Property="Cursor" Value="Hand"/>
+                    <Setter Property="MinHeight" Value="44"/>
+                    <Setter Property="Margin" Value="0,0,16,0"/>
+                    <Setter Property="Focusable" Value="False"/>
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="ToggleButton">
+                                <Border x:Name="Bd" Background="Transparent" BorderBrush="#14FFFFFF"
+                                        BorderThickness="0,0,0,1" Padding="4,6"
+                                        MinHeight="{TemplateBinding MinHeight}">
+                                    <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Stretch"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="Bd" Property="Background" Value="#0AFFFFFF"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+                <!-- The one disclosure row. Its label is the selection summary. -->
+                <Style x:Key="RemoteFineTuneRow" TargetType="Button">
+                    <Setter Property="Cursor" Value="Hand"/>
+                    <Setter Property="MinHeight" Value="34"/>
+                    <Setter Property="Focusable" Value="False"/>
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="Bd" Background="#0FFFFFFF" BorderBrush="#22FFFFFF"
+                                        BorderThickness="1" CornerRadius="10" Padding="12,0"
+                                        MinHeight="{TemplateBinding MinHeight}">
+                                    <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Stretch"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="Bd" Property="Background" Value="#1CFFFFFF"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+            </Border.Resources>
             <StackPanel>
-                <TextBlock Text="{loc:Str section_media_source}" Style="{StaticResource SectionHeader}"
-                           Margin="0,0,0,2"/>
-                <TextBlock Text="{loc:Str label_media_source_hint}"
-                           Foreground="{StaticResource TextMutedBrush}" FontSize="11"
-                           TextWrapping="Wrap" Margin="0,0,0,8"/>
-
-                <!-- Own assets / Reddit / Both. Radio behaviour is enforced in code so the
-                     chips can share AchievementFilterChip with the niche row below. -->
-                <WrapPanel x:Name="RemoteSourceChips" x:FieldModifier="internal"/>
-
-                <!-- Everything below is dead weight while the source is "local", so it only
-                     unfolds once remote media is actually in play. In Reddit or Both it is
-                     tall (13 niche chips, a resolved-subreddit line per checked niche, and up
-                     to 20 custom-sub chips), and this row is Auto inside a grid whose only
-                     star row is the asset browser, so an uncapped unfold ate the browser.
-                     The cap lives on the ScrollViewer rather than on the RowDefinition so the
-                     overflow scrolls instead of clipping, and so RemoteMediaDetails keeps its
-                     name and its Visibility contract with MainWindow.Assets.cs. 200 is the
-                     budget worked out on the root grid above; the typical Both layout (ratio
-                     row, niche chips, a handful of niche lines, the folded custom-sub line)
-                     fits inside it without a scrollbar, and only the everything-checked case
-                     scrolls. -->
-                <ScrollViewer x:Name="RemoteMediaScroll" MaxHeight="200"
-                              VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                <StackPanel x:Name="RemoteMediaDetails" x:FieldModifier="internal" Visibility="Collapsed">
-
-                    <!-- Mix ratio: only meaningful in "Both" -->
-                    <Grid x:Name="RemoteRatioRow" x:FieldModifier="internal" Margin="0,4,0,2"
-                          Visibility="Collapsed">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="{loc:Str label_remote_mix}"
-                                   Foreground="{StaticResource TextMutedBrush}" FontSize="11"
-                                   VerticalAlignment="Center" Margin="0,0,8,0"/>
-                        <Slider x:Name="SliderRemoteRatio" x:FieldModifier="internal" Grid.Column="1"
+                <!-- Row 1, SOURCE: the header, the segmented bar (built in MainWindow.Assets.cs,
+                     radio behaviour enforced there) and, in Both only, the share slider. The
+                     old hint line now rides the header as a tooltip, to keep the block short. -->
+                <DockPanel LastChildFill="False">
+                    <TextBlock Text="{loc:Str section_media_source}" Style="{StaticResource SectionHeader}"
+                               DockPanel.Dock="Left" VerticalAlignment="Center" Margin="0,0,16,0"
+                               ToolTip="{loc:Str label_media_source_hint}"/>
+                    <Border DockPanel.Dock="Left" Background="#14FFFFFF" BorderBrush="#22FFFFFF"
+                            BorderThickness="1" CornerRadius="18" Padding="3" VerticalAlignment="Center">
+                        <WrapPanel x:Name="RemoteSourceChips" x:FieldModifier="internal"/>
+                    </Border>
+                    <StackPanel x:Name="RemoteRatioRow" x:FieldModifier="internal" DockPanel.Dock="Left"
+                                Orientation="Horizontal" Margin="18,0,0,0" VerticalAlignment="Center"
+                                Visibility="Collapsed">
+                        <TextBlock Text="{loc:Str label_remote_mix}"
+                                   Foreground="{StaticResource TextMutedBrush}" FontSize="12"
+                                   VerticalAlignment="Center" Margin="0,0,10,0"/>
+                        <Slider x:Name="SliderRemoteRatio" x:FieldModifier="internal" Width="220"
                                 Minimum="5" Maximum="95" Value="30" Height="22"
                                 IsSnapToTickEnabled="True" TickFrequency="5"
-                                VerticalAlignment="Center" MaxWidth="320"
+                                VerticalAlignment="Center"
                                 ToolTip="{loc:Str tooltip_remote_mix}"/>
-                        <TextBlock x:Name="TxtRemoteRatio" x:FieldModifier="internal" Grid.Column="2"
-                                   Text="30%" Foreground="{DynamicResource PinkBrush}" FontSize="11"
-                                   FontWeight="SemiBold" VerticalAlignment="Center" Margin="8,0,0,0"/>
-                    </Grid>
+                        <TextBlock x:Name="TxtRemoteRatio" x:FieldModifier="internal" MinWidth="36"
+                                   Text="30%" Foreground="{DynamicResource PinkBrush}" FontSize="12"
+                                   FontWeight="SemiBold" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                    </StackPanel>
+                </DockPanel>
 
-                    <!-- Niches. These edit FypOnlineNiches, the SAME selection the For You feed
-                         uses — one taxonomy, one selection, two surfaces (AppSettings). -->
-                    <TextBlock Text="{loc:Str label_remote_niches}" Style="{StaticResource SettingLabel}"
-                               FontSize="12" Margin="0,6,0,2"/>
-                    <TextBlock Text="{loc:Str label_remote_niches_shared}"
-                               Foreground="{StaticResource TextMutedBrush}" FontSize="11"
-                               TextWrapping="Wrap" Margin="0,0,0,6"/>
-                    <WrapPanel x:Name="RemoteNicheChips" x:FieldModifier="internal"/>
+                <!-- Everything below only unfolds once remote media is in play. -->
+                <StackPanel x:Name="RemoteMediaDetails" x:FieldModifier="internal" Visibility="Collapsed">
 
-                    <!-- One grey, collapsed line per CHECKED niche, listing the subreddits it
-                         actually resolves to. A WrapPanel cannot host a full-width row, so this
-                         is a sibling StackPanel rather than another chip. Filled by
-                         RefreshRemoteMediaPicker / RemoteNicheChip_Changed; expansion state is
-                         session-only (MainWindow._remoteNicheExpanded) - a disclosure triangle
-                         is not worth a settings key. -->
-                    <StackPanel x:Name="RemoteNicheSubs" x:FieldModifier="internal" Margin="0,2,0,0"/>
+                    <!-- Row 2, FLAVOUR: six cards in one row (five flavours + Mine, mirrored from
+                         the web pickers, FlavourPresets.cs). One click sets niches + pool. -->
+                    <UniformGrid x:Name="RemoteFlavourTiles" x:FieldModifier="internal" Rows="1"
+                                 Margin="0,10,-8,0"/>
 
-                    <!-- Custom subreddits. The chips below are the LIBRARY (every sub kept
-                         anywhere in the app, AppSettings.RemoteSubLibrary): a lit pill is in
-                         this machine's media pool (FypOnlineCustomSubs), a dashed one is kept
-                         but unused here, and the X forgets the name everywhere at once.
+                    <!-- Row 3, FINE-TUNE: one row says what is in the pool; a click opens the
+                         niche list and your own communities. Session-only open state. -->
+                    <Button x:Name="BtnRemoteFineTune" x:FieldModifier="internal" Margin="0,8,0,0"
+                            Style="{StaticResource RemoteFineTuneRow}">
+                        <DockPanel>
+                            <TextBlock x:Name="TxtRemoteFineTuneChevron" x:FieldModifier="internal"
+                                       DockPanel.Dock="Right" Text="&#xE70D;" FontFamily="Segoe MDL2 Assets, Segoe UI Symbol, Segoe UI"
+                                       FontSize="12" Foreground="{StaticResource TextMutedBrush}"
+                                       VerticalAlignment="Center"/>
+                            <TextBlock x:Name="TxtRemoteSummary" x:FieldModifier="internal"
+                                       Foreground="#E6FFFFFF" FontSize="12.5" FontWeight="SemiBold"
+                                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                        </DockPanel>
+                    </Button>
 
-                         Folded by default behind the same ▸ line the niche sub lists use, and
-                         for the same reason the scroll cap exists: up to 20 pills plus the add
-                         row is the tallest thing in this panel, and most visits never touch
-                         it. The folded line carries the counts, so nothing is hidden that the
-                         chips would have told you at a glance. Text and click are painted from
-                         MainWindow.Assets.cs (PaintRemoteCustomSubsToggle); expansion state is
-                         session-only, like _remoteNicheExpanded. -->
-                    <TextBlock x:Name="RemoteCustomSubsToggle" x:FieldModifier="internal"
-                               Text="{loc:Str label_remote_custom_subs}" Style="{StaticResource SettingLabel}"
-                               FontSize="12" Margin="0,6,0,2" Cursor="Hand" Background="Transparent"/>
-                    <StackPanel x:Name="RemoteCustomSubsBody" x:FieldModifier="internal" Visibility="Collapsed">
-                        <TextBlock Text="{loc:Str label_remote_custom_subs_kept}"
-                                   Foreground="{StaticResource TextMutedBrush}" FontSize="11"
-                                   TextWrapping="Wrap" Margin="0,0,0,4"/>
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                            <TextBox x:Name="TxtRemoteCustomSub" x:FieldModifier="internal" Width="200"
+                    <!-- Open, the list borrows the Asset Browser's room (the browser section
+                         collapses while Fine-tune is open, SetRemoteFineTuneOpen) and scrolls
+                         past 430 px: the page itself never scrolls, so an uncapped list pushed
+                         the r/ field and the browser below the window (desk run 4). -->
+                    <ScrollViewer x:Name="RemoteFineTuneScroll" x:FieldModifier="internal" MaxHeight="430"
+                                  Visibility="Collapsed" VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel x:Name="RemoteFineTuneBody" x:FieldModifier="internal"
+                                Margin="4,10,12,0">
+                        <!-- Catalog niches. These edit FypOnlineNiches, the SAME selection the
+                             For You feed uses (AppSettings). Two clean columns of rows. -->
+                        <TextBlock Text="{loc:Str label_remote_niches}" Style="{StaticResource SettingLabel}"
+                                   FontSize="12.5" Margin="0,0,0,2"
+                                   ToolTip="{loc:Str label_remote_niches_shared}"/>
+                        <UniformGrid x:Name="RemoteNicheChips" x:FieldModifier="internal" Columns="2"/>
+
+                        <!-- Your own communities: the LIBRARY (AppSettings.RemoteSubLibrary) as
+                             the same rows. Switch = in this machine's pool (FypOnlineCustomSubs),
+                             X forgets the name everywhere. The add row answers every refusal
+                             inline (RemoteSubAddMessages), never silently. -->
+                        <TextBlock x:Name="RemoteCustomSubsHeader" x:FieldModifier="internal"
+                                   Text="{loc:Str label_remote_own_communities}" Style="{StaticResource SettingLabel}"
+                                   FontSize="12.5" Margin="0,12,0,2"
+                                   ToolTip="{loc:Str label_remote_custom_subs_kept}"/>
+                        <UniformGrid x:Name="RemoteCustomSubChips" x:FieldModifier="internal" Columns="2"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,8,0,4">
+                            <TextBlock Text="r/" Foreground="{StaticResource TextMutedBrush}"
+                                       FontSize="12.5" FontWeight="SemiBold" VerticalAlignment="Center"
+                                       Margin="0,0,4,0"/>
+                            <TextBox x:Name="TxtRemoteCustomSub" x:FieldModifier="internal" Width="240"
                                      Background="#1E1E32" Foreground="White" BorderBrush="#3A3A5A"
-                                     FontSize="11" Padding="6,4" VerticalAlignment="Center"
+                                     FontSize="12" Padding="6,5" VerticalAlignment="Center"
                                      ToolTip="{loc:Str tooltip_remote_custom_sub_add}"/>
                             <Button x:Name="BtnRemoteAddSub" x:FieldModifier="internal" Content="{loc:Str btn_add}"
-                                    Style="{StaticResource SmallPinkButton}" Padding="10,4" FontSize="11"
+                                    Style="{StaticResource SmallPinkButton}" Padding="12,5" FontSize="12"
                                     Margin="6,0,0,0"/>
                         </StackPanel>
-                        <!-- Inline, non-blocking. This replaced a modal MessageBox: a typo in a
-                             subreddit name does not deserve a dialog, and the probe result (not
-                             found / offline) has nowhere else to land. -->
+                        <!-- Inline, non-blocking reason under the box (a hint, not an alarm). -->
                         <TextBlock x:Name="TxtRemoteSubError" x:FieldModifier="internal"
-                                   Foreground="{StaticResource RemoteSubErrorBrush}" FontSize="11"
-                                   TextWrapping="Wrap" Margin="0,0,0,6" Visibility="Collapsed"/>
-                        <WrapPanel x:Name="RemoteCustomSubChips" x:FieldModifier="internal"/>
+                                   Foreground="{StaticResource TextMutedBrush}" FontSize="11.5"
+                                   FontStyle="Italic"
+                                   TextWrapping="Wrap" Margin="2,0,0,2" Visibility="Collapsed"/>
                     </StackPanel>
+                    </ScrollViewer>
                 </StackPanel>
-                </ScrollViewer>
             </StackPanel>
         </Border>
 
@@ -480,7 +613,7 @@
                       Background="Transparent" Cursor="SizeNS" Visibility="Collapsed"/>
     
         <!-- BOTTOM: Interactive File Browser -->
-        <Border Grid.Row="4" Style="{StaticResource SectionPanel}" Padding="12">
+        <Border x:Name="AssetBrowserSection" x:FieldModifier="internal" Grid.Row="4" Style="{StaticResource SectionPanel}" Padding="12">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>

@@ -21,6 +21,8 @@ public sealed class AskSources
     public IReadOnlyList<AskOption> Games { get; init; } = Array.Empty<AskOption>();
     public IReadOnlyList<AskOption> Sessions { get; init; } = Array.Empty<AskOption>();
     public AskOption? Quests { get; init; }
+    /// <summary>False once every daily seat and the weekly quest are done: nothing left to peek at (#1387).</summary>
+    public bool QuestsOpen { get; init; } = true;
     public IReadOnlyCollection<string> KnownTopics { get; init; } = Array.Empty<string>();
     /// <summary>Localisation lookup (key to text). Format arguments use {0}.</summary>
     public Func<string, string> Text { get; init; } = key => key;
@@ -117,7 +119,7 @@ public static class AskCatalog
 
     private static AskCard? BuildQuests(AskSources s, Random rng, DateTime now)
     {
-        if (s.Quests is not { IsAllowed: true } quests) return null;
+        if (!s.QuestsOpen || s.Quests is not { IsAllowed: true } quests) return null;
         return new AskCard(AskKind.Quests, Line(s, "companion_ask_quests_q", rng), new[]
         {
             Choice(s, "quests", "companion_ask_quests_yes", AskTone.Yes, AskAction.Quests, quests.Id),

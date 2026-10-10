@@ -39,7 +39,7 @@ namespace ConditioningControlPanel.Controls
     /// </summary>
     public sealed class TierBadge : Grid
     {
-        private const int AmbientFrameRate = 24;
+        private const int AmbientFrameRate = 30;
 
         /// <summary>Share of the host card's width the badge takes, and the clamps around it: a
         /// 336px vault card gets ~151px of badge, a 1300px hero band is held to the ceiling rather
@@ -80,6 +80,19 @@ namespace ConditioningControlPanel.Controls
         private const double DimmedTierOpacity = 0.35;
 
         private readonly Image _tierImage;
+
+        /// <summary>
+        /// The neon glow (perf pass, 2026-10-07): a copy of the art UNDER the sharp sign carrying
+        /// the DropShadowEffect, cached as a bitmap. The sign breathes by fading this layer, and
+        /// opacity on a cached layer is free to re-compose, so the blur renders once instead of on
+        /// every frame of the wobble (the effect used to sit on the sign itself, whose scale,
+        /// angle and glow strength all animate). The sharp sign on top is never cached, so it
+        /// stays crisp at any lean.
+        /// </summary>
+        private readonly Image _glowImage;
+
+        /// <summary>Cache density of the glow layer; above the usual DPI so the halo never steps.</summary>
+        private const double GlowCacheScale = 2.0;
         private readonly Image _stampImage;
         private readonly Ellipse _glintA;
         private readonly Ellipse _glintB;
@@ -114,6 +127,17 @@ namespace ConditioningControlPanel.Controls
                 RenderTransformOrigin = new Point(0.5, 0.5),
                 RenderTransform = new TransformGroup { Children = { _tierScale, _tierRotate } },
             };
+            _glowImage = new Image
+            {
+                Stretch = Stretch.Uniform,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                VerticalAlignment = VerticalAlignment.Top,
+                RenderTransformOrigin = new Point(0.5, 0.5),
+                RenderTransform = _tierImage.RenderTransform,
+                CacheMode = new BitmapCache(GlowCacheScale),
+                Visibility = Visibility.Collapsed,
+            };
+            Children.Add(_glowImage);
             Children.Add(_tierImage);
 
             // Tier 2's glints, parked invisible. Placed against the badge's own box in
@@ -207,6 +231,7 @@ namespace ConditioningControlPanel.Controls
         internal bool IsAnimating => _motionRunning;
 
         internal Image TierImage => _tierImage;
+        internal Image GlowImage => _glowImage;
         internal Image StampImage => _stampImage;
         internal double TierTilt => Tier >= 2 ? TiltT2 : TiltT1;
 
@@ -215,6 +240,7 @@ namespace ConditioningControlPanel.Controls
             get
             {
                 if (MotionOverride is bool forced) return forced;
+                if (Services.Diagnostics.FxBisect.Off("badge")) return false;
                 try { return MotionFx.AllowAmbientLoops; }
                 catch { return false; }
             }
@@ -266,6 +292,7 @@ namespace ConditioningControlPanel.Controls
 
                 Visibility = Visibility.Visible;
                 _tierImage.Source = art;
+                _glowImage.Source = art;
                 _tierRotate.Angle = TierTilt;
 
                 bool restamped = FreeToday;
@@ -275,23 +302,27 @@ namespace ConditioningControlPanel.Controls
                 _tierImage.Opacity = restamped ? DimmedTierOpacity : 1.0;
                 if (restamped || !GlowAllowed)
                 {
-                    if (_tierImage.Effect is DropShadowEffect old)
-                        old.BeginAnimation(DropShadowEffect.OpacityProperty, null);
-                    _tierImage.ClearValue(EffectProperty);
+                    _glowImage.BeginAnimation(OpacityProperty, null);
+                    _glowImage.ClearValue(EffectProperty);
+                    _glowImage.Visibility = Visibility.Collapsed;
                 }
-                else if (_tierImage.Effect is not DropShadowEffect)
+                else if (_glowImage.Effect is not DropShadowEffect)
                 {
                     double blur;
                     try { blur = Math.Min(22, PerformanceProfile.MaxGlowBlurRadius(PerformanceProfile.CurrentTier)); }
                     catch { blur = 18; }
-                    _tierImage.Effect = new DropShadowEffect
+                    var glow = new DropShadowEffect
                     {
                         Color = tier >= 2 ? GlowT2 : GlowT1,
                         BlurRadius = blur,
                         ShadowDepth = 0,
                         Opacity = 1.0,
                     };
+                    glow.Freeze();
+                    _glowImage.Effect = glow;
+                    _glowImage.Visibility = Visibility.Visible;
                 }
+                else _glowImage.Visibility = Visibility.Visible;
 
                 var glintVisibility = (tier >= 2 && !restamped) ? Visibility.Visible : Visibility.Collapsed;
                 _glintA.Visibility = glintVisibility;
@@ -439,7 +470,7 @@ namespace ConditioningControlPanel.Controls
         /// <summary>The neon hum: the glow's opacity swells 0.55 -> 1.0 on the wobble's period.</summary>
         private void StartGlowBreath(double period)
         {
-            if (_tierImage.Effect is not DropShadowEffect glow) return;
+            if (_glowImage.Effect is not DropShadowEffect) return;
             var hum = new DoubleAnimation(0.55, 1.0, TimeSpan.FromSeconds(period / 2))
             {
                 AutoReverse = true,
@@ -447,7 +478,7 @@ namespace ConditioningControlPanel.Controls
                 EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
             };
             Timeline.SetDesiredFrameRate(hum, AmbientFrameRate);
-            glow.BeginAnimation(DropShadowEffect.OpacityProperty, hum);
+            _glowImage.BeginAnimation(OpacityProperty, hum);
         }
 
         /// <summary>
@@ -524,11 +555,8 @@ namespace ConditioningControlPanel.Controls
                 _tierImage.BeginAnimation(OpacityProperty, null);
                 _tierImage.Opacity = FreeToday ? DimmedTierOpacity : 1.0;
 
-                if (_tierImage.Effect is DropShadowEffect glow)
-                {
-                    glow.BeginAnimation(DropShadowEffect.OpacityProperty, null);
-                    glow.Opacity = 1.0;
-                }
+                _glowImage.BeginAnimation(OpacityProperty, null);
+                _glowImage.Opacity = 1.0;
 
                 foreach (var glint in new[] { _glintA, _glintB })
                 {
@@ -573,6 +601,7 @@ namespace ConditioningControlPanel.Controls
         private void ApplyWidth(double width)
         {
             _tierImage.Width = width;
+            _glowImage.Width = width;
 
             // The stamp is deliberately a touch bigger than what it covers, and lands down-left of
             // it, so it reads as a second pass with a real rubber stamp rather than a swapped layer.

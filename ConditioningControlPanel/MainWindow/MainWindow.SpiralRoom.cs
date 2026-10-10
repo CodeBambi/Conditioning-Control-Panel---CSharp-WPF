@@ -29,14 +29,6 @@ namespace ConditioningControlPanel
     /// </summary>
     public partial class MainWindow
     {
-        /// <summary>What the row says while the ceremony is still owed. One character, gold, and
-        /// deliberately not a word: the fog era's whole point is that the room has not introduced
-        /// itself yet.</summary>
-        private const string SpiralRailAnonymousLabel = "…";
-
-        private static readonly Brush SpiralRailAnonymousBrush =
-            Freeze(new SolidColorBrush(Color.FromRgb(0xE0, 0xB0, 0x52)));
-
         private bool _spiralRoomWired;
 
         /// <summary>
@@ -81,49 +73,10 @@ namespace ConditioningControlPanel
         /// </summary>
         internal void RefreshSpiralRailEntry()
         {
-            var row = BtnNavSpiral;
-            if (row == null) return;
-
-            try
-            {
-                // CLAUDE.md rule 8: this rides three events that can arrive while the window is
-                // closing.
-                if (Application.Current?.Dispatcher?.HasShutdownStarted != false) return;
-
-                var fuse = App.DescentCountdown;
-                var state = SpiralRoom.StateFor(
-                    App.Settings?.Current,
-                    fuse?.LastAnnouncedPhase ?? DescentFusePhase.Dark,
-                    fuse?.IsArmed == true,
-                    App.DescentMigration?.SpiralWithheld == true,
-                    App.Descent?.Current is not null);
-
-                bool show = SpiralRoom.RailEntryVisible(state);
-                row.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
-                if (!show) return;
-
-                if (TxtNavSpiral == null) return;
-
-                if (SpiralRoom.RailEntryIsAnonymous(state))
-                {
-                    TxtNavSpiral.Text = SpiralRailAnonymousLabel;
-                    // FuseGold, never the mod accent: the fog era belongs to the countdown, and the
-                    // countdown is the app's own colour (see DescentFuseChrome, "ACCENT IS
-                    // UNTOUCHABLE").
-                    TxtNavSpiral.Foreground = SpiralRailAnonymousBrush;
-                }
-                else
-                {
-                    TxtNavSpiral.Text = Loc.Get("tab_spiral");
-                    // ClearValue rather than writing a colour back, so the row's own DynamicResource
-                    // stays live for mod repaints.
-                    TxtNavSpiral.ClearValue(System.Windows.Controls.TextBlock.ForegroundProperty);
-                }
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Debug("[Spiral] rail row repaint failed: {E}", ex.Message);
-            }
+            // Nav rework (2026-10-06): the Spiral row left the rail. The You strip draws the
+            // pill from NavSections (hidden: true), and the fuse chip on the rail stays the way
+            // in during the fog era. Kept as the one place the fuse events land, so a fog-era
+            // pill reveal can hook in here.
         }
 
         /// <summary>The rail row's click. One line, because the tab does all the deciding.</summary>

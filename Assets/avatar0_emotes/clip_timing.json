@@ -1,44 +1,44 @@
 {
-  "_comment": "Per-talk-clip speaking window, in ms. speakStartMs = when the mouth starts moving; speakEndMs = when talking stops; talkLen = end-start drives how many clips cover a line. Measured with tools/avatar-emotes/trim_timing_tool.py (re-run + rebuild to update). Keyed by clip stem.",
+  "_comment": "Per-talk-clip speaking window, in ms. speakStartMs = when the mouth starts moving; speakEndMs = when talking stops; talkLen = end-start drives how many clips cover a line. Cel set (2026-10-07): every talk clip was generated to mouth words the whole way through, so the window is the clip minus a short lead-in and lead-out (estimated, not measured). Keyed by clip stem.",
   "talkA": {
-    "durationMs": 5000,
-    "speakStartMs": 2880,
-    "speakEndMs": 4710,
-    "confirmed": true
+    "durationMs": 7200,
+    "speakStartMs": 250,
+    "speakEndMs": 7000,
+    "confirmed": false
   },
   "talkB": {
-    "durationMs": 5000,
-    "speakStartMs": 1960,
-    "speakEndMs": 4420,
-    "confirmed": true
+    "durationMs": 7200,
+    "speakStartMs": 250,
+    "speakEndMs": 7000,
+    "confirmed": false
   },
   "talkC": {
-    "durationMs": 5000,
-    "speakStartMs": 1880,
-    "speakEndMs": 4710,
-    "confirmed": true
+    "durationMs": 7200,
+    "speakStartMs": 250,
+    "speakEndMs": 7000,
+    "confirmed": false
   },
   "talkD": {
-    "durationMs": 5000,
-    "speakStartMs": 130,
-    "speakEndMs": 4710,
-    "confirmed": true
+    "durationMs": 7200,
+    "speakStartMs": 250,
+    "speakEndMs": 7000,
+    "confirmed": false
   },
   "talkE": {
-    "durationMs": 5000,
-    "speakStartMs": 290,
-    "speakEndMs": 4710,
-    "confirmed": true
+    "durationMs": 7200,
+    "speakStartMs": 250,
+    "speakEndMs": 7000,
+    "confirmed": false
   },
   "talkF": {
-    "durationMs": 5000,
-    "speakStartMs": 1580,
-    "speakEndMs": 4710,
-    "confirmed": true
+    "durationMs": 7200,
+    "speakStartMs": 250,
+    "speakEndMs": 7000,
+    "confirmed": false
   },
   "adoring": {
-    "durationMs": 5000,
+    "durationMs": 7200,
     "speakStartMs": 0,
-    "speakEndMs": 5000
+    "speakEndMs": 7200
   }
 }

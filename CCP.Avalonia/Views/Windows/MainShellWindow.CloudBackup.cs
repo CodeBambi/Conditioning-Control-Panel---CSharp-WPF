@@ -8,13 +8,14 @@
 //    BtnPrivacyPolicy_Click already exist as that control's own stubs. Restoring them here would
 //    be a second copy nothing routes to. Cloud backup gets wired in THAT file.
 //
-// 2. NO CLOUD IDENTITY IS REACHABLE HERE. Every body needs
-//    ConditioningControlPanel/Services/ProfileSyncService.cs (BackupSettingsAsync,
-//    RestoreSettingsAsync, ExportDataAsync, GetSettingsBackupInfoAsync) plus App.HasCloudIdentity -
-//    an authenticated client keyed by the account token. The token seam is CoreSecrets, whose rule
-//    is absolute: unseeded means NO STORE, never plaintext. This head seeds none, so it holds no
-//    token and has nothing to authenticate with. That is the end state until a keyring-backed
-//    CoreSecrets provider exists, not a gap to route around.
+// 2. NOT WIRED BY DECISION (docs/avalonia-decisions.md, 2026-10-09, rows-cloud-remember). The head now
+//    has an identity (CCP.Avalonia/Platform/AccountSeed.cs, SecretStore, V2AuthService), but every body
+//    needs the backup half of ConditioningControlPanel/Services/Settings/ProfileSyncService.cs
+//    (BackupSettingsAsync, GetSettingsBackupInfoAsync, RestoreSettingsFromCloudAsync, ExportDataAsync,
+//    ExcludedBackupProperties, SettingsBackupBudget, PreserveLocalOnlyFields). Wiring it would upload
+//    Linux settings and restore Windows backups here (and the reverse) with no path translation for
+//    CustomAssetsPath / the asset lists, against a server contract still pending owner confirmation.
+//    Needs an oracle-deep design first.
 //
 // Members, so nothing disappears silently:
 //   internal void ReloadSettingsUiAfterRestore()

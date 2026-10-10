@@ -207,19 +207,29 @@ public partial class LauncherWindow
         var play = BuildPlayButton(entry, locked, needsAccount, revealed ? null : "launcher_mystery_play");
         play.PreviewMouseLeftButtonDown += Press_Down;
         play.PreviewMouseLeftButtonUp += Press_Up;
-        play.Click += (_, _) =>
+        void Launch()
         {
             if (locked || needsAccount) LauncherSfx.Denied(); else LauncherSfx.Click();
             FxOnPlay(tile, entry);
             // The mystery card's Play goes to the counter, not to the game it hides.
             if (needsAccount) OpenSignIn();
             else LauncherHost.LaunchGame(revealed ? entry.Id : "backroom");
-        };
-        if (needsAccount)
-        {
-            // The whole card is the ask, not only its button.
-            tile.MouseLeftButtonUp += (_, _) => { LauncherSfx.Denied(); FxOnPlay(tile, entry); OpenSignIn(); };
         }
+        play.Click += (_, _) => Launch();
+
+        // 7.1.5 (tester: "only the Play button works"): the WHOLE card is the Play button. A
+        // press must start AND end on the tile; the Play and shortcut buttons handle their own
+        // down/up, so those never reach here and nothing fires twice.
+        bool tileArmed = false;
+        tile.MouseLeftButtonDown += (_, e) => { if (!e.Handled) tileArmed = true; };
+        tile.MouseLeftButtonUp += (_, e) =>
+        {
+            bool armed = tileArmed;
+            tileArmed = false;
+            if (!armed || e.Handled) return;
+            e.Handled = true;
+            Launch();
+        };
         text.Children.Add(play);
         body.Children.Add(text);
         tile.Child = body;
@@ -235,6 +245,7 @@ public partial class LauncherWindow
         };
         tile.MouseLeave += (_, _) =>
         {
+            tileArmed = false;
             MotionFx.HoverLift(tile, false);
             shortcutBtn.Opacity = 0;
             TintTile(glow, titleBrush, textLight, false);

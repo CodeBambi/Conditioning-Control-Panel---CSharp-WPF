@@ -184,6 +184,8 @@ public class PlayDoorRenderTests
         "SlotRemoteControl", "SlotWebcamChip",
         "SlotGaze", "SlotFocusGaze", "SlotBlinkTrainer",
         "SlotGradedIntake", "SlotFyp", "SlotLockdown", "SlotLoom",
+        // nav rework 2026-10-06: the five games whose only panel door was the Premium page
+        "SlotBackRoom", "SlotDtrh", "SlotArcademy", "SlotRacingThoughts", "SlotWebApp",
     };
 
     [Fact]
@@ -214,6 +216,7 @@ public class PlayDoorRenderTests
             "BtnPlayRemoteControl",
             "BtnPlayGazeMinigame", "BtnPlayGradedIntake", "BtnPlayBlinkTrainer",
             "BtnPlayFyp", "BtnPlayLockdown", "BtnPlayLoom",
+            "BtnPlayBackRoom", "BtnPlayDtrh", "BtnPlayArcademy", "BtnPlayRacingThoughts", "BtnPlayWebApp",
         };
 
         OnStaThread(() =>
@@ -248,6 +251,7 @@ public class PlayDoorRenderTests
     {
         "PlayLockGaze", "PlayLockFocusGaze", "PlayLockRemote",
         "PlayLockLockdown", "PlayLockBlink", "PlayLockFyp", "PlayLockIntake",
+        "PlayLockDtrh", "PlayLockArcademy",
     };
 
     [Fact]
@@ -453,10 +457,12 @@ public class PlayDoorRenderTests
         // of them by number. Phase 6 renamed index 8 rather than inserting; the legacy alias has
         // to score the same index or every caller still passing "lab" gets the fallback "rise"
         // entrance instead of its neighbours' horizontal slide.
-        Assert.Equal("play", ChromeFxNav.NavOrder[8]);
+        // Nav rework 2026-10-06: NavOrder is derived from NavSections; Play's first pill is 12.
+        // Polish 12 (2026-10-07): Home gained its Premium pill, so Play's first pill is 13. 7.1.2: Companion > AI makes it 14.
+        Assert.Equal("play", ChromeFxNav.NavOrder[14]);
         Assert.DoesNotContain("lab", ChromeFxNav.NavOrder);
-        Assert.Equal(8, ChromeFxNav.IndexOf("lab"));
-        Assert.Equal(8, ChromeFxNav.IndexOf("play"));
+        Assert.Equal(14, ChromeFxNav.IndexOf("lab"));
+        Assert.Equal(14, ChromeFxNav.IndexOf("play"));
     }
 
     [Fact]
@@ -473,9 +479,14 @@ public class PlayDoorRenderTests
         Assert.Equal("play", (string?)m.Invoke(null, new object?[] { "lab" }));
 
         // And the other Play entries did not lose their door on the way past.
-        foreach (var key in new[] { "deeper", "exclusives", "gradedintake", "lockdown",
-                                    "blinktrainer", "remotecontrol", "availablesubjects" })
+        foreach (var key in new[] { "deeper", "gradedintake", "lockdown", "blinktrainer" })
             Assert.Equal("play", (string?)m.Invoke(null, new object?[] { key }));
+        // Nav rework (2026-10-06): the Lobby and Remote moved to Social. Polish 12 (2026-10-07):
+        // the old Exclusives key lands on Home > Premium again.
+        foreach (var key in new[] { "remotecontrol", "availablesubjects" })
+            Assert.Equal("social", (string?)m.Invoke(null, new object?[] { key }));
+        Assert.Equal("home", (string?)m.Invoke(null, new object?[] { "exclusives" }));
+        Assert.Equal("home", (string?)m.Invoke(null, new object?[] { "premium" }));
     }
 
     [Fact]
@@ -606,6 +617,9 @@ public class PlayDoorRenderTests
             // the wrong price. (The diamond Rabbit Hole hero left for the launcher, 2026-09-18.)
             Assert.Equal(1, page.PlayBadgeFyp.Tier);
             Assert.Equal(1, page.PlayBadgeRemote.Tier);
+            // Diamond on the two Lab games rehomed from the Premium page (nav rework 2026-10-06).
+            Assert.Equal(2, page.PlayBadgeDtrh.Tier);
+            Assert.Equal(2, page.PlayBadgeArcademy.Tier);
         });
     }
 

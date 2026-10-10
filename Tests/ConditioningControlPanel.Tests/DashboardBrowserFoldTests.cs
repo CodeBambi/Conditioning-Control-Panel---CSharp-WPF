@@ -83,8 +83,38 @@ public class DashboardBrowserFoldTests
     public void TheChevronPointsAtWhatTheClickWillDo()
     {
         // Shut: down, because clicking opens it. Open: up, because clicking shuts it.
-        Assert.Equal("▾", BrowserFoldRule.Chevron(collapsed: true));
-        Assert.Equal("▴", BrowserFoldRule.Chevron(collapsed: false));
+        // Segoe MDL2 ChevronDown / ChevronUp since the owner asked for an unmissable arrow.
+        Assert.Equal("\uE70D", BrowserFoldRule.Chevron(collapsed: true));
+        Assert.Equal("\uE70E", BrowserFoldRule.Chevron(collapsed: false));
+    }
+
+    [Fact]
+    public void TheArrowLabelSaysWhatTheClickWillDo()
+    {
+        Assert.Equal("btn_browser_fold_show", BrowserFoldRule.LabelKey(collapsed: true));
+        Assert.Equal("btn_browser_fold_hide", BrowserFoldRule.LabelKey(collapsed: false));
+    }
+
+    [Fact]
+    public void OnlyAShutCardGlows()
+    {
+        Assert.True(BrowserFoldRule.Glows(collapsed: true));
+        Assert.False(BrowserFoldRule.Glows(collapsed: false));
+        // The breath the brief names: 0.35 to 0.8 over 2.4 s, with a static middle when loops are refused.
+        Assert.Equal(0.35, BrowserFoldRule.GlowLow);
+        Assert.Equal(0.80, BrowserFoldRule.GlowHigh);
+        Assert.Equal(2400, BrowserFoldRule.GlowBreathMs);
+        Assert.InRange(BrowserFoldRule.GlowStatic, BrowserFoldRule.GlowLow, BrowserFoldRule.GlowHigh);
+    }
+
+    [Fact]
+    public void TheArrowIsLoudEnoughToFind()
+    {
+        // 24% fill, 40% on hover, 70% border over Home's hue.
+        Assert.Equal(0.24, BrowserFoldRule.ArrowFill);
+        Assert.Equal(0.40, BrowserFoldRule.ArrowHoverFill);
+        Assert.Equal(0.70, BrowserFoldRule.ArrowBorder);
+        Assert.True(BrowserFoldRule.ArrowHoverFill > BrowserFoldRule.ArrowFill);
     }
 
     [Fact]

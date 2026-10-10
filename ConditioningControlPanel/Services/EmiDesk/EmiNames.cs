@@ -68,6 +68,7 @@ internal static class EmiNames
         ["remotecontrol"] = "remote",
         ["bambitakeover"] = "takeover",
         ["exclusives"] = "vault",
+        ["premium"] = "vault",
         ["discord"] = "profile",
         ["appsettings"] = "settings",
         ["flash"] = "flashes",
