@@ -698,7 +698,7 @@ public class BoardTilesTests
     [InlineData(0.5, 0.05, 640, 480, -1, -1)] // in the letterbox above the grid
     public void A_touch_maps_through_the_letterbox(double nx, double ny, double w, double h, int tx, int ty)
     {
-        bool hit = BoardTouch.TileAt(new Point(nx, ny), w, h, out var x, out var y);
+        bool hit = BoardTouch.TileAt(nx, ny, w, h, out var x, out var y);
         if (tx < 0) { Assert.False(hit); return; }
         Assert.True(hit);
         Assert.Equal((tx, ty), ((int)x, (int)y));

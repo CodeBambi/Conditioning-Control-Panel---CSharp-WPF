@@ -308,6 +308,8 @@ namespace ConditioningControlPanel
             // The settings model now lives in Core; Core code reads the live instance through
             // this. Settings is created later in OnStartup; the delegate reads it lazily.
             CoreSettings.ServiceProvider = () => Settings;
+            // Lobby, PvP stakes and the board picture read the app through these (Services/CoreSeams.cs).
+            Services.CoreSeams.Wire();
             // The mod service's side effects on a switch, and what it asks the head.
             CoreModsHooks.ModSwitched = newCompanionName => Brain?.OnModSwitched(newCompanionName);
             CoreModsHooks.ReloadBarkRules = () => Bark?.ReloadRules();
@@ -3108,7 +3110,7 @@ namespace ConditioningControlPanel
             // facade — the browser client via GoonHostService, the dev cockpit via GoonTestPanel —
             // so an always-constructed idle singleton owned nothing and was never read.)
             AvailableSubjects = new AvailableSubjectsService();
-            Lobby = new Services.Lobby.LobbyService();
+            Lobby = Services.Lobby.LobbyServiceApp.Create();
             CompanionPhrases = new CompanionPhraseService();
             Catalogue = new CatalogueService();
             CatalogueLookup = new CatalogueLookupService();
