@@ -279,11 +279,12 @@ public sealed class SessionRunnerTests : IDisposable
             _runner.Resume();
             Assert.Equal(enabled, quiz.IsRunning);
 
-            s.PopQuizEnabled = !enabled;   // mid-session edits are session-scoped
+            // The rate is session-scoped; the toggle is the player's own and sticks (7.1.5, WPF f30b54f31).
+            s.PopQuizEnabled = !enabled;
             s.PopQuizFrequency = 99;
             _runner.Stop();
             Assert.False(quiz.IsRunning);
-            Assert.Equal((enabled, 5), (s.PopQuizEnabled, s.PopQuizFrequency));
+            Assert.Equal((!enabled, 5), (s.PopQuizEnabled, s.PopQuizFrequency));
         }
         finally
         {
