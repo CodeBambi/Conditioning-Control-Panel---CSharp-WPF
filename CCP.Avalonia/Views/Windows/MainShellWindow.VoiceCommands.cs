@@ -4,10 +4,10 @@
 //
 // The mic opens only under WPF's conditions: VoiceInputRules.ModesToRun (consent + an armed mode +
 // premium or the "voice" free day + an available engine), re-read at every reconcile.
-// ponytail: no sherpa KWS spotter (the Vosk wake grammar is WPF's fallback path), no bark voice lines (text confirmations), no
-// echo wait on her clip (confirmations here are text-only; a 300 ms tail stands in). Intents with no
-// seam here (spiral, pink, mind wipe, quiz, keyword triggers, bubble count, shake, deeper,
-// session pause/resume, volume/mute, video pause/resume) are left out of the grammar.
+// ponytail: no sherpa KWS spotter (the Vosk wake grammar is WPF's fallback path). Confirmations are her
+// recorded bark clips when the active pack has one, else a text bubble (never synthetic speech).
+// The second half of the actions is MainShellWindow.VoiceActions.cs; keyword triggers, shake and
+// deeper have no seam here and stay out of the grammar.
 
 using System;
 using System.Linq;
@@ -45,9 +45,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             OnRefused = () => LockdownService.Current?.NotifyEscapeAttempt(EscapeKinds.Stop),
             ShowListening = line => _avatarTubeWindow?.ShowListeningBubble(line),
             HideListening = () => _avatarTubeWindow?.HideListeningBubble(),
-            Say = (text, audio) => Dispatcher.UIThread.Post(() => _avatarTubeWindow?.GigglePriority(text,
-                playSound: audio != null, aiGenerated: false, phraseAudioPath: audio, barkVoice: audio != null)),
-            WaitQuiet = _ => Task.Delay(300),
+            Say = VoiceSay,
+            PickVoiceLine = id => Platform.BarkHead.Engine?.PickVoiceLine(id),
+            WaitQuiet = VoiceWaitQuiet,
             ActiveModId = () => CoreMods.ActiveModId,
             OnUi = a => Dispatcher.UIThread.InvokeAsync(a).GetTask(),
             HelpFromAvailable = true,
@@ -67,7 +67,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             || (BubbleCountWindow.IsAnyOpen() && CoreSettings.Current.BubbleCountStrictLock);
 
         /// <summary>The intents this head can run (null = not on this head, so not in the grammar).</summary>
-        private Action? VoiceAction(string name) => name switch
+        internal Action? VoiceAction(string name) => name switch
         {
             "panic" => VoicePanic,
             "bubbles_on" when CoreBubbles.StartAction != null => CoreBubbles.Start,
@@ -84,7 +84,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             "takeover_on" => () => Autonomy.Start(),
             "takeover_off" => () => Autonomy.Stop(),
             "stop_listening" => StopVoiceInput,
-            _ => null,
+            _ => VoiceActionMore(name),
         };
 
         /// <summary>WPF TriggerPanicFromRemote: the spoken safe word. Deliberately NOT refused under
