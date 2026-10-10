@@ -12,9 +12,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
     /// local half): the active library's images/ and videos/, deselected files left out, oversize or
     /// undecodable media counted as skipped, sampled down to 5000 entries keeping the image:video ratio.
     /// URLs are the asset server's ccp.assets path (WPF https://ccp.assets/&lt;rel&gt;).
-    /// ponytail: the remote (online) entries WPF appends after the sample are not ported.
+    /// The remote (online) entries WPF appends after the sample are GameMediaManifest.Remote.cs: only
+    /// with MediaSource off "local" AND remote media consent.
     /// </summary>
-    internal static class GameMediaManifest
+    internal static partial class GameMediaManifest
     {
         private static readonly string[] ImageExts = { ".jpg", ".jpeg", ".png", ".webp", ".gif" };
         private static readonly string[] VideoExts = { ".mp4", ".webm", ".m4v" };
@@ -126,8 +127,20 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             }
         }
 
-        /// <summary>The live library through the shared asset server.</summary>
+        /// <summary>WPF DtrhAssetManifest.Build: the live library through the shared asset server, then
+        /// the remote tail ON TOP of it, after the downsample (a bounded handful: sampling it against a
+        /// 5000-file library would lose it).</summary>
         internal static Manifest BuildLive()
+        {
+            var m = BuildLocal();
+            int remote = AppendRemote(m, CoreSettings.Current);
+            if (remote > 0) Log.Information("[Game] manifest: +{N} remote", remote);
+            return m;
+        }
+
+        /// <summary>The local half only (WPF EnumerateActive's pool): for a consumer that needs files
+        /// behind every entry, never a CDN url.</summary>
+        internal static Manifest BuildLocal()
         {
             var server = ConditioningControlPanel.Avalonia.Platform.WebAssetServer.Shared;
             return Build(CorePaths.EffectiveAssets, server.AssetUrl, CoreSettings.Current.DisabledAssetPaths);

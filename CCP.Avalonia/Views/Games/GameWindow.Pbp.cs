@@ -292,7 +292,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
         /// authority on it, GameMediaManifest: decodable extensions, unchecked assets honoured, size caps).</summary>
         internal static Func<IEnumerable<(string Rel, string Url, bool IsImage)>> PbpLibrary { get; set; } = () =>
         {
-            var m = GameMediaManifest.BuildLive();
+            var m = GameMediaManifest.BuildLocal();   // local disk only, as WPF EnumerateActive
             return m.Images.Select(e => (e.Name, e.Url, true)).Concat(m.Videos.Select(e => (e.Name, e.Url, false)));
         };
 
