@@ -77,6 +77,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                     InRun = true;
                     _lastRunProgress = null;
                     _runStartedUtc = DateTime.UtcNow;
+                    global::ConditioningControlPanel.Services.SeasonFeatureTracker.TrackFeature(global::ConditioningControlPanel.Models.SeasonFeatureKeys.Dtrh);   // WPF DtrhHostService:322
                     OnDtrhRunStartedExtras((string?)o["difficulty"] ?? "Gentle");
                     Log.Information("[Game] dtrh: run started (diff={D}, mode={M})", (string?)o["difficulty"] ?? "Gentle", (string?)o["mode"]);
                     return true;

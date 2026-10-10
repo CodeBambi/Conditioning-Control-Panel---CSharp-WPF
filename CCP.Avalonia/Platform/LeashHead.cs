@@ -120,9 +120,11 @@ internal static class LeashHead
         }
         catch (Exception ex) { Serilog.Log.Debug("Leash chaster read failed: {E}", ex.Message); }
 
-        // ponytail: minutes today (WPF FeatureDayLog day Cm) has no source on this head (no per-day log, only the
-        // all-time total), so it reads 0, which only thins the holder's day card.
-        return new LeashDayInputs(DateTime.Now, 0, done, total, streak, linked, ends, hidden, tab);
+        // WPF LeashService.AppDayInputs: today's conditioning minutes from the feature day log.
+        var minutes = 0;
+        try { minutes = global::ConditioningControlPanel.Services.FeatureDayLogService.Current?.MinutesOn(global::ConditioningControlPanel.Services.FeatureDayLogService.DayKey(DateTime.Now)) ?? 0; }
+        catch (Exception ex) { Serilog.Log.Debug("Leash minutes read failed: {E}", ex.Message); }
+        return new LeashDayInputs(DateTime.Now, minutes, done, total, streak, linked, ends, hidden, tab);
     }
 
     /// <summary>WPF ChasterLeashTab: the same NoteSeconds path, literal row ids.</summary>

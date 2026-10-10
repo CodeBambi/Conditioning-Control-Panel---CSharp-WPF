@@ -345,7 +345,7 @@ public sealed class PremiumDoorsTests
             Assert.Equal("init", (string?)init["type"]);
             Assert.NotNull(init["assets"]);
             Assert.NotNull(init["settings"]!["layout"]);
-            Assert.False((bool)init["settings"]!["eyeControl"]!);      // nothing drives it on this head
+            Assert.False((bool)init["settings"]!["eyeControl"]!);      // off until the player switches it on
             Assert.NotEmpty((JArray)init["online"]!["niches"]!);
             Assert.DoesNotContain(posted, p => (string?)p["type"] == "manifest");   // its own init, not the games'
 
@@ -359,11 +359,19 @@ public sealed class PremiumDoorsTests
             Assert.Equal(new[] { "clickThrough", "ghost-unavailable" }, posted.Select(p => (string?)p["type"]));
             Assert.False((bool)posted[0]["on"]!);
 
-            // Eye control: refused with the WPF reason, and the setting goes back off.
+            // Eye control: consent first. Refused = the WPF reason, and the setting goes back off
+            // (the camera path itself is FypEyeControlTests; no test opens a camera).
             posted.Clear();
-            w.HandleMessage("{\"type\":\"settings-changed\",\"key\":\"eyeControl\",\"value\":true}");
+            var oldConsent = GameWindow.FypEyeConsent;
+            GameWindow.FypEyeConsent = _ => Task.FromResult(false);
+            try
+            {
+                w.HandleMessage("{\"type\":\"settings-changed\",\"key\":\"eyeControl\",\"value\":true}");
+                for (var i = 0; i < 20 && !w.FypEyeTask.IsCompleted; i++) Dispatcher.UIThread.RunJobs();
+            }
+            finally { GameWindow.FypEyeConsent = oldConsent; }
             Assert.Equal("eyeStatus", (string?)posted.Single()["type"]);
-            Assert.Equal("no-camera", (string?)posted[0]["reason"]);
+            Assert.Equal("consent", (string?)posted[0]["reason"]);
             Assert.False((bool)posted[0]["enabled"]!);
             Assert.False(s.FypEyeControl);
 

@@ -92,7 +92,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             Closed += (_, _) => ClosePbp();
             StartPbpWatch();
             try { FriendsHead.Service?.EnterActivity(PresenceActivity.Chess); } catch (Exception ex) { Diag.Swallowed(ex); }
-            // ponytail: WPF also calls SeasonRecapService.TrackFeature(PieceByPiece); that service is head-side on WPF.
+            global::ConditioningControlPanel.Services.SeasonFeatureTracker.TrackFeature(global::ConditioningControlPanel.Models.SeasonFeatureKeys.PieceByPiece);   // WPF PieceByPieceHostService:190
             Log.Information("PieceByPieceHost: launched");
         }
 

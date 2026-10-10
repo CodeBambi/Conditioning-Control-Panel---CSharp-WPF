@@ -114,7 +114,27 @@ namespace ConditioningControlPanel.Services
 
             _timer = new Timer(_ => CoreDispatch.Post(() => Tick(Elapsed)), null, 1000, 1000);
             SessionLog.BeginSession(session);
+            TrackSessionFeatures(session.Settings);
             Log.Information("Session started: {Name}", session.Name);
+        }
+
+        /// <summary>WPF SessionEngine.cs:297-308: which features this session engaged, once per session from
+        /// the enabled flags (pause / resume cannot double-count). Feeds the day log and the season bucket.</summary>
+        internal static void TrackSessionFeatures(SessionSettings ss)
+        {
+            try
+            {
+                if (ss.FlashEnabled) SeasonFeatureTracker.TrackFeature(SeasonFeatureKeys.Flash);
+                if (ss.MandatoryVideosEnabled) SeasonFeatureTracker.TrackFeature(SeasonFeatureKeys.Video);
+                if (ss.SubliminalEnabled) SeasonFeatureTracker.TrackFeature(SeasonFeatureKeys.Subliminal);
+                if (ss.SpiralEnabled || ss.PinkFilterEnabled) SeasonFeatureTracker.TrackFeature(SeasonFeatureKeys.Overlay);
+                if (ss.BubblesEnabled) SeasonFeatureTracker.TrackFeature(SeasonFeatureKeys.Bubbles);
+                if (ss.BubbleCountEnabled) SeasonFeatureTracker.TrackFeature(SeasonFeatureKeys.BubbleCount);
+                if (ss.BouncingTextEnabled) SeasonFeatureTracker.TrackFeature(SeasonFeatureKeys.BouncingText);
+                if (ss.LockCardEnabled) SeasonFeatureTracker.TrackFeature(SeasonFeatureKeys.LockCard);
+                if (ss.MindWipeEnabled) SeasonFeatureTracker.TrackFeature(SeasonFeatureKeys.MindWipe);
+            }
+            catch { }
         }
 
         private double RemainingMinutes =>

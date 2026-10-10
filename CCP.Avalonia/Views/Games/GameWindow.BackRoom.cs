@@ -58,6 +58,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                 Fx = BackRoomFxHead.Shared,
                 Voice = RoomVoiceFactory(() => IsBreakoutPage(Spec.Id)),
                 Haptic = BackRoomHapticDirector.OnHaptic,
+                NoteEvent = key => global::ConditioningControlPanel.Services.FeatureDayLogService.Current?.Note(key),   // WPF CreateBridge :427
                 SlotLanded = SlotLanded,
                 SetOption = option => Dispatcher.UIThread.Post(() =>
                 {

@@ -40,8 +40,6 @@ internal static class ChasterHead
                 Paused: s.ChasterPaused,
                 PriceOverrides: new Dictionary<string, int>(s.ChasterPriceOverrides ?? new Dictionary<string, int>(), StringComparer.Ordinal));
         };
-        // ponytail: no MinutesOn (the feature day log is not on this head); optional on the service,
-        // read as "nobody can tell".
         var target = Target(userDataDir, overrideUrl);
         inner ??= new HttpClientHandler();
         return new ChasterService(
@@ -56,8 +54,14 @@ internal static class ChasterHead
                 FriendsHead.Identity, ChasterClient.ProxyBase),
             RafflePostDays = () => CoreSettings.Current.ChasterRafflePostDays,
             LadderShowName = () => CoreSettings.Current.ChasterLadderShowName,
+            MinutesOn = MinutesFromDayLog,
         };
     }
+
+    /// <summary>WPF ChasterService.App.cs:62, the idle-day row's eyes: conditioning minutes the feature day
+    /// log booked on a day. A day with no entry had none; no log at all means nobody can tell (null).</summary>
+    internal static int? MinutesFromDayLog(string dayKey) =>
+        global::ConditioningControlPanel.Services.FeatureDayLogService.Current?.MinutesOn(dayKey);
 
     /// <summary>WPF ChasterHooks.Attach, for the events this head raises: quests (and the dailies
     /// board) and level-ups. Every call is inert until the tab is on and the row is priced.

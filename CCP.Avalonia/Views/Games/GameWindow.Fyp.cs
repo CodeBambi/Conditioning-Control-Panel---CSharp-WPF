@@ -25,9 +25,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
     /// XP); need-remote -> assets-append + online-status; library-remove -> library; probe-sub ->
     /// sub-probe (+ library); attention-hit; settings-changed; file-menu; close (the shell).</para>
     ///
-    /// <para>NOT on this head: ghost mode (WPF's DWM live-thumbnail mirror over a parked window) and
-    /// eye control (blink / gaze from the webcam) with its calibrate frame. Each answers the page
-    /// with WPF's own "unavailable" frame so its toggle snaps back with the WPF reason line.</para>
+    /// <para>Eye control (blink / eyesClosed / gaze frames, eyeStatus, the calibrate frame) is
+    /// GameWindow.Fyp.Eye.cs. NOT on this head: ghost mode (WPF's DWM live-thumbnail mirror over a
+    /// parked window); it answers the page with WPF's own "unavailable" frame so its toggle snaps back
+    /// with the WPF reason line.</para>
     ///
     /// <para>BRIGHT LINE: remote batches and sub probes go straight from this machine to the
     /// provider, and only when <see cref="FypHostService.RemoteAllowed"/> says so.</para>
@@ -80,11 +81,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                     // WPF Close: the page's probes and every channel's rotation are kept.
                     Closed += (_, _) =>
                     {
+                        DisableFypEyeControl();   // WPF Close :137: the camera goes back
                         try { _fypMeta?.Save(); } catch (Exception ex) { Log.Debug("[Game] fyp meta save: {E}", ex.Message); }
                         try { FypOnlineCoordinator.SaveAll(); } catch (Exception ex) { Log.Debug("[Game] fyp channels save: {E}", ex.Message); }
                     };
                 }
-                Post(FypHostService.BuildInit(CoreSettings.Current, FypAssets(), eyeControl: false));
+                Post(FypHostService.BuildInit(CoreSettings.Current, FypAssets(), eyeControl: true));
+                // WPF :239: persisted eye control re-arms the camera on every launch (with the same consent
+                // check); the page shows the toggle on from the payload and eyeStatus corrects it on a refusal.
+                if (CoreSettings.Current.FypEyeControl) EnableFypEyeControl();
             }
             catch (Exception ex) { Log.Warning("[Game] fyp: init failed: {E}", ex.Message); }
         }
@@ -164,9 +169,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                     ShowFypFileMenu((string?)o["id"]);
                     return true;
                 case "calibrate":
-                    // not ported: the gaze calibration dialog over the feed (no eye control on this head).
-                    Log.Debug("[Game] fyp: calibrate ignored (eye control is not on this head)");
-                    PostFypEyeUnavailable();
+                    // WPF :326: off the web-message callback, then the gaze calibration over the feed.
+                    Dispatcher.UIThread.Post(() => _ = RunFypGazeCalibration());
                     return true;
                 default:
                     return false;   // close / log / boot-error: the shell's
@@ -185,20 +189,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                     Post(new { type = "ghost-unavailable", reason = "not on this build" });
                     break;
                 case FypHostService.SettingEffect.EyeControlOn:
-                    // not ported: eye control. WPF FailEyeControl: the setting goes back off and the
-                    // page gets the reason ("Webcam unavailable - eye control is off.").
-                    s.FypEyeControl = false;
-                    PostFypEyeUnavailable();
+                    EnableFypEyeControl();   // WPF :395
                     break;
                 case FypHostService.SettingEffect.EyeControlOff:
+                    DisableFypEyeControl();   // WPF :396
+                    PostFypEyeStatus(null);
+                    break;
                 case FypHostService.SettingEffect.EyeGazeChanged:
-                    Post(new { type = "eyeStatus", enabled = false, gaze = false, running = false, calibrated = false, reason = (string?)null });
+                    SyncFypGazeSubscription();   // WPF :402
+                    PostFypEyeStatus(null);
                     break;
             }
         }
-
-        private void PostFypEyeUnavailable() =>
-            Post(new { type = "eyeStatus", enabled = false, gaze = false, running = false, calibrated = false, reason = "no-camera" });
 
         /// <summary>
         /// WPF ServeRemoteBatch: one batch per ask, single-flight (the page re-asks after every
