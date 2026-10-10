@@ -28,7 +28,7 @@ public sealed class NavSearchTests
         palette.Show();
         palette.FindControl<TextBox>("TxtQuery")!.Text = "volme";
         Dispatcher.UIThread.RunJobs();
-        if (SettingsPaletteIndex.Search("volme").Count > 0) { palette.Close(); return; }
+        Assert.Empty(SettingsPaletteIndex.Search("volme"));
 
         Assert.True(palette.FindControl<Control>("PanelEmpty")!.IsVisible);
         Assert.Equal(Loc.GetF("nav_search_none", "volme"), palette.FindControl<TextBlock>("TxtEmpty")!.Text);
@@ -98,6 +98,54 @@ public sealed class NavSearchTests
     });
 
     [Fact]
+    public Task CcLabsRowOpensTheLauncherAndGameRowsListOnlyStartableGames() => Shell(shell =>
+    {
+        try
+        {
+            SettingsPaletteWindow.Navigate(shell, SettingsPaletteIndex.ById("chrome.cclabs")!);
+            Dispatcher.UIThread.RunJobs();
+            Assert.False(shell.IsVisible);
+            Assert.True(LauncherWindow.Instance?.IsVisible);
+
+            // Unseeded, Core lists every catalogue game; seeded as App does, only what this head starts.
+            SettingsPaletteIndex.GameAvailableProvider = null;
+            Assert.Contains(SettingsPaletteIndex.Search("casino"), e => e.GameId == "backroom");
+            SettingsPaletteIndex.GameAvailableProvider = LauncherWindow.CanStartGame;
+            Assert.DoesNotContain(SettingsPaletteIndex.Search("casino"), e => e.GameId != null);
+        }
+        finally
+        {
+            SettingsPaletteIndex.GameAvailableProvider = null;
+            LauncherWindow.Instance?.Close();
+        }
+    });
+
+    [Fact]
+    public Task ClickAwayClosesThePaletteAndLeavesThePanelInFront() => Shell(shell =>
+    {
+        var other = new Window();
+        try
+        {
+            other.Show(shell);
+            SettingsPaletteWindow.Toggle(shell);
+            var palette = OpenPalette();
+            palette.Activate();
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(palette.IsActive, "palette never active");
+            // The click lands on another of our windows. The headless platform keeps every window
+            // active at once and never raises Deactivated, so the palette's handler is entered directly.
+            var raised = 0;
+            shell.Activated += (_, _) => raised++;
+            typeof(SettingsPaletteWindow).GetMethod("Window_Deactivated", BindingFlags.NonPublic | BindingFlags.Instance)!
+                .Invoke(palette, null);
+            Dispatcher.UIThread.RunJobs();
+            Assert.False(SettingsPaletteWindow.IsOpen);
+            Assert.True(raised > 0, "the panel was not brought back to the front");
+        }
+        finally { other.Close(); }
+    });
+
+    [Fact]
     public Task RightClickPinsTheRowToFavourites() => Shell(shell =>
     {
         CoreSettings.Current.RailFavorites.Clear();
@@ -106,9 +154,17 @@ public sealed class NavSearchTests
         palette.FindControl<TextBox>("TxtQuery")!.Text = "leaderboard";
         Dispatcher.UIThread.RunJobs();
         var list = palette.FindControl<ListBox>("ListResults")!;
-        var row = list.Items.Cast<PaletteRow>().First(r => FavoritesRailRule.IsDestination(r.Entry.Id));
-        var menu = palette.ShowPinMenu(row, list);
+        var index = list.Items.Cast<PaletteRow>().ToList().FindIndex(r => FavoritesRailRule.IsDestination(r.Entry.Id));
+        var row = (PaletteRow)list.Items[index]!;
+        // A real right-button press and release on the row, as the user does it.
+        palette.UpdateLayout();
+        var container = (Control)list.ContainerFromIndex(index)!;
+        var at = container.TranslatePoint(new Point(container.Bounds.Width / 2, container.Bounds.Height / 2), palette)!.Value;
+        palette.MouseDown(at, global::Avalonia.Input.MouseButton.Right);
+        palette.MouseUp(at, global::Avalonia.Input.MouseButton.Right);
         Dispatcher.UIThread.RunJobs();
+        Assert.True(SettingsPaletteWindow.IsOpen);   // a right-click pins, it never navigates
+        var menu = palette.PinMenu;
         Assert.NotNull(menu);
         var item = menu!.Items.OfType<MenuItem>().Single();
         Assert.Equal(Loc.Get("rail_pin"), item.Header);

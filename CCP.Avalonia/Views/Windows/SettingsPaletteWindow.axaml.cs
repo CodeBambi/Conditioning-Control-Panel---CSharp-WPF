@@ -198,10 +198,23 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // before. Only when the panel already holds focus: a click into another app keeps it.
             try
             {
-                if (Owner is Window owner && owner.IsActive)
-                    Dispatcher.UIThread.Post(() => { try { owner.Activate(); } catch { } });
+                // WPF ForegroundIsOurs: asked after the close settles, because when Deactivated
+                // fires the window that took the click has not reported Activated yet.
+                if (Owner is Window owner)
+                    Dispatcher.UIThread.Post(() => { try { if (OurWindowIsActive()) owner.Activate(); } catch { } });
             }
             catch { }
+        }
+
+        /// <summary>WPF ForegroundIsOurs: some window of this app holds activation. Tracked by
+        /// class handler, so it also holds for headless hosts that have no desktop lifetime.</summary>
+        private static bool OurWindowIsActive() => OpenWindows.Any(w => w.IsActive);
+        private static readonly HashSet<Window> OpenWindows = new();
+
+        static SettingsPaletteWindow()
+        {
+            WindowOpenedEvent.AddClassHandler<Window>((w, _) => OpenWindows.Add(w));
+            WindowClosedEvent.AddClassHandler<Window>((w, _) => OpenWindows.Remove(w));
         }
 
         // =====================================================================================
@@ -468,6 +481,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         /// <summary>Right-click pins or unpins the row to the dashboard's Favourites (WPF
         /// Item_RightClick, f6534c3c4): the only pin door for games and rack modules.</summary>
+        /// <summary>The pin menu last opened (tests read it; the menu has no name scope).</summary>
+        internal ContextMenu? PinMenu { get; private set; }
+
         internal ContextMenu? ShowPinMenu(PaletteRow row, Control anchor)
         {
             var id = row.Entry.Id;
@@ -493,6 +509,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 try { if (IsVisible) { Activate(); _txtQuery.Focus(); } } catch { }
             };
             _pinMenuOpen = true;
+            PinMenu = menu;
             menu.Open(anchor);
             return menu;
         }
