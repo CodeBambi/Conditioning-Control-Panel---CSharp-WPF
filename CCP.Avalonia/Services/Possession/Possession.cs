@@ -56,7 +56,7 @@ public static class PossessionTree
     /// <summary>Anything the user presses, types in, drags or scrolls.</summary>
     public static bool IsInteractive(Visual? v) =>
         v is Button or ToggleButton or TextBox or RangeBase and not ProgressBar or SelectingItemsControl or ScrollBar
-            or Thumb or MenuItem or ScrollViewer or NumericUpDown or CalendarDatePicker;
+            or Thumb or MenuItem or ScrollViewer or NumericUpDown or CalendarDatePicker or ListBoxItem or TabItem;
 
     /// <summary>True when no effect may touch this element: null, excluded, holding anything excluded
     /// or interactive, interactive itself or sitting INSIDE an interactive control (a label that is a
