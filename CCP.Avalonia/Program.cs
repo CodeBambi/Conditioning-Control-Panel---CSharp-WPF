@@ -248,6 +248,7 @@ namespace ConditioningControlPanel.Avalonia
                 .With(new SkiaOptions { MaxGpuResourceSizeBytes = Platform.RenderBudget.GpuResourceCacheBytes });
             if (OperatingSystem.IsWindows())
                 builder = builder.With(Win32Options());
+            if (OperatingSystem.IsWindows()) Views.Games.GameWindow.FypGhostPlatform = new Platform.WindowsFypGhost();   // For You ghost mode (never in headless tests)
             // The packed display face (Fredoka) on every OS; off Windows also the bundled stand-ins for
             // the Windows faces the views name (Platform/AppFonts.cs).
             if (Platform.AppFonts.Options() is { } fonts)

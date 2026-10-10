@@ -208,6 +208,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                     PostFypEyeStatus(null);
                     return;
                 }
+                ExitFypGhost();   // WPF :1371: a parked window cannot host a modal dot dance
                 await FypEyeCalibrate(this);
                 SyncFypGazeSubscription();
                 PostFypEyeStatus(null);

@@ -26,12 +26,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
     /// sub-probe (+ library); attention-hit; settings-changed; file-menu; close (the shell).</para>
     ///
     /// <para>Eye control (blink / eyesClosed / gaze frames, eyeStatus, the calibrate frame) is
-    /// GameWindow.Fyp.Eye.cs. NOT on this head: ghost mode (WPF's DWM live-thumbnail mirror over a
-    /// parked window); it answers the page with WPF's own "unavailable" frame so its toggle snaps back
-    /// with the WPF reason line.</para>
+    /// GameWindow.Fyp.Eye.cs. Ghost mode (the clickThrough setting: a see-through, click-through live
+    /// mirror over a parked window) is GameWindow.Fyp.Ghost.cs; where the platform has none it answers
+    /// the page with WPF's own "unavailable" frame so its toggle snaps back with the WPF reason line.</para>
     ///
     /// <para>BRIGHT LINE: remote batches and sub probes go straight from this machine to the
-    /// provider, and only when <see cref="FypHostService.RemoteAllowed"/> says so.</para>
+    /// provider. Media is fetched only when <see cref="FypHostService.RemoteAllowed"/> says so; a
+    /// probe of a typed name is answered whatever the consent state, as WPF does (owner, 10 Oct 2026).</para>
     /// </summary>
     internal sealed partial class GameWindow
     {
@@ -85,6 +86,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                         try { _fypMeta?.Save(); } catch (Exception ex) { Log.Debug("[Game] fyp meta save: {E}", ex.Message); }
                         try { FypOnlineCoordinator.SaveAll(); } catch (Exception ex) { Log.Debug("[Game] fyp channels save: {E}", ex.Message); }
                     };
+                }
+                // WPF PostInit :172: a page (re)init while ghosted means the page rebooted under the
+                // mirror with its own clickThrough reset; leave ghost mode so both sides agree.
+                if (IsFypGhosted)
+                {
+                    Log.Information("[Game] fyp: page re-init while ghosted, leaving ghost mode");
+                    ExitFypGhost();
                 }
                 Post(FypHostService.BuildInit(CoreSettings.Current, FypAssets(), eyeControl: true));
                 // WPF :239: persisted eye control re-arms the camera on every launch (with the same consent
@@ -183,10 +191,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             switch (FypHostService.ApplySetting(s, key, value))
             {
                 case FypHostService.SettingEffect.GhostOn:
-                    // not ported: ghost mode. WPF's own "could not compose" answer: the toggle snaps
-                    // back and the page says the feed stays solid.
-                    Post(new { type = "clickThrough", on = false });
-                    Post(new { type = "ghost-unavailable", reason = "not on this build" });
+                    EnterFypGhost();   // WPF :359 (GameWindow.Fyp.Ghost.cs); "unavailable" where it cannot compose
+                    break;
+                case FypHostService.SettingEffect.GhostOff:
+                    ExitFypGhost();    // WPF :360
+                    break;
+                case FypHostService.SettingEffect.OpacityChanged:
+                    // WPF :387: stored, and pushed straight onto the mirror when one is up.
+                    _fypGhost?.SetOpacity(s.FypWindowOpacity);
                     break;
                 case FypHostService.SettingEffect.EyeControlOn:
                     EnableFypEyeControl();   // WPF :395
@@ -231,17 +243,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
 
         /// <summary>WPF ProbeCustomSub: is a typed subreddit real? One upstream request, then
         /// sub-probe back; a found sub is committed here, never by the page.</summary>
-        internal async Task ProbeFypSub(string? rawSub)
+        internal Task? FypLastProbe { get; private set; }
+
+        internal Task ProbeFypSub(string? rawSub) => FypLastProbe = ProbeFypSubCore(rawSub);
+
+        private async Task ProbeFypSubCore(string? rawSub)
         {
             var clean = FypOnlineCoordinator.SanitizeSub(rawSub);
             if (clean == null) { Post(FypHostService.InvalidProbeFrame(rawSub)); return; }
-            // The same consent every remote fetch on this head asks for: a probe is a request to the provider.
-            if (!CoreSettings.Current.HasRemoteMediaConsent)
-            {
-                Log.Debug("[Game] fyp: probe-sub refused (no remote media consent)");
-                Post(new { type = "sub-probe", sub = clean, ok = false, videoCount = (int?)null, error = "consent" });
-                return;
-            }
+            // WPF ProbeCustomSub :577 has no consent gate: the probe is one name lookup the player
+            // typed, and it runs whatever the consent state. Only the media fetch (need-remote ->
+            // assets-append) needs consent AND a non-library source (ServeFypRemoteBatch).
             lock (_fypProbesInFlight) { if (!_fypProbesInFlight.Add(clean)) return; }
             try
             {

@@ -429,15 +429,30 @@ public sealed class PremiumDoorsTests
             };
             w.FypProbeOverride = (_, _) => { probes++; return Task.FromResult(new SubProbe { Ok = true, VideoCount = 9 }); };
 
-            // No consent: nothing is fetched, nothing is probed, whatever the page asks.
+            // No consent: no MEDIA is fetched, whatever the page asks.
             w.ServeFypRemoteBatch().GetAwaiter().GetResult();
             w.HandleMessage("{\"type\":\"settings-changed\",\"key\":\"source\",\"value\":\"online\"}");
             Assert.Equal("library", s.FypSource);
             w.ServeFypRemoteBatch().GetAwaiter().GetResult();
-            w.ProbeFypSub("hypno").GetAwaiter().GetResult();
             Assert.Equal(0, fetches);
-            Assert.Equal(0, probes);
-            Assert.Equal("consent", (string?)posted.Single(p => (string?)p["type"] == "sub-probe")["error"]);
+
+            // The niche probe is not a media fetch: WPF answers it whatever the consent state
+            // (owner, 10 Oct 2026: match WPF), and a found name is kept in the library.
+            var probing = w.ProbeFypSub("hypno");
+            for (var i = 0; i < 400 && !probing.IsCompleted; i++) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(5); }
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(probing.IsCompleted);
+            Assert.Equal(1, probes);
+            var answer = posted.Single(p => (string?)p["type"] == "sub-probe");
+            Assert.True((bool)answer["ok"]!);
+            Assert.Null((string?)answer["error"]);
+            Assert.Equal(9, (int)answer["videoCount"]!);
+            Assert.Contains(posted, p => (string?)p["type"] == "library");
+            Assert.Contains("hypno", s.FypOnlineCustomSubs);
+            Assert.False(s.HasRemoteMediaConsent);                     // a probe never grants consent
+            Assert.Equal(0, fetches);                                  // and never fetches media
+            w.ServeFypRemoteBatch().GetAwaiter().GetResult();
+            Assert.Equal(0, fetches);
 
             // A name that is not a subreddit is answered without a request.
             posted.Clear();
