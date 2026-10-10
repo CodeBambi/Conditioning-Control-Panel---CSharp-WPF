@@ -1793,3 +1793,6 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/sync6-nav-rail-b: +857
 - Section rail replaces the flyout (Social door with Friends/Leash pills, lit row, last tab, Ctrl+1..7, fixed Back row); pills pin on right-click; Play zone pills scroll.
 - Ctrl+K held toggles once; 7 rows ported/n/a, 15 left needs-port for sync6-nav-rail-c.
+
+## avalonia-port/sync6-gate-pay: +74
+- Vault gate: card/PayPal checkout link under every pay button (main 750e76812), via ExternalOpener; fake-launcher test, fail-proven.
