@@ -92,6 +92,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _engineGen++;
             App.Sessions?.Pause();
             CoreEngine.Stop();
+            Overlays.BrainDrainOverlay.CloseAll();   // the haze goes on every stop and panic, engine running or not
         }
 
         /// <summary><see cref="CoreEngine.StoppedHook"/>: the head half of StopEngineCore.</summary>
