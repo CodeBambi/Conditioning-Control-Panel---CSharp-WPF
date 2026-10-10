@@ -184,6 +184,7 @@ namespace ConditioningControlPanel.Services
             _loop = null;
             (IsActive, SessionCode, ConnectPin, Tier, ControllerIdle, _idleSince, _autoDisconnected) = (false, null, null, null, false, null, false);
             (_remoteSetStrictLock, _pollBackedOff, _lastControllerCommand) = (false, false, DateTime.MinValue);
+            (_lastOptInTags, _lastOptInStatus) = (null, null);
             // StopAsync and the poll loop land here off the UI thread, and the stops close windows: run
             // them on the UI like ControllerLeft, posted if a stalled UI cancels the Invoke.
             void StopEffects() { try { _stopEffects(false); } catch (Exception ex) { Log.Warning(ex, "[RemoteControl] stop effects failed"); } }
@@ -261,7 +262,7 @@ namespace ConditioningControlPanel.Services
             if (changed)
             {
                 ControllerConnected = connected;
-                if (!connected) ControllerLeft();
+                if (!connected) { ControllerLeft(); _ = RepublishDirectoryIfOptedInAsync(); }
                 ControllerConnectedChanged?.Invoke(this, EventArgs.Empty);
             }
             if (idle != ControllerIdle)
@@ -275,6 +276,7 @@ namespace ConditioningControlPanel.Services
                 Log.Information("[RemoteControl] Controller idle for {Seconds:F0}s - auto-disconnecting", (Now() - since).TotalSeconds);
                 (_autoDisconnected, ControllerConnected, ControllerIdle) = (true, false, false);
                 ControllerLeft();
+                _ = RepublishDirectoryIfOptedInAsync();
                 ControllerConnectedChanged?.Invoke(this, EventArgs.Empty);
                 ControllerIdleChanged?.Invoke(this, EventArgs.Empty);
                 changed = true;
@@ -404,6 +406,52 @@ namespace ConditioningControlPanel.Services
         /// <summary>WPF PushStatusNowAsync: a settings change (share avatar) reaches the controller now,
         /// not at the next ~15 s push. No-op without a session.</summary>
         public Task PushStatusNowAsync() => IsActive ? SendStatusAsync(null, null) : Task.CompletedTask;
+
+        /// <summary>WPF OptInToDirectoryAsync (RemoteControlService.cs:247): list the live session in the
+        /// directory. Best-effort: false on any failure, the session itself is untouched. The body carries
+        /// the PIN the tab already shows; the response body is never logged.</summary>
+        public async Task<bool> OptInToDirectoryAsync(List<string>? tags, string? statusText)
+        {
+            if (!IsActive || string.IsNullOrEmpty(SessionCode) || string.IsNullOrEmpty(ConnectPin))
+            {
+                Log.Warning("[RemoteControl] OptIn called without active session");
+                return false;
+            }
+            var uid = _unifiedId();
+            if (string.IsNullOrEmpty(uid) || _baseUrl == null) return false;
+            tags ??= new List<string>();
+            statusText ??= "";
+            try
+            {
+                using var resp = await PostAsync("/v2/directory/opt-in",
+                    new { unified_id = uid, code = SessionCode, pin = ConnectPin, tags, status_text = statusText }).ConfigureAwait(false);
+                if (!resp.IsSuccessStatusCode)
+                {
+                    Log.Warning("[RemoteControl] Directory opt-in failed: {Status}", resp.StatusCode);
+                    return false;
+                }
+                // Kept so the entry can be re-published when the controller leaves (the server keeps
+                // the claim flag across a disconnect, so the subject would stay "taken").
+                (_lastOptInTags, _lastOptInStatus) = (tags, statusText);
+                Log.Information("[RemoteControl] Directory opt-in OK ({TagCount} tags, status={StatusLen}c)", tags.Count, statusText.Length);
+                return true;
+            }
+            catch (Exception ex) { Log.Warning(ex, "[RemoteControl] Directory opt-in error"); return false; }
+        }
+
+        /// <summary>True once this session's directory opt-in succeeded; cleared when the session ends.</summary>
+        public bool DirectoryOptedIn => _lastOptInTags != null;
+
+        private List<string>? _lastOptInTags;
+        private string? _lastOptInStatus;
+
+        /// <summary>WPF RepublishDirectoryIfOptedInAsync: after a controller leaves, the entry goes back to available.</summary>
+        internal async Task RepublishDirectoryIfOptedInAsync()
+        {
+            if (_lastOptInTags is not { } tags || !IsActive) return;
+            try { await OptInToDirectoryAsync(tags, _lastOptInStatus ?? "").ConfigureAwait(false); }
+            catch (Exception ex) { Log.Warning(ex, "[RemoteControl] Directory re-publish after disconnect failed"); }
+        }
 
         private async Task SendStatusAsync(string? lastId, string? lastAction)
         {

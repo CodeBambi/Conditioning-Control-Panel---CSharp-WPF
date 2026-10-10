@@ -39,10 +39,9 @@ public sealed class RemoteControlTabTests
                 host.Show();
                 Dispatcher.UIThread.RunJobs();
 
-                // Fix wave 2026-10-09 (S6, S7): emotes and the directory opt-in have no route on this relay yet, so
-                // neither block is offered (a tick would tell a player they are listed when they are not).
-                Assert.False(view.FindControl<Border>("EmotePickerPanel")!.IsVisible);
-                Assert.False(view.FindControl<Border>("OptInSectionPanel")!.IsVisible);
+                // Page wave 2026-10-10 (S6, S7): both blocks are on the page, as on WPF (RemoteDirectoryTabTests).
+                Assert.True(view.FindControl<Border>("EmotePickerPanel")!.IsVisible);
+                Assert.True(view.FindControl<Border>("OptInSectionPanel")!.IsVisible);
 
                 var toggle = view.FindControl<CheckBox>("ChkRemoteControlEnabled")!;
                 toggle.IsChecked = true;
@@ -51,9 +50,9 @@ public sealed class RemoteControlTabTests
                 Assert.Equal(1, refusals);
                 Assert.False(RemoteControlTabView.Relay.Value.IsActive);
 
-                Assert.DoesNotContain("panic", RemoteControlTabView.Waiver("full").Split("A controller can never turn your panic key off.")[0], System.StringComparison.OrdinalIgnoreCase);
-                Assert.Contains("strict lock", RemoteControlTabView.Waiver("full"));
-                Assert.Contains("A controller can never turn your panic key off.", RemoteControlTabView.Waiver("light"));
+                Assert.DoesNotContain("panic", RemoteControlTabView.Waiver("full").Split("Your panic key always works. A controller cannot switch it off or turn Strict Lock on.")[0], System.StringComparison.OrdinalIgnoreCase);
+                Assert.DoesNotContain("Enable strict lock", RemoteControlTabView.Waiver("full"));   // WPF 7.1.5: no tier can
+                Assert.Contains("Your panic key always works. A controller cannot switch it off or turn Strict Lock on.", RemoteControlTabView.Waiver("light"));
                 Assert.DoesNotContain("videos", RemoteControlTabView.Waiver("light"));
 
                 var qr = RemoteControlTabView.QrCode(RemoteRelay.PairingUrl("ABC123", "0420"));
