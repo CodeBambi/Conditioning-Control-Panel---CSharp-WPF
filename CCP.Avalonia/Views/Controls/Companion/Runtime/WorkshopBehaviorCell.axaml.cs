@@ -120,8 +120,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion.Runtime
         /// TextBlock. The literal in the markup is a placeholder, not a binding, so assigning
         /// .Text here is safe (nothing on this control carries {loc:Str}).
         /// </summary>
-        internal void RefreshChatShortcutLabel() =>
+        internal void RefreshChatShortcutLabel()
+        {
             TxtChatShortcutLabel.Text = AvatarTube.AvatarTubeWindow.FormatChatShortcut();
+            RefreshCameraShortcutLabel();
+        }
+
+        /// <summary>WPF RefreshCameraShortcutLabel (MainWindow.SessionIO.cs:1466), the same pill.</summary>
+        internal void RefreshCameraShortcutLabel() =>
+            TxtCameraShortcutLabel.Text = Views.Windows.MainShellWindow.FormatCameraShortcut();
 
         private void SliderIdleInterval_ValueChanged(object? sender, RangeBaseValueChangedEventArgs e)
         {

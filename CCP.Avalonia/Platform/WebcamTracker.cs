@@ -50,31 +50,93 @@ namespace ConditioningControlPanel.Avalonia.Platform
         }
     }
 
-    /// <summary>V4L2 capture through OpenCV. <c>CCP_WEBCAM_DEVICE</c> (an index) overrides the saved camera
-    /// index; live checks point it at one with no /dev/videoN so no real camera is opened.</summary>
+    /// <summary>Capture through OpenCV: V4L2 on Linux; on Windows WPF's ladder (DSHOW, DSHOW/MJPG, MSMF,
+    /// MSMF/MJPG, WebcamTrackingService.CaptureAttempts), each kept only if a frame arrives.
+    /// <c>CCP_WEBCAM_DEVICE</c> (an index) overrides the saved camera index; live checks point it at one
+    /// with no device so no real camera is opened.
+    /// ponytail: WPF also rejects a flat frozen feed (MinProbeStdDev / temporal delta) before adopting a
+    /// backend; this accepts the first backend that delivers any frame.</summary>
     internal sealed class OpenCvFrameSource : IFrameSource
     {
         private VideoCapture? _cap;
 
+        private static readonly (VideoCaptureAPIs Api, string? Fourcc)[] WindowsAttempts =
+        {
+            (VideoCaptureAPIs.DSHOW, null), (VideoCaptureAPIs.DSHOW, "MJPG"),
+            (VideoCaptureAPIs.MSMF, null), (VideoCaptureAPIs.MSMF, "MJPG"),
+        };
+
+        /// <summary>Tests: no test may open a real camera. Open fails as "no camera".</summary>
+        internal static bool Disabled;
+
         public bool Open()
         {
+            if (Disabled) return false;
             int index = int.TryParse(Environment.GetEnvironmentVariable("CCP_WEBCAM_DEVICE"), out var i)
                 ? Math.Max(0, i) : ResolveSavedIndex();
-            _cap = new VideoCapture(index, OperatingSystem.IsLinux() ? VideoCaptureAPIs.V4L2 : VideoCaptureAPIs.ANY);
-            if (!_cap.IsOpened()) return false;
-            // WPF's default mode (WebcamTrackingService CaptureWidth/Height/TargetFps).
-            _cap.Set(VideoCaptureProperties.FrameWidth, 640);
-            _cap.Set(VideoCaptureProperties.FrameHeight, 480);
-            _cap.Set(VideoCaptureProperties.Fps, 30);
-            return true;
+            if (!OperatingSystem.IsWindows())
+            {
+                _cap = new VideoCapture(index, OperatingSystem.IsLinux() ? VideoCaptureAPIs.V4L2 : VideoCaptureAPIs.ANY);
+                if (!_cap.IsOpened()) return false;
+                Configure(_cap, null);
+                return true;
+            }
+            foreach (var (api, fourcc) in WindowsAttempts)
+            {
+                VideoCapture? cap = null;
+                try
+                {
+                    cap = new VideoCapture(index, api);
+                    if (!cap.IsOpened()) { cap.Dispose(); continue; }
+                    Configure(cap, fourcc);
+                    if (Warm(cap))
+                    {
+                        Log.Information("[Webcam] device {Index} opened via {Api}{Fourcc}", index, api, fourcc == null ? "" : "/" + fourcc);
+                        _cap = cap;
+                        return true;
+                    }
+                    cap.Release(); cap.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    Log.Information("[Webcam] {Api} open threw for index {Index}: {Error}", api, index, ex.Message);
+                    try { cap?.Dispose(); } catch (Exception e2) { Diag.Swallowed(e2); }
+                }
+            }
+            return false;
         }
 
-        /// <summary>The saved /dev/videoN when it is listed, else the first listed camera - the one the
+        // WPF's default mode (WebcamTrackingService CaptureWidth/Height/TargetFps, BufferSize 1).
+        private static void Configure(VideoCapture cap, string? fourcc)
+        {
+            if (fourcc is { Length: 4 })
+                cap.Set(VideoCaptureProperties.FourCC, VideoWriter.FourCC(fourcc[0], fourcc[1], fourcc[2], fourcc[3]));
+            cap.Set(VideoCaptureProperties.FrameWidth, 640);
+            cap.Set(VideoCaptureProperties.FrameHeight, 480);
+            cap.Set(VideoCaptureProperties.Fps, 30);
+            if (OperatingSystem.IsWindows()) cap.Set(VideoCaptureProperties.BufferSize, 1);
+        }
+
+        /// <summary>Slow drivers hand back empty frames right after the handle opens (WPF ProbeWarmupMs):
+        /// poll briefly before calling the backend dead. The probe frame is dropped, never kept.</summary>
+        private static bool Warm(VideoCapture cap)
+        {
+            using var probe = new Mat();
+            var until = DateTime.UtcNow.AddMilliseconds(2500);
+            while (DateTime.UtcNow < until)
+            {
+                if (cap.Read(probe) && !probe.Empty()) return true;
+                Thread.Sleep(30);
+            }
+            return false;
+        }
+
+        /// <summary>The saved camera number when it is listed, else the first listed camera - the one the
         /// Settings picker shows in that case (V4L2 numbers have gaps, so "0" may not exist).</summary>
         internal static int ResolveSavedIndex()
         {
             int saved = CoreSettings.Current.WebcamDeviceIndex;
-            var cams = V4l2Cameras.Enumerate();
+            var cams = CameraList.Enumerate();
             foreach (var c in cams) if (c.Index == saved) return saved;
             return cams.Count > 0 ? cams[0].Index : Math.Max(0, saved);
         }
@@ -85,7 +147,7 @@ namespace ConditioningControlPanel.Avalonia.Platform
     }
 
     /// <summary>
-    /// The Linux webcam engine: frame source -> Core BlazeFace/FaceMesh/Iris detectors -> Core
+    /// The webcam engine (Linux and Windows): frame source -> Core BlazeFace/FaceMesh/Iris detectors -> Core
     /// BlinkDetector + GazeEngine, the same pipeline WebcamTrackingService.ProcessFrame runs on WPF:
     /// blinks, face lost/found, head pose, raw iris, gaze side and the projected gaze point. Camera
     /// open only between Start and Stop, only with current consent.
@@ -134,6 +196,16 @@ namespace ConditioningControlPanel.Avalonia.Platform
         private volatile bool _calibrationLoaded;
 
         public bool IsRunning => _run != null;
+        /// <summary>Running, but no face in the frame (WPF WebcamTrackingState.FaceLost).</summary>
+        internal volatile bool FaceLost;
+        /// <summary>WPF WebcamStateText: the tracker's state as the loc key every status pill shows.
+        /// ponytail: WPF tells "camera in use" and "camera denied" apart from a plain error; this
+        /// engine's open has one failure, so both read as Error with LastError in the log.</summary>
+        internal string StateKey =>
+            IsStarting ? "rf_webcam_starting"
+            : IsRunning ? (FaceLost ? "rf_webcam_face_lost" : "rf_webcam_tracking")
+            : LastError != null && !StartWasStopped ? "rf_webcam_error"
+            : "rf_webcam_stopped";
         /// <summary>Why the last start failed, for the user; null after a good start.</summary>
         public string? LastError { get; private set; }
         /// <summary>Frames whose processing threw (the loop logs and carries on); tests assert zero.</summary>
@@ -236,6 +308,7 @@ namespace ConditioningControlPanel.Avalonia.Platform
                 }
                 _blink.Reset();
                 _gaze.Reset();
+                FaceLost = false;
                 run.Thread = new Thread(() => Loop(run)) { IsBackground = true, Name = "WebcamCapture", Priority = ThreadPriority.BelowNormal };
                 bool stale;
                 lock (_gate)
@@ -374,7 +447,7 @@ namespace ConditioningControlPanel.Avalonia.Platform
             if (r.Width < 16 || r.Height < 16) { NoFace(); return; }
             var lm = run.Mesh!.Detect(bgr, r);
             if (lm == null) { NoFace(); return; }
-            if (_gaze.FaceSeen()) Dispatcher.UIThread.Post(() => OnFaceFound?.Invoke());
+            if (_gaze.FaceSeen()) { FaceLost = false; Dispatcher.UIThread.Post(() => OnFaceFound?.Invoke()); }
             if (HeadPose(_gaze, lm, bgr.Width, bgr.Height) is { } pose)
                 Dispatcher.UIThread.Post(() => OnHeadPose?.Invoke(pose.Yaw, pose.Pitch));
             var left = run.Iris!.Detect(bgr, lm[FaceMeshDetector.LeftEyeOuterIdx], lm[FaceMeshDetector.LeftEyeInnerIdx], isRightEye: false);
@@ -430,7 +503,7 @@ namespace ConditioningControlPanel.Avalonia.Platform
 
         private void NoFace()
         {
-            if (_gaze.FaceMissing()) Dispatcher.UIThread.Post(() => OnFaceLost?.Invoke());
+            if (_gaze.FaceMissing()) { FaceLost = true; Dispatcher.UIThread.Post(() => OnFaceLost?.Invoke()); }
             _blink.CancelClosure();
         }
     }

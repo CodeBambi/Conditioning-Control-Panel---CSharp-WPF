@@ -20,6 +20,9 @@ internal static class TestUserDataProfile
         // w2: no test may read the real screen or listen to the real keyboard.
         ConditioningControlPanel.Avalonia.Platform.ScreenOcrService.Disabled = true;
         ConditioningControlPanel.Avalonia.Platform.X11KeyListener.Disabled = true;
+        // u1: no test may ask the real machine for its cameras.
+        ConditioningControlPanel.Avalonia.Platform.CameraList.Disabled = true;
+        ConditioningControlPanel.Avalonia.Platform.OpenCvFrameSource.Disabled = true;
         Environment.SetEnvironmentVariable("CCP_USERDATA_DIR", Root);
         _ = ConditioningControlPanel.CorePaths.UserData;   // installs the SandboxNet guard before any test runs
         // Every one-shot feature card already spent: a shown shell lands on the Dashboard, whose card

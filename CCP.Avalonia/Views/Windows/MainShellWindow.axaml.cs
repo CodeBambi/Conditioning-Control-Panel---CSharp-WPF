@@ -133,6 +133,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             InitializeHelpButtons(); // MainShellWindow.HelpButtons.cs (WPF MainWindow.Presets.cs:35 SetupHelpButtons)
             InitializeDashboardFx(); // MainShellWindow.DashboardFx.cs (WPF MainWindow ctor -> InitializeDashboardFx)
             InitializeRememberButton(); // MainShellWindow.Remember.cs (WPF MainWindow.xaml.cs:3508)
+            InitializeFocusGaze(); // MainShellWindow.FocusGaze.cs (WPF MainWindow.LabTab.cs HookFocusGazeService)
+            InitializeCameraShortcut(); // MainShellWindow.CameraShortcut.cs (WPF ApplyCameraShortcutTo + ApplyGlobalCameraHotkey)
             InitializeMicActivePill(); // MainShellWindow.SheListening.cs (WPF MainWindow.xaml.cs:3594 WireMicActivePill)
             InitializeRemoteControlOverlay(); // MainShellWindow.RemoteControl.cs (WPF MainWindow.RemoteControl.cs:784)
             // WPF MainWindow.xaml.cs:3695: the tube is built on load when the companion is enabled.

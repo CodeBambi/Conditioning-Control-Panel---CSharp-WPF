@@ -58,8 +58,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             Platform.WebcamTracker.Instance.StateChanged -= OnTrackerStateChanged;
             Platform.WebcamTracker.Instance.StateChanged += OnTrackerStateChanged;
             LocalizationManager.Instance.LanguageChanged += OnTrackerLanguageChanged;
+            Platform.GazeFocusHead.Instance.OnActiveChanged -= OnFocusGazeActiveChanged;
+            Platform.GazeFocusHead.Instance.OnActiveChanged += OnFocusGazeActiveChanged;
             RefreshPlayCards();
             RefreshTrackerUi();
+            // WPF HookFocusGazeService: the box follows the saved intent, silently.
+            if (ChkPlayFocusGaze.IsChecked != CoreSettings.Current.FocusGazeEnabled)
+            {
+                _focusGazeSyncing = true;
+                try { ChkPlayFocusGaze.IsChecked = CoreSettings.Current.FocusGazeEnabled; }
+                finally { _focusGazeSyncing = false; }
+            }
+            RefreshFocusGazeStatus();
         }
 
         private void OnTrackerStateChanged() => Dispatcher.UIThread.Post(() => RefreshTrackerUi());
@@ -90,6 +100,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             App.IntakePass.PassStateChanged -= OnIntakePassStateChanged;
             LocalizationManager.Instance.LanguageChanged -= OnIntakePassStateChanged;
             Platform.WebcamTracker.Instance.StateChanged -= OnTrackerStateChanged;
+            Platform.GazeFocusHead.Instance.OnActiveChanged -= OnFocusGazeActiveChanged;
             LocalizationManager.Instance.LanguageChanged -= OnTrackerLanguageChanged;
             base.OnDetachedFromVisualTree(e);
         }
@@ -323,41 +334,100 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         private bool _focusGazeSyncing;
 
-        /// <summary>WPF MainWindow.LabTab.cs:929 ChkFocusGaze_Changed, as far as this head goes. The
-        /// Prime gate answers first on the ON branch (revert, then tell), exactly as WPF. The engine
-        /// behind the switch (GazeFocusService: dwell on flashes, bubbles and floating video) is not on
-        /// this head, so an allowed ON reverts too and the status line says so. OFF is never gated.</summary>
-        private void ChkFocusGaze_Changed(object? sender, RoutedEventArgs e) => FocusGazeChanged();
+        /// <summary>Tests answer the consent prompt without a window. Null = the real dialog.</summary>
+        internal Func<System.Threading.Tasks.Task<bool>>? AskWebcamConsent;
 
-        /// <returns>What the ON press met: "off", "tier" or "build".</returns>
-        internal string FocusGazeChanged()
+        /// <summary>WPF MainWindow.LabTab.cs:929 ChkFocusGaze_Changed: the Prime gate first (revert, then
+        /// tell), webcam consent, start the camera off the UI thread, then the engine. It stays on only
+        /// when the engine went active (tracking + a calibration). OFF is never gated.</summary>
+        private async void ChkFocusGaze_Changed(object? sender, RoutedEventArgs e)
+        {
+            try { await (LastFocusGazePress = FocusGazeChangedAsync()); }
+            catch (Exception ex) { Log.Warning(ex, "[Play] Focus Gaze switch failed"); }
+        }
+
+        /// <summary>Tests await the press the switch just started.</summary>
+        internal System.Threading.Tasks.Task<string>? LastFocusGazePress;
+
+        /// <returns>What the press met: "sync", "off", "tier", "consent", "camera", "calibrate" or "on".</returns>
+        internal async System.Threading.Tasks.Task<string> FocusGazeChangedAsync()
         {
             if (_focusGazeSyncing) return "sync";
+            var focus = Platform.GazeFocusHead.Instance;
             if (ChkPlayFocusGaze.IsChecked != true)
             {
+                focus.MasterEnabled = false;
                 SyncFocusGazeToggle(false);
-                TxtPlayFocusGazeStatus.Text = "";
                 return "off";
             }
             var verdict = TierGate.RequiresLab(Loc.Get("label_focus_gaze"));
-            SyncFocusGazeToggle(false);
             if (!verdict.Allowed)
             {
+                SyncFocusGazeToggle(false);
                 TierGate.ShowDenied(verdict);
                 return "tier";
             }
-            TxtPlayFocusGazeStatus.Text = Loc.Get("exclusives_not_on_this_build");
-            return "build";
+            if (!Services.Webcam.WebcamConsent.IsCurrent(CoreSettings.Current))
+            {
+                bool ok;
+                if (AskWebcamConsent != null) ok = await AskWebcamConsent();
+                else if (Owner is { } owner) { await new Dialogs.WebcamConsentDialog().ShowDialogSafe(owner); ok = true; }
+                else ok = false;
+                if (!ok || !Services.Webcam.WebcamConsent.IsCurrent(CoreSettings.Current))
+                {
+                    SyncFocusGazeToggle(false);
+                    TxtPlayFocusGazeStatus.Text = Loc.Get("label_focus_gaze_consent_required");
+                    return "consent";
+                }
+            }
+            var tracker = Platform.WebcamTracker.Instance;
+            if (focus.CanRunOverride == null && !tracker.IsRunning)
+            {
+                TxtPlayFocusGazeStatus.Text = "Starting webcam…";
+                if (!await tracker.StartAsync())
+                {
+                    SyncFocusGazeToggle(false);
+                    TxtPlayFocusGazeStatus.Text = Loc.GetF("label_focus_gaze_webcam_failed_format", Loc.Get(tracker.StateKey));
+                    return "camera";
+                }
+            }
+            focus.MasterEnabled = true;
+            if (focus.IsActive) { SyncFocusGazeToggle(true); return "on"; }
+            focus.MasterEnabled = false;
+            SyncFocusGazeToggle(false);
+            bool noCal = tracker.Calibration == null;
+            TxtPlayFocusGazeStatus.Text = noCal
+                ? Loc.Get("label_focus_gaze_calibrate_first")
+                : Loc.GetF("label_focus_gaze_webcam_failed_format", Loc.Get(tracker.StateKey));
+            return noCal ? "calibrate" : "camera";
+        }
+
+        /// <summary>WPF RefreshFocusGazeStatus: blank when off, else active / waiting for the camera.</summary>
+        internal void RefreshFocusGazeStatus()
+        {
+            if (!CoreSettings.Current.FocusGazeEnabled) { TxtPlayFocusGazeStatus.Text = ""; return; }
+            TxtPlayFocusGazeStatus.Text = Loc.Get(Platform.GazeFocusHead.Instance.IsActive ? "label_focus_gaze_active" : "label_focus_gaze_waiting");
+        }
+
+        private void OnFocusGazeActiveChanged(bool _) => global::Avalonia.Threading.Dispatcher.UIThread.Post(RefreshFocusGazeStatus);
+
+        /// <summary>WPF OpenFocusGazeSwitch: the Premium card lands on the switch.</summary>
+        internal void ShowFocusGazeSwitch()
+        {
+            try { SlotFocusGaze.BringIntoView(); } catch (Exception ex) { Log.Debug("Focus Gaze bring-into-view: {E}", ex.Message); }
         }
 
         /// <summary>WPF SyncFocusGazeToggle: the setting is the intent, the box follows it silently.</summary>
         private void SyncFocusGazeToggle(bool enabled)
         {
-            CoreSettings.Current.FocusGazeEnabled = enabled;
-            if (ChkPlayFocusGaze.IsChecked == enabled) return;
-            _focusGazeSyncing = true;
-            try { ChkPlayFocusGaze.IsChecked = enabled; }
-            finally { _focusGazeSyncing = false; }
+            if (CoreSettings.Current.FocusGazeEnabled != enabled) { CoreSettings.Current.FocusGazeEnabled = enabled; CoreSettings.Save(); }
+            if (ChkPlayFocusGaze.IsChecked != enabled)
+            {
+                _focusGazeSyncing = true;
+                try { ChkPlayFocusGaze.IsChecked = enabled; }
+                finally { _focusGazeSyncing = false; }
+            }
+            RefreshFocusGazeStatus();
         }
 
         private void BtnLabBlinkTrainerOpenNew_Click(object? sender, RoutedEventArgs e) => Owner?.ShowTab("blinktrainer");

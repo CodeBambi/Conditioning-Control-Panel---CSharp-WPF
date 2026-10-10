@@ -74,6 +74,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         private static int _statN, _statBubbles;
 
         public static bool IsRunning => _running;
+        /// <summary>Focus Gaze: the DPI scale of a bubble's screen (bubble coordinates are pixels / this).</summary>
+        internal static double ScalingOf(int screen)
+        {
+            foreach (var w in Windows) if (w.Index == screen) return w.Scaling > 0 ? w.Scaling : 1;
+            return 1;
+        }
         internal static bool IsFrameOwner(BubbleOverlayWindow w) => Windows.Count > 0 && Windows[0] == w;
 
         /// <summary><paramref name="frequency"/> per minute overrides the setting (WPF Start's).</summary>

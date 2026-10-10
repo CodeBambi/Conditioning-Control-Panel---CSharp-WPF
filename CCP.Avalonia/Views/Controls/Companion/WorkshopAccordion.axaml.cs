@@ -50,9 +50,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
                 catch (Exception ex) { Log.Debug("Pause browser: {E}", ex.Message); }
             };
 
+            // T11: the camera shortcut pill (WPF MainWindow.SessionIO.cs BtnCameraShortcut_Click).
+            parts.Behavior.CameraShortcutRequested += async (_, _) =>
+            {
+                try
+                {
+                    if (TopLevel.GetTopLevel(this) is not Window owner) return;
+                    if (await Views.Windows.MainShellWindow.RebindCameraShortcutAsync(owner)) parts.Behavior.RefreshCameraShortcutLabel();
+                }
+                catch (Exception ex) { Log.Warning(ex, "Workshop: camera shortcut rebind failed"); }
+            };
+
             // NOT wired, and each control is HIDDEN in its cell so nothing visible is dead:
             //
-            //  · Behavior.CameraShortcutRequested: no webcam engine or hotkey on this head.
             //  · Roster.PersonalityAssignRequested and Community.Browse/Import/Export/Refresh:
             //    CommunityPromptService is still in the WPF head.
         }
