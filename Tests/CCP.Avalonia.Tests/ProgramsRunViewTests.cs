@@ -21,8 +21,8 @@ namespace CCP.Avalonia.Tests;
 /// <summary>
 /// Programs slice 2: an existing enrollment, loaded read-only from a temp profile's programs.json,
 /// reaches the run view through the shell's Programs door. CHECKPOINT A: a day the program clock
-/// has moved past is labelled "last saved", not "today"; no lifecycle/session control is shown;
-/// nothing is written and the state does not move.
+/// has moved past is labelled "last saved", not "today"; on a read-only service (programs 3a: a newer
+/// build's file) Withdraw and Start are greyed and the 3b controls hidden; nothing is written or moves.
 /// </summary>
 public sealed class ProgramsRunViewTests
 {
@@ -90,9 +90,13 @@ public sealed class ProgramsRunViewTests
             Assert.Contains(tasks, t => t.TaskId == "d2_lockcards" && t.ProgressText == Loc.GetF("programs_task_progress", 1, 2));
             Assert.All(tasks, t => Assert.False(t.SubmitVisible || t.OpenVisible));
 
-            // No lifecycle or session control on the read-only head.
-            foreach (var name in new[] { "BtnProgramPauseResume", "BtnProgramWithdraw", "BtnStartTodaySession",
-                                         "BtnProgramRestart", "BtnProgramDismissGraduated" })
+            // Read-only service: the 3a doors show greyed, the 3b ones stay hidden.
+            foreach (var name in new[] { "BtnProgramWithdraw", "BtnStartTodaySession" })
+            {
+                Assert.True(F<Button>(name).IsEffectivelyVisible, name);
+                Assert.False(F<Button>(name).IsEnabled, name);
+            }
+            foreach (var name in new[] { "BtnProgramPauseResume", "BtnProgramRestart", "BtnProgramDismissGraduated" })
                 Assert.False(F<Button>(name).IsEffectivelyVisible, name);
 
             // Same program day as the save: then, and only then, it is "today".

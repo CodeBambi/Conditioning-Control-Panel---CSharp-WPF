@@ -161,10 +161,8 @@
                 </Image.Clip>
             </Image>
             <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                <TextBlock x:Name="TxtStudioTitle" Text="{loc:Str st4_studio_title}"
-                           Foreground="White" FontSize="21" FontWeight="Bold"/>
-                <TextBlock Text="{loc:Str st4_studio_subtitle}"
-                           Foreground="{DynamicResource TextMutedBrush}" FontSize="12.5"/>
+                <TextBlock Style="{StaticResource Type.PageTitle}" x:Name="TxtStudioTitle" Text="{loc:Str st4_studio_title}"/>
+                <TextBlock Style="{StaticResource Type.PageSubtitle}" Text="{loc:Str st4_studio_subtitle}"/>
             </StackPanel>
         </Grid>
 

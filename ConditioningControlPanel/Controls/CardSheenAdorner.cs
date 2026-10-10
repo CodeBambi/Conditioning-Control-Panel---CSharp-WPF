@@ -40,7 +40,7 @@ namespace ConditioningControlPanel.Controls
         /// long flat tail IS the pause - one clock, nothing to schedule.</summary>
         private const double TravelSeconds = 1.3;
         private const double CycleSeconds = 12.0;
-        private const int AmbientFrameRate = 24;
+        private const int AmbientFrameRate = 30;
         private const byte PeakAlpha = 0x4A;
 
         // Rest offsets: the whole band sits before the brush's 0 mark, so every visible offset

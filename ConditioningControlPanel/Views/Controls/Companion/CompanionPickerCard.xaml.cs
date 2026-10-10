@@ -91,10 +91,12 @@ namespace ConditioningControlPanel.Views.Controls.Companion
             BtnPerkChange.Visibility = CompanionExperience.IsV2Enabled && !_previewing ? Visibility.Visible : Visibility.Collapsed;
             TxtPerkGlyph.Text = perk.Glyph;
             TxtPerk.Text = (CompanionExperience.IsV2Enabled ? Loc.Get(CompanionPerks.NameKey(type)) + ": " : string.Empty) + Loc.Get(perk.LocKey);
-            TxtPerk.Foreground = perk.Negative ? Brushes.Salmon : Brushes.White;
+            // A cost keeps its salmon; everything else is body copy (Type.Body ink).
+            if (perk.Negative) TxtPerk.Foreground = Brushes.Salmon;
+            else TxtPerk.SetResourceReference(TextBlock.ForegroundProperty, "TextSecondaryBrush");
             var tone = perk.Negative ? Color.FromRgb(0xFF, 0x6B, 0x6B) : (Color?)null;
             if (tone is { } c) TxtPerkGlyph.Foreground = new SolidColorBrush(c);
-            else TxtPerkGlyph.SetResourceReference(TextBlock.ForegroundProperty, "PinkBrush");
+            else TxtPerkGlyph.SetResourceReference(TextBlock.ForegroundProperty, "SectionInkBrush");
         }
 
         private void Perk_Click(object sender, RoutedEventArgs e)
@@ -344,15 +346,19 @@ namespace ConditioningControlPanel.Views.Controls.Companion
                 SamplePanel.Children.Add(Line("“" + (App.Mods?.MakeModAware(line) ?? line) + "”", italic: true));
         }
 
-        private TextBlock Line(string text, bool italic) => new()
+        // A sample line is body copy (Type.Body: 13, TextSecondary); the quote marks and the
+        // italic say it is the personality talking.
+        private TextBlock Line(string text, bool italic)
         {
-            Text = text,
-            TextWrapping = TextWrapping.Wrap,
-            FontSize = 12,
-            FontStyle = italic ? FontStyles.Italic : FontStyles.Normal,
-            Foreground = (Brush)FindResource("TextLightBrush"),
-            Margin = new Thickness(0, 0, 0, 4)
-        };
+            var line = new TextBlock
+            {
+                Text = text,
+                FontStyle = italic ? FontStyles.Italic : FontStyles.Normal,
+                Margin = new Thickness(0, 0, 0, 4)
+            };
+            line.SetResourceReference(StyleProperty, "Type.Body");
+            return line;
+        }
 
         // ------------------------------------------------------------------ more options
 

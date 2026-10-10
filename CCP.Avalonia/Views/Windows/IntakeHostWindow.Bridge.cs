@@ -114,7 +114,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private static readonly System.Collections.Generic.List<IntakeHostWindow> OpenWindows = new();
 
-        private static IntakeHostWindow[] Snapshot() { lock (OpenWindows) return OpenWindows.ToArray(); }
+        internal static IntakeHostWindow[] Snapshot() { lock (OpenWindows) return OpenWindows.ToArray(); }
 
         /// <summary>PanicSurfaces 'intake' screen probe (WPF AnyGameSurfaceOwnsTheScreen).</summary>
         internal static bool IsAnyOpen() { lock (OpenWindows) return OpenWindows.Count > 0; }

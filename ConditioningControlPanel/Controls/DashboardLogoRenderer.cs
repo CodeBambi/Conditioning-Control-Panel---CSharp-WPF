@@ -57,6 +57,10 @@ internal sealed class DashboardLogoRenderer : IDisposable
         catch { Dispose(); throw; }
     }
 
+    /// <summary>Draws one frame. <paramref name="energy"/> is the drive, 0..1: the control never sends
+    /// less than <see cref="AnimatedLogoImage.IdleFloor"/> at rest (the logo lives without a mouse)
+    /// and eases up to 1 on hover. Allocation-free per frame: every bitmap, canvas, paint and shader
+    /// is built once in the constructor.</summary>
     public void Draw(SKCanvas canvas, int width, int height, double phase, double energy)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);

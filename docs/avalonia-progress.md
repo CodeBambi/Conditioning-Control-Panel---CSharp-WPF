@@ -1660,3 +1660,61 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-dashboard: +987
 - Dashboard FX funnel wired (RefreshFx on motion/performance/window changes, vault CTA breath, FeatureCard parks at peak); browser fold and billboard ported (BrowserFoldRule and DashboardBillboard moved to Core); billboard and fold rows now wired.
 - Still stubs: dashboard-fx (? box, logo, rail, browser sweep), hero-fx (untouched).
+
+## avalonia-port/rows-login-phone: +684
+- Link phone dialog is real: Core mobile-link code, QRCoder QR, countdown and expiry. Sign in via Web polls Core V2DeviceCodeService, which moved from the WPF head with `git mv`. dialogs-login and dialogs-link-phone are now wired.
+- Unopenable sign-in links are copied with WPF's prompt. The home Discord button opens the invite. 5 headless tests on a stepped clock, all fail-proven.
+
+## avalonia-port/rows-cloud-remember: +267
+- shell-remember stub -> wired (Core RememberedConfig, refusal mid-session, 9-language tooltips, fail-proven headless test, live ☆->★).
+- shell-cloud-backup kept as a stub by decision (P44): server contract pending, cross-OS path translation not designed; missing list recorded.
+
+## avalonia-port/programs-run-3-0: +220
+- Core schema-skew seam for programs.json: `Extra` at three levels, a `SchemaVersion` stamp that forces read-only, `IsReadOnly`, and a stepped `Now` clock. WPF's bytes are unchanged.
+- Logs checkpoint-B decision (c); Avalonia still calls `CreateReadOnly()`.
+
+## avalonia-port/rows-shell-rails: +592
+- Dashboard FAVORITES + RECENT rail ported: art chips, pin menus, RECENT from ShowTab, lock repaint; Core FavoritesRailRule/Art moved with git mv; premium-rail stand-in deleted.
+- Banner One Account link is a real link and retires its beat; Just Drop and the rest of the marquee remain stubs, with the missing pieces listed in the ledger.
+
+## avalonia-port/programs-signals: +479
+- Quest signals now wired: LockCard, Pink Filter/Spiral minutes (1 s tick only while the overlay shows) and Lockdown completed, all as on WPF.
+- `CanEnroll` refuses programs with required tasks this head never raises (Core provider, unseeded on WPF, plus head `ProgramCapabilities` table); refused cards name what is missing.
+
+## avalonia-port/rows-companion-tab: +222
+- Companion tab visibility hook: drawer state persisted on leave/exit and restored on show, upgrader v2 consent offered on show, mod switch repaints the roster.
+- Rows stay stub; what remains needs CompanionService + CommunityPromptService in Core.
+
+## avalonia-port/rows-launcher: +83
+- Launcher speaker mute button (WPF Sound.cs), real-click test fail-proven, live sandbox checked.
+- win-launcher ledger: 5 duplicate rows merged into one (P21); still stub.
+
+## avalonia-port/programs-run-3a: +738
+- Linux now writes programs.json: full ProgramService (timers, startup rollover, Dispose flush), Enroll (first_week only), Withdraw and today's session through a SessionRunner bridge; a newer-schema file is read-only on both heads.
+- A panic ends a program session; Lockdown refuses each lifecycle control. Pause/Restart/Dismiss/Ritual/Mantras are left for 3b.
+
+## avalonia-port/rows-companion-room: +400
+- Make-her-yours (Z4) now uses the real personality data: preset chips, the Slut Mode toggle (both behind the explicit-content gate), Reset, and the prompt-editor links; it re-reads when the tab is shown.
+- New test `CompanionPersonalityZoneTests`, fail-proven by 6 breaks; v2 hides the interview card and the spice toggle snaps back after Cancel; the three rows stay stub, each with its missing list.
+
+## avalonia-port/main-20261009: +47588
+- Main sync #6: WPF main 11d7c3afc merged (releases 7.1.0-7.1.5); delta ledger docs/avalonia-main-sync-20261009.md (8 ported-by-merge, 132 needs-port in 15 sync6-* lanes, 8 n/a).
+
+## avalonia-port/main-20261009-compat: +199
+- Compat for main sync #6: BillboardContract/NavSections into Core, QuestsOpen/GameAvailable head seams, LegacyBillboard keeps the Avalonia slideshow, WPF scan tests via SourceRoots/Assets. GATE-OK.
+
+## avalonia-port/rows-possession-lockdown: +278
+- views-tab-lockdown: blood-red theme + 600 ms activation flash + Video/BubbleCount Strict greys wired, restored on exit (10 fail-proofs; theme live; Bubble Count hold decided at Lockdown event like WPF, not on rack re-attach). Row still stub: Possession readout, Dose keeper.
+- shell-possession untouched: ~12.1k-line subsystem needs a slice plan (P33).
+
+## avalonia-port/rows-graded-intake-tab: +312
+- Graded Intake window lifecycle ported: `fullscreen-set` with the mode remembered, the control panel minimised for the run and restored on close, and a heartbeat watchdog that relaunches once (WPF IntakeHostService). Tests use the real `OpenIntake` path on a stepped clock and were proven to fail when broken.
+- First-ever-run rule moved to Core `IntakePunchCardState`; duplicate parity row removed. The row stays `stub`.
+
+## avalonia-port/rows-remote-control: +611
+- Remote emotes (tab + overlay big picker, edit popup) via Core RemoteRelay.SendEmoteAsync; controller overlay, 2 s command toast, joined notice and Start lock wired from startup.
+- Rows stay stub: directory opt-in chain, listing pill, session verbs, HUD/preview folds, taskbar flash, avatar emote bubble.
+
+## avalonia-port/rows-possession-lockdown: +278
+- views-tab-lockdown: blood-red theme + 600 ms activation flash + Video/BubbleCount Strict greys wired, restored on exit (10 fail-proofs; theme live; Bubble Count hold decided at Lockdown event like WPF, not on rack re-attach). Row still stub: Possession readout, Dose keeper.
+- shell-possession untouched: ~12.1k-line subsystem needs a slice plan (P33).

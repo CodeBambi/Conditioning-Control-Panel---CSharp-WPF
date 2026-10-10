@@ -5,23 +5,24 @@ using Xunit;
 namespace CCP.Avalonia.Tests;
 
 /// <summary>
-/// P04/P11 for programs CHECKPOINT A (docs/avalonia-decisions.md 2026-10-09): App startup builds
-/// ProgramService load-only, disposes it on exit, and never builds the writing instance or seeds
-/// the mutating TrackProgramVerifierProvider before the run panel exists.
+/// P04/P11/P31, oracle CHECKPOINT B test 8 (programs 3a, docs/avalonia-decisions.md): App startup builds
+/// the full writing ProgramService (timers, startup repair + rollover), seeds the capability gate before
+/// it and the verifier fan-out after it (WPF App.xaml.cs:413), and disposes it on exit (the flush).
 /// </summary>
 public sealed class ProgramServiceStartupTests
 {
     [Fact]
-    public void AppStartupBuildsProgramsReadOnlyAndDisposesThem()
+    public void AppStartupBuildsTheWritingProgramsSeedsTheVerifierAndDisposesIt()
     {
         var src = Regex.Replace(   // P23: comments and string literals never count
             File.ReadAllText(Path.Combine(Root(), "CCP.Avalonia", "App.axaml.cs")),
             @"//[^\n]*|/\*.*?\*/|@?""(?:[^""\\]|\\.)*""", " ", RegexOptions.Singleline);
 
-        Assert.Matches(@"Programs\s*=\s*Services\.Program\.ProgramService\.CreateReadOnly\(\)", src);
+        Assert.Matches(@"CoreProgram\.TaskAvailableProvider\s*=\s*Platform\.ProgramCapabilities\.IsAvailable;\s*" +
+                       @"Programs\s*=\s*new\s+Services\.Program\.ProgramService\(\);", src);
+        Assert.Matches(@"CoreQuests\.TrackProgramVerifierProvider\s*=\s*\(category,\s*amount\)\s*=>\s*Programs\?\.TrackVerifier\(category,\s*amount\)", src);
         Assert.Contains("Programs?.Dispose()", src);
-        Assert.DoesNotMatch(@"new\s+(?:[\w.]+\.)?ProgramService\s*\(", src);
-        Assert.DoesNotContain("TrackProgramVerifierProvider", src);
+        Assert.DoesNotContain("CreateReadOnly", src);
     }
 
     private static string Root([System.Runtime.CompilerServices.CallerFilePath] string here = "") =>

@@ -110,6 +110,12 @@
                 <!-- ESC hint -->
                 <TextBlock Text="{loc:Str label_esc_to_skip}" Foreground="#303050" FontSize="11"
                            HorizontalAlignment="Center" Margin="0,8,0,0"/>
+
+                <!-- Quiet off switch: the same setting as Play > Graded Intake > Enable pop-up questions.
+                     Never an answer: no XP, no penalty, the card just closes. -->
+                <TextBlock x:Name="TxtTurnOff" Text="{loc:Str intake_popquiz_turn_off}" Foreground="#7A7A9A" FontSize="11"
+                           HorizontalAlignment="Center" Margin="0,6,0,0" Cursor="Hand" TextDecorations="Underline"
+                           MouseLeftButtonUp="TurnOff_Click"/>
             </StackPanel>
 
             <!-- Affirmation Panel (shown after answering) -->

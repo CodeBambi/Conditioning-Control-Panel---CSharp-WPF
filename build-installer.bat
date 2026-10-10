@@ -7,7 +7,7 @@ echo ============================================
 echo.
 
 :: Configuration
-set VERSION=7.0.5
+set VERSION=7.1.5
 set PROJECT_DIR=ConditioningControlPanel
 set CORE_DIR=CCP.Core
 set PUBLISH_DIR=%PROJECT_DIR%\bin\Release\net10.0-windows10.0.19041.0\win-x64\publish

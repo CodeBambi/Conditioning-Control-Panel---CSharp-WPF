@@ -22,7 +22,7 @@ namespace ConditioningControlPanel
     /// settles too, which is the backstop for any path nobody thought of.</para>
     ///
     /// <para><b>What folds.</b> The header strip stays - title, site radios, reload, status, mute,
-    /// Pop Out and the chevron - and <c>BrowserFoldBody</c>, everything under it, collapses. The
+    /// Pop Out and the fold arrow - and <c>BrowserFoldBody</c>, everything under it, collapses. The
     /// fold deliberately collapses that ONE element instead of <c>BrowserContainer</c>: the
     /// container's Visibility already has owners (session start/stop, the remote-control takeover,
     /// MainWindow.Settings) and a folded card must never un-hide a browser a running session hid.
@@ -36,7 +36,7 @@ namespace ConditioningControlPanel
     /// <para>The animation is a height ease on the card frame, through the
     /// <see cref="MotionFx.AllowTransitions"/> gate. The body is Collapsed for the WHOLE of it, in
     /// both directions, and only comes back at the settle: a native HWND that is not clipped by
-    /// WPF must not be in flight over the companion strip for 180ms.</para>
+    /// WPF must not be in flight over the account strip below the card for 180ms.</para>
     /// </summary>
     public partial class MainWindow
     {
@@ -195,9 +195,8 @@ namespace ConditioningControlPanel
             foldRow.Height = BrowserFoldRule.FoldRowIsStar(collapsed) ? star : new GridLength(0);
             body.Visibility = BrowserFoldRule.BodyShown(collapsed) ? Visibility.Visible : Visibility.Collapsed;
 
-            if (dash.TxtFoldBrowser != null) dash.TxtFoldBrowser.Text = BrowserFoldRule.Chevron(collapsed);
-            if (dash.BtnFoldBrowser != null)
-                dash.BtnFoldBrowser.ToolTip = Loc.Get(BrowserFoldRule.TooltipKey(collapsed));
+            // The arrow pill: glyph, label, tooltip, hue and the breathing glow while shut.
+            dash.PaintFoldArrow(collapsed);
 
             OnBrowserFoldChanged(collapsed);
         }

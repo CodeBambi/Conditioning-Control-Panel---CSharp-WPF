@@ -146,8 +146,7 @@
 
                             <StackPanel VerticalAlignment="Center">
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="{loc:Str tab_blink_trainer}" FontSize="17" FontWeight="Bold"
-                                               Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                    <TextBlock Style="{StaticResource Type.CardTitle}" Text="{loc:Str tab_blink_trainer}" VerticalAlignment="Center"/>
                                     <Border Background="#1A5CE0A5" BorderBrush="{StaticResource TabHueBorderBrush}" BorderThickness="1"
                                             CornerRadius="4" Padding="5,1" Margin="8,1,0,0" VerticalAlignment="Center">
                                         <TextBlock Text="{loc:Str blink_trainer_beta}" Foreground="{StaticResource TabHueBrush}"
@@ -155,7 +154,7 @@
                                     </Border>
                                 </StackPanel>
                                 <TextBlock Text="{loc:Str blink_trainer_tagline}" FontSize="11.5"
-                                           Foreground="{StaticResource TextMutedBrush}" Margin="0,1,0,0"/>
+                                           Foreground="{StaticResource TextSecondaryBrush}" Margin="0,1,0,0"/>
                             </StackPanel>
                         </StackPanel>
 

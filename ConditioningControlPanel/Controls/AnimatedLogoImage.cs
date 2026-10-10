@@ -21,6 +21,18 @@ public sealed class AnimatedLogoImage : Image
     private double _last, _phase, _energy;
     private bool _ambientAllowed, _failed;
     public bool IsAnimatedArtwork { get; private set; }
+
+    /// <summary>The logo lives at rest (owner, 2026-10-06: "animated even when not on hover, but
+    /// animate faster when on hover"). The renderer reads one drive value: rest sits on this floor,
+    /// so the waves pulse, the arc travels, the arrows drift and a few sparks rise without a mouse;
+    /// hover eases the drive up to 1 and the clock to 3x.</summary>
+    internal const double IdleFloor = .35;
+
+    /// <summary>Renderer drive for a hover energy of 0 (rest) to 1 (full hover).</summary>
+    internal static double Drive(double energy) => IdleFloor + (1 - IdleFloor) * Math.Clamp(energy, 0, 1);
+
+    /// <summary>Phase speed in radians per second: one turn per 12 s at rest, three times that on hover.</summary>
+    internal static double PhaseRate(double energy) => Math.Tau / 12 * (1 + 2 * Math.Clamp(energy, 0, 1));
     internal bool IsAnimating => _timer.IsEnabled;
 
     public AnimatedLogoImage()
@@ -102,8 +114,8 @@ public sealed class AnimatedLogoImage : Image
             _last = now;
             double target = IsMouseOver ? 1 : 0;
             _energy += (target - _energy) * (1 - Math.Exp(-dt / (target > _energy ? .18 : .48)));
-            _phase = (_phase + dt * Math.Tau / 12 * (1 + 2 * _energy)) % Math.Tau;
-            _renderer.Draw(_surface!.Canvas, size, size, _phase, _energy);
+            _phase = (_phase + dt * PhaseRate(_energy)) % Math.Tau;
+            _renderer.Draw(_surface!.Canvas, size, size, _phase, Drive(_energy));
             _surface.Canvas.Flush();
             using var pixels = _surface.PeekPixels();
             _frame.WritePixels(new Int32Rect(0, 0, size, size), pixels.GetPixels(), pixels.RowBytes * size, pixels.RowBytes);

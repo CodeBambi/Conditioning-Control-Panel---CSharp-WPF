@@ -265,11 +265,18 @@
     </LinearGradientBrush>
 
     <!-- ============================ 4. text styles ============================ -->
+    <!-- Readability pass (polish 8): the page title, section title, hint, body and dim
+         styles below carry the SETTERS of their Type.* twin (Resources/Theme/MainWindow.xaml)
+         instead of a BasedOn: this dictionary is merged into UserControls by pack URI and a
+         BasedOn is a StaticResource lookup that would have to reach the app's dictionaries
+         at load time. Keep the two in step by hand: PageTitle 26 SemiBold Fredoka Light,
+         SectionHeader 11 Bold Consolas SectionInk, Body 13 Secondary, Caption 11 Muted.
+         Brushes are DynamicResource so mods and the section ink follow. -->
     <Style x:Key="CmpPageTitleStyle" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="/Fonts/#Fredoka, Segoe UI"/>
         <Setter Property="FontWeight" Value="SemiBold"/>
-        <Setter Property="FontSize" Value="27"/>
-        <Setter Property="Foreground" Value="{StaticResource CmpTextBrush}"/>
+        <Setter Property="FontSize" Value="26"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
         <Setter Property="Effect" Value="{StaticResource CmpTitleGlow}"/>
     </Style>
 
@@ -280,34 +287,35 @@
         <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
     </Style>
 
-    <!-- .card h2 — the zone header. Glow is on the title only, not the whole row. -->
+    <!-- .card h2, the zone header. Polish 8: an eyebrow (Type.SectionHeader), a group label
+         over the card's chips, never a second card title; no glow. -->
     <Style x:Key="CmpSectionTitleStyle" TargetType="TextBlock">
-        <Setter Property="FontSize" Value="16.5"/>
-        <Setter Property="FontWeight" Value="SemiBold"/>
-        <Setter Property="Foreground" Value="{StaticResource CmpTextBrush}"/>
+        <Setter Property="FontFamily" Value="Consolas, Courier New"/>
+        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="FontWeight" Value="Bold"/>
+        <Setter Property="Foreground" Value="{DynamicResource SectionInkBrush}"/>
         <Setter Property="VerticalAlignment" Value="Center"/>
-        <Setter Property="Effect" Value="{StaticResource CmpSectionGlow}"/>
         <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
     </Style>
 
     <Style x:Key="CmpSectionHintStyle" TargetType="TextBlock">
-        <Setter Property="FontSize" Value="11.5"/>
-        <Setter Property="Foreground" Value="{StaticResource CmpMutedBrush}"/>
+        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
         <Setter Property="VerticalAlignment" Value="Center"/>
         <Setter Property="Margin" Value="9,1,0,0"/>
         <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
     </Style>
 
     <Style x:Key="CmpBodyTextStyle" TargetType="TextBlock">
-        <Setter Property="FontSize" Value="12.5"/>
-        <Setter Property="Foreground" Value="{StaticResource CmpBodyBrush}"/>
+        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
         <Setter Property="TextWrapping" Value="Wrap"/>
         <Setter Property="LineHeight" Value="18"/>
     </Style>
 
     <Style x:Key="CmpDimTextStyle" TargetType="TextBlock">
-        <Setter Property="FontSize" Value="11.5"/>
-        <Setter Property="Foreground" Value="{StaticResource CmpDimBrush}"/>
+        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
         <Setter Property="TextWrapping" Value="Wrap"/>
     </Style>
 
