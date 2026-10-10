@@ -1769,3 +1769,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/sync6-715-fixes: +151
 - 7.1.5 fixes: the pop quiz "Turn these off" link, a 20-minute default for Lockdown, and a session no longer restores the pop quiz switch (ledger rows 144/146/147 ported).
 - Shatter grey-out and perk-row opacity were folded into missing parity rows because those surfaces are not on this head.
+
+## avalonia-port/sync6-companion-ai-page: +251
+- Companion > AI page: the AI pill opens it, and it shows the room's live Connection drawer, Behaviour and Triggers cells and memory diary, giving them back on hide. Rows 138 and 140 are ported; 136 is n/a (no ConversationPage on this head).
+- CompanionAiPageTests (fail-proven) plus a live Keincheck run.
