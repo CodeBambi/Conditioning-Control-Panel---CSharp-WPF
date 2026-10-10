@@ -1816,3 +1816,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/reference-render-ci: +430
 - reference-render.yml: WPF (Windows) vs Avalonia renders paired per parity row into side-by-side PNGs; first run 173 WPF / 213 Avalonia / 280 rows paired.
 - Opt-in WpfReferenceRender test + pair-renders.py; fetch with ~/ccp-port/bin/fetch-renders.sh <branch>.
+
+## avalonia-port/snapshot-lock: +197
+- Verify.Avalonia SSIM (0.995) snapshots lock the 2 verified parity rows in their own testhost (RenderProof setup + pinned Noto Emoji fallback). They pass on Arch and on ubuntu-latest (run 38055802311).
+- `ledger-snapshot-check.sh` fails any verified/improved row without a baseline. The parity doc now has a "Locking a row" rule.
