@@ -239,6 +239,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
 
         private void CloseEngine()
         {
+            HandBackEyeTracking();
             if (s_open.Remove(this))
             {
                 try { WebcamTracker.Instance.StateChanged -= OnEyeStateChanged; } catch { }
@@ -263,6 +264,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
 
         private bool _eyeBusy;
 
+        /// <summary>WPF _playerStartedWebcam: THIS player turned the camera on, so its close turns it
+        /// off again. A camera that was already running when the player opened is never touched.</summary>
+        private bool _eyeStartedHere;
+
+        /// <summary>WPF Window_Closing (:2661): leave the camera the way the player found it.</summary>
+        private void HandBackEyeTracking()
+        {
+            if (!_eyeStartedHere) return;
+            _eyeStartedHere = false;
+            try { if (EyeIsRunning()) _ = EyeStop(); }
+            catch (Exception ex) { Log.Debug("EnhancementPlayer: webcam auto-stop failed: {Error}", ex.Message); }
+        }
+
         internal async Task ToggleEyeTrackingAsync()
         {
             if (_eyeBusy) return;
@@ -272,6 +286,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             {
                 if (EyeIsRunning())
                 {
+                    _eyeStartedHere = false;   // the player's own stop: nothing left to hand back
                     await EyeStop();
                     return;
                 }
@@ -283,7 +298,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
                 }
                 // Awaited: the camera opens only after the answer.
                 if (!await EyeConfirm(this, title, Loc.Get("deeper_player_eye_tracking_confirm_start"))) return;
-                if (!await EyeStart())
+                if (await EyeStart()) _eyeStartedHere = true;   // WPF _playerStartedWebcam
+                else
                     await EyeNotice(this, title, string.Format(Loc.Get("deeper_player_eye_tracking_start_failed_fmt"), EyeLastError() ?? ""));
             }
             catch (Exception ex)

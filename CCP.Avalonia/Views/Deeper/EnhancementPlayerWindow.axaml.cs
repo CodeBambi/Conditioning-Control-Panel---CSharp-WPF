@@ -1683,10 +1683,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             _fetcher = null;
             // Engine, audio and the tracker subscription: every started effect stops with the window.
             CloseEngine();
-            // ponytail: the WPF teardown also unsubscribed the player/webcam singletons, stopped a
-            // webcam this session had started, disposed the video time source and force-closed the
-            // borderless fullscreen host. Those are the head services' and WebView2's; none of them
-            // exist here. The web view itself is disposed with the visual tree.
+            // A camera this player started is handed back in CloseEngine (HandBackEyeTracking).
+            // ponytail: the WPF teardown also disposed the video time source and force-closed the
+            // borderless fullscreen host. Those are WebView2's; neither exists here. The web view
+            // itself is disposed with the visual tree.
         }
 
         // ====================================================================================
