@@ -101,13 +101,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
     /// <para><b>What is stubbed, and why.</b> Three families, each marked <c>ponytail:</c> at the
     /// call site:</para>
     /// <list type="bullet">
-    ///   <item><b>Services.</b> EnhancementAudioPlayer (NAudio), EnhancementLibrary, WebcamTracking
-    ///         and the editor jump still live in the WPF head, so every handler that reached them is
-    ///         a stub. EnhancementHostService and DeeperFetcher no longer block anything: the host's
-    ///         load path is EnhancementSerializer + EnhancementValidator, both public in Core, and
-    ///         App.DeeperFetcher IS Core's <c>EnhancementFetcher</c>. Both are wired below. What
-    ///         does NOT come with them is the host's OTHER half — <c>Bind</c>, the rule engine and
-    ///         the playback time source — so a loaded enhancement's rules never fire here.</item>
+    ///   <item><b>Services.</b> EnhancementLibrary and the editor jump are not here yet, so the
+    ///         handlers that reached them are stubs. The host, the rule engine and the time source
+    ///         ARE here: Core's EnhancementHostService + EnhancementEngine, bound in the Engine
+    ///         partial, with audio on the shared LibVLC transport (DeeperLocalAudio) and the eye
+    ///         tracking button on Platform/WebcamTracker. Still missing: the waveform peaks
+    ///         (NAudio decode) and the library tier of auto-discovery.</item>
     ///   <item><b>WebView2.</b> The WPF pane hosted a <c>wv2:WebView2</c> driven through
     ///         <c>CoreWebView2</c>. <see cref="Controls.WebHost"/> covers more of that than the
     ///         first pass assumed: NavigationStarted carries a settable Cancel (so the allowlist
@@ -770,17 +769,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         /// glyph, the status line, the pill and the playhead all describe something that is
         /// actually happening.
         ///
-        /// Audio deliberately does NOT flip the state. Before this layer the media pickers could
-        /// not load anything, so the "nothing to play" branch caught every press; now they can, and
-        /// a press with no audio engine would have shown ⏸, the LIVE pill and "Playing" over
-        /// silence. There is no NAudio here, so the honest answer is to refuse and say so in the
-        /// event log rather than to draw a transport that is running.
-        ///
-        /// ponytail: needs EnhancementAudioPlayer for the audio play/pause/resume/replay ladder,
-        /// and MaybePromptForWebcamBeforePlay for the consent gate — which is a second reason not
-        /// to make Play do more than this: skipping a consent prompt is worse than not playing.
-        /// Note that even in video mode the enhancement's RULES do not fire: that needs
-        /// EnhancementHostService.Bind and the engine, both still in the WPF head.
+        /// Audio plays on the Engine partial's transport (play / pause / resume). The rules fire in
+        /// both modes: the tick binds Core's engine to this window's clock while media runs.
         /// </summary>
         private async void BtnPlayPause_Click()
         {

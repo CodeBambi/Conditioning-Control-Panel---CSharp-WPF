@@ -593,24 +593,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         }
 
         /// <summary>
-        /// ponytail: the "?" button is present and hit-testable and opens nothing. The old note here
-        /// said this waits on "App.Tutorial + TutorialOverlay, wired when the tutorial service moves
-        /// to Core" and BOTH halves of that are now wrong: <c>CoreTutorial</c> is the seam and
-        /// <c>CCP.Avalonia/Views/Windows/TutorialOverlay.axaml.cs</c> is the ported overlay, with a
-        /// live <c>TutorialOverlay(Window)</c> constructor that walks whatever tour the seam runs.
-        ///
-        /// <para>The single blocker is that NOTHING SEEDS the seam on this head - see
-        /// <c>CCP.Avalonia/App.axaml.cs:71</c>. The twenty-two step lists are sentences about WPF
-        /// controls and stay in <c>ConditioningControlPanel/Services/TutorialService.cs</c>, so
-        /// <c>CoreTutorial.Start("DeeperEditorTutorial")</c> is a silent no-op today. Showing the
-        /// overlay anyway is the failure to avoid: it would dim the editor behind an empty card.
-        /// The four lines to write once a tour exists, WPF's shape with that one guard added:</para>
-        /// <code>
-        /// if (CoreTutorial.IsActive) CoreTutorial.Skip();
-        /// CoreTutorial.Start("DeeperEditorTutorial");
-        /// if (!CoreTutorial.IsActive) return;   // unseeded seam: do not dim over nothing
-        /// new TutorialOverlay(this).Show();
-        /// </code>
+        /// The "?" button: WPF DeeperEditorWindow.StartEditorTutorial. Tours/TutorialHead.cs seeds
+        /// CoreTutorial with the "DeeperEditor" tour, so this starts it and shows the ported
+        /// TutorialOverlay over this window. The IsActive check stays: an unseeded seam (a test
+        /// that never ran the head seed) must not dim the editor behind an empty card.
         /// </summary>
         private void StartEditorTutorial()
         {

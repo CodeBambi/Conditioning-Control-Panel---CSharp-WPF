@@ -169,6 +169,30 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             try { a?.Dispose(); } catch (Exception ex) { Log.Debug(ex, "EnhancementPlayer: audio dispose"); }
         }
 
+        // -- one shared player (WPF EnhancementPlayerWindow.ShowOrActivate) ---------------------
+
+        /// <summary>The open player brought forward, else a new one shown over <paramref name="owner"/>;
+        /// <paramref name="afterShow"/> then runs on it (the editor's Preview loads its enhancement).</summary>
+        internal static EnhancementPlayerWindow ShowOrActivate(Window? owner, Action<EnhancementPlayerWindow>? afterShow = null)
+        {
+            var w = s_open.LastOrDefault();
+            if (w != null)
+            {
+                if (w.WindowState == WindowState.Minimized) w.WindowState = WindowState.Normal;
+                w.Activate();
+            }
+            else
+            {
+                w = new EnhancementPlayerWindow(null, null);
+                if (owner is { IsVisible: true }) w.Show(owner); else w.Show();
+            }
+            afterShow?.Invoke(w);
+            return w;
+        }
+
+        /// <summary>The players open right now (tests).</summary>
+        internal static IReadOnlyList<EnhancementPlayerWindow> Open => s_open;
+
         // -- panic and close -----------------------------------------------------------------
 
         /// <summary>Panic: every open player stops its media and its engine (overlay bands, haptics,
