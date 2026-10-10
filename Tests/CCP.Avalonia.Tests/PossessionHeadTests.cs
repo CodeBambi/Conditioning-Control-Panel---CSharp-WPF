@@ -74,8 +74,10 @@ public sealed class PossessionHeadTests
             Assert.NotEmpty(targets);
             Assert.All(targets, t =>
             {
-                Assert.False(PossessionOffLimits.IsReservedName(t.Key));
-                Assert.False(t.Element is Button or ToggleButton or TextBox or Slider);
+                // k22 (reach = WPF): the rail doors and Start are enrolled; a safety control never is.
+                Assert.False(PossessionOffLimits.IsSafetyName(t.Key));
+                Assert.False(PossessionTree.IsSafety((Control)t.Element));
+                Assert.False(t.Element is TextBox or Slider);
             });
             Assert.Same(targets[0], host.Targets()[0]);   // cached: a cooldown survives the next read
 

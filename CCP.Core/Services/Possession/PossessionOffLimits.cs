@@ -23,4 +23,32 @@ public static class PossessionOffLimits
         }
         return false;
     }
+
+    /// <summary>SAFETY controls (owner, 10 Oct 2026): never moved, hidden, relabelled, dodged, robbed of
+    /// input or made harder to hit by any effect, at any frame. Matched case-insensitively against the
+    /// control's own name and every ancestor's: the Emergency Exit, the exit phrase and its input, any
+    /// panic affordance, a Stop / pause / cancel / close control, the leash cut, tray items, dialogs,
+    /// the Strict Lock and panic-key settings, and the two switches that end or soften the haunt itself
+    /// (the Possession switch, photosensitive-safe).</summary>
+    private static readonly string[] _safetyNameTokens =
+    {
+        "emergency", "secret", "exit", "panic", "strict", "stop", "pause", "cancel", "close", "quit",
+        "leash", "safeword", "tray", "dialog", "possessionenabled", "photosafe",
+    };
+
+    /// <summary>True for a name no effect may ever touch, tagged or not.</summary>
+    public static bool IsSafetyName(string? name)
+    {
+        if (string.IsNullOrEmpty(name)) return false;
+        foreach (var token in _safetyNameTokens)
+        {
+            if (name!.IndexOf(token, StringComparison.OrdinalIgnoreCase) >= 0) return true;
+        }
+        return false;
+    }
+
+    /// <summary>A Start / Stop control: a start while nothing runs, a STOP (and so a safety control)
+    /// the moment anything does. The head answers "is anything running".</summary>
+    public static bool IsStartStopName(string? name) =>
+        !string.IsNullOrEmpty(name) && name!.IndexOf("start", StringComparison.OrdinalIgnoreCase) >= 0;
 }

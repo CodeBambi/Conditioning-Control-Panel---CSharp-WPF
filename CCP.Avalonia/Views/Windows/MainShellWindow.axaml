@@ -582,7 +582,7 @@
                 <!-- Seven section rows, top-packed, no ScrollViewer: 7 x 72 = 504px. Order frozen
                      by Core NavSections (and NavCheck). -->
                 <StackPanel x:Name="NavSectionRows" Grid.Row="1" VerticalAlignment="Top">
-                    <Button x:Name="DoorHome" Tag="home" Theme="{StaticResource NavSectionButton}"
+                    <Button x:Name="DoorHome" poss:Possession.Role="TabHeader" poss:Possession.Name="the Home door" Tag="home" Theme="{StaticResource NavSectionButton}"
                             AutomationProperties.Name="{loc:Str nav_door_home}"
                             Click="NavDoor_Click">
                         <Grid RowDefinitions="56,Auto">
@@ -613,7 +613,7 @@
                                        Text="{loc:Str nav_door_home}"/>
                         </Grid>
                     </Button>
-                    <Button x:Name="DoorStudio" Tag="studio" Theme="{StaticResource NavSectionButton}"
+                    <Button x:Name="DoorStudio" poss:Possession.Role="TabHeader" poss:Possession.Name="the Studio door" Tag="studio" Theme="{StaticResource NavSectionButton}"
                             AutomationProperties.Name="{loc:Str nav_door_studio}"
                             Click="NavDoor_Click">
                         <Grid RowDefinitions="56,Auto">
@@ -644,7 +644,7 @@
                                        Text="{loc:Str nav_door_studio}"/>
                         </Grid>
                     </Button>
-                    <Button x:Name="DoorCompanion" Tag="companion" Theme="{StaticResource NavSectionButton}"
+                    <Button x:Name="DoorCompanion" poss:Possession.Role="TabHeader" poss:Possession.Name="the Companion door" Tag="companion" Theme="{StaticResource NavSectionButton}"
                             AutomationProperties.Name="{loc:Str nav_door_companion}"
                             Click="NavDoor_Click">
                         <Grid RowDefinitions="56,Auto">
@@ -675,7 +675,7 @@
                                        Text="{loc:Str nav_door_companion}"/>
                         </Grid>
                     </Button>
-                    <Button x:Name="DoorPlay" Tag="play" Theme="{StaticResource NavSectionButton}"
+                    <Button x:Name="DoorPlay" poss:Possession.Role="TabHeader" poss:Possession.Name="the Play door" Tag="play" Theme="{StaticResource NavSectionButton}"
                             AutomationProperties.Name="{loc:Str nav_door_play}"
                             Click="NavDoor_Click">
                         <Grid RowDefinitions="56,Auto">
@@ -706,7 +706,7 @@
                                        Text="{loc:Str nav_door_play}"/>
                         </Grid>
                     </Button>
-                    <Button x:Name="DoorSocial" Tag="social" Theme="{StaticResource NavSectionButton}"
+                    <Button x:Name="DoorSocial" poss:Possession.Role="TabHeader" poss:Possession.Name="the Social door" Tag="social" Theme="{StaticResource NavSectionButton}"
                             AutomationProperties.Name="{loc:Str nav_section_social}"
                             Click="NavDoor_Click">
                         <Grid RowDefinitions="56,Auto">
@@ -737,7 +737,7 @@
                                        Text="{loc:Str nav_section_social}"/>
                         </Grid>
                     </Button>
-                    <Button x:Name="DoorYou" Tag="you" Theme="{StaticResource NavSectionButton}"
+                    <Button x:Name="DoorYou" poss:Possession.Role="TabHeader" poss:Possession.Name="the You door" Tag="you" Theme="{StaticResource NavSectionButton}"
                             AutomationProperties.Name="{loc:Str nav_door_you}"
                             Click="NavDoor_Click">
                         <Grid RowDefinitions="56,Auto">
@@ -768,7 +768,7 @@
                                        Text="{loc:Str nav_door_you}"/>
                         </Grid>
                     </Button>
-                    <Button x:Name="DoorLibrary" Tag="library" Theme="{StaticResource NavSectionButton}"
+                    <Button x:Name="DoorLibrary" poss:Possession.Role="TabHeader" poss:Possession.Name="the Library door" Tag="library" Theme="{StaticResource NavSectionButton}"
                             AutomationProperties.Name="{loc:Str nav_door_library}"
                             Click="NavDoor_Click">
                         <Grid RowDefinitions="56,Auto">
@@ -812,7 +812,7 @@
                          and collapsed unless a ceremony timestamp is cached, so it measures as absent. -->
                     <fx:DescentFuseRailChip x:Name="FuseRailChip"/>
                     <!-- THE GEAR. Tag "appsettings" (the tab key "settings" is the dashboard). -->
-                    <Button x:Name="DoorSettings" Tag="appsettings" Theme="{StaticResource NavSectionButton}"
+                    <Button x:Name="DoorSettings" poss:Possession.Role="TabHeader" poss:Possession.Name="the Settings door" Tag="appsettings" Theme="{StaticResource NavSectionButton}"
                             AutomationProperties.Name="{loc:Str nav_door_settings}"
                             Click="NavDoor_Click">
                         <Grid RowDefinitions="56,Auto">
@@ -2318,7 +2318,7 @@
                 <!-- StartPressScale is the ignition dip (Velvet Kit 2). It is the button's only
                      RenderTransform and nothing else may claim it - HoverPop deliberately refuses
                      named transforms, so this stays a lane-B-only surface. -->
-                <Button x:Name="BtnStart" fx:HudPlank.Kind="Chunky" Grid.Column="1" Theme="{StaticResource PinkButton}"
+                <Button x:Name="BtnStart" poss:Possession.Role="Button" poss:Possession.Name="the Start button" fx:HudPlank.Kind="Chunky" Grid.Column="1" Theme="{StaticResource PinkButton}"
                         Background="{DynamicResource AccentGradientBrush}"
                         Height="50" FontSize="18" Click="BtnStart_Click"
                         RenderTransformOrigin="50%,50%"

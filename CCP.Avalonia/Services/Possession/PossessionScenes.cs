@@ -30,13 +30,13 @@ internal abstract class PossessionSceneBase : PossessionEffectBase, IPossessionS
     /// <summary>A free, visible display control of this role, or null. Booked when asked to.</summary>
     protected PossessionTarget? Pick(PossessionContext ctx, PossessionRole role, bool book)
     {
-        if (!PossessionTree.IsDisplayRole(role)) return null;
+        if (!PossessionTree.IsDisplayRole(role) && !(TakesInteractive && PossessionTree.IsInteractiveRole(role))) return null;
         var free = new List<PossessionTarget>();
         foreach (var t in ctx.Host.Targets())
         {
             if (t == null || t.Role != role || t.IsLive || _booked.Contains(t)) continue;
             if (t.CooldownUntil > DateTime.Now) continue;
-            if (t.Element is not Control c || !c.IsEffectivelyVisible || PossessionTree.IsOffLimits(c)) continue;
+            if (t.Element is not Control c || !c.IsEffectivelyVisible || !PossessionTree.MayTouch(c, role, TakesInteractive)) continue;
             free.Add(t);
         }
         if (free.Count == 0) return null;
