@@ -25,6 +25,7 @@ namespace CCP.Avalonia.Tests;
 /// <summary>The profile wardrobe on this head (WPF MainWindow.ProfileWardrobe + the two dialogs):
 /// real registry art on the hero, the charms placed by Core WardrobeStageGeometry, and the
 /// Customize/Wardrobe dialogs offering and arranging real items.</summary>
+[Collection(RunsAloneCollection.Name)]   // opens a shell: every Avalonia test shares one UI thread (X12)
 public sealed class ProfileWardrobeTests
 {
     private const string Deco = "bambi_silk_bow", Charm1 = "bambi_plush_bunny", Charm2 = "bambi_bubble_wand";

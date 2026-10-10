@@ -40,5 +40,42 @@ namespace ConditioningControlPanel
         {
             try { RefreshHandler?.Invoke(index); } catch { /* a live-apply nudge must never throw */ }
         }
+
+        // ---- the session-scoped corner GIF (WPF SessionEngine.ShowCornerGif / CloseCornerGif) ----
+
+        /// <summary>Raise the session's corner GIF: path ("" = the built-in corner art), corner, size, opacity.</summary>
+        public static volatile Action<string, Models.CornerPosition, int, int>? ShowSessionHandler;
+
+        /// <summary>Take it down. True = the corner goes back to the user's own slots (a terminal close);
+        /// false = hide only (a pause, a panic press, a recreate).</summary>
+        public static volatile Action<bool>? HideSessionHandler;
+
+        /// <summary>A standalone corner overlay is up or queued (WPF CornerGifService.HasActiveOverlays).</summary>
+        public static volatile Func<bool>? StandaloneActiveProvider;
+
+        /// <summary>A fullscreen spiral is on screen right now, whoever raised it (WPF OverlayService.IsSpiralVisible).</summary>
+        public static volatile Func<bool>? SpiralVisibleProvider;
+
+        /// <summary>A session corner GIF is on screen or on its way (WPF SessionEngine.IsSessionCornerGifActive).</summary>
+        public static volatile bool SessionActive;
+
+        /// <summary>Raised when the standalone side changed, so a running session re-asks its admission
+        /// (WPF CornerGifService.RefreshOverlays -> SessionEngine.RefreshCornerGifPolicy).</summary>
+        public static event Action? StandaloneChanged;
+
+        public static void RaiseStandaloneChanged() { try { StandaloneChanged?.Invoke(); } catch { } }
+
+        public static bool StandaloneActive { get { try { return StandaloneActiveProvider?.Invoke() == true; } catch { return false; } } }
+        public static bool SpiralVisible { get { try { return SpiralVisibleProvider?.Invoke() == true; } catch { return false; } } }
+
+        public static void ShowSession(string path, Models.CornerPosition position, int size, int opacity)
+        {
+            try { ShowSessionHandler?.Invoke(path, position, size, opacity); } catch { }
+        }
+
+        public static void HideSession(bool handBack)
+        {
+            try { HideSessionHandler?.Invoke(handBack); } catch { }
+        }
     }
 }
