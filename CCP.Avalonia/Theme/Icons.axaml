@@ -1,0 +1,25 @@
+<!-- Fluent icons (decision 2026-10-10): the size ramp as style classes on fx:IconGlyph, and the
+     semantic brushes that carry the colour the emoji used to. Style classes, not ControlThemes:
+     IconGlyph is not templated. Keep an old FontSize/box when converting, then snap to the ramp.
+     Hearts use {DynamicResource PinkBrush} itself (a mod switch replaces it; an alias would freeze).
+     Contrast >= 3:1 on SurfaceBg/PanelBg/DarkerBg: IconBrushContrastTests. -->
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:fx="clr-namespace:ConditioningControlPanel.Avalonia.Controls">
+  <Styles.Resources>
+    <SolidColorBrush x:Key="IconTier1Brush" Color="#FFF0C24B"/>   <!-- = PlayLockT1Brush (gold) -->
+    <SolidColorBrush x:Key="IconTier2Brush" Color="#FFB47BFF"/>   <!-- = PlayLockT2Brush (violet) -->
+    <SolidColorBrush x:Key="IconSuccessBrush" Color="#FF3EE87A"/> <!-- = SuccessGreen -->
+    <SolidColorBrush x:Key="IconWarnBrush" Color="#FFFFB347"/>
+    <SolidColorBrush x:Key="IconDangerBrush" Color="#FFFF6B6B"/>
+    <SolidColorBrush x:Key="IconGoldBrush" Color="#FFFFD700"/>
+    <SolidColorBrush x:Key="IconGemBrush" Color="#FFB482FF"/>     <!-- EnhancementsTabView Rgb(180,130,255) -->
+    <SolidColorBrush x:Key="IconFireBrush" Color="#FFFF8A3D"/>
+  </Styles.Resources>
+  <Style Selector="fx|IconGlyph.xs"><Setter Property="Size" Value="10"/></Style>
+  <Style Selector="fx|IconGlyph.s"><Setter Property="Size" Value="12"/></Style>
+  <Style Selector="fx|IconGlyph.m"><Setter Property="Size" Value="16"/></Style>
+  <Style Selector="fx|IconGlyph.l"><Setter Property="Size" Value="20"/></Style>
+  <Style Selector="fx|IconGlyph.xl"><Setter Property="Size" Value="24"/></Style>
+  <Style Selector="fx|IconGlyph.hero"><Setter Property="Size" Value="48"/></Style>
+</Styles>

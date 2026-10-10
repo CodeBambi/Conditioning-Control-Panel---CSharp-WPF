@@ -1,6 +1,4 @@
 using System;
-using System.Windows;
-using System.Windows.Media;
 using ConditioningControlPanel.Models;
 
 namespace ConditioningControlPanel.Controls.Header
@@ -11,6 +9,15 @@ namespace ConditioningControlPanel.Controls.Header
     /// <summary>How much the spark may move: the app's motion level, folded with the
     /// performance tier (a tier that forbids ambient motion turns Full into Reduced).</summary>
     public enum SparkMotion { Full, Reduced, Off }
+
+    /// <summary>A point in the spark's own px box (Core twin of a head Point, so both heads share the star).</summary>
+    public readonly record struct SparkPoint(double X, double Y);
+
+    /// <summary>An opaque RGB colour (Core twin of a head Color).</summary>
+    public readonly record struct SparkColor(byte R, byte G, byte B)
+    {
+        internal static SparkColor FromRgb(byte r, byte g, byte b) => new(r, g, b);
+    }
 
     /// <summary>
     /// THE PREMIUM SPARK, the pure half (polish 12, owner 2026-10-07): a die-cut cardstock
@@ -173,12 +180,16 @@ namespace ConditioningControlPanel.Controls.Header
             tier != SparkTier.Free && motion != SparkMotion.Off;
 
         /// <summary>Where the cutout sits (px down from rest) and how long its paper shadow is.
-        /// Straight from DepthRules: pressed sinks 2, hover lifts 2, rest throws 3.</summary>
+        /// DepthRules' numbers (head-side, WPF-typed; a WPF test pins these equal): pressed sinks 2,
+        /// hover lifts 2, rest throws 3. Press/hover settle times are DepthRules.PressMs/HoverMs.</summary>
+        internal const double PressTravelPx = 2.0, HoverLiftPx = 2.0, RaisedPx = 3.0;
+        internal const int PressMs = 90, HoverMs = 120;
+
         internal static double Travel(bool pressed, bool hovered) =>
-            Depth.DepthRules.TravelFor(enabled: true, pressed: pressed, active: false, hovered: hovered);
+            pressed ? PressTravelPx : hovered ? -HoverLiftPx : 0;
 
         internal static double ShadowLength(bool pressed, bool hovered) =>
-            Depth.DepthRules.ShadowFor(enabled: true, pressed: pressed, active: false, hovered: hovered);
+            pressed ? 0 : hovered ? RaisedPx + HoverLiftPx : RaisedPx;
 
         /// <summary>A random wait inside a range, seconds; rng injectable for tests.</summary>
         internal static double Between(Random rng, double min, double max) =>
@@ -201,21 +212,21 @@ namespace ConditioningControlPanel.Controls.Header
 
         /// <summary>One tier's cardstock: face gradient (top, middle, bottom), the label ink, the
         /// particle colour and the paper shadow.</summary>
-        internal readonly record struct Livery(Color FaceTop, Color FaceMid, Color FaceBottom,
-                                               Color Ink, Color Mote, Color Edge);
+        internal readonly record struct Livery(SparkColor FaceTop, SparkColor FaceMid, SparkColor FaceBottom,
+                                               SparkColor Ink, SparkColor Mote, SparkColor Edge);
 
         /// <summary>Gold matches tier_badge_t1 (#FFD27A glow); cyan matches tier_badge_t2 (#BDEFFF).</summary>
         internal static Livery LiveryFor(SparkTier tier) => tier switch
         {
             SparkTier.Prime => new Livery(
-                Color.FromRgb(0xF0, 0xFD, 0xFF), Color.FromRgb(0x9C, 0xEC, 0xFF), Color.FromRgb(0x38, 0xB6, 0xDA),
-                Color.FromRgb(0x5E, 0xE6, 0xFF), Color.FromRgb(0xBD, 0xEF, 0xFF), Color.FromRgb(0xF4, 0xFC, 0xFF)),
+                SparkColor.FromRgb(0xF0, 0xFD, 0xFF), SparkColor.FromRgb(0x9C, 0xEC, 0xFF), SparkColor.FromRgb(0x38, 0xB6, 0xDA),
+                SparkColor.FromRgb(0x5E, 0xE6, 0xFF), SparkColor.FromRgb(0xBD, 0xEF, 0xFF), SparkColor.FromRgb(0xF4, 0xFC, 0xFF)),
             SparkTier.Basic => new Livery(
-                Color.FromRgb(0xFF, 0xF2, 0xC6), Color.FromRgb(0xFF, 0xCF, 0x5C), Color.FromRgb(0xC9, 0x8A, 0x1E),
-                Color.FromRgb(0xFF, 0xD2, 0x7A), Color.FromRgb(0xFF, 0xE7, 0x9A), Color.FromRgb(0xFF, 0xFB, 0xEF)),
+                SparkColor.FromRgb(0xFF, 0xF2, 0xC6), SparkColor.FromRgb(0xFF, 0xCF, 0x5C), SparkColor.FromRgb(0xC9, 0x8A, 0x1E),
+                SparkColor.FromRgb(0xFF, 0xD2, 0x7A), SparkColor.FromRgb(0xFF, 0xE7, 0x9A), SparkColor.FromRgb(0xFF, 0xFB, 0xEF)),
             _ => new Livery(
-                Color.FromRgb(0x9A, 0x95, 0xA6), Color.FromRgb(0x77, 0x72, 0x84), Color.FromRgb(0x56, 0x52, 0x62),
-                Color.FromRgb(0xA9, 0xA4, 0xB4), Color.FromRgb(0x9A, 0x95, 0xA6), Color.FromRgb(0xC9, 0xC5, 0xD1)),
+                SparkColor.FromRgb(0x9A, 0x95, 0xA6), SparkColor.FromRgb(0x77, 0x72, 0x84), SparkColor.FromRgb(0x56, 0x52, 0x62),
+                SparkColor.FromRgb(0xA9, 0xA4, 0xB4), SparkColor.FromRgb(0x9A, 0x95, 0xA6), SparkColor.FromRgb(0xC9, 0xC5, 0xD1)),
         };
 
         /// <summary>The four-point sparkle, in a StarSize box: long vertical points, shorter
@@ -226,22 +237,22 @@ namespace ConditioningControlPanel.Controls.Header
 
         /// <summary>The star's four flanks as cubic Beziers (start, c1, c2, end), clockwise from
         /// the top tip, in the StarSize box. Same numbers as StarPathData.</summary>
-        internal static readonly (Point p0, Point c1, Point c2, Point p3)[] Flanks =
+        internal static readonly (SparkPoint p0, SparkPoint c1, SparkPoint c2, SparkPoint p3)[] Flanks =
         {
-            (new Point(15, 0), new Point(15.9, 10), new Point(18.8, 14), new Point(28, 15)),
-            (new Point(28, 15), new Point(18.8, 16), new Point(15.9, 20), new Point(15, 30)),
-            (new Point(15, 30), new Point(14.1, 20), new Point(11.2, 16), new Point(2, 15)),
-            (new Point(2, 15), new Point(11.2, 14), new Point(14.1, 10), new Point(15, 0)),
+            (new SparkPoint(15, 0), new SparkPoint(15.9, 10), new SparkPoint(18.8, 14), new SparkPoint(28, 15)),
+            (new SparkPoint(28, 15), new SparkPoint(18.8, 16), new SparkPoint(15.9, 20), new SparkPoint(15, 30)),
+            (new SparkPoint(15, 30), new SparkPoint(14.1, 20), new SparkPoint(11.2, 16), new SparkPoint(2, 15)),
+            (new SparkPoint(2, 15), new SparkPoint(11.2, 14), new SparkPoint(14.1, 10), new SparkPoint(15, 0)),
         };
 
         /// <summary>The heart of the star, where the folds meet.</summary>
-        internal static readonly Point Heart = new(15, 15);
+        internal static readonly SparkPoint Heart = new(15, 15);
 
         /// <summary>Splits a cubic at t (de Casteljau): the two halves, each (p0, c1, c2, p3).</summary>
-        internal static ((Point, Point, Point, Point) a, (Point, Point, Point, Point) b) Split(
-            (Point p0, Point c1, Point c2, Point p3) c, double t)
+        internal static ((SparkPoint, SparkPoint, SparkPoint, SparkPoint) a, (SparkPoint, SparkPoint, SparkPoint, SparkPoint) b) Split(
+            (SparkPoint p0, SparkPoint c1, SparkPoint c2, SparkPoint p3) c, double t)
         {
-            static Point L(Point a, Point b, double t) => new(a.X + (b.X - a.X) * t, a.Y + (b.Y - a.Y) * t);
+            static SparkPoint L(SparkPoint a, SparkPoint b, double t) => new(a.X + (b.X - a.X) * t, a.Y + (b.Y - a.Y) * t);
             var p01 = L(c.p0, c.c1, t); var p12 = L(c.c1, c.c2, t); var p23 = L(c.c2, c.p3, t);
             var p012 = L(p01, p12, t); var p123 = L(p12, p23, t);
             var mid = L(p012, p123, t);
@@ -257,7 +268,7 @@ namespace ConditioningControlPanel.Controls.Header
         /// <summary>How lit one facet is: the facet is the triangle (raised heart, a, b) with a and
         /// b on the card. Positive = brighter than a flat card under the same lamp, negative =
         /// darker. Range about -1..1.</summary>
-        internal static double FacetShade(Point a, Point b)
+        internal static double FacetShade(SparkPoint a, SparkPoint b)
         {
             double cx = Heart.X, cy = Heart.Y, cz = FoldHeight;
             double ux = a.X - cx, uy = a.Y - cy, uz = -cz;

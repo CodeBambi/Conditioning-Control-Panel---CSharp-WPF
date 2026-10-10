@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
+using Avalonia.Media;
 using Avalonia.Threading;
 using CCP.Avalonia.Testing;
 using ConditioningControlPanel;
@@ -134,6 +135,24 @@ public sealed class GateFxAdornerTests
         Settle(shell);
         Assert.Equal(1.0, tab.RowSweep!.Progress, 3);
         Assert.False(tab.RowSweep.IsTicking);
+    });
+
+    [Fact]   // Fluent icons L0a: a converted gate (IconGlyph padlock) keeps its glow end to end.
+    public Task GateWithAnIconGlyphPadlockGlows() => Run(_ =>
+    {
+        var glyph = new IconGlyph { Kind = FluentIcons.Common.Symbol.LockClosed, Variant = FluentIcons.Common.IconVariant.Filled, Size = 40 };
+        var gate = new Border { Child = new StackPanel { Children = { glyph, new Button { Content = "Unlock" } } } };
+        var host = new Window { Width = 400, Height = 300, Content = gate };
+        try
+        {
+            host.Show(); Settle(host);
+            var fx = PremiumGateFx.Attach(gate)!;
+            Settle(host);
+            Assert.True(fx.IsRunning);
+            Assert.True(fx.HasLockGlow);
+            Assert.IsType<DropShadowEffect>(glyph.Effect);              // the glow sits on the IconGlyph
+        }
+        finally { host.Close(); }
     });
 
     private static readonly SteppedClock Clock = new();

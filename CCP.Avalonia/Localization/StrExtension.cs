@@ -21,7 +21,7 @@ namespace ConditioningControlPanel.Avalonia.Localization
     /// the raw-key bug in PR #81 came from. With this the WPF XAML copies nearly verbatim.
     /// Formatted strings (Loc.GetF) stay in code-behind, exactly as in WPF.
     /// </summary>
-    public sealed class StrExtension : MarkupExtension
+    public class StrExtension : MarkupExtension
     {
         public string Key { get; set; }
 

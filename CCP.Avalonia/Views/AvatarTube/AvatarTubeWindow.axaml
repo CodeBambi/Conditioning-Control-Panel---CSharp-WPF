@@ -61,6 +61,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
         xmlns:at="clr-namespace:ConditioningControlPanel.Avalonia.Views.AvatarTube"
+        xmlns:fx="clr-namespace:ConditioningControlPanel.Avalonia.Controls"
         x:Class="ConditioningControlPanel.Avalonia.Views.AvatarTube.AvatarTubeWindow"
         Title="{loc:Str dialog_avatar_tube}"
 
@@ -289,6 +290,13 @@
                     </Grid>
                 </Grid>
             </Border>
+
+            <!-- WPF polish wave 13: motes rising inside the glass, over the chamber and behind her.
+                 Placed on the chamber's interior box by ApplyTubeMotes; only over OUR tube art. -->
+            <fx:AmbientFxCanvas x:Name="TubeMotes"
+                                HorizontalAlignment="Left" VerticalAlignment="Top"
+                                Margin="273,553,0,0" Width="126" Height="269"
+                                ClipToBounds="True" IsHitTestVisible="False"/>
 
             <!-- Text Input Panel (hidden by default) - Z-Index 3, positioned near avatar -->
             <Border x:Name="InputPanel"
@@ -563,34 +571,88 @@
                         Background="#FF2A2440" BorderBrush="#40E0B052" BorderThickness="1"/>
             </Grid>
 
-            <!-- Title/Level Box with Avatar Selection - Z-Index 4 to be above everything -->
+            <!-- Title/Level Box with Avatar Selection - Z-Index 4 to be above everything.
+                 WPF polish wave 13 (2889ddb23): under the depth law the box is a FLOATING plate with its
+                 band under it, and the two arrows are RAISED coins that lift on hover. No Effects.
+                 TitleBox stays the outer element: code moves its Margin and hit-tests against it.
+                 The Depth.xaml brushes this needs are local (this head has no Depth theme yet), and the
+                 Segoe MDL2 chevrons are drawn as Paths (no MDL2 font on Linux). -->
             <Border x:Name="TitleBox"
                     ZIndex="4"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Bottom"
                     Margin="0,0,121,180"
-                    Background="#CC1A1A2E"
-                    CornerRadius="12"
-                    BorderBrush="{DynamicResource PinkBrush}"
-                    BorderThickness="2"
-                    Padding="8,6">
+                    Background="Transparent">
+                <Border.Resources>
+                    <LinearGradientBrush x:Key="DepthRaisedBevel" StartPoint="0%,0%" EndPoint="0%,100%">
+                        <GradientStop Offset="0.0" Color="#42FFFFFF"/>
+                        <GradientStop Offset="0.5" Color="#10FFFFFF"/>
+                        <GradientStop Offset="1.0" Color="#80000000"/>
+                    </LinearGradientBrush>
+                    <LinearGradientBrush x:Key="DepthRaisedSheen" StartPoint="0%,0%" EndPoint="0%,100%">
+                        <GradientStop Offset="0.00" Color="#17FFFFFF"/>
+                        <GradientStop Offset="0.55" Color="#00FFFFFF"/>
+                    </LinearGradientBrush>
+                    <RadialGradientBrush x:Key="DepthDropDisc">
+                        <GradientStop Offset="0.0" Color="#9E06020F"/>
+                        <GradientStop Offset="0.6" Color="#5C06020F"/>
+                        <GradientStop Offset="1.0" Color="#0006020F"/>
+                    </RadialGradientBrush>
+                    <LinearGradientBrush x:Key="DepthFloatBand" StartPoint="0%,0%" EndPoint="0%,100%">
+                        <GradientStop Offset="0.0" Color="#6606020F"/>
+                        <GradientStop Offset="1.0" Color="#0006020F"/>
+                    </LinearGradientBrush>
+                </Border.Resources>
+                <Border.Styles>
+                    <Style Selector="Border.tubeArrowFace">
+                        <Setter Property="Width" Value="30"/>
+                        <Setter Property="Height" Value="30"/>
+                        <Setter Property="CornerRadius" Value="15"/>
+                        <Setter Property="VerticalAlignment" Value="Top"/>
+                        <Setter Property="Background" Value="{DynamicResource PinkBrush}"/>
+                        <Setter Property="BorderBrush" Value="{StaticResource DepthRaisedBevel}"/>
+                        <Setter Property="BorderThickness" Value="1"/>
+                        <Setter Property="RenderTransform" Value="translateY(0px)"/>
+                    </Style>
+                    <Style Selector="Grid:pointerover > Border.tubeArrowFace">
+                        <Setter Property="RenderTransform" Value="translateY(-2px)"/>
+                    </Style>
+                </Border.Styles>
+                <Grid>
+                    <!-- the plate's shadow band under its foot -->
+                    <Border Background="{StaticResource DepthFloatBand}" Height="12" VerticalAlignment="Bottom"
+                            Margin="8,0,8,-9" CornerRadius="6" IsHitTestVisible="False"/>
+                    <Border CornerRadius="12" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1.5" Padding="8,6">
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                                <GradientStop Offset="0" Color="#F2281A36"/>
+                                <GradientStop Offset="1" Color="#F2140C1E"/>
+                            </LinearGradientBrush>
+                        </Border.Background>
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
+                    <!-- the lamp's sheen across the plate's top half -->
+                    <Border Grid.ColumnSpan="3" Margin="-7,-5,-7,0" Height="18" VerticalAlignment="Top" CornerRadius="10,10,4,4"
+                            Background="{StaticResource DepthRaisedSheen}" IsHitTestVisible="False"/>
 
-                    <!-- Left Arrow (Previous Avatar) - 50% bigger -->
+                    <!-- Left Arrow (Previous Avatar): a raised coin with its drop disc -->
                     <Border x:Name="BtnPrevAvatar" Grid.Column="0"
                             Background="Transparent" Cursor="Hand"
                             IsVisible="False"
                             VerticalAlignment="Center" Margin="0,0,10,0">
-                        <TextBlock Text="◀" FontSize="27" Foreground="{DynamicResource SecondaryBrush}" FontWeight="Bold">
-                            <TextBlock.Effect>
-                                <DropShadowEffect Color="{StaticResource PatreonPurple}" BlurRadius="10" OffsetX="0" OffsetY="0" Opacity="0.8"/>
-                            </TextBlock.Effect>
-                        </TextBlock>
+                        <Grid Width="30" Height="34" Background="Transparent">
+                            <Ellipse Width="28" Height="10" VerticalAlignment="Bottom" Fill="{StaticResource DepthDropDisc}" IsHitTestVisible="False"/>
+                            <Border Classes="tubeArrowFace">
+                                <Border CornerRadius="15" Background="{StaticResource DepthRaisedSheen}">
+                                    <Path Data="M 4,0 L 0,4 L 4,8" Stroke="White" StrokeThickness="1.6" Width="5" Height="9"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center" Margin="-1,0,0,0"/>
+                                </Border>
+                            </Border>
+                        </Grid>
                     </Border>
 
                     <!-- Title and Level -->
@@ -601,30 +663,32 @@
                                    FontWeight="Bold"
                                    Foreground="{DynamicResource PinkBrush}"
                                    TextAlignment="Center"
-                                   HorizontalAlignment="Center">
-                            <TextBlock.Effect>
-                                <DropShadowEffect Color="Black" BlurRadius="2" OffsetX="1" OffsetY="1" Opacity="0.8"/>
-                            </TextBlock.Effect>
-                        </TextBlock>
+                                   HorizontalAlignment="Center"/>
                         <TextBlock x:Name="TxtAvatarLevel"
                                    Text="{loc:Str label_lv_1_2}"
                                    FontSize="13"
-                                   Foreground="#B0B0B0"
+                                   Foreground="#B8A9C6"
                                    TextAlignment="Center"
                                    HorizontalAlignment="Center"
                                    Margin="0,-2,0,0"/>
                     </StackPanel>
 
-                    <!-- Right Arrow (Next Avatar) - 50% bigger -->
+                    <!-- Right Arrow (Next Avatar): a raised coin with its drop disc -->
                     <Border x:Name="BtnNextAvatar" Grid.Column="2"
                             Background="Transparent" Cursor="Hand"
                             IsVisible="False"
                             VerticalAlignment="Center" Margin="10,0,0,0">
-                        <TextBlock Text="▶" FontSize="27" Foreground="{DynamicResource SecondaryBrush}" FontWeight="Bold">
-                            <TextBlock.Effect>
-                                <DropShadowEffect Color="{StaticResource PatreonPurple}" BlurRadius="10" OffsetX="0" OffsetY="0" Opacity="0.8"/>
-                            </TextBlock.Effect>
-                        </TextBlock>
+                        <Grid Width="30" Height="34" Background="Transparent">
+                            <Ellipse Width="28" Height="10" VerticalAlignment="Bottom" Fill="{StaticResource DepthDropDisc}" IsHitTestVisible="False"/>
+                            <Border Classes="tubeArrowFace">
+                                <Border CornerRadius="15" Background="{StaticResource DepthRaisedSheen}">
+                                    <Path Data="M 0,0 L 4,4 L 0,8" Stroke="White" StrokeThickness="1.6" Width="5" Height="9"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center" Margin="1,0,0,0"/>
+                                </Border>
+                            </Border>
+                        </Grid>
+                    </Border>
+                </Grid>
                     </Border>
                 </Grid>
             </Border>
