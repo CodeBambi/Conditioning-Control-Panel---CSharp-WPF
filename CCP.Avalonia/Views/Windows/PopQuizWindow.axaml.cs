@@ -118,6 +118,57 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             }
 
             _txtQuestion.Text = question.QuestionText;
+
+            // "Turn these off" link: mouse (WPF MouseLeftButtonUp) or Enter/Space when focused (P17).
+            var turnOff = this.FindControl<TextBlock>("TxtTurnOff")!;
+            turnOff.PointerReleased += (_, e) =>
+            {
+                if (e.InitialPressMouseButton != MouseButton.Left) return;
+                e.Handled = true;
+                TurnOff_Click();
+            };
+            turnOff.KeyDown += (_, e) =>
+            {
+                if (e.Key is not (Key.Enter or Key.Space)) return;
+                e.Handled = true;
+                TurnOff_Click();
+            };
+        }
+
+        /// <summary>Raised after the card's link switched pop quizzes off, so the Graded Intake
+        /// switch can follow (WPF reached into MainWindowRef.GradedIntakeTab directly).</summary>
+        public static event Action? TurnedOff;
+
+        /// <summary>
+        /// WPF PopQuizWindow.TurnOffPopQuestions (7.1.5): switches the Graded Intake page's own
+        /// setting off. PURE on the settings object; returns whether anything changed.
+        /// </summary>
+        internal static bool TurnOffPopQuestions(ConditioningControlPanel.Models.AppSettings settings)
+        {
+            if (!settings.PopQuizEnabled) return false;
+            settings.PopQuizEnabled = false;
+            return true;
+        }
+
+        // WPF PopQuizWindow.TurnOff_Click: closes like Esc - never an answer, no XP, no penalty.
+        private void TurnOff_Click()
+        {
+            if (_answered) return;
+            try
+            {
+                if (TurnOffPopQuestions(CoreSettings.Current))
+                {
+                    CoreSettings.Save();
+                    TurnedOff?.Invoke();
+                    Log.Information("PopQuiz: turned off from the card");
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "PopQuiz: turning off from the card failed");
+            }
+            CleanupAndClose("turned off from the card");
+            CoreEngine.PopQuiz?.Stop();
         }
 
         private void Window_KeyDown(object? sender, KeyEventArgs e)
@@ -160,9 +211,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             CleanupAndClose();
         }
 
-        private void CleanupAndClose()
+        private void CleanupAndClose(string? reason = null)
         {
-            _closeReason = _answered ? "answered, auto-dismiss" : "ESC";
+            _closeReason = reason ?? (_answered ? "answered, auto-dismiss" : "ESC");
             // Mark answered BEFORE completing: OnClosed re-Completes when !_answered as a
             // safety net, and the ESC path (still unanswered) would otherwise double-Complete —
             // the second call hits the mismatch branch and clears whatever interaction the

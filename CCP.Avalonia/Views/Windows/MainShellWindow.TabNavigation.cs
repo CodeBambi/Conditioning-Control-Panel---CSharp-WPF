@@ -87,7 +87,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             ["presets"] = "PresetsTab",          ["quests"] = "QuestsTab",
             ["programs"] = "ProgramsTab",        ["enhancements"] = "EnhancementsTab",
             ["deeper"] = "DeeperTab",            ["achievements"] = "AchievementsTab",
-            ["companion"] = "CompanionTab",      ["play"] = "PlayTab",  ["lab"] = "PlayTab",
+            ["companion"] = "CompanionTab",      ["companionai"] = "CompanionAiTab", ["play"] = "PlayTab",  ["lab"] = "PlayTab",
             ["leaderboard"] = "LeaderboardTab",  ["assets"] = "AssetsTab",
             ["discord"] = "DiscordTab",          ["awareness"] = "AwarenessTab",
             ["remotecontrol"] = "RemoteControlTab", ["availablesubjects"] = "AvailableSubjectsTab",
@@ -95,7 +95,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             ["lockdown"] = "LockdownTab",        ["blinktrainer"] = "BlinkTrainerTab",
             ["shelistening"] = "SheListeningTab", ["gradedintake"] = "GradedIntakeTab",
             ["appsettings"] = "AppSettingsTab",  ["spiral"] = "SpiralTab",
-            ["exclusives"] = "ExclusivesTab", ["chaster"] = "ChasterTab",
+            ["premium"] = "ExclusivesTab", ["chaster"] = "ChasterTab",
             ["friends"] = "FriendsTab",          ["leash"] = "LeashTab",
             // Nav rework zone pills (WPF MainWindow.TabNavigation.cs:521/572/666): places inside a page.
             ["playeyes"] = "PlayTab", ["playsessions"] = "PlayTab", ["folders"] = "AssetsTab", ["ramp"] = "StudioTab",
@@ -116,17 +116,26 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// deliberately NOT an entry here.</para>
         /// </summary>
         private static readonly Dictionary<string, string> BarkTabAliases =
-            new(StringComparer.OrdinalIgnoreCase) { ["play"] = "lab" };
+            new(StringComparer.OrdinalIgnoreCase)
+            {
+                ["play"] = "lab",
+                // WPF :93 (polish 12): a rule keyed `tab_eq: "exclusives"` still hears the vault opening.
+                ["premium"] = "exclusives",
+            };
+
+        /// <summary>Old keys that land on their new home without a word (WPF MainWindow.SectionChrome.cs
+        /// SilentRedirectKeys): "exclusives" is the Premium page again, Home > Premium (Core NavSections.Redirects).</summary>
+        internal static readonly string[] SilentRedirectKeys = { "exclusives" };
 
         /// <summary>The rail's doors: Tag on the door button, the tab it opens, the tabs it owns,
         /// and the entry panel that unfolds under it (null for the two doors that have none).
         /// Copied from WPF's NavDoorMap.</summary>
         private static readonly (string Door, string DefaultTab, string[] Tabs, string? Panel)[] NavDoorMap =
         {
-            ("home",        "settings",    new[] { "settings", "progression" },                                   null),
+            ("home",        "settings",    new[] { "settings", "progression", "premium" },                        null),
             ("studio",      "studio",      new[] { "studio", "presets", "haptics", "ramp" },                              "DoorPanelStudio"),
-            ("companion",   "companion",   new[] { "companion", "bambitakeover", "shelistening", "awareness" },   "DoorPanelCompanion"),
-            ("play",        "play",        new[] { "play", "lab", "playeyes", "playsessions", "deeper", "exclusives", "gradedintake", "lockdown", "blinktrainer", "remotecontrol", "availablesubjects" }, "DoorPanelPlay"),
+            ("companion",   "companion",   new[] { "companion", "companionai", "bambitakeover", "shelistening", "awareness" },   "DoorPanelCompanion"),
+            ("play",        "play",        new[] { "play", "lab", "playeyes", "playsessions", "deeper", "gradedintake", "lockdown", "blinktrainer", "remotecontrol", "availablesubjects" }, "DoorPanelPlay"),
             ("you",         "discord",     new[] { "discord", "spiral", "quests", "achievements", "enhancements", "programs", "leaderboard", "friends", "leash" }, "DoorPanelYou"),
             ("library",     "assets",      new[] { "assets", "folders" },                                                    "DoorPanelLibrary"),
             ("appsettings", "appsettings", new[] { "appsettings" },                                               null),
@@ -141,6 +150,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         internal void ShowTab(string? tab)
         {
             tab = (tab ?? string.Empty).ToLowerInvariant();
+            // WPF :228 TryRedirectSilentTab, at the door before anything counts the old key.
+            if (Array.IndexOf(SilentRedirectKeys, tab) >= 0
+                && Services.UI.NavSections.Redirects.TryGetValue(tab, out var moved)) { ShowTab(moved.Tab); return; }
             // The dashboard's RECENT rail, at the door before the intercepts (WPF :121), so a
             // window key counts as an open like any tab (MainShellWindow.FavoritesRail.cs).
             NoteDestinationOpened(tab);
@@ -200,6 +212,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     // WPF MainWindow.TabNavigation.cs:420/457/527/534 - the door tour cards (studio-rack: :505, case "studio").
                     case "play": case "lab": case "playeyes": case "playsessions": MaybeShowFeatureIntro("play-wall", "play"); break;
                     case "awareness": MaybeShowFeatureIntro("awareness"); break;
+                    // WPF MainWindow.CompanionTabs.cs NavTabHost("companionai", OnShown): borrow the room's live zones.
+                    case "companionai":
+                        Named<Controls.Companion.Pages.AiPage>("CompanionAiTab")?.OnShown(Named<Tabs.CompanionTabView>("CompanionTab")?.Room);
+                        break;
                     case "lockdown": MaybeShowFeatureIntro("lockdown"); break;
                     case "blinktrainer": MaybeShowFeatureIntro("blinktrainer"); break;
                     // WPF :581 - only once the room shows the map (its IsVisible hook re-read the gates).
@@ -227,7 +243,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     case "friends": Named<Tabs.FriendsTabView>("FriendsTab")?.OnShown(); break;
 
                     // WPF MainWindow.Exclusives.cs RefreshExclusivesTab "on tab show": gates can move between visits.
-                    case "exclusives": RefreshExclusivesTab(); break;
+                    case "premium": RefreshExclusivesTab(); break;
                     // WPF MainWindow.TabNavigation.cs:588-593 (AnimateTabIn is the header's ponytail).
                     case "chaster": Named<Tabs.ChasterTabView>("ChasterTab")?.OnTabShown(); break;
                     // WPF MainWindow.TabNavigation.cs:433-438: rescan the library, re-sync presets, AssetsFx entrance.
@@ -256,7 +272,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>WPF MaybeShowFeatureIntro (MainWindow.TabNavigation.cs:1094): through the
         /// startup ladder, so a quiet window turns the card into an Inbox row. ponytail: no
         /// FirstShowService on this head, so WPF's first-show early return has nothing to read.</summary>
-        private void MaybeShowFeatureIntro(string key, string? doorTab = null)
+        internal void MaybeShowFeatureIntro(string key, string? doorTab = null)
         {
             try { FeatureIntroPopup.ShowWhenStartupSettles(key, this, NavDoorForTab(doorTab ?? key)); }
             catch (Exception ex) { Serilog.Log.Warning(ex, "Feature intro hook failed for {Key}", key); }

@@ -91,11 +91,11 @@ public sealed class FirstRunGateDeadClickTests
 
         shell.ShowTab("settings");
         Card("CardVault").RaiseEvent(new RoutedEventArgs(FeatureCard.ClickEvent));
-        Assert.Equal("exclusives", shell.CurrentTab);
+        Assert.Equal("premium", shell.CurrentTab);
 
         shell.ShowTab("settings");
         shell.FindControl<Button>("BtnPatreonExclusives")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-        Assert.Equal("exclusives", shell.CurrentTab);
+        Assert.Equal("premium", shell.CurrentTab);
 
         shell.ShowTab("settings");
         shell.FindControl<Button>("BtnNavMediaLog")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
