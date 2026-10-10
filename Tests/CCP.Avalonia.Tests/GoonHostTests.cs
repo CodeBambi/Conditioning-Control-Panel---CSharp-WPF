@@ -299,9 +299,6 @@ public sealed class GoonHostTests
                 Assert.Equal("io-failed", (string?)r["error"]);
                 w.HandleMessage("{\"type\":\"share-card\",\"id\":\"s1\",\"op\":\"copy\"}");
                 Assert.False((bool)Assert.Single(Of(posted, "share-card-result"))["ok"]!);
-                // Stakes are not offered on this head yet: no stake frame, so nothing can be booked.
-                w.HandleMessage("{\"type\":\"stake-offer\",\"code\":\"ABCD\",\"kind\":\"time\",\"amount\":30}");
-                Assert.Empty(Of(posted, "stake"));
             }
             finally { w.Close(); }
             return Task.CompletedTask;

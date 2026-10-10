@@ -6,6 +6,7 @@ using Avalonia.Threading;
 using ConditioningControlPanel.Services;
 using ConditioningControlPanel.Services.Friends;
 using ConditioningControlPanel.Services.GoonGame;
+using ConditioningControlPanel.Services.Stakes;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Serilog;
@@ -70,6 +71,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
 
         private static void SeedGoon()
         {
+            SeedPbpSeams();   // the stakes + online-picture seams are shared with chess; first seeding wins
             GoonHostService.OpenWindowProvider ??= () =>
             {
                 var w = Launch("goon");   // the account gate runs here; a live window is focused
@@ -163,6 +165,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
         {
             EnsureGoon();
             var type = (string?)o["type"];
+            // PvP stakes (WPF OnPageMessage :706): stake-limits / stake-offer / stake-state / stake-settle go
+            // to the shared Core bridge and nowhere else, before the host's own switch.
+            if (StakeBridge.Handles(type))
+            {
+                _ = GoonStakes.Handle(o);
+                return true;
+            }
             switch (type)
             {
                 case "ready":
@@ -261,16 +270,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                     // false on this head, so the page's lobby shows sending as off rather than half-working.
                     Log.Information("[Goon] {Type}: not ported (transfer cache)", type);
                     return true;
-                case "stake-limits":
-                case "stake-offer":
-                case "stake-state":
-                case "stake-settle":
-                    // SEAM(stakes): WPF hands these to StakeBridge.ForApp("goon", post) (Services/Stakes,
-                    // shared with chess, not in Core yet). Whoever ports it sets GoonStakes once; until
-                    // then nothing is offered, booked or settled and the page's stake row stays off.
-                    if (GoonStakes?.Invoke(o, frame => Post(frame)) == true) return true;
-                    Log.Information("[Goon] {Type}: not ported (StakeBridge)", type);
-                    return true;
                 case "peer-card-req":
                     // WPF OnPeerCardRequest: the opponent's name + avatar for the VS splash; a duplicate posts nothing.
                     _ = Task.Run(async () =>
@@ -362,11 +361,30 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             });
         }
 
-        /// <summary>SEAM(stakes): the stake-limits / stake-offer / stake-state / stake-settle frames and
-        /// the way back for the bridge's <c>stake</c> frames (WPF GoonHostService.OnPageMessage :706,
-        /// PostStake :827). True = handled. One bridge for the life of the app: a settle watch it started
-        /// keeps running after the window closes, and posting to a closed window is a quiet no-op.</summary>
-        internal static Func<JObject, Action<JObject>, bool>? GoonStakes { get; set; }
+        // ============================ stakes ============================
+
+        private static StakeBridge? _goonStakes;
+
+        /// <summary>One bridge for the life of the app (WPF _stakes :824): a settle watch it started keeps
+        /// running, and books, after the duel window closes; posting to a closed window is a quiet no-op.
+        /// Each player stakes against the house, the server settles only when both ledger claims agree,
+        /// and Mercy / Esc / abandon settle as void.</summary>
+        internal static StakeBridge GoonStakes
+        {
+            get => _goonStakes ??= StakeBridge.ForApp("goon", PostGoonStake);
+            set => _goonStakes = value;
+        }
+
+        /// <summary>A <c>stake</c> frame back to the page, on the UI thread (WPF PostStake :827).</summary>
+        private static void PostGoonStake(JObject o)
+        {
+            void Run()
+            {
+                try { LiveGoon()?.Post(o); }
+                catch (Exception ex) { Log.Debug("[Goon] stake post failed: {E}", ex.Message); }
+            }
+            if (Dispatcher.UIThread.CheckAccess()) Run(); else Dispatcher.UIThread.Post(Run);
+        }
 
         /// <summary>The peer-card fetch and the shell open; tests swap them for fakes.</summary>
         internal Func<JObject, Task<JObject?>> GoonPeerCard { get; set; } = o => GoonHostService.PeerCardAsync(o);

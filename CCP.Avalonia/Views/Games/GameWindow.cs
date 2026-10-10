@@ -26,9 +26,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
     /// <c>manifest</c>, and <c>exit</c> / <c>exit-done</c> / <c>boot-error</c> close the window.
     /// Each game's own frames live in a partial beside this shell (GameWindow.BackRoom.cs: station
     /// relay + bank; GameWindow.Dtrh.cs: meta, run config, payout; GameWindow.Host.cs: manifest,
-    /// heartbeat, fullscreen; GameWindow.Channel.cs: WebView2's own message channel).
-    /// ponytail: Goon signalling + relay, chess friends/media/stakes, Arcademy meta/sync/wallet and
-    /// the Racing host are not ported; their pages run on their own timeout fallbacks.</para>
+    /// heartbeat, fullscreen; GameWindow.Channel.cs: WebView2's own message channel;
+    /// GameWindow.Pbp*.cs: chess friends, online play, pictures, stakes; GameWindow.Goon*.cs: the
+    /// Goon host, whose page is the game and reaches the server through net-post, plus stakes, online
+    /// pictures and the own-media transfer cache). Racing has a window of its own (RaceWindow*.cs).
+    /// Frame ledgers with what is still owed per game: C:/wt-par/progress/*-frames.md.</para>
     /// </summary>
     internal sealed partial class GameWindow : Window
     {
