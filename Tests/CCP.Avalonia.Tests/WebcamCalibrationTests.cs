@@ -65,6 +65,16 @@ public sealed class WebcamCalibrationTests
 
     /// <summary>Runs <paramref name="body"/> with a running blank tracker, a sentinel live calibration and
     /// no calibration file, restoring all of it afterwards.</summary>
+    /// <summary>The splash fade is an Avalonia Animation on the headless render timer, which ticks on WALL
+    /// time: 200 bare ticks can finish inside the 200 ms fade on a fast runner (Windows CI flake). Pump for up
+    /// to 2 s instead - still under the 2.8 s error hold, so a hold instead of a fade stays red.</summary>
+    private static void PumpUntilSplashGone(MainShellWindow shell)
+    {
+        var deadline = System.Diagnostics.Stopwatch.StartNew();
+        while (shell.WebcamLoadingSplashForTests != null && deadline.Elapsed < TimeSpan.FromSeconds(2))
+        { AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Dispatcher.UIThread.RunJobs(); Thread.Sleep(5); }
+    }
+
     private static void WithTracker(bool start, Action<WebcamTracker, WebcamCalibrationData> body) => AvaloniaTestDispatcher.Run(() =>
     {
         if (Application.Current is null)
@@ -286,8 +296,7 @@ public sealed class WebcamCalibrationTests
             Assert.Equal("Opening camera…", seen[2].Text);
             Assert.Equal("Ready", seen[4].Text);
             var splash = shell.WebcamLoadingSplashForTests!;
-            for (int i = 0; i < 200 && shell.WebcamLoadingSplashForTests != null; i++)
-            { AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Dispatcher.UIThread.RunJobs(); }
+            PumpUntilSplashGone(shell);
             Assert.Null(shell.WebcamLoadingSplashForTests);   // faded and closed
             Assert.False(splash.IsVisible);
 
@@ -331,8 +340,7 @@ public sealed class WebcamCalibrationTests
             Assert.True(tracker.StartWasStopped);
             Dispatcher.UIThread.RunJobs();
             Assert.NotEqual(tracker.LastError, splash.FindControl<TextBlock>("TxtStatus")!.Text);
-            for (int i = 0; i < 200 && shell.WebcamLoadingSplashForTests != null; i++)
-            { AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Dispatcher.UIThread.RunJobs(); }
+            PumpUntilSplashGone(shell);
             Assert.Null(shell.WebcamLoadingSplashForTests);   // faded at once, no 2.8 s error hold
         }
         finally { src.Release.Set(); shell.Close(); }

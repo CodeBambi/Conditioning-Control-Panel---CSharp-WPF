@@ -903,3 +903,7 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
   - IntakePageTests.TheFallbackPanelNeverShowsTheToken: the Windows runner has WebView2, so WebHost never draws the fallback.
     Supervisor-approved: always assert `WebHost.WithoutToken`, the TxtSource text when no engine, and on both runners that no
     TextBlock/tooltip in the host holds `ccp_t`. Fail-proof: panel showing the raw URL -> red.
+- WebcamCalibrationTests splash-close loops (Windows CI flake, run 38060583086): the fade is an Avalonia Animation on the headless
+  render timer, which ticks on wall time (local proof: 4 ticks fail, 400 ms sleep + 4 ticks pass), so 200 bare ticks could end
+  inside the 200 ms fade. Now pumps until gone or 2 s - under the 2.8 s error hold, so a hold-instead-of-fade still fails
+  (fail-proof: panic path routed to ShowErrorAndClose -> red).
