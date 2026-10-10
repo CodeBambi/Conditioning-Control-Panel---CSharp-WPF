@@ -37,6 +37,9 @@ public class RoadmapService : IDisposable
     private readonly Timer _saveTimer;
     private bool _isDirty;
     private bool _disposed;
+    // Set when the file could not be read AND could not be backed up (e.g. locked): saving the
+    // defaults would destroy the only copy, so this session never writes roadmap.json.
+    private bool _saveBlocked;
 
     public RoadmapProgress Progress { get; private set; }
     public string DiaryFolderPath => _diaryFolderPath;
@@ -114,12 +117,14 @@ public class RoadmapService : IDisposable
         }
         catch (Exception ex)
         {
-            Log.Warning(ex, "Could not preserve unreadable roadmap progress");
+            _saveBlocked = true;
+            Log.Warning(ex, "Could not preserve unreadable roadmap progress; roadmap saving is off for this session");
         }
     }
 
     public void Save()
     {
+        if (_saveBlocked) return;
         try
         {
             var dir = Path.GetDirectoryName(_progressPath);
@@ -131,7 +136,12 @@ public class RoadmapService : IDisposable
             var json = JsonSerializer.Serialize(Progress, new JsonSerializerOptions { WriteIndented = true });
             // Temp then rename: a crash mid-write leaves the old file intact, not a truncated one.
             var tmp = _progressPath + ".tmp";
-            File.WriteAllText(tmp, json);
+            // Flush(true) reaches the disk before the rename, so a power cut cannot leave an empty file.
+            using (var fs = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None))
+            {
+                fs.Write(new System.Text.UTF8Encoding(false).GetBytes(json)); // = File.WriteAllText's bytes
+                fs.Flush(flushToDisk: true);
+            }
             File.Move(tmp, _progressPath, overwrite: true);
             _isDirty = false;
         }

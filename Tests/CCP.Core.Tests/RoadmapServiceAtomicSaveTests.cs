@@ -57,6 +57,36 @@ public sealed class RoadmapServiceAtomicSaveTests : IDisposable
     }
 
     [Fact]
+    public void UnreadableFileThatCannotBeBackedUpIsNeverOverwritten()
+    {
+        if (OperatingSystem.IsWindows()) return; // chmod 000 is the portable-enough "locked" here
+        const string original = "{ \"Track1Unlocked\": true }";
+        File.WriteAllText(ProgressPath, original);
+        File.SetUnixFileMode(ProgressPath, UnixFileMode.None);
+        try
+        {
+            if (CanRead(ProgressPath)) return; // running as root: cannot simulate
+            using (var roadmap = new RoadmapService(ProgressPath, DiaryPath))
+            {
+                roadmap.StartStep("t1_step1");
+                roadmap.Save();
+            }
+        }
+        finally
+        {
+            File.SetUnixFileMode(ProgressPath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+        }
+
+        Assert.Equal(original, File.ReadAllText(ProgressPath));
+        Assert.Empty(Directory.GetFiles(_dir, "roadmap.json.corrupt-*"));
+    }
+
+    private static bool CanRead(string path)
+    {
+        try { File.ReadAllBytes(path); return true; } catch (UnauthorizedAccessException) { return false; }
+    }
+
+    [Fact]
     public void ValidFileRoundTripsUnchanged()
     {
         using (var first = new RoadmapService(ProgressPath, DiaryPath))

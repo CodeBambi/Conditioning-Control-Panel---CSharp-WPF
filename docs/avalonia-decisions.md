@@ -829,7 +829,12 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
     existing backup) and logs a warning before falling back to defaults. Before this, the next StartStep/SubmitPhoto saved
     the defaults over the user's whole roadmap.
   - Internal ctor `RoadmapService(progressPath, diaryFolderPath)`; the public ctor chains to it, so tests use temp dirs.
+  - If the unreadable file cannot be backed up either (e.g. locked or no read permission), saving is off for the session,
+    so the defaults never replace the only copy. The temp file is written through a FileStream and `Flush(true)` before
+    the rename, so the rename cannot publish data that has not reached the disk yet.
 - Not covered: a file that parses as JSON `null` still yields defaults without a backup (not a parse failure, matches
   before). A failed Move can leave a stale `roadmap.json.tmp`; the next save overwrites it. Backups are never pruned.
-- Tests: `Tests/CCP.Core.Tests/RoadmapServiceAtomicSaveTests.cs` (3 tests, each fail-proven: Move->Copy leaves .tmp;
-  removing the backup call; Load ignoring the file).
+  The flush-to-disk is asserted only by reading the code, not fail-proven (a power cut cannot be observed in a test).
+- Tests: `Tests/CCP.Core.Tests/RoadmapServiceAtomicSaveTests.cs` (4 tests; the unreadable-file test returns early (passes without asserting) on Windows
+  and when running as root). Fail-proofs (break, red, restore) are logged at
+  ~/ccp-port/evidence/review-roadmap-atomic-save/fail-proofs.log.
