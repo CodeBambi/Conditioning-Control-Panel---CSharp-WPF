@@ -94,6 +94,49 @@ public sealed class ShellDeadControlsTests
         return Task.CompletedTask;
     });
 
+    /// <summary>The header wallet's "+N" fires on a real local award (WPF SparklePointRewards.Awarded),
+    /// never on a bare rise in the ledger (a restore, a sync, a server adoption).</summary>
+    [Fact]
+    public Task TheWalletBadgeFiresOnlyOnALocalAward() => AvaloniaTestDispatcher.RunAsync(() =>
+    {
+        Setup();
+        var saved = CoreSettings.ServiceProvider;
+        var service = new SettingsService();
+        CoreSettings.ServiceProvider = () => service;
+        var s = service.Current;
+        s.SkillPoints = 5;
+        var shell = new MainShellWindow();
+        try
+        {
+            shell.Show();
+            Dispatcher.UIThread.RunJobs();
+
+            s.SkillPoints = 9;                                   // a sync or a restore raised it
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(0, shell.SparkleWalletRewardsShown);
+
+            SkillPointsBank.OnLevelUp(s, newLevel: 4);           // a level-up minted one
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(10, s.SkillPoints);
+            Assert.Equal(1, shell.SparkleWalletRewardsShown);
+
+            Assert.Equal(1, SkillPointsBank.CreditBubbleMilestones(s, 99, 100));
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(2, shell.SparkleWalletRewardsShown);
+
+            Assert.Equal(0, SkillPointsBank.CreditBubbleMilestones(s, 100, 150));   // no boundary, no badge
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(2, shell.SparkleWalletRewardsShown);
+        }
+        finally
+        {
+            shell.Close();
+            Dispatcher.UIThread.RunJobs();
+            CoreSettings.ServiceProvider = saved;
+        }
+        return Task.CompletedTask;
+    });
+
     [Fact]
     public Task TheIntakePassCardShowsOnlyWhileAPassIsWaiting() => AvaloniaTestDispatcher.RunAsync(async () =>
     {

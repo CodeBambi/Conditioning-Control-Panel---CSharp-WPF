@@ -1,5 +1,6 @@
 using System;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services;
 using Serilog;
 
 namespace ConditioningControlPanel
@@ -33,8 +34,9 @@ namespace ConditioningControlPanel
     /// <summary>
     /// WPF <c>SkillTreeService.OnLevelUp</c> (SkillTreeService.cs:847) and the 100-bubble milestone of
     /// <c>AchievementService.TrackBubblePopped</c> (:607): the two places Sparkle Points are minted locally.
-    /// Callers save. ponytail: no SparklePointRewards.PublishCredit (the header spark reads a ledger rise
-    /// itself) and no TrackSkillPointsEarned stat (not in the port's AchievementEngine yet).
+    /// Callers save. Each mint publishes <see cref="SparklePointRewards"/> (presentation only: the header
+    /// wallet's "+N"), so a balance restored or adopted from the server stays quiet, as in WPF.
+    /// ponytail: no TrackSkillPointsEarned stat (not in the port's AchievementEngine yet).
     /// </summary>
     public static class SkillPointsBank
     {
@@ -45,9 +47,11 @@ namespace ConditioningControlPanel
         public static void OnLevelUp(AppSettings s, int newLevel, int levelsGained = 1)
         {
             var points = levelsGained * PointsPerLevel;
+            var previous = s.SkillPoints;
             s.SkillPoints += points;
             s.SeasonPeakLevel = Math.Max(s.SeasonPeakLevel, newLevel);
             Log.Information("Level up to {Level}! Awarded {Points} skill points. Total: {Total}", newLevel, points, s.SkillPoints);
+            SparklePointRewards.PublishCredit(previous, s.SkillPoints, SparklePointSource.LevelUp);
         }
 
         /// <summary>Every 100-bubble boundary crossed between <paramref name="before"/> and
@@ -56,7 +60,9 @@ namespace ConditioningControlPanel
         {
             var milestones = Math.Max(0, after / 100 - before / 100);
             if (milestones == 0) return 0;
+            var previous = s.SkillPoints;
             s.SkillPoints += milestones;
+            SparklePointRewards.PublishCredit(previous, s.SkillPoints, SparklePointSource.BubbleMilestone);
             Log.Information("Bubble milestone! {Total} bubbles popped - awarded {N} sparkle point(s) (total: {Points})",
                 after, milestones, s.SkillPoints);
             return milestones;
