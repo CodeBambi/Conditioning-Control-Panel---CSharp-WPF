@@ -6,8 +6,9 @@
 // ponytail: still dropped, each needing a service/effect this head lacks - door-name glow breath
 // and shimmer (BuildNavDoorLabelFx/Start/Stop), the hue glow ellipse and active tile tint
 // (BuildNavDoorGlow/RefreshNavDoorActive/SetNavDoorGlow), mod-aware ApplyDoorArt, the possession
-// reroute seam, the WebView airspace holds, the stuck-rail watchdog and
-// the MotionFx reduced-motion snap. The handlers named by MainShellWindow.axaml are real methods,
+// reroute seam, the WebView airspace holds, the stuck-rail watchdog and the MotionFx
+// reduced-motion snap of the rail flyout itself (door panels honour it, SetDoorPanelExpanded).
+// The handlers named by MainShellWindow.axaml are real methods,
 // because a missing one is a XAML compile error, not a runtime gap.
 
 using System;

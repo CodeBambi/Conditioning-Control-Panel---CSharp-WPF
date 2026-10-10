@@ -288,8 +288,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// (WPF Discord report v6.8.6).</summary>
         private void SetExpandedDoor(string? door)
         {
+            if (string.Equals(_expandedDoor, door, StringComparison.Ordinal)) return;
+            var previous = _expandedDoor;
             _expandedDoor = door;
-            ApplyNavRailDoorState();
+            // WPF :878 - only the two doors that change are touched; the rest are already parked.
+            foreach (var d in NavDoorMap)
+            {
+                if (d.Panel is null) continue;
+                if (!string.Equals(d.Door, door, StringComparison.Ordinal) &&
+                    !string.Equals(d.Door, previous, StringComparison.Ordinal)) continue;
+                var panel = this.FindControl<Border>(d.Panel);
+                if (panel is not null) SetDoorPanelExpanded(d.Door, panel, IsDoorPanelOpenFor(d.Door));
+            }
         }
 
         /// <summary>WPF IsDoorPanelOpenFor (:895): the rail is out AND this is the chosen door. Both
@@ -298,7 +308,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             => _navRailExpanded && string.Equals(_expandedDoor, door, StringComparison.Ordinal);
 
         /// <summary>WPF ApplyNavRailDoorState (MainWindow.NavRail.cs:1294): every panel follows
-        /// <see cref="IsDoorPanelOpenFor"/>; called on each door change and each rail open/shut.</summary>
+        /// <see cref="IsDoorPanelOpenFor"/>; called on each rail open/shut.</summary>
         private void ApplyNavRailDoorState()
         {
             foreach (var d in NavDoorMap)

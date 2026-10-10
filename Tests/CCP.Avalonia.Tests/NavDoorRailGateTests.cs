@@ -67,6 +67,16 @@ public sealed class NavDoorRailGateTests
                 w.HoldNavRailOpen(owner);
                 Assert.True(double.IsNaN(you.Height), "motion Off must snap the door open");
                 Assert.Null(you.Transitions);
+
+                // WPF SetExpandedDoor touches only the new and the previous door: switching on an
+                // open rail opens Studio AND parks You; the same door again is a no-op.
+                w.ShowTab("Haptics");
+                Assert.Equal("studio", w.ExpandedDoor);
+                Assert.True(studio.IsHitTestVisible, "the new door did not open");
+                Assert.False(you.IsHitTestVisible, "the previous door stayed open");
+                Assert.Equal(0, you.Height);
+                w.ShowTab("Haptics");
+                Assert.True(studio.IsHitTestVisible);
                 w.ReleaseNavRailOpen(owner);
             }
             finally
