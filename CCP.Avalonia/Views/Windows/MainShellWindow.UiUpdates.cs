@@ -150,6 +150,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                         if (Named<Control>("TxtStreakShieldIcon") is { } shield) shield.IsVisible = s.StreakShieldsRemaining > 0;
                     }
                 }
+                RefreshXPBarBonuses();   // WPF UpdateStatPills' tail (MainShellWindow.XpBar.cs)
             }
             catch (Exception ex) { Log.Debug("UpdateStatPills: {E}", ex.Message); }
         }
