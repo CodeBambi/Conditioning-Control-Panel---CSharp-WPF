@@ -134,6 +134,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                             if (!refused) App.MediaHistory?.RecordImages(new[] { path });   // WPF MediaHistoryService.OnFlashDisplayed
                             // WPF FlashService.cs:2102 -> AchievementService.cs:416: one quest tick per image.
                             if (!refused) App.Quests?.TrackFlashImage();
+                            // WPF FlashService.cs:2169-2178: the lifetime count (retinal_burn) and, on the
+                            // account's first image ever, EMI's firstFlashEver.
+                            if (!refused) App.Achievements?.TrackFlashImage();
                         }
                         catch (Exception ex) { refused = true; Log.Error(ex, "Flash: spawn failed"); }
                         finally { if (last) _busy = false; }

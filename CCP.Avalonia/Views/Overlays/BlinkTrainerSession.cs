@@ -208,6 +208,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                     catch (Exception ex) { Log.Debug(ex, "BlinkTrainer: blink haptic failed"); }
                 });
             try { App.Quests?.TrackBlinkTrainerBlink(); } catch (Exception ex) { Log.Debug("blink quest credit: {E}", ex.Message); }
+            try { App.Achievements?.TrackBlinkTrainerBlink(); } catch (Exception ex) { Log.Debug("blink count: {E}", ex.Message); }   // WPF GamificationBridge.cs:481
         }
 
         private static void ShowRandom()

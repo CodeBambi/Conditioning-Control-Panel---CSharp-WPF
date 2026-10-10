@@ -752,6 +752,7 @@ namespace ConditioningControlPanel.Avalonia
                 // caller's thread; the popup hops to the UI thread as WPF's DispatcherHelper does.
                 Achievements = new AchievementEngine(new AchievementStore(AchievementsPath));
                 WireAchievementUnlocks(Achievements);
+                Platform.AchievementAutosave.Start(Achievements);   // k23: lifetime counters (Core events, 30 s autosave, companion messages)
                 Platform.LoginStreak.Start(Achievements);   // progression#42: WPF AchievementService ctor + App.xaml.cs:2732 + CheckDayRollover
                 WardrobeCatalog.ProgressProvider = () => Achievements?.Progress;
                 CoreProgram.UnlockAchievementProvider = id => Achievements?.TryUnlock(id);

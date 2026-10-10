@@ -46,6 +46,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             _timeSource = new PlayerTimeSource(this);
             _host.ActionLogged += OnHostActionLogged;
             _host.Diagnostic += OnHostDiagnostic;
+            // WPF GamificationBridge.OnEnhancementCompleted (:657): the play count and the per-play badges.
+            _host.EnhancementCompleted += (_, e) => global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                try
+                {
+                    var a = App.Achievements; if (a == null) return;
+                    a.TrackEnhancementPlayed(e.DistinctTriggerTypes);
+                    if (e.WebcamTriggerUsed) a.TryUnlock("wired_in");
+                    if (e.GazeHeldFull) a.TryUnlock("dont_look_away");
+                    if (e.Featured) a.TryUnlock("directors_cut");
+                }
+                catch (Exception ex) { Serilog.Log.Debug(ex, "enhancement completed count"); }
+            });
             // Statics only once the window is really up: a window that is built and never shown
             // (render proof) must not sit in the open list or under the tracker's event.
             Opened += (_, _) =>
