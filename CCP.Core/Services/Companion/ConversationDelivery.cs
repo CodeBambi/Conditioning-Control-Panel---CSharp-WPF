@@ -23,11 +23,14 @@ internal static class ConversationDelivery
         @"\b(suggest|recommend|pick|find|show|open)\b.{0,50}\b(games?|activities|activity|something|things?|options?|studio|presets?|quests?)\b|\bwhat (can|could|should) (i|we) (do|try|play)\b|\bwhat can you do\b|\b(another idea|bored|help me pick)\b" +
         @"|\bi (wanna|want to|would like to|'d like to) (play|do something|try something)\b|\bpropose\b|\bsomething to do\b|\bentertain me\b|\bwhat now\b");
 
+    /// <summary>Set by each head to its quest service's HasUnfinishedQuest (WPF and Avalonia App.Quests).</summary>
+    internal static Func<bool?>? QuestsOpenProvider;
+
     /// <summary>True while a quest is still in play (unknown counts as open). #1387: the companion kept
     /// offering the quests page after every quest was done.</summary>
     internal static bool QuestsOpen()
     {
-        try { return App.Quests?.HasUnfinishedQuest() ?? true; }
+        try { return QuestsOpenProvider?.Invoke() ?? true; }
         catch { return true; }
     }
 

@@ -33,7 +33,7 @@ public class BillboardProvidersTests
 
     private static Dictionary<string, string> LoadLanguage(string code)
     {
-        var path = Path.Combine(AppDir(), "Localization", "Languages", code + ".json");
+        var path = Path.Combine(SourceRoots.LanguagesDirectory, code + ".json");
         var obj = JObject.Parse(File.ReadAllText(path));
         return obj.Properties().ToDictionary(p => p.Name, p => (string?)p.Value ?? "");
     }
