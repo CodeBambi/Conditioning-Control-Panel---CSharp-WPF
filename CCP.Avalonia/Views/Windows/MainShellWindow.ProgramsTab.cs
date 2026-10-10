@@ -270,9 +270,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 _programCardHooked = svc;
                 EventHandler repaint = (_, _) => global::Avalonia.Threading.Dispatcher.UIThread.Post(RefreshProgramTodayCard);
                 svc.TodayChanged += repaint;
-                svc.ProgramLapsed += (_, _) => repaint(null, EventArgs.Empty);
-                svc.ProgramGraduated += (_, _) => repaint(null, EventArgs.Empty);
-                svc.DayCompleted += (_, _) => repaint(null, EventArgs.Empty);
+                EventHandler<ProgramLapsedEventArgs> lapsed = (_, _) => repaint(null, EventArgs.Empty);
+                EventHandler<ProgramDayEventArgs> day = (_, _) => repaint(null, EventArgs.Empty);
+                svc.ProgramLapsed += lapsed;
+                svc.ProgramGraduated += day;
+                svc.DayCompleted += day;
+                // The service outlives the shell: a closed shell must not stay rooted by it.
+                Closed += (_, _) => { svc.TodayChanged -= repaint; svc.ProgramLapsed -= lapsed; svc.ProgramGraduated -= day; svc.DayCompleted -= day; };
             }
             RefreshProgramTodayCard();
         }

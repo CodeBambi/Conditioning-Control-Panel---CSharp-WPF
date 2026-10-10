@@ -90,6 +90,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             // WPF put these on the Window element itself; Avalonia routes them as attached events.
             HookResizeEdges();
+            HookLifetime();   // the close releases what the shell left on static seams (MainShellWindow.Lifetime.cs)
             // handledEventsToo: a drop the Sessions tab already imported must still clear the overlay.
             AddHandler(DragDrop.DropEvent, Window_Drop, RoutingStrategies.Bubble, handledEventsToo: true);
             AddHandler(DragDrop.DragEnterEvent, Window_DragEnter);

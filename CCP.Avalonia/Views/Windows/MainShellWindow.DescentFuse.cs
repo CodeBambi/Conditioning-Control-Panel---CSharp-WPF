@@ -31,9 +31,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             {
                 var fuse = App.DescentCountdown;
                 if (fuse is null) return;
-                fuse.PhaseChanged += (_, e) => ApplyFusePhase(e.Current);
-                fuse.Tick += (_, remaining) => OnFuseTick(remaining);
-                fuse.ZeroReached += (_, _) => _ = OpenLiveFuseShow();
+                EventHandler<DescentFusePhaseChangedEventArgs> onPhase = (_, e) => ApplyFusePhase(e.Current);
+                EventHandler<TimeSpan> onTick = (_, remaining) => OnFuseTick(remaining);
+                EventHandler onZero = (_, _) => _ = OpenLiveFuseShow();
+                fuse.PhaseChanged += onPhase;
+                fuse.Tick += onTick;
+                fuse.ZeroReached += onZero;
+                // The countdown outlives the shell: a closed shell must not stay rooted by it.
+                Closed += (_, _) =>
+                {
+                    fuse.PhaseChanged -= onPhase; fuse.Tick -= onTick; fuse.ZeroReached -= onZero;
+                    _fuseBreath?.Cancel();   // the spark's breath clock stops with the shell
+                    _fuseBreath = null;
+                };
                 ApplyFusePhase(fuse.LastAnnouncedPhase);
             }
             catch (Exception ex) { Log.Debug("[Fuse] Header surfaces could not be wired: {E}", ex.Message); }

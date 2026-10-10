@@ -89,6 +89,7 @@ public sealed class GifCascadeTests
             Assert.True(GifCascadeOverlay.Alive >= 2);
 
             // OUT: after the spawn window nothing new is born; every clip leaves off the bottom and the windows close.
+            await GifCascadeOverlay.Loading;   // decodes run off-thread: count them once they have landed (a loaded run counted late)
             int born = decoded.Count;
             for (int i = 0; i < 400 && GifCascadeOverlay.IsUp; i++) GifCascadeOverlay.Advance(100);
             await GifCascadeOverlay.Loading;

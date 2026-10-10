@@ -25,11 +25,14 @@ public sealed class LoginStreakEmiMomentTests
         var oldShield = CoreQuests.UseStreakShieldProvider;
         CoreSettings.ServiceProvider = () => service;
         CoreQuests.UseStreakShieldProvider = null;
-        EmiDeskBus.Sink = (moment, ctx) => fired.Add((moment, (int)(ctx?.GetType().GetProperty("streak")?.GetValue(ctx) ?? -1)));
+        Action<string, object?> testSink = (moment, ctx) => fired.Add((moment, (int)(ctx?.GetType().GetProperty("streak")?.GetValue(ctx) ?? -1)));
+        EmiDeskBus.Sink = testSink;
         try { body(service.Current); }
         finally
         {
-            EmiDeskBus.Sink = oldSink;
+            // Only our own sink is handed back: if the desk service was first touched meanwhile it wired
+            // the real one, and restoring the null we saved left the bus deaf for every class after.
+            if (ReferenceEquals(EmiDeskBus.Sink, testSink)) EmiDeskBus.Sink = oldSink;
             CoreQuests.UseStreakShieldProvider = oldShield;
             CoreSettings.ServiceProvider = oldSettings;
             service.SealForReset();

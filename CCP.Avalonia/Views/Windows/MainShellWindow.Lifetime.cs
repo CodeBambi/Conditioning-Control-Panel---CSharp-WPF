@@ -47,6 +47,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 _closedCts.Cancel();
                 foreach (var timer in _openTimers.ToArray()) timer.Dispose();
                 _openTimers.Clear();
+                // A static seam and a running clock: neither may keep the closed shell reachable.
+                if (Platform.X11PanicKey.PushToTalk == (Action)OnPushToTalkKey) Platform.X11PanicKey.PushToTalk = null;
+                _rampTimer?.Stop();
             };
         }
     }

@@ -34,8 +34,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             {
                 if (CoreSettings.Service == null) return;   // a render or a headless head: no knock
                 _emiSeenVersion = CoreSettings.Current.LastSeenVersion ?? "";
-                EmiKnockWorld.WizardUpProbe = () => _emiFirstRunUp;
+                Func<bool> probe = () => _emiFirstRunUp;
+                EmiKnockWorld.WizardUpProbe = probe;
                 Opened += OnEmiKnockShellOpened;
+                // A static probe over the shell: handed back on close, or it roots the closed shell.
+                Closed += (_, _) =>
+                {
+                    Opened -= OnEmiKnockShellOpened;
+                    if (ReferenceEquals(EmiKnockWorld.WizardUpProbe, probe)) EmiKnockWorld.WizardUpProbe = () => false;
+                };
             }
             catch (Exception ex) { Log.Debug(ex, "[EmiDesk] could not arm the knock"); }
         }
@@ -83,13 +90,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             {
                 // SETTLED, not merely "after": past the give-up we simply do not knock. The offer
                 // has not been spent, so the next launch can still make it.
+                // The wait dies with the shell (ClosedToken): un-cancelled it kept every closed shell
+                // rooted, and polling, for the whole five minutes.
+                var closed = ClosedToken;
                 bool settled = false;
-                for (int i = 0; i < EmiKnockTries; i++)
+                for (int i = 0; i < EmiKnockTries && !closed.IsCancellationRequested; i++)
                 {
                     if (!EmiKnockScreenBusy() && i > 0) { settled = true; break; }
-                    await Task.Delay(EmiKnockPoll);
+                    try { await Task.Delay(EmiKnockPoll, closed); }
+                    catch (OperationCanceledException) { return; }
                 }
-                if (!settled || !IsVisible) return;
+                if (!settled || closed.IsCancellationRequested || !IsVisible) return;
                 EmiKnock(seenVersion);
             }
             catch (Exception ex) { Log.Debug(ex, "[EmiDesk] the knock could not be queued"); }

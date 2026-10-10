@@ -38,7 +38,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _leashWired = true;
             try
             {
-                Platform.LeashHead.LeashedChanged += on => Dispatcher.UIThread.Post(() =>
+                Action<bool> onLeashed = on => Dispatcher.UIThread.Post(() =>
                 {
                     // The tray "Cut leash" item re-reads IsLeashed on every open (Tray.cs RefreshCut).
                     if (on) CheckLeashGate();
@@ -50,18 +50,36 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                         EndLeashTask("leash off");
                     }
                 });
+                Platform.LeashHead.LeashedChanged += onLeashed;
                 MountLeashGate();
 
-                Controls.Leash.Explain.LeashExplainer.DefaultOwner = () => this;
+                Func<Window?> leashOwner = () => this;
+
+                Controls.Leash.Explain.LeashExplainer.DefaultOwner = leashOwner;
                 LeashSurfaces.Init(() => IsVisible && WindowState != WindowState.Minimized ? this : null);
                 LeashSurfaces.TugArrived += WobbleForTug;
-                Platform.LeashHead.CutDone += () => Dispatcher.UIThread.Post(() => EndLeashTask("cut"));
-                Platform.LeashTaskHost.GatePanic = LeashGateOnPanic;
+                Action onCut = () => Dispatcher.UIThread.Post(() => EndLeashTask("cut"));
+                Platform.LeashHead.CutDone += onCut;
+                Action<bool, bool> gatePanic = LeashGateOnPanic;
+                Platform.LeashTaskHost.GatePanic = gatePanic;
 
                 _leashGateTimer = new DispatcherTimer(DispatcherPriority.Normal) { Interval = TimeSpan.FromSeconds(2) };
                 _leashGateTimer.Tick += (_, _) => { LeashSurfaces.Rebind(); CheckLeashGate(); };
                 _leashGateTimer.Start();
-                Closed += (_, _) => _leashGateTimer?.Stop();
+                // Static events: a closed shell must not stay rooted by them (ShellMemoryTests).
+                Closed += (_, _) =>
+                {
+                    _leashGateTimer?.Stop();
+                    Platform.LeashHead.LeashedChanged -= onLeashed;
+                    Platform.LeashHead.CutDone -= onCut;
+                    LeashSurfaces.TugArrived -= WobbleForTug;
+                    if (ReferenceEquals(Controls.Leash.Explain.LeashExplainer.DefaultOwner, leashOwner))
+                    {
+                        Controls.Leash.Explain.LeashExplainer.DefaultOwner = () => null;
+                        LeashSurfaces.Init(() => null);
+                    }
+                    if (ReferenceEquals(Platform.LeashTaskHost.GatePanic, gatePanic)) Platform.LeashTaskHost.GatePanic = null;
+                };
                 CheckLeashGate();
             }
             catch (Exception ex) { Serilog.Log.Debug("Leash init failed: {E}", ex.Message); }

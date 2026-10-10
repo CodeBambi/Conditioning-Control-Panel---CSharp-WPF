@@ -141,7 +141,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 _ambientBeat = VisibleBeat.Attach(PageRoot, StepAmbient, RestAmbient);
                 PropertyChanged += (_, e) => { if (e.Property == IsVisibleProperty && !IsVisible) FxPark(); };
                 DetachedFromVisualTree += (_, _) => FxPark();
-                Env.MotionGateChanged += OnFxMotionGate;
+                // A static event: held only while the page is in a tree, or it pins every closed shell (ShellMemoryTests).
+                AttachedToVisualTree += (_, _) => { Env.MotionGateChanged -= OnFxMotionGate; Env.MotionGateChanged += OnFxMotionGate; };
+                DetachedFromVisualTree += (_, _) => Env.MotionGateChanged -= OnFxMotionGate;
+                if (TopLevel.GetTopLevel(this) != null) Env.MotionGateChanged += OnFxMotionGate;
             }
             catch (Exception ex) { Serilog.Log.Debug(ex, "[Chaster] fx init"); }
         }
