@@ -1785,3 +1785,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/sync6-nav-search: +864
 - Ctrl+K palette brought up to the 7.1 nav rework: recent picks, no-hits Try/All, "(was X)" hints, each row opens through its own action, right-click pin, click-away re-activate; GameAvailableProvider set at startup. 10 tests, each proven to fail when broken.
 - What moved card (plan moved to Core): offered once on upgrade through StartupLadder, Help replay, Show me; glow and Games zone (rows 38/46 partial) wait on sync6-nav-rail.
+
+## avalonia-port/sync6-drone-mod: +2
+- Ledger row 110 (drone-mode.ccpmod emotes + voice) marked n/a: content-only, ships via the shared mod-drone pack.
+- Drone outfit emotes folded into avatar-tube-window (this head has no emote mode).
