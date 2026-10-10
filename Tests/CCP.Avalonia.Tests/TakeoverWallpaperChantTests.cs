@@ -33,6 +33,65 @@ public sealed class TakeoverWallpaperChantTests
         public void Fire() { if (!Dead) { Dead = true; Act(); } }
     }
 
+    /// <summary>Lane p1: the remote wallpaper verbs. The picture is one of the subject's own folder, the
+    /// stop puts the subject's desktop back, and a system that cannot change the wallpaper refuses.</summary>
+    [Fact]
+    public void RemoteWallpaper_UsesTheSubjectsOwnFolder_AndStopPutsTheDesktopBack()
+    {
+        var s = CoreSettings.Current;
+        var (folder, original, keep) = (s.WallpaperSourceFolder, s.WallpaperOriginalPath, s.WallpaperEnabled);
+        var dir = Path.Combine(Path.GetTempPath(), "ccp-p1-remotewall-" + Guid.NewGuid().ToString("N"));
+        var pool = Path.Combine(dir, "pool");
+        Directory.CreateDirectory(pool);
+        var mine = Path.Combine(dir, "mine.png");
+        File.WriteAllBytes(mine, new byte[] { 1 });
+        File.WriteAllBytes(Path.Combine(pool, "a.png"), new byte[] { 1 });
+        File.WriteAllBytes(Path.Combine(pool, "b.png"), new byte[] { 1 });
+        var desk = new Desk { Current = mine };
+        try
+        {
+            (s.WallpaperSourceFolder, s.WallpaperOriginalPath, s.WallpaperEnabled) = (pool, "", true);   // "keep" never holds a controller's change
+            WallpaperHead.ResetForTest();
+            WallpaperHead.Backend = () => desk;
+
+            Assert.Null(ConditioningControlPanel.Avalonia.Views.Windows.MainShellWindow.RemoteWallpaper(true));
+            var first = desk.Current!;
+            Assert.Equal(pool, Path.GetDirectoryName(first));
+            Assert.Null(ConditioningControlPanel.Avalonia.Views.Windows.MainShellWindow.RemoteWallpaper(true));   // again: another of the same folder
+            Assert.Equal(pool, Path.GetDirectoryName(desk.Current!));
+            Assert.NotEqual(first, desk.Current);
+
+            Assert.Null(ConditioningControlPanel.Avalonia.Views.Windows.MainShellWindow.RemoteWallpaper(false));
+            Assert.Equal(mine, desk.Current);
+            Assert.Null(ConditioningControlPanel.Avalonia.Views.Windows.MainShellWindow.RemoteWallpaper(false));  // nothing up: nothing touched
+            Assert.Equal(3, desk.Sets.Count);
+
+            // An empty folder: refused, the desktop untouched.
+            File.Delete(Path.Combine(pool, "a.png")); File.Delete(Path.Combine(pool, "b.png"));
+            Assert.Equal(ConditioningControlPanel.Avalonia.Views.Windows.MainShellWindow.NoWallpapers,
+                ConditioningControlPanel.Avalonia.Views.Windows.MainShellWindow.RemoteWallpaper(true));
+            Assert.Equal(mine, desk.Current);
+
+            // A desktop this head cannot drive: refused with the reason, never a silent ok.
+            WallpaperHead.ResetForTest();
+            WallpaperHead.Backend = () => NoDesk();
+            if (!WallpaperHead.Supported)
+                Assert.Equal(ConditioningControlPanel.Avalonia.Views.Windows.MainShellWindow.NoWallpaperHere,
+                    ConditioningControlPanel.Avalonia.Views.Windows.MainShellWindow.RemoteWallpaper(true));
+        }
+        finally
+        {
+            WallpaperHead.ResetForTest();
+            (s.WallpaperSourceFolder, s.WallpaperOriginalPath, s.WallpaperEnabled) = (folder, original, keep);
+            CoreSettings.SaveImmediate();
+            try { Directory.Delete(dir, true); } catch { }
+        }
+    }
+
+    /// <summary>WallpaperHead's own "cannot drive this desktop" backend (private there).</summary>
+    private static IWallpaperBackend NoDesk() =>
+        (IWallpaperBackend)Activator.CreateInstance(typeof(WallpaperHead).GetNestedType("NoBackend", System.Reflection.BindingFlags.NonPublic)!)!;
+
     [Fact]
     public void WallpaperPulse_Reverts_UnlessKept_AndStopAndPanicPutTheDesktopBack()
     {
