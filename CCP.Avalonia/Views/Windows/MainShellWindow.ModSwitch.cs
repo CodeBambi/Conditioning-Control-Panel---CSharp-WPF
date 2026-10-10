@@ -5,9 +5,8 @@
 // already live in Core's PendingModChoice. The combo, the Mod Manager, the pending first-run
 // choice and the wizard all go through ActivateMod + ApplyActiveModChange; nothing else switches.
 //
-// ponytail: ApplyActiveModChange repaints what this head has - the selector, the palette, the Home
-// tile art, the nav door art and the level readout (MainShellWindow.ModArt.cs). WPF also
-// reloads the logo, the achievement grid, skill tree, secret skills, BambiCloud
+// ponytail: ApplyActiveModChange repaints what this head has - the selector, the palette. WPF also
+// reloads the logo/takeover/feature art, the achievement grid, skill tree, secret skills, BambiCloud
 // radio + browser URL, the Hypnotube link editor, the tube's quick menu and the per-mod default
 // presets; each joins here when its surface is live on this head. The combo ends with the one row
 // that is not a mod (ModManagerEntryId, WPF MainWindow.xaml.cs:83): it opens the Mod Manager, as in
@@ -47,7 +46,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             Closed += (_, _) => { if (_modSwitchHost == this) _modSwitchHost = null; };
             InitializeModSelector();
             RefreshThemeAwareElements();
-            RefreshModArt(atAttach: true);   // HA5: a saved non-default mod paints its art at boot
             if (_hookedMods != mods)
             {
                 _hookedMods = mods;
@@ -182,7 +180,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             InitializeModSelector();
             RefreshThemeAwareElements();
-            RefreshModArt();   // HA5: Home tile art, nav door art, level readout (MainShellWindow.ModArt.cs)
 
             // WPF: the personality picked in this mod comes back, like the look does (tester, 6.11.3).
             try { ConditioningControlPanel.Services.PersonalityService.Shared.RestoreForActiveMod(); }
@@ -237,9 +234,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>
         /// The palette half of WPF RefreshThemeAwareElements: the same keys, the same math, written to
         /// the application resources so every DynamicResource repaints. ponytail: the Descent-fuse
-        /// dimming (DescentFuseChrome, WPF-only, step 0 on every install without a countdown) is not
-        /// ported. WPF's per-control writes (title bar, rank title, level chip, XP bar, banner) need no twin:
-        /// those are {DynamicResource PinkBrush} here and repaint with the brush written below.
+        /// dimming (DescentFuseChrome, WPF-only, step 0 on every install without a countdown) and the
+        /// per-control writes (title bar, level label, XP bar, banner) are not ported.
         /// </summary>
         private void RefreshThemeAwareElements()
         {

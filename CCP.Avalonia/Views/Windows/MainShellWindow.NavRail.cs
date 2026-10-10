@@ -13,8 +13,7 @@
 // (section hue, dims once seen), the row tooltip (name, open count, Ctrl+N), Ctrl+1..7, the
 // rail's shadow on the page, upper-case labels.
 //
-// Door art follows the mod in MainShellWindow.ModArt.cs (ApplyDoorArt).
-// ponytail (not on this head / not this wave): mod-aware
+// ponytail (not on this head / not this wave): mod-aware door art (ApplyDoorArt) and mod-aware
 // labels, the possession reroute seam, NavGlow ("moved here"
 // ring), the section edge + embers.
 
