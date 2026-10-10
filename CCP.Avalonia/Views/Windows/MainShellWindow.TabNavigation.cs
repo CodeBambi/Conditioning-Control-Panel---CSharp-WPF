@@ -500,6 +500,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 TweenSectionWash(hue, washMs);
                 PaintDepthRail(hue);
                 PaintDepthHud(hue);
+                Named<Tabs.QuestsTabView>("QuestsTab")?.PaintDepthQuests(hue);   // WPF PaintSectionWash -> PaintDepthQuests
                 PaintSectionEdge(hue, washMs);
             }
             catch (Exception ex) { Log.Debug("PaintSectionWash failed: {E}", ex.Message); }
