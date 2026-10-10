@@ -46,14 +46,16 @@ public class RoadmapService : IDisposable
     public event EventHandler? BadgeEarned;
 
     public RoadmapService()
+        : this(Path.Combine(CorePaths.UserData, "roadmap.json"),
+               Path.Combine(CorePaths.UserData, "roadmap_diary"))
     {
-        _progressPath = Path.Combine(
-            CorePaths.UserData,
-            "roadmap.json");
+    }
 
-        _diaryFolderPath = Path.Combine(
-            CorePaths.UserData,
-            "roadmap_diary");
+    /// <summary>Test seam: lets tests use a temp dir instead of the real profile.</summary>
+    internal RoadmapService(string progressPath, string diaryFolderPath)
+    {
+        _progressPath = progressPath;
+        _diaryFolderPath = diaryFolderPath;
 
         Progress = LoadProgress();
         EnsureDiaryFolderExists();
@@ -91,9 +93,29 @@ public class RoadmapService : IDisposable
         catch (Exception ex)
         {
             Log.Error(ex, "Failed to load roadmap progress");
+            PreserveCorruptFile();
         }
 
         return new RoadmapProgress();
+    }
+
+    /// <summary>
+    /// The fallback below is defaults, and the next StartStep/SubmitPhoto saves them over the
+    /// user's file. Keep a copy of the unreadable file first so the roadmap can be recovered.
+    /// </summary>
+    private void PreserveCorruptFile()
+    {
+        try
+        {
+            if (!File.Exists(_progressPath)) return;
+            var backup = $"{_progressPath}.corrupt-{DateTime.Now:yyyyMMdd_HHmmss}";
+            File.Copy(_progressPath, backup, overwrite: false);
+            Log.Warning("Unreadable roadmap progress preserved as {Backup}; starting from defaults", backup);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Could not preserve unreadable roadmap progress");
+        }
     }
 
     public void Save()
@@ -107,7 +129,10 @@ public class RoadmapService : IDisposable
             }
 
             var json = JsonSerializer.Serialize(Progress, new JsonSerializerOptions { WriteIndented = true });
-            File.WriteAllText(_progressPath, json);
+            // Temp then rename: a crash mid-write leaves the old file intact, not a truncated one.
+            var tmp = _progressPath + ".tmp";
+            File.WriteAllText(tmp, json);
+            File.Move(tmp, _progressPath, overwrite: true);
             _isDirty = false;
         }
         catch (Exception ex)

@@ -818,3 +818,18 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
 - Tests: `Tests/CCP.Core.Tests/ProgramRunLifecycleTests.cs`, `Tests/CCP.Avalonia.Tests/ProgramsRunLifecycleTests.cs`,
   `ProgramServiceStartupTests`, `LockdownVeilTests`, `ProgramsRunViewTests`, `PanicSurfacesTests`. Fail-proofs:
   ~/ccp-port/evidence/review-programs-run-3a/fail-proofs.log.
+
+## 2026-10-10: roadmap.json atomic save and corrupt-file backup (avalonia-port/roadmap-atomic-save)
+- Source: oracle-deep, ~/ccp-port/evidence/oracle/programs-roadmap-seed.md (Q1 "Two existing protections"). Core-only, so
+  WPF gets it too.
+- Decision:
+  - `RoadmapService.Save()` writes `roadmap.json.tmp` then `File.Move(tmp, path, overwrite: true)`. Same serializer, same
+    options (`WriteIndented = true`), same UTF-8 without BOM: the bytes on disk are unchanged. No format change.
+  - `LoadProgress` copies an unreadable file to `roadmap.json.corrupt-<yyyyMMdd_HHmmss>` (local time, never overwrites an
+    existing backup) and logs a warning before falling back to defaults. Before this, the next StartStep/SubmitPhoto saved
+    the defaults over the user's whole roadmap.
+  - Internal ctor `RoadmapService(progressPath, diaryFolderPath)`; the public ctor chains to it, so tests use temp dirs.
+- Not covered: a file that parses as JSON `null` still yields defaults without a backup (not a parse failure, matches
+  before). A failed Move can leave a stale `roadmap.json.tmp`; the next save overwrites it. Backups are never pruned.
+- Tests: `Tests/CCP.Core.Tests/RoadmapServiceAtomicSaveTests.cs` (3 tests, each fail-proven: Move->Copy leaves .tmp;
+  removing the backup call; Load ignoring the file).
