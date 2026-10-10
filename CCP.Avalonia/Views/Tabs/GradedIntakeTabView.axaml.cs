@@ -167,7 +167,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 if (pass.State == IntakePassState.NeedsLogin)
                 {
                     if (owner != null)
-                        await Dialogs.MessageDialog.ShowAsync(owner, "Login Required",
+                        await Dialogs.MessageDialog.ShowAsync(owner, Loc.Get("title_login_required"),
                             Loc.Get("msg_you_need_to_be_logged_in_to_use_the_ai_quiz"));
                 }
                 else
@@ -182,7 +182,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             if (!CoreAi.IsAvailable)
             {
                 if (owner != null)
-                    await Dialogs.MessageDialog.ShowAsync(owner, "Login Required",
+                    await Dialogs.MessageDialog.ShowAsync(owner, Loc.Get("title_login_required"),
                         Loc.Get("msg_you_need_to_be_logged_in_to_use_the_ai_quiz"));
                 return;
             }
@@ -245,7 +245,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             if (!CoreAi.IsAvailable)
             {
                 if (TopLevel.GetTopLevel(this) is Window owner)
-                    await Dialogs.MessageDialog.ShowAsync(owner, "Login Required",
+                    await Dialogs.MessageDialog.ShowAsync(owner, Loc.Get("title_login_required"),
                         Loc.Get("msg_you_need_to_be_logged_in_to_use_the_ai_quiz"));
                 return;
             }
