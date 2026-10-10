@@ -300,8 +300,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 if (!string.IsNullOrWhiteSpace(entry.GameId))
                 {
                     // ponytail: WPF also stands a pending leash punishment between any game and its
-                    // window (LeashBlocksGames -> PresentLeashGateFromLauncher); the port's Leash
-                    // service has no game gate yet.
+                    // window (LeashBlocksGames -> PresentLeashGateFromLauncher); here Play()
+                    // asks the same gate (Platform/LeashHead.cs seeds LeashBlocksGames).
                     if (!LauncherWindow.LaunchGame(shell, entry.GameId!))
                         Serilog.Log.Information("Palette: game {Id} is not hosted on this head", entry.GameId);
                     return;
