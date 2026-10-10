@@ -2408,22 +2408,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         }
 
 
-        /// <summary>
-        /// ponytail: EmiDeskWindow.Props.cs, and the note this used to carry was wrong about where
-        /// the blocker is. <c>EmiProps</c> - the anchor, the three plates, their sizes, the hold and
-        /// the rise - is ALREADY IN CORE (CCP.Core/Services/EmiDesk/EmiProps.cs) and is pure, so
-        /// LayoutProp / ShowProp / HideProp / the rise port arithmetic for arithmetic. What stops
-        /// them is the ART: <c>EmiProps.Path</c> probes
-        /// <c>Resources/web/arcademy/art/emi/props/*.png</c> beside the exe, and CCP.Avalonia.csproj
-        /// links no <c>Assets/web/</c> tree at all, so every lookup returns null and the whole beat
-        /// is a silent no-op by the WPF original's own design. Take the csproj link and the port in
-        /// ONE layer, or the port draws nothing and says nothing about why. The beat that starts it
-        /// (RunPropBeat) additionally needs a chain, so it is two blockers, not one.
-        /// </summary>
-        private void LayoutProp() { }
-
-        /// <inheritdoc cref="LayoutProp"/>
-        private void HideProp() { }
+        // LayoutProp / ShowProp / HideProp: EmiDeskWindow.Props.cs (the thing she is holding).
 
         /// <summary>ponytail: EmiDeskWindow.Bubble.cs - drops the voice hooks.</summary>
         private void TearDownVox() { }

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Threading;
 using CCP.Avalonia.Testing;
@@ -240,6 +241,46 @@ public sealed class EmiDeskMomentTests
             Assert.Equal("mid", EmiTossRules.ZoneRow(450, 0, 900));
             Assert.Equal("bottom", EmiTossRules.ZoneRow(700, 0, 900));
             await Pump(500);                              // the squash runs out on its own
+        }
+        finally
+        {
+            w.ShutDown();
+            CoreSettings.ServiceProvider = oldSettings;
+        }
+    });
+    [Fact]
+    public Task AHeldPropRisesIn_AndSlidesBackOut() => AvaloniaTestDispatcher.RunAsync(async () =>
+    {
+        EnsureApp();
+        var oldSettings = CoreSettings.ServiceProvider;
+        var service = new SettingsService();
+        CoreSettings.ServiceProvider = () => service;
+        var w = new EmiDeskWindow();
+        try
+        {
+            CoreSettings.Current.MotionLevel = ConditioningControlPanel.Models.MotionLevel.Full;
+            w.CursorProbe = () => null;
+            w.Show();
+            Dispatcher.UIThread.RunJobs();
+            Assert.NotNull(EmiProps.Path("phone"));       // the arcademy's plates ship beside the head
+            var prop = w.FindControl<Image>("PropImage")!;
+            Assert.False(prop.IsVisible);
+
+            w.ShowProp("phone", holdMs: 60_000);
+            Assert.True(w.PropUp);
+            Assert.True(prop.IsVisible);
+            Assert.NotNull(prop.Source);
+            Assert.True(prop.Width > 1 && prop.Height > prop.Width, "the phone is a tall plate sized off her body");
+            await Pump(400);                              // the rise has landed
+
+            w.HideProp();
+            Assert.False(w.PropUp);
+            await Pump(600);                              // the slide back down, then it is taken off
+            Assert.False(prop.IsVisible);
+            Assert.Null(prop.Source);
+
+            w.ShowProp("not a prop");
+            Assert.False(w.PropUp);                       // an unknown plate is a no-op, never a blank hand
         }
         finally
         {

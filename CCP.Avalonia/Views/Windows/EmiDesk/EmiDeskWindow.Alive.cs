@@ -19,8 +19,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
     /// <para>The cursor is read from the OS (user32 GetCursorPos / X11 XQueryPointer through
     /// Platform/X11Pointer), because she watches it while it is over OTHER windows.</para>
     ///
-    /// <para>not ported: the weight shift and the rare stretch (body squash tweens), the prop beat
-    /// (see LayoutProp) and the screen beat (no glass channels): a scheduler pick of one of those
+    /// <para>not ported: the weight shift and the rare stretch (body squash tweens) and the
+    /// screen beat (no glass channels): a scheduler pick of one of those
     /// declines and the next fidget runs instead, which is WPF's own decline path.</para>
     /// </summary>
     public partial class EmiDeskWindow
@@ -122,7 +122,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                 var t = _aliveTimer;
                 _aliveTimer = null;
                 if (t != null) { t.Stop(); t.Tick -= OnAliveTick; }
-                HideProp();
+                HideProp(animate: false);
                 ResetGaze();
             }
             catch (Exception ex) { Log.Debug(ex, "[EmiDesk] alive poll stop failed"); }
@@ -299,8 +299,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                         PlayChain("glance", bodyFrameOverride: "idle");
                         NudgeGaze(Rng.Next(2) == 0 ? -1 : 1, 0, 900);
                         return true;
+
+                    case EmiFidget.Prop:
+                        if (!RunPropBeat()) return false;
+                        NudgeGaze(1, 1, EmiProps.HoldMs);
+                        return true;
                 }
-                return false;   // weight shift, prop, screen: not on this head yet, the next one runs
+                return false;   // weight shift, screen: not on this head yet, the next one runs
             }
             catch (Exception ex)
             {
