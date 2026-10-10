@@ -78,6 +78,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         internal void ApplyInviteTicket(InviteMine? mine)
         {
+            // WPF MainWindow.InviteTicket.cs:99: the Tonight Board's Waiting card reads the same answer.
+            try { Services.Billboard.Providers.WaitingSignals.NoteInvites(mine); } catch { }
             if (Named<Button>("BtnInviteTicket") is not { } ticket) return;
             ticket.IsVisible = _inviteTicketShown = InviteTicketRule.ShouldShow(mine);
             SyncInviteWobble();
@@ -121,7 +123,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         internal void OpenInvitesCard()
         {
             if (LockdownActive) return;
-            ShowTab("exclusives");
+            ShowTab("premium");
             DispatcherTimer.RunOnce(async () =>
             {
                 try

@@ -199,10 +199,11 @@
       <Setter Property="Background" Value="#5865F2"/>
       <Setter Property="BorderThickness" Value="0"/>
       <Setter Property="Cursor" Value="Hand"/>
-      <Setter Property="Padding" Value="12,5"/>
+      <Setter Property="Padding" Value="14,0"/>
       <Setter Property="Template">
         <ControlTemplate>
-          <Border x:Name="border" Background="{TemplateBinding Background}" CornerRadius="5"
+          <!-- WPF acd51fcf9: a 34 px pill on the bubble line. -->
+          <Border x:Name="border" Background="{TemplateBinding Background}" CornerRadius="17" Height="34"
                   Padding="{TemplateBinding Padding}" HorizontalAlignment="Stretch">
             <ContentPresenter Content="{TemplateBinding Content}"
                               ContentTemplate="{TemplateBinding ContentTemplate}"
@@ -235,64 +236,66 @@
       </Style>
     </ControlTheme>
 
-    <!-- The quick-toggles row. Three liveries over one 14px-radius pill: neutral glass, the
-         cyan-accented Webcam card and the pink-accented Catalogue card. -->
-    <ControlTheme x:Key="VelvetPill" TargetType="Button">
+    <!-- The browser fold arrow pill (WPF inline Button.Template on BtnFoldBrowser). -->
+    <ControlTheme x:Key="FoldArrowButton" TargetType="Button">
       <Setter Property="Cursor" Value="Hand"/>
-      <Setter Property="FontSize" Value="12"/>
-      <Setter Property="FontWeight" Value="Bold"/>
-      <Setter Property="Padding" Value="0"/>
-      <Setter Property="Background" Value="{DynamicResource ElevatedSurfaceBrush}"/>
-      <Setter Property="BorderBrush" Value="{DynamicResource GlassBorderBrush}"/>
-      <Setter Property="BorderThickness" Value="1"/>
       <Setter Property="Template">
-        <ControlTemplate>
-          <Border x:Name="b" Background="{TemplateBinding Background}"
-                  BorderBrush="{TemplateBinding BorderBrush}"
-                  BorderThickness="{TemplateBinding BorderThickness}"
-                  CornerRadius="14">
+        <ControlTemplate TargetType="Button">
+          <Border Name="FoldPlate" Background="{TemplateBinding Background}"
+                  BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
+                  CornerRadius="13" Padding="{TemplateBinding Padding}">
             <ContentPresenter Content="{TemplateBinding Content}"
-                              ContentTemplate="{TemplateBinding ContentTemplate}"
                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
           </Border>
         </ControlTemplate>
       </Setter>
-      <Style Selector="^:pointerover /template/ Border#b">
-        <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
-        <Setter Property="Background" Value="{DynamicResource TransparentPinkBrush}"/>
+      <Style Selector="^:pointerover /template/ Border#FoldPlate">
+        <Setter Property="Background" Value="{Binding $parent[Button].Tag}"/>
+      </Style>
+      <Style Selector="^:focus-visible /template/ Border#FoldPlate">
+        <Setter Property="BorderBrush" Value="White"/>
       </Style>
     </ControlTheme>
-    <ControlTheme x:Key="VelvetPillWebcam" TargetType="Button" BasedOn="{StaticResource VelvetPill}">
-      <Setter Property="Background" Value="{DynamicResource AccentTintedBgBrush}"/>
-      <Setter Property="BorderBrush" Value="{DynamicResource SecondaryBrush}"/>
-      <Setter Property="BorderThickness" Value="1.5"/>
-      <Style Selector="^:pointerover /template/ Border#b">
-        <Setter Property="BorderBrush" Value="{DynamicResource SecondaryBrush}"/>
-        <Setter Property="Background" Value="{DynamicResource TransparentPinkBrush}"/>
+
+    <!-- The favorites drawer handle (WPF inline Button.Style on FavoritesDrawerHandle). The
+         FavHandle* brushes live on the drawer Grid and are repainted from the mod colour. -->
+    <ControlTheme x:Key="FavoritesDrawerHandleStyle" TargetType="Button">
+      <Setter Property="Foreground" Value="{DynamicResource FavHandleText}"/>
+      <Setter Property="Template">
+        <ControlTemplate TargetType="Button">
+          <Border Name="hb" CornerRadius="9" BorderThickness="1.5"
+                  Background="{DynamicResource FavHandleFill}" BorderBrush="{DynamicResource FavHandleBorder}">
+            <ContentPresenter Content="{TemplateBinding Content}"
+                              HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
+          </Border>
+        </ControlTemplate>
+      </Setter>
+      <Style Selector="^:pointerover">
+        <Setter Property="Foreground" Value="{DynamicResource FavHandleTextHover}"/>
       </Style>
-    </ControlTheme>
-    <ControlTheme x:Key="VelvetPillCatalogue" TargetType="Button" BasedOn="{StaticResource VelvetPill}">
-      <Setter Property="Background" Value="{DynamicResource TransparentPinkBrush}"/>
-      <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
-      <Setter Property="BorderThickness" Value="1.5"/>
-      <Style Selector="^:pointerover /template/ Border#b">
-        <Setter Property="BorderBrush" Value="{DynamicResource SecondaryBrush}"/>
-        <Setter Property="Background" Value="{DynamicResource AccentTintedBgBrush}"/>
+      <Style Selector="^:pointerover /template/ Border#hb">
+        <Setter Property="Background" Value="{DynamicResource FavHandleFillHover}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource FavHandleBorderHover}"/>
+      </Style>
+      <Style Selector="^:focus-visible /template/ Border#hb">
+        <Setter Property="BorderBrush" Value="{DynamicResource FavHandleBorderHover}"/>
+      </Style>
+      <Style Selector="^:pressed /template/ Border#hb">
+        <Setter Property="Opacity" Value="0.82"/>
       </Style>
     </ControlTheme>
   </UserControl.Resources>
 
   <Grid>
     <Grid.ColumnDefinitions>
-      <!-- #860: 84 of rail + 8 reserved for the rail's scrollbar. The chips used to be laid out
-           against the full 84 and then squeezed the moment the ScrollViewer decided it needed a
-           bar, cropping the chip art and wrapping the captions. The gutter is reserved here and
-           the chip stack is pinned to its old width, so a scrollbar costs the chips nothing.
-           Keep in sync with the FavoritesRail stack: 92 - 5 rail margin - 2 border - 8 scrollbar
-           - 8 stack margin = 69. -->
-      <ColumnDefinition Width="92"/>
+      <!-- WPF nav polish wave 3 (11552cadf): column 0 held FAVORITES + RECENT at 92 px; it is 0
+           now and kept so every Grid.Column index stays put. The column lives in the FAVORITES
+           DRAWER at the right edge (column 3, Auto): a 22 px handle plus a body that opens to
+           the same 92 px and PUSHES the browser column; the 640 mosaic never moves. -->
+      <ColumnDefinition Width="0"/>
       <ColumnDefinition Width="640"/>
       <ColumnDefinition Width="*"/>
+      <ColumnDefinition Width="Auto"/>
     </Grid.ColumnDefinitions>
     <Grid.RowDefinitions>
       <RowDefinition Height="Auto"/>   <!-- Training Programs "Today" card -->
@@ -308,7 +311,7 @@
     <!-- it opens the Programs tab.                                    -->
     <!-- ============================================================ -->
     <Button x:Name="ProgramTodayCard"
-            Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3"
+            Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="4"
             Theme="{StaticResource ProgramTodayCardStyle}"
             Margin="5,5,5,0" IsVisible="False" Cursor="Hand"
             HorizontalContentAlignment="Stretch"
@@ -376,8 +379,45 @@
     <!-- the user goes. Chips are built in code (MainShellWindow.FavoritesRail.cs) from the  -->
     <!-- Ctrl+K palette rows, wearing the feature's own picture (Core FavoritesRailArt).     -->
     <!-- ============================================================ -->
-    <Border x:Name="FavoritesRail" Grid.Column="0" Grid.Row="1" Margin="5,5,0,5"
-            Background="{DynamicResource ElevatedSurfaceBrush}" BorderBrush="{DynamicResource GlassBorderBrush}"
+    <!-- THE FAVORITES DRAWER (WPF SettingsTabView.xaml FavoritesDrawer). The handle is always
+         there; the body's Width is the only thing that moves (0 closed, 92 open, 200 ms, instant
+         under Motion Off). FavHandle* brushes are defaults; PaintFavoritesDrawer repaints them
+         from the mod's glow colour. Code: SettingsTabView.FavoritesDrawer.cs. -->
+    <Grid x:Name="FavoritesDrawer" Grid.Column="3" Grid.Row="1" ColumnDefinitions="22,Auto">
+      <Grid.Resources>
+        <SolidColorBrush x:Key="FavHandleFill" Color="#1FB79CFF"/>
+        <SolidColorBrush x:Key="FavHandleBorder" Color="#66B79CFF"/>
+        <SolidColorBrush x:Key="FavHandleFillHover" Color="#40B79CFF"/>
+        <SolidColorBrush x:Key="FavHandleBorderHover" Color="#FFB79CFF"/>
+        <SolidColorBrush x:Key="FavHandleText" Color="#FFB79CFF"/>
+        <SolidColorBrush x:Key="FavHandleTextHover" Color="#FFE4DAFF"/>
+      </Grid.Resources>
+      <Button x:Name="FavoritesDrawerHandle" Grid.Column="0" Margin="2,5,2,5" Cursor="Hand"
+              HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+              Theme="{StaticResource FavoritesDrawerHandleStyle}"
+              AutomationProperties.Name="{loc:Str rail_favorites_drawer}"
+              AutomationProperties.HelpText="{loc:Str tooltip_rail_favorites_drawer}"
+              ToolTip.Tip="{loc:Str tooltip_rail_favorites_drawer}">
+        <Grid RowDefinitions="Auto,*,Auto">
+          <TextBlock x:Name="FavoritesDrawerStar" Grid.Row="0" Text="&#x2605;" FontSize="13" Margin="0,9,0,0"
+                     HorizontalAlignment="Center" RenderTransformOrigin="50%,50%"
+                     Foreground="{Binding $parent[Button].Foreground}">
+            <TextBlock.RenderTransform><ScaleTransform/></TextBlock.RenderTransform>
+          </TextBlock>
+          <LayoutTransformControl Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center">
+            <LayoutTransformControl.LayoutTransform><RotateTransform Angle="-90"/></LayoutTransformControl.LayoutTransform>
+            <TextBlock Text="{loc:Str rail_favorites_drawer}" FontSize="12" FontWeight="SemiBold"
+                       TextTrimming="CharacterEllipsis" Foreground="{Binding $parent[Button].Foreground}"/>
+          </LayoutTransformControl>
+          <TextBlock x:Name="FavoritesDrawerChevron" Grid.Row="2" Text="&#x2039;" FontSize="16" FontWeight="Bold"
+                     Margin="0,0,0,7" HorizontalAlignment="Center" Foreground="{Binding $parent[Button].Foreground}"/>
+        </Grid>
+      </Button>
+      <!-- THE BODY: 92 open = the old column 0, so the chip sum is unchanged (92 - 5 - 2 - 8 - 8
+           = 69). The rail is pinned at 87 and right-aligned so it slides in from the edge. -->
+      <Grid x:Name="FavoritesDrawerBody" Grid.Column="1" Width="0" ClipToBounds="True">
+    <Border x:Name="FavoritesRail" Width="87" HorizontalAlignment="Right" Margin="0,5,5,5"
+            Background="{DynamicResource ElevatedSurfaceBrush}" BorderBrush="{DynamicResource FavHandleBorder}"
             BorderThickness="1" CornerRadius="12">
       <Border.Resources>
         <LinearGradientBrush x:Key="RailChipScrim" StartPoint="0%,0%" EndPoint="0%,100%">
@@ -444,6 +484,13 @@
              see the shell-favorites-rail row. -->
       </Grid>
     </Border>
+      </Grid>
+      <!-- THE MOTES: embers + dust in the mod's particle colour and the burst a click or a new
+           pin fires at the handle. Over the handle, hit-test off, 36 px wider to the left;
+           registered against the dashboard tab beside MosaicFx so ShowTab parks it. -->
+      <fx:AmbientFxCanvas x:Name="FavoritesDrawerFx" Grid.Column="0" Grid.ColumnSpan="2"
+                          Margin="-36,0,0,0" IsHitTestVisible="False"/>
+    </Grid>
 
     <!-- ============================================================ -->
     <!-- VELVET MOSAIC DASHBOARD - 4x4 hybrid wall (col 1)             -->
@@ -913,7 +960,6 @@
         <RowDefinition Height="*"/>
         <RowDefinition Height="0"/>
         <RowDefinition Height="Auto"/>
-        <RowDefinition Height="Auto"/>
       </Grid.RowDefinitions>
 
       <!-- Browser Section -->
@@ -955,7 +1001,6 @@
               <ColumnDefinition Width="Auto"/>
               <ColumnDefinition Width="Auto"/>
               <ColumnDefinition Width="Auto"/>
-              <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
               <TextBlock Theme="{StaticResource SectionHeader}" Text="{loc:Str section_browser}" Margin="0"/>
@@ -985,6 +1030,27 @@
                     ToolTip.Tip="{loc:Str tooltip_reload_browser}"
                     FontSize="11" Padding="6,3" Margin="8,0,0,0">
               <TextBlock Text="🔄"/>
+            </Button>
+            <!-- The fold arrow (WPF 210e0e262: "an unmissable dropdown arrow"): a wide pill in the
+                 header's empty star column, clear of the reload button. Hue, label, tooltip and
+                 the breathing glow while folded are painted by SettingsTabView.PaintFoldArrow from
+                 MainShellWindow.DashboardFold.cs; these values are only the first paint (Home's
+                 lilac at 24% fill, a 70% border, 40% on hover - Tag carries the hover brush). -->
+            <Button Grid.Column="2" x:Name="BtnFoldBrowser" Theme="{StaticResource FoldArrowButton}"
+                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                    MinWidth="120" Height="26" Padding="12,0" Margin="48,0,8,0"
+                    Background="#3DB79CFF" BorderBrush="#B3B79CFF" BorderThickness="1.5"
+                    ToolTip.Tip="{loc:Str tooltip_browser_unfold}"
+                    AutomationProperties.Name="{loc:Str btn_browser_fold_show}">
+              <Button.Tag><SolidColorBrush Color="#66B79CFF"/></Button.Tag>
+              <StackPanel Orientation="Horizontal">
+                <!-- Core's chevrons are Segoe MDL2 code points; no such font on Linux, so this
+                     head draws the plain arrows (DashboardFold.cs sets them). -->
+                <TextBlock x:Name="TxtFoldBrowser" Text="&#x25B4;" FontSize="16"
+                           Foreground="White" VerticalAlignment="Center" Margin="0,1,8,0"/>
+                <TextBlock x:Name="TxtFoldBrowserLabel" Text="{loc:Str btn_browser_fold_show}"
+                           FontSize="12" FontWeight="SemiBold" Foreground="White" VerticalAlignment="Center"/>
+              </StackPanel>
             </Button>
             <!-- Status indicator -->
             <TextBlock Grid.Column="3" x:Name="TxtBrowserStatus" Text="{loc:Str label_loading}"
@@ -1027,12 +1093,6 @@
                     ToolTip.Tip="{loc:Str tooltip_pop_out_browser_to_resizable_window}"
                     FontSize="9" Padding="6,3" VerticalAlignment="Center">
               <TextBlock Text="{loc:Str btn_pop_out}"/>
-            </Button>
-            <!-- The fold chevron (WPF :1308): glyph and tooltip come from BrowserFoldRule. -->
-            <Button Grid.Column="7" x:Name="BtnFoldBrowser" Theme="{StaticResource BrowserMuteButton}"
-                    Padding="6,2" Margin="6,0,0,0" VerticalAlignment="Center">
-              <TextBlock x:Name="TxtFoldBrowser" Text="&#x25B4;" FontSize="13"
-                         Foreground="{DynamicResource TextMutedBrush}"/>
             </Button>
           </Grid>
 
@@ -1253,60 +1313,22 @@
         <Grid x:Name="BillboardHostSlot" Margin="8,8,8,4"/>
       </Border>
 
-      <Border x:Name="CompanionStrip" Grid.Row="2"
-              CornerRadius="12" Padding="10,7" Margin="0,0,0,5"
-              Background="{DynamicResource ElevatedSurfaceBrush}"
-              BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1"
-              Cursor="Hand"
-              ToolTip.Tip="{loc:Str tooltip_companion_settings}">
-        <Grid>
-          <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="Auto"/>
-            <ColumnDefinition Width="*"/>
-            <ColumnDefinition Width="Auto"/>
-          </Grid.ColumnDefinitions>
-          <!-- Same glyph as the sidebar's Companion door, so the two read as one place. -->
-          <TextBlock Grid.Column="0" Text="🤖" FontSize="14" VerticalAlignment="Center" Margin="0,0,9,0"/>
-          <StackPanel Grid.Column="1" VerticalAlignment="Center">
-            <TextBlock Text="{loc:Str nav_door_companion}"
-                       Foreground="{DynamicResource PinkBrush}"
-                       FontSize="12" FontWeight="Bold"
-                       TextTrimming="CharacterEllipsis"/>
-            <TextBlock Text="{loc:Str hm3_companion_strip_sub}"
-                       Foreground="{DynamicResource TextMutedBrush}"
-                       FontSize="11" Margin="0,1,0,0"
-                       TextTrimming="CharacterEllipsis"/>
-          </StackPanel>
-          <TextBlock Grid.Column="2" Text="›" VerticalAlignment="Center" Margin="12,0,2,0"
-                     Foreground="{DynamicResource TextMutedBrush}" FontSize="18"/>
-        </Grid>
-      </Border>
-
       <!-- ============================================================ -->
-      <!-- ACCOUNT STRIP (Phase 3) - the old "Quick Links" card,         -->
-      <!-- compressed from a four-row tile into one line.                -->
-      <!--                                                               -->
-      <!-- It is NOT redundant markup: every x:Name below is written by   -->
-      <!-- live code (BtnUnifiedLogin, LoggedInStatusPanel,               -->
-      <!-- TxtLoggedInName, ChkQuickDiscordRichPresence,                  -->
-      <!-- HelpBtnQuickLinks) and none may be dropped.                    -->
+      <!-- ACCOUNT STRIP - one line since WPF acd51fcf9 (nav polish wave  -->
+      <!-- 5): the name, Link phone and Logout as glass bubbles (Logout   -->
+      <!-- keeps a pink fill), a divider, the labelled Discord pill, the  -->
+      <!-- Rich Presence switch as a status bubble (lit when on), a       -->
+      <!-- divider, the five quick bubbles (41288a884), and the "?".      -->
+      <!-- One HoverBubbleBar dresses every glyph button. Every x:Name    -->
+      <!-- below is written by live code (Login.cs UpdateQuickLoginUI,    -->
+      <!-- HelpButtons, the view's click wiring); none may be dropped.    -->
       <!-- ============================================================ -->
-      <Border Grid.Row="3" CornerRadius="12" Padding="9,7"
+      <Border x:Name="AccountStrip" Grid.Row="2" CornerRadius="12" Padding="9,6"
               Background="{DynamicResource ElevatedSurfaceBrush}"
               BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
-        <Grid>
-          <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="*"/>
-            <ColumnDefinition Width="Auto"/>
-            <ColumnDefinition Width="Auto"/>
-            <ColumnDefinition Width="Auto"/>
-          </Grid.ColumnDefinitions>
-
-          <!-- The logged-out and logged-in faces share ONE cell: MainWindow.Login.cs flips
-               exactly these two visibilities against each other, so they must never be able to
-               claim two slots' worth of width between them. -->
-          <Grid Grid.Column="0">
-            <!-- Unified Login Button -->
+        <Grid ColumnDefinitions="*,Auto,Auto,Auto">
+          <!-- The logged-out and logged-in faces share ONE cell (Login.cs flips the two). -->
+          <Grid Grid.Column="0" Margin="0,0,10,0">
             <Button x:Name="BtnUnifiedLogin"
                     Theme="{StaticResource AccountPinkButton}"
                     FontSize="12"
@@ -1315,184 +1337,113 @@
               <TextBlock Text="{loc:Str btn_login_2}"/>
             </Button>
 
-            <!-- Logged In Status (shown when logged in) -->
+            <!-- Logged in: the name alone; "Logged in as" is its tooltip. -->
             <Border x:Name="LoggedInStatusPanel" IsVisible="False"
-                    Background="{DynamicResource PanelBgBrush}" CornerRadius="6" Padding="9,4"
-                    VerticalAlignment="Center"
-                    BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1">
-              <Grid>
-                <Grid.ColumnDefinitions>
-                  <ColumnDefinition Width="*"/>
-                  <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <StackPanel VerticalAlignment="Center">
-                  <TextBlock x:Name="TxtLoggedInAs" Text="{loc:Str label_logged_in_as}"
-                             Foreground="{DynamicResource TextMutedBrush}" FontSize="11"/>
-                  <TextBlock x:Name="TxtLoggedInName" Text="{loc:Str label_username}"
-                             Foreground="White" FontWeight="Bold" FontSize="14" Margin="0,1,0,0"
-                             TextTrimming="CharacterEllipsis">
-                    <TextBlock.Effect>
-                      <DropShadowEffect Color="#FF69B4" BlurRadius="10" OffsetX="0" OffsetY="0" Opacity="0.65"/>
-                    </TextBlock.Effect>
-                  </TextBlock>
-                </StackPanel>
-                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                  <Button x:Name="BtnLinkPhone"
-                          Margin="0,0,6,0" VerticalAlignment="Center"
-                          ToolTip.Tip="Sign in to the CCP mobile app by scanning a QR code"
-                          Padding="8,3" Background="{DynamicResource AccentTintedBgBrush}" Foreground="{DynamicResource PinkBrush}"
-                          BorderThickness="0" FontSize="10" Cursor="Hand">
-                    <TextBlock Text="📱 Link phone"/>
-                  </Button>
-                  <!-- Prominent, high-contrast Logout button -->
-                  <Button x:Name="BtnQuickLogout"
-                          Theme="{StaticResource AccountPinkButton}"
-                          VerticalAlignment="Center"
-                          Padding="12,4" FontSize="11" Cursor="Hand"
-                          ToolTip.Tip="{loc:Str btn_logout}">
-                    <TextBlock Text="{loc:Str btn_logout}"/>
-                  </Button>
-                </StackPanel>
-              </Grid>
+                    Background="Transparent" Padding="4,0" HorizontalAlignment="Left"
+                    VerticalAlignment="Center" ToolTip.Tip="{loc:Str label_logged_in_as}">
+              <TextBlock x:Name="TxtLoggedInName" Text="{loc:Str label_username}"
+                         Foreground="White" FontWeight="Bold" FontSize="15" MaxWidth="220"
+                         VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
+                <TextBlock.Effect>
+                  <DropShadowEffect Color="#FF69B4" BlurRadius="10" OffsetX="0" OffsetY="0" Opacity="0.65"/>
+                </TextBlock.Effect>
+              </TextBlock>
             </Border>
           </Grid>
 
-          <!-- Discord Join Button -->
-          <Button Grid.Column="1" x:Name="BtnDiscord"
-                  Theme="{StaticResource DiscordJoinButton}"
-                  ToolTip.Tip="{loc:Str tooltip_join_the_discord_community}" Cursor="Hand"
-                  VerticalAlignment="Center" Margin="10,0,0,0">
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-              <TextBlock Text="💬" FontSize="11" VerticalAlignment="Center"/>
-              <TextBlock Text="{loc:Str label_join_discord}" Foreground="White" FontSize="10" FontWeight="Bold"
-                         VerticalAlignment="Center" Margin="5,0,0,0"/>
-            </StackPanel>
-          </Button>
-          <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="10,0,0,0">
-            <ToolTip.Tip>
-              <Border Background="{DynamicResource SurfaceBgBrush}" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" Padding="10">
-                <StackPanel MaxWidth="280">
-                  <TextBlock Text="{loc:Str label_discord_rich_presence}" Foreground="{DynamicResource PinkBrush}" FontSize="12" FontWeight="Bold" Margin="0,0,0,6"/>
-                  <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8"
-                             Text="Shows &quot;Playing Conditioning Control Panel&quot; in your Discord status, along with your current level and session time."/>
-                  <TextBlock Text="{loc:Str label_who_can_see_this}" Foreground="{DynamicResource SecondaryBrush}" FontSize="11" FontWeight="Bold" Margin="0,0,0,4"/>
-                  <TextBlock Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap"
-                             Text="Only people who can already see your Discord activity status (friends, server members if enabled in your Discord privacy settings). This does NOT send notifications - it simply updates your &quot;Currently Playing&quot; status like any other game."/>
-                </StackPanel>
-              </Border>
-            </ToolTip.Tip>
-            <CheckBox x:Name="ChkQuickDiscordRichPresence" Theme="{StaticResource ToggleStyle}"
-                      RenderTransformOrigin="50%,50%">
-              <CheckBox.RenderTransform>
-                <ScaleTransform ScaleX="0.85" ScaleY="0.85"/>
-              </CheckBox.RenderTransform>
-            </CheckBox>
-            <TextBlock Text="{loc:Str label_rp}" Foreground="{DynamicResource TextMutedBrush}" FontSize="9"
-                       VerticalAlignment="Center" Margin="4,0,0,0"/>
-          </StackPanel>
+          <!-- Link phone, Logout and their divider follow the logged-in face's visibility. -->
+          <fx:HoverBubbleBar x:Name="HomeBubbleBar" Grid.Column="1"
+                             HorizontalAlignment="Right" VerticalAlignment="Center">
+            <Button x:Name="BtnLinkPhone"
+                    IsVisible="{Binding #LoggedInStatusPanel.IsVisible}"
+                    ToolTip.Tip="Sign in to the CCP mobile app by scanning a QR code"
+                    fx:HoverBubbleBar.Glyph="📱"
+                    fx:HoverBubbleBar.LabelKeys="btn_home_link_phone"/>
+            <Button x:Name="BtnQuickLogout"
+                    IsVisible="{Binding #LoggedInStatusPanel.IsVisible}"
+                    ToolTip.Tip="{loc:Str btn_logout}"
+                    fx:HoverBubbleBar.Glyph="⏻"
+                    fx:HoverBubbleBar.Fill="#FF69B4"
+                    fx:HoverBubbleBar.LabelKeys="btn_logout"/>
+            <Border x:Name="AccountStripDivider" Width="1" Height="18" Margin="12,0,4,0"
+                    VerticalAlignment="Center" Background="#40FFFFFF"
+                    IsVisible="{Binding #LoggedInStatusPanel.IsVisible}"/>
 
-          <Button x:Name="HelpBtnQuickLinks" Grid.Column="3"
+            <!-- Discord Join Button: the one labelled pill on the line. -->
+            <Button x:Name="BtnDiscord"
+                    Theme="{StaticResource DiscordJoinButton}"
+                    ToolTip.Tip="{loc:Str tooltip_join_the_discord_community}" Cursor="Hand"
+                    VerticalAlignment="Center">
+              <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                <TextBlock Text="💬" FontSize="11" VerticalAlignment="Center"/>
+                <TextBlock Text="{loc:Str label_join_discord}" Foreground="White" FontSize="11" FontWeight="Bold"
+                           VerticalAlignment="Center" Margin="6,0,0,0"/>
+              </StackPanel>
+            </Button>
+
+            <!-- Rich Presence as a status bubble: lit when on. Still the CheckBox the
+                 account mirror writes (IsChecked), just dressed by the bar. -->
+            <CheckBox x:Name="ChkQuickDiscordRichPresence"
+                      fx:HoverBubbleBar.Glyph="🎮"
+                      fx:HoverBubbleBar.LabelKeys="btn_home_discord_status">
+              <ToolTip.Tip>
+                <Border Background="{DynamicResource SurfaceBgBrush}" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" Padding="10">
+                  <StackPanel MaxWidth="280">
+                    <TextBlock Text="{loc:Str label_discord_rich_presence}" Foreground="{DynamicResource PinkBrush}" FontSize="12" FontWeight="Bold" Margin="0,0,0,6"/>
+                    <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8"
+                               Text="Shows &quot;Playing Conditioning Control Panel&quot; in your Discord status, along with your current level and session time."/>
+                    <TextBlock Text="{loc:Str label_who_can_see_this}" Foreground="{DynamicResource SecondaryBrush}" FontSize="11" FontWeight="Bold" Margin="0,0,0,4"/>
+                    <TextBlock Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap"
+                               Text="Only people who can already see your Discord activity status (friends, server members if enabled in your Discord privacy settings). This does NOT send notifications - it simply updates your &quot;Currently Playing&quot; status like any other game."/>
+                  </StackPanel>
+                </Border>
+              </ToolTip.Tip>
+            </CheckBox>
+            <Border Width="1" Height="18" Margin="12,0,4,0" VerticalAlignment="Center" Background="#40FFFFFF"/>
+
+            <!-- The five quick bubbles (WPF 41288a884). VelvetBtnSystem is the ONLY route to
+                 MainWindow.CardSystem_Click: never retire it without moving the handler. -->
+            <Button x:Name="VelvetBtnWebcam"
+                    fx:HoverBubbleBar.Glyph="📷"
+                    fx:HoverBubbleBar.LabelKeys="btn_home_webcam_mic"/>
+            <Button x:Name="VelvetBtnSystem"
+                    fx:HoverBubbleBar.Glyph="⚙"
+                    fx:HoverBubbleBar.LabelKeys="section_system"/>
+            <Button x:Name="VelvetBtnSchedulerRamp"
+                    fx:HoverBubbleBar.Glyph="📅"
+                    fx:HoverBubbleBar.LabelKeys="section_scheduler+section_intensity_ramp"/>
+            <Button x:Name="VelvetBtnCatalogue"
+                    ToolTip.Tip="Opens app.cclabs.app/catalogue in your browser"
+                    fx:HoverBubbleBar.Glyph="📚"
+                    fx:HoverBubbleBar.LabelKeys="btn_home_catalogue"/>
+            <Button x:Name="VelvetBtnAppInfo"
+                    fx:HoverBubbleBar.Glyph="ℹ"
+                    fx:HoverBubbleBar.LabelKeys="label_app_info"/>
+          </fx:HoverBubbleBar>
+
+          <Button x:Name="HelpBtnQuickLinks" Grid.Column="2"
                   Theme="{StaticResource HelpButtonStyle}" Tag="QuickLinks"
-                  VerticalAlignment="Center" Margin="8,0,0,0"/>
+                  VerticalAlignment="Center" Margin="10,0,0,0"/>
+
+          <!-- Diagnostics (this head only): a developer affordance, so one muted glyph, last.
+               It lived in the quick-toggles row, which WPF acd51fcf9 gave back to the mosaic. -->
+          <Button Grid.Column="3" x:Name="BtnOpenDiagnostics"
+                  VerticalAlignment="Center" Margin="4,0,0,0" Padding="2" FontSize="11" Opacity="0.6"
+                  Background="Transparent" BorderThickness="0" Cursor="Hand"
+                  Foreground="{DynamicResource TextMutedBrush}"
+                  Click="BtnOpenDiagnostics_Click"
+                  ToolTip.Tip="Open the Linux head's diagnostics window">
+            <TextBlock Text="🛠"/>
+          </Button>
         </Grid>
       </Border>
     </Grid>
 
-    <!-- ============================================================ -->
-    <!-- QUICK TOGGLES ROW - full width, under both the feature grid   -->
-    <!-- AND the right half. (Historic x:Name VelvetHelperButtonRow.)  -->
-    <!-- Keep this row at Height=30: it sits between the mosaic and    -->
-    <!-- the marquee inside the fixed design canvas, and every unit it -->
-    <!-- grows comes off the mosaic's star row (layout clips           -->
-    <!-- silently - #860).                                             -->
-    <!-- ============================================================ -->
-    <Grid Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" x:Name="VelvetHelperButtonRow"
-          Height="30" Margin="5,4,5,0">
-      <Grid.ColumnDefinitions>
-        <ColumnDefinition Width="*"/>
-        <ColumnDefinition Width="10"/>
-        <ColumnDefinition Width="*"/>
-        <ColumnDefinition Width="10"/>
-        <ColumnDefinition Width="*"/>
-        <ColumnDefinition Width="10"/>
-        <ColumnDefinition Width="*"/>
-        <ColumnDefinition Width="10"/>
-        <ColumnDefinition Width="*"/>
-      </Grid.ColumnDefinitions>
-      <!-- Webcam card — surfaced from the Lab for discoverability. Distinct Secondary (cyan)
-           accent + tinted fill so it stands out from the two neutral cards beside it. -->
-      <Button Grid.Column="0" x:Name="VelvetBtnWebcam"
-              Theme="{StaticResource VelvetPillWebcam}">
-        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-          <TextBlock Text="📷" FontSize="13" VerticalAlignment="Center" Margin="0,0,8,0"/>
-          <TextBlock Text="Webcam &amp; Mic" Foreground="White" VerticalAlignment="Center"/>
-        </StackPanel>
-      </Button>
-
-      <!-- System — the display / video switches plus the read-only jumps into Settings. It used
-           to be the ⚙ mosaic tile; the tile went to Brain Drain and the entry point came here.
-           This pill is now the ONLY route to MainWindow.CardSystem_Click: never retire it
-           without moving the handler somewhere else. -->
-      <Button Grid.Column="2" x:Name="VelvetBtnSystem"
-              Theme="{StaticResource VelvetPill}">
-        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-          <!-- No separate cog glyph: section_system already starts with the gear (same idiom as
-               the Scheduler pill below). -->
-          <TextBlock Text="{loc:Str section_system}" Foreground="White" VerticalAlignment="Center"/>
-        </StackPanel>
-      </Button>
-
-      <Button Grid.Column="8" x:Name="VelvetBtnAppInfo"
-              Theme="{StaticResource VelvetPill}">
-        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-          <TextBlock Text="ℹ" FontSize="16" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,8,0"
-                     Foreground="{DynamicResource PinkBrush}"/>
-          <TextBlock Text="{loc:Str label_app_info}" Foreground="White" VerticalAlignment="Center"/>
-        </StackPanel>
-      </Button>
-
-      <!-- Combined Scheduler + Intensity Ramp card. Label is two live-localized strings joined
-           by " + " so both halves stay translated. The pill navigates to the Studio rack, which
-           fires the same single "SchedulerRamp" NotifyFeatureOpened key the old popup did. -->
-      <Button Grid.Column="4" x:Name="VelvetBtnSchedulerRamp"
-              Theme="{StaticResource VelvetPill}">
-        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-          <!-- No separate 📅 glyph: section_scheduler already starts with the calendar emoji
-               (matches the inline ⚡ on Intensity Ramp). -->
-          <TextBlock Text="{loc:Str section_scheduler}" Foreground="White" VerticalAlignment="Center"/>
-          <TextBlock Text=" + " Foreground="White" VerticalAlignment="Center"/>
-          <TextBlock Text="{loc:Str section_intensity_ramp}" Foreground="White" VerticalAlignment="Center"/>
-        </StackPanel>
-      </Button>
-
-      <!-- CCP Catalogue card — opens the web catalogue to browse/share community presets and
-           sessions. Pink-tinted to flag it as the community/social action of the row. -->
-      <Button Grid.Column="6" x:Name="VelvetBtnCatalogue"
-              Theme="{StaticResource VelvetPillCatalogue}"
-              ToolTip.Tip="Opens app.cclabs.app/catalogue in your browser">
-        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-          <TextBlock Text="📚" FontSize="13" VerticalAlignment="Center" Margin="0,0,8,0"/>
-          <TextBlock Text="CCP Catalogue" Foreground="White" VerticalAlignment="Center"/>
-        </StackPanel>
-      </Button>
-
-      <!-- Diagnostics. Deliberately small and last in the row: a developer affordance, not a
-           setting. Opens this head's diagnostics window (platform, Core paths, engine values, a
-           live moderation verdict) as a SECOND window, so the shell keeps its state and that
-           window's own Back button is just a close. -->
-      <Button Grid.Column="6" x:Name="BtnOpenDiagnostics"
-              HorizontalAlignment="Right" VerticalAlignment="Bottom"
-              Margin="0,0,4,-2" Padding="8,2" FontSize="10"
-              Background="Transparent" BorderThickness="0" Cursor="Hand"
-              Foreground="{DynamicResource TextMutedBrush}"
-              Click="BtnOpenDiagnostics_Click"
-              ToolTip.Tip="Open the Linux head's diagnostics window">
-        <TextBlock Text="diagnostics"/>
-      </Button>
-    </Grid>
+    <!-- Row 2 (Auto) is empty since WPF acd51fcf9: the quick bubbles live on the account
+         strip's one line, and the row's height went back to the mosaic. -->
 
     <!-- Scrolling Marquee Banner - row 3, spans all columns -->
-    <Border x:Name="MarqueeBanner" Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="3"
+    <Border x:Name="MarqueeBanner" Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="4"
             Background="#1A0A1A" BorderBrush="{DynamicResource DarkPinkBrush}" BorderThickness="2"
             CornerRadius="8" Height="48" Margin="5,5,5,0" ClipToBounds="True">
       <Border.Effect>

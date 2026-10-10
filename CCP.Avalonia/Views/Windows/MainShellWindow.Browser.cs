@@ -1,8 +1,6 @@
 // PORTED-IN-PART from ConditioningControlPanel/MainWindow/MainWindow.Browser.cs (3,084 lines).
 //
-// Two things are LIVE here, and one of them has a caller:
-//   * BtnDiscordTab_Click - the header's Profile door. MainShellWindow.axaml:1123 names it, and
-//     on WPF it is one ShowTab("discord") call. It is that here too. CALLED.
+// LIVE here (the Profile entry BtnDiscordTab_Click left with the rail entries, cd426fe36):
 //   * the site navigation, the offline gate and the profile-viewer clear. Restored in full and
 //     each is complete, but NOTHING CALLS THEM YET - see "Callers still missing" below.
 //
@@ -70,9 +68,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
     public partial class MainShellWindow
     {
-        /// <summary>The header's Profile door. One ShowTab call on WPF, one here.</summary>
-        private void BtnDiscordTab_Click(object? sender, RoutedEventArgs e) => ShowTab("discord");
-
         // ============================== the embedded browser ==============================
 
         private const string BambiCloudHome = "https://bambicloud.com/";

@@ -60,7 +60,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
             "remote" => Premium(id, "remote", () => Nav("remotecontrol")),
             "takeover" => Premium(id, "takeover", () => Nav("bambitakeover")),
             "lockdown" => Premium(id, null, () => Nav("lockdown")),
-            "vault" => Free(() => Nav("exclusives")),
+            "vault" => Free(() => Nav("premium")),
             "companion" => Free(() => Nav("companion")),
             "progression" => Free(() => Nav("progression")),
             "profile" => Free(() => Nav("discord")),
