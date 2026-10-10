@@ -50,9 +50,6 @@ namespace ConditioningControlPanel.Avalonia.Tours
         /// <summary>Idempotent. Called once at startup (App.axaml.cs) and by tests.</summary>
         internal static void Seed()
         {
-            if (_seeded) return;
-            _seeded = true;
-
             CoreTutorial.IsActiveProvider = () => Service.IsActive;
             CoreTutorial.CurrentStepProvider = () => Service.IsActive && Service.CurrentStep is { } s ? Project(s) : null;
             CoreTutorial.CurrentStepIndexProvider = () => Service.IsActive ? Service.CurrentStepIndex : 0;
@@ -61,6 +58,9 @@ namespace ConditioningControlPanel.Avalonia.Tours
             CoreTutorial.PreviousAction = Service.Previous;
             CoreTutorial.SkipAction = Service.Skip;
             CoreTutorial.StartAction = StartByName;
+
+            if (_seeded) return;      // the seam is re-pointed every call, the events are wired once
+            _seeded = true;
 
             Service.StepChanged += (s, step) => CoreTutorial.RaiseStepChanged(s, Project(step));
             Service.TutorialFinished += (s, e) => CoreTutorial.RaiseFinished(s, e.Completed);

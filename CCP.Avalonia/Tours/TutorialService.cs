@@ -194,8 +194,8 @@ namespace ConditioningControlPanel.Avalonia.Tours
         Awareness,      // Awareness Engine (keyword triggers + OCR)
         Deeper,         // Deeper tab (universal media enhancement)
         DeeperEditor,   // Deeper editor coachmarks (targets the editor window)
-        DeeperEditorInteractiveHT, // Interactive on-rails HypnoTube walkthrough — Part 1 (NewEnhancementDialog → click Create)
-        DeeperEditorInteractiveHTPart2, // Part 2 — runs in DeeperEditorWindow after dialog hands off
+        DeeperEditorInteractiveHT, // Interactive on-rails HypnoTube walkthrough - Part 1 (NewEnhancementDialog → click Create)
+        DeeperEditorInteractiveHTPart2, // Part 2 - runs in DeeperEditorWindow after dialog hands off
         DeeperEditorInteractiveLocalAudio, // Interactive on-rails Local Audio walkthrough - Part 1
         DeeperEditorInteractiveLocalAudioPart2, // Part 2 - runs in DeeperEditorWindow (audio mode: waveform preview, audio-only triggers)
         DeeperEditorInteractiveLocalVideo, // Interactive on-rails Local Video walkthrough - Part 1
@@ -277,7 +277,7 @@ namespace ConditioningControlPanel.Avalonia.Tours
             ["BtnNavSpiral"] = "spiral",
             // The x:Name is API and never changes; the VALUE is the live ShowTab key, so it moved
             // to "play" when Phase 6 retired the Lab page into the Play door's card wall.
-            // ("lab" would still resolve — ExpandDoorForTab canonicalises the alias — but a door
+            // ("lab" would still resolve - ExpandDoorForTab canonicalises the alias - but a door
             // map that names a deleted view is how the next reader learns the wrong thing.)
             ["BtnLab"] = "play",
             ["BtnPatreonExclusives"] = "exclusives",
@@ -1560,7 +1560,7 @@ namespace ConditioningControlPanel.Avalonia.Tours
         private List<TutorialStep> CreateCompanionSteps()
         {
             // OnActivate helper: idempotently open the Workshop on its roster pigeonhole, which is
-            // where the roster tray went (design §6). Idempotent by construction now — the hero's
+            // where the roster tray went (design §6). Idempotent by construction now - the hero's
             // Switch chip stopped being a toggle, so this is the same call it makes.
             Action revealRoster = () =>
             {
@@ -1582,7 +1582,7 @@ namespace ConditioningControlPanel.Avalonia.Tours
                     Title = "Meet Your Companion",
                     Description = "This tab is where she lives.\n\n" +
                                   "She's the voice in your speech bubbles, the personality behind your AI chats, " +
-                                  "and the one keeping score of your XP. There's a lot in here — let's walk it together.",
+                                  "and the one keeping score of your XP. There's a lot in here - let's walk it together.",
                     RequiresTab = "companion",
                     TextPosition = TutorialStepPosition.Center
                 },
@@ -1607,7 +1607,7 @@ namespace ConditioningControlPanel.Avalonia.Tours
                     Title = "Five Companions",
                     Description = "There are five companions, and each one gives you a different XP bonus " +
                                   "(Pink Filter, Autonomy, XP Drain, Strict Mode, Session Completion).\n\n" +
-                                  "The Switch chip opens the Workshop on her roster — your XP for each is tracked separately.",
+                                  "The Switch chip opens the Workshop on her roster - your XP for each is tracked separately.",
                     RequiresTab = "companion",
                     TargetElementName = "HeroZone",
                     TextPosition = TutorialStepPosition.Right,
@@ -1617,7 +1617,7 @@ namespace ConditioningControlPanel.Avalonia.Tours
                 {
                     Id = "comp_roster",
                     Icon = "🎭",
-                    Title = "The Roster — Two Clicks",
+                    Title = "The Roster - Two Clicks",
                     Description = "The roster lives in the Workshop, at the bottom of the page. " +
                                   "Two different clicks live on each card:\n\n" +
                                   "• Click the card itself → switch to that companion.\n" +
@@ -1633,7 +1633,7 @@ namespace ConditioningControlPanel.Avalonia.Tours
                     Id = "comp_chat_shortcut",
                     Icon = "💬",
                     Title = "Chat Hotkey",
-                    Description = "She has a global hotkey for chat — Ctrl+T by default, anywhere on your machine.\n\n" +
+                    Description = "She has a global hotkey for chat - Ctrl+T by default, anywhere on your machine.\n\n" +
                                   "The hero's Chat button shows the live combo; this is where you rebind it, " +
                                   "in the Workshop's Behavior shelf. Useful when Ctrl+T collides with " +
                                   "another app you use a lot.",
@@ -1648,9 +1648,9 @@ namespace ConditioningControlPanel.Avalonia.Tours
                     Icon = "👁",
                     Title = "Avatar Window Controls",
                     Description = "Three quick chips on her card:\n\n" +
-                                  "• The eye chip — pop her on or off your screen.\n" +
-                                  "• The speaker chip — silence her speech and sound effects.\n" +
-                                  "• Detach — float her free of the main window so you can drag her anywhere.",
+                                  "• The eye chip - pop her on or off your screen.\n" +
+                                  "• The speaker chip - silence her speech and sound effects.\n" +
+                                  "• Detach - float her free of the main window so you can drag her anywhere.",
                     RequiresTab = "companion",
                     TargetElementName = "HeroZone",
                     TextPosition = TutorialStepPosition.Top
@@ -1660,7 +1660,7 @@ namespace ConditioningControlPanel.Avalonia.Tours
                     Id = "comp_customize",
                     Icon = "🎨",
                     Title = "Personality Editor",
-                    Description = "\"Make her yours\" is the front door to her personality — preset chips, " +
+                    Description = "\"Make her yours\" is the front door to her personality - preset chips, " +
                                   "the spice switch, and who she currently is.\n\n" +
                                   "The quiet links at the bottom of that card - View compiled prompt, Fork & edit " +
                                   "by hand, Community prompts - open the full editor.",
@@ -1677,7 +1677,7 @@ namespace ConditioningControlPanel.Avalonia.Tours
                         ? "The Engine Room is what gives her real conversation. She'll reply to you, react to " +
                           "what's on your screen, and chime in unprompted.\n\n" +
                           "Three things to set up here: which provider, which capabilities, and how spicy."
-                        : "The Engine Room is what gives her real conversation — replies, reactions, unprompted chimes.\n\n" +
+                        : "The Engine Room is what gives her real conversation - replies, reactions, unprompted chimes.\n\n" +
                           "Right now it's locked because you're not signed in. " +
                           "Sign in with Discord or Patreon and her chat unlocks. " +
                           "AI is free for all signed-in users.",
@@ -1694,9 +1694,9 @@ namespace ConditioningControlPanel.Avalonia.Tours
                     Icon = "📡",
                     Title = "Pick a Provider",
                     Description = "Three modes:\n\n" +
-                                  "• Off — no AI, just her phrase library.\n" +
-                                  "• Cloud — easiest. Talks to our proxy. Free for signed-in users.\n" +
-                                  "• Local — runs Ollama on your own machine. Fully private, but you install Ollama once.\n\n" +
+                                  "• Off - no AI, just her phrase library.\n" +
+                                  "• Cloud - easiest. Talks to our proxy. Free for signed-in users.\n" +
+                                  "• Local - runs Ollama on your own machine. Fully private, but you install Ollama once.\n\n" +
                                   "Pick Local and the model name + host fields appear below, along with a Setup wizard " +
                                   "that walks you through Ollama install.",
                     RequiresTab = "companion",
@@ -1712,7 +1712,7 @@ namespace ConditioningControlPanel.Avalonia.Tours
                     Description = "Turning the provider above to Cloud or Local switches on her AI replies. " +
                                   "The Workshop holds the rest of her tuning:\n\n" +
                                   "• Idle chatter, bubble duration and trigger phrases.\n" +
-                                  "• Awareness fine-tuning — the cooldowns that stop her spamming. The eye dial in " +
+                                  "• Awareness fine-tuning - the cooldowns that stop her spamming. The eye dial in " +
                                   "\"What she can see\" is what turns the watching on.",
                     RequiresTab = "companion",
                     TargetElementName = "WorkshopZone",
@@ -1725,7 +1725,7 @@ namespace ConditioningControlPanel.Avalonia.Tours
                     Icon = "🌶",
                     Title = "Slut Mode",
                     Description = "The flame switch on \"Make her yours\" flips her to the spicier " +
-                                  "personality variant — same companion, dirtier mouth.\n\n" +
+                                  "personality variant - same companion, dirtier mouth.\n\n" +
                                   "Toggle on or off whenever; it doesn't change her level or XP.",
                     RequiresTab = "companion",
                     TargetElementName = "PersonalityZone",
@@ -1739,7 +1739,7 @@ namespace ConditioningControlPanel.Avalonia.Tours
                     Id = "comp_ai_locked",
                     Icon = "🔒",
                     Title = "Login Unlocks AI",
-                    Description = "Chatting with her needs a login — that is what the veil on " +
+                    Description = "Chatting with her needs a login - that is what the veil on " +
                                   "\"Talk to her\" is.\n\n" +
                                   "Discord login or Patreon login both work, and everything else on this page - " +
                                   "her barks, her diary, her personality - is already yours. Once you're in, " +
@@ -1756,8 +1756,8 @@ namespace ConditioningControlPanel.Avalonia.Tours
                 Icon = "⏱",
                 Title = "How Often, How Long",
                 Description = "Two timing sliders in the Workshop's Behavior shelf:\n\n" +
-                              "• Idle Giggle Interval (5–300s) — how often she chimes in unprompted.\n" +
-                              "• Bubble Duration (1–10s) — how long each speech bubble stays on screen.\n\n" +
+                              "• Idle Giggle Interval (5-300s) - how often she chimes in unprompted.\n" +
+                              "• Bubble Duration (1-10s) - how long each speech bubble stays on screen.\n\n" +
                               "If she feels too chatty, raise the giggle interval. If you can't read fast enough, " +
                               "raise the bubble duration.",
                 RequiresTab = "companion",
@@ -1770,7 +1770,7 @@ namespace ConditioningControlPanel.Avalonia.Tours
                 Id = "comp_triggers",
                 Icon = "⚡",
                 Title = "Trigger Mode",
-                Description = "Trigger Mode rotates a list of phrases at a fixed interval — handy for mantra-style " +
+                Description = "Trigger Mode rotates a list of phrases at a fixed interval - handy for mantra-style " +
                               "drilling without typing anything yourself.\n\n" +
                               "Flip it on and a panel appears with the rotation interval and an Edit Triggers button " +
                               "where you can add or remove phrases.",
@@ -1785,10 +1785,10 @@ namespace ConditioningControlPanel.Avalonia.Tours
                 Icon = "📚",
                 Title = "Phrases & Community Prompts",
                 Description = "Three more shelves in the Workshop:\n\n" +
-                              "• Manage Phrases — her speech bubble library, with on/off per phrase.\n" +
-                              "• Phrase Presets — save a phrase config and load it later.\n" +
-                              "• Community Prompts — Browse / Import / Export AI personalities other users have made.\n" +
-                              "• Hypnotube Links — comma-separated video URLs she's allowed to suggest (2000-char cap).",
+                              "• Manage Phrases - her speech bubble library, with on/off per phrase.\n" +
+                              "• Phrase Presets - save a phrase config and load it later.\n" +
+                              "• Community Prompts - Browse / Import / Export AI personalities other users have made.\n" +
+                              "• Hypnotube Links - comma-separated video URLs she's allowed to suggest (2000-char cap).",
                 RequiresTab = "companion",
                 TargetElementName = "BtnManagePhrases",
                 PrepareTargetWindowAction = CompanionTutorialPrep.ExpandWorkshop,
@@ -1803,7 +1803,7 @@ namespace ConditioningControlPanel.Avalonia.Tours
                               "• Want to replay this tour? The 🎓 button next to the page title runs it again.\n" +
                               "• It's also in the ? menu (top-right) under Companion.\n" +
                               "• Most controls have hover tooltips with extra detail.\n\n" +
-                              "Click Finish — go play.",
+                              "Click Finish - go play.",
                 RequiresTab = "companion",
                 TextPosition = TutorialStepPosition.Center
             });
@@ -1976,7 +1976,7 @@ namespace ConditioningControlPanel.Avalonia.Tours
                     Id = "mod_welcome",
                     Icon = "\uD83D\uDD27",
                     Title = "Welcome to the Mod Creator!",
-                    Description = "This tool lets you build a complete mod visually \u2014 no manual file editing needed.\n\n" +
+                    Description = "This tool lets you build a complete mod visually - no manual file editing needed.\n\n" +
                                   "We'll walk through each tab so you know exactly what everything does. " +
                                   "You can reopen this guide anytime with the ? button in the title bar.",
                     TextPosition = TutorialStepPosition.Center
@@ -1986,7 +1986,7 @@ namespace ConditioningControlPanel.Avalonia.Tours
                     Id = "mod_tab_info",
                     Icon = "\u2139",
                     Title = "Info",
-                    Description = "Start here \u2014 give your mod a name, author, version, and description.\n\n" +
+                    Description = "Start here - give your mod a name, author, version, and description.\n\n" +
                                   "Add a preview image that shows in the mod manager so people know what your mod looks like at a glance.",
                     RequiresTab = "mod:info",
                     TextPosition = TutorialStepPosition.Center
@@ -2017,7 +2017,7 @@ namespace ConditioningControlPanel.Avalonia.Tours
                     Icon = "\uD83C\uDFC6",
                     Title = "Achievements",
                     Description = "Drag and drop custom achievement icons onto each slot. These replace the default badges.\n\n" +
-                                  "Leave slots empty to keep the originals \u2014 you only need to replace what you want to change.",
+                                  "Leave slots empty to keep the originals - you only need to replace what you want to change.",
                     RequiresTab = "mod:achievements",
                     TextPosition = TutorialStepPosition.Center
                 },
@@ -2066,7 +2066,7 @@ namespace ConditioningControlPanel.Avalonia.Tours
                     Id = "mod_tab_triggers",
                     Icon = "\uD83D\uDCA5",
                     Title = "Triggers",
-                    Description = "Customize trigger text \u2014 what happens on Freeze, Reset, Collapse, and Autonomy events.\n\n" +
+                    Description = "Customize trigger text - what happens on Freeze, Reset, Collapse, and Autonomy events.\n\n" +
                                   "Type your own text for each trigger to match your mod's theme.",
                     RequiresTab = "mod:triggers",
                     TextPosition = TutorialStepPosition.Center
@@ -2086,7 +2086,7 @@ namespace ConditioningControlPanel.Avalonia.Tours
                     Id = "mod_tab_phrases",
                     Icon = "\uD83D\uDCAC",
                     Title = "Phrases",
-                    Description = "The big one! Add phrases for every situation \u2014 greetings, idle chatter, gaming, browsing, level ups, and more.\n\n" +
+                    Description = "The big one! Add phrases for every situation - greetings, idle chatter, gaming, browsing, level ups, and more.\n\n" +
                                   "Click a category to expand it, then add as many phrases as you want. " +
                                   "The companion picks randomly from your list.",
                     RequiresTab = "mod:phrases",
@@ -2098,7 +2098,7 @@ namespace ConditioningControlPanel.Avalonia.Tours
                     Icon = "\uD83D\uDD04",
                     Title = "Text Replacements",
                     Description = "Find-and-replace across the entire UI. Map words to your mod's equivalent.\n\n" +
-                                  "These apply everywhere automatically \u2014 every label, phrase, and message gets substituted.",
+                                  "These apply everywhere automatically - every label, phrase, and message gets substituted.",
                     RequiresTab = "mod:replacements",
                     TextPosition = TutorialStepPosition.Center
                 },
@@ -2114,7 +2114,7 @@ namespace ConditioningControlPanel.Avalonia.Tours
             };
         }
 
-        // Awareness Engine tutorial \u2014 narrated around setting up a "good boy" clicker
+        // Awareness Engine tutorial - narrated around setting up a "good boy" clicker
         // so each section has a concrete reason to exist in the user's head, not just
         // a description. The script is intentionally non-technical: the engine, OCR,
         // cooldowns, scroll dedup, and the action editor are all explained in plain
@@ -2130,7 +2130,7 @@ namespace ConditioningControlPanel.Avalonia.Tours
                     Icon = "\uD83D\uDC41",
                     Title = "The Awareness Engine",
                     Description = "The Awareness Engine watches your screen and your typing for keywords " +
-                                  "you choose, then reacts \u2014 a sound, a glow, a praise line from your companion, " +
+                                  "you choose, then reacts - a sound, a glow, a praise line from your companion, " +
                                   "anything you want.\n\n" +
                                   "Let's walk through it by setting up a simple \"good boy\" clicker.",
                     RequiresTab = "awareness",
@@ -2152,7 +2152,7 @@ namespace ConditioningControlPanel.Avalonia.Tours
                     Id = "aw_pulse",
                     Icon = "\uD83D\uDCE1",
                     Title = "Live Pulse Feed",
-                    Description = "Every time a keyword fires, it lands here \u2014 your live receipt.\n\n" +
+                    Description = "Every time a keyword fires, it lands here - your live receipt.\n\n" +
                                   "If you're ever wondering \"did the engine actually catch that?\", " +
                                   "this feed tells you in real time. We'll come back here in a moment.",
                     RequiresTab = "awareness",
@@ -2166,7 +2166,7 @@ namespace ConditioningControlPanel.Avalonia.Tours
                     Title = "Screen OCR",
                     Description = "Screen OCR scans your monitors every few seconds and reads the text on them.\n\n" +
                                   "This is how the engine catches words on web pages, chat windows, " +
-                                  "captions, anything visible \u2014 even if you didn't type it yourself.\n\n" +
+                                  "captions, anything visible - even if you didn't type it yourself.\n\n" +
                                   "It runs entirely on your computer. Nothing is sent anywhere.",
                     RequiresTab = "awareness",
                     TargetElementName = "ChkAwarenessOcr",
@@ -2178,7 +2178,7 @@ namespace ConditioningControlPanel.Avalonia.Tours
                     Icon = "\u2328",
                     Title = "Keyboard Watching",
                     Description = "Keyboard mode watches what you type, even outside this app.\n\n" +
-                                  "Either source works on its own \u2014 you can use OCR, keyboard, or both at once. " +
+                                  "Either source works on its own - you can use OCR, keyboard, or both at once. " +
                                   "Most people leave both on.",
                     RequiresTab = "awareness",
                     TargetElementName = "ChkAwarenessKeyboard",
@@ -2213,11 +2213,11 @@ namespace ConditioningControlPanel.Avalonia.Tours
                     Id = "aw_scroll_note",
                     Icon = "\uD83D\uDCDC",
                     Title = "What About Scrolling?",
-                    Description = "When you scroll a page, OCR sees the same words again \u2014 you might worry that " +
+                    Description = "When you scroll a page, OCR sees the same words again - you might worry that " +
                                   "scrolling would spam the engine with false fires.\n\n" +
                                   "It doesn't. The engine waits for a word to stay in the same spot for two scans " +
                                   "before counting it. Scrolling, redraws, and cursor movement are filtered out automatically.\n\n" +
-                                  "There's nothing here for you to configure \u2014 it just works.",
+                                  "There's nothing here for you to configure - it just works.",
                     RequiresTab = "awareness",
                     TargetElementName = "AwarenessPulseFeed",
                     TextPosition = TutorialStepPosition.Bottom
@@ -2242,7 +2242,7 @@ namespace ConditioningControlPanel.Avalonia.Tours
                     Description = "Same-word cooldown = the gap before the same keyword can fire again.\n\n" +
                                   "If \"good boy\" appears five times on a page, only the first one fires. " +
                                   "Other keywords can still fire normally during that window.\n\n" +
-                                  "Crank both cooldowns up if you ever feel overloaded \u2014 it's the gentlest way to dial things back.",
+                                  "Crank both cooldowns up if you ever feel overloaded - it's the gentlest way to dial things back.",
                     RequiresTab = "awareness",
                     TargetElementName = "SliderAwarenessSameWordCooldown",
                     TextPosition = TutorialStepPosition.Top
@@ -2252,7 +2252,7 @@ namespace ConditioningControlPanel.Avalonia.Tours
                     Id = "aw_demo_fire",
                     Icon = "\u2728",
                     Title = "Watch It Catch a Word",
-                    Description = "Watch the pulse feed \u2014 the engine just simulated a fire for the word \"good boy\".\n\n" +
+                    Description = "Watch the pulse feed - the engine just simulated a fire for the word \"good boy\".\n\n" +
                                   "That's exactly what happens when OCR or your keyboard catches one of your keywords " +
                                   "in real life. If your companion is attached, she may have said something too.",
                     RequiresTab = "awareness",
@@ -2271,7 +2271,7 @@ namespace ConditioningControlPanel.Avalonia.Tours
                     Title = "Preset Packs",
                     Description = "The easiest way to start: install a preset pack.\n\n" +
                                   "Each pack bundles a set of keywords and the responses that fire when they're caught. " +
-                                  "The Puppy Pet pack already includes \"good boy\" with a clicker sound and a praise line \u2014 " +
+                                  "The Puppy Pet pack already includes \"good boy\" with a clicker sound and a praise line - " +
                                   "pick it if you want a one-click clicker setup, or browse the others.",
                     RequiresTab = "awareness",
                     TargetElementName = "AwarenessPresetItems",
@@ -2284,7 +2284,7 @@ namespace ConditioningControlPanel.Avalonia.Tours
                     Title = "Highlight Glow",
                     Description = "When a keyword is caught on-screen, the engine paints a glow around it " +
                                   "so you actually see the recognition happen.\n\n" +
-                                  "Pick a color you like \u2014 pink by default. The \"visible in screen capture\" toggle " +
+                                  "Pick a color you like - pink by default. The \"visible in screen capture\" toggle " +
                                   "decides whether OBS / streaming software sees the glow too.",
                     RequiresTab = "awareness",
                     TargetElementName = "AwarenessHighlightColorPanel",
@@ -2295,7 +2295,7 @@ namespace ConditioningControlPanel.Avalonia.Tours
                     Id = "aw_advanced",
                     Icon = "\uD83D\uDD27",
                     Title = "Your Keyword Triggers",
-                    Description = "This panel is your keyword list \u2014 every word the engine listens for, and what " +
+                    Description = "This panel is your keyword list - every word the engine listens for, and what " +
                                   "it does when it catches one.\n\n" +
                                   "Want more control (swap the clicker sound, change the praise line, add XP per " +
                                   "fire, send time to a Chaster lock)? The \"Customize individual triggers " +
@@ -2318,7 +2318,7 @@ namespace ConditioningControlPanel.Avalonia.Tours
                     Description = "Each row in the editor is one keyword, with a stack of responses below it:\n\n" +
                                   "\uD83D\uDD0A sound clip   \u2728 glow   \uD83D\uDCAC avatar line   \u2B50 XP\n" +
                                   "\uD83D\uDCF3 haptic   \u23F1 extend session   \uD83D\uDD12 Chaster time\n\n" +
-                                  "Add, remove, retune any of them \u2014 your changes save the moment you close.\n\n" +
+                                  "Add, remove, retune any of them - your changes save the moment you close.\n\n" +
                                   "We'll pop the editor open with the Puppy preset for you when you finish this tour.",
                     RequiresTab = "awareness",
                     TextPosition = TutorialStepPosition.Center
@@ -2329,10 +2329,10 @@ namespace ConditioningControlPanel.Avalonia.Tours
                     Icon = "\u2764",
                     Title = "You're Set",
                     Description = "That's the whole tour.\n\n" +
-                                  "\u2022 Privacy: nothing leaves your machine \u2014 OCR runs locally on Windows.\n" +
+                                  "\u2022 Privacy: nothing leaves your machine - OCR runs locally on Windows.\n" +
                                   "\u2022 Feeling overloaded later? Raise the two cooldown sliders.\n" +
                                   "\u2022 Want this tour again? It's in the ? button at the top right.\n\n" +
-                                  "Click Finish \u2014 the editor will open so you can play.",
+                                  "Click Finish - the editor will open so you can play.",
                     TextPosition = TutorialStepPosition.Center
                 }
             };
@@ -2424,7 +2424,7 @@ namespace ConditioningControlPanel.Avalonia.Tours
         // Deeper editor coachmarks. These steps target element names that live
         // inside the editor *window*, so the consumer must construct the
         // TutorialOverlay against the editor window (not MainWindow). No
-        // RequiresTab \u2014 the editor is its own surface.
+        // RequiresTab - the editor is its own surface.
         private List<TutorialStep> CreateDeeperEditorSteps()
         {
             return new List<TutorialStep>
@@ -2710,7 +2710,7 @@ namespace ConditioningControlPanel.Avalonia.Tours
                     AdvanceTrigger = TutorialAdvanceTrigger.OnEvent,
                     AdvanceEventName = "FileSaved",
                     AllowManualSkip = true,
-                    // The OS save dialog is on top of the editor \u2014 let clicks
+                    // The OS save dialog is on top of the editor - let clicks
                     // pass through the dim so the user can pick a filename and
                     // hit Save without our overlay eating their input.
                     BlockBackgroundClicks = false

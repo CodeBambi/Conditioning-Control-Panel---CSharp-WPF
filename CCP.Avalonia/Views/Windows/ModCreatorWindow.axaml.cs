@@ -337,6 +337,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             CoreTutorial.Start("Modding");
             if (!CoreTutorial.IsActive) return;
 
+            // WPF ModCreatorWindow.LaunchTutorial :257: a step with RequiresTab "mod:xxx" opens that
+            // section of THIS window, and the first step's callback is fired by hand.
+            var tours = global::ConditioningControlPanel.Avalonia.Tours.TutorialHead.Service;
+            foreach (var step in tours.CurrentSteps)
+            {
+                if (step.RequiresTab != null && step.RequiresTab.StartsWith("mod:", StringComparison.Ordinal))
+                {
+                    var sectionKey = step.RequiresTab.Substring(4);
+                    step.OnActivate = () => NavigateToSection(sectionKey);
+                }
+            }
+            try { tours.CurrentStep?.OnActivate?.Invoke(); } catch { /* a tour never blocks on UI quirks */ }
+
             _tutorialOverlay = new TutorialOverlay(this);
             _tutorialOverlay.Closed += (_, _) => _tutorialOverlay = null;
             _tutorialOverlay.Show();
