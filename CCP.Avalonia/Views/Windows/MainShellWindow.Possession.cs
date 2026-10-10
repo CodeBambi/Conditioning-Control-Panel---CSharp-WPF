@@ -38,6 +38,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 PossessionDirector.Current?.Dispose();
                 PossessionDirector.Current = new PossessionDirector(lockdown, PossessionHeadEffects(), PossessionHostFor(() => Current));
                 PossessionDirector.Current.Scenes.AddRange(PossessionHeadScenes());
+                InstallPossessionRemember(lockdown);
             }
             catch (Exception ex) { Log.Warning(ex, "Possession: install failed"); }
         }
@@ -53,6 +54,29 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             new Services.Possession.Effects.RetitleEffect(),
             new Services.Possession.Effects.GlitchPortraitEffect(),
         };
+
+        /// <summary>WPF PossessionRemember.Install: arm on a Full Doki exit, and spend a charge armed by
+        /// the last run once this launch's window has been up for twenty seconds.</summary>
+        private static DispatcherTimer? _possessionRememberTimer;
+
+        private static void InstallPossessionRemember(LockdownService lockdown)
+        {
+            try
+            {
+                _possessionRememberTimer?.Stop();
+                PossessionRemember.Current?.Dispose();
+                var remember = PossessionRemember.Current = new PossessionRemember(lockdown, PossessionHostFor(() => Current));
+                remember.SchedulePendingCharge(DateTime.UtcNow);
+                if (!remember.IsWaiting) return;
+                _possessionRememberTimer = new DispatcherTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Background, (t, _) =>
+                {
+                    remember.Tick(DateTime.UtcNow);
+                    if (!remember.IsWaiting) (t as DispatcherTimer)?.Stop();
+                });
+                _possessionRememberTimer.Start();
+            }
+            catch (Exception ex) { Log.Warning(ex, "Possession: remember install failed"); }
+        }
 
         /// <summary>WPF PossessionSceneCatalog, minus the rail sweep (its victims are the rail doors,
         /// which are buttons and not enrolled on this head).</summary>
