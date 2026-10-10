@@ -98,6 +98,17 @@ namespace ConditioningControlPanel.Services
                 case "haptic_stop": RemoteHaptics.Stop(); return null;
                 case "duck_audio": CoreAudio.Duck(80); return null;
                 case "unduck_audio": CoreAudio.Unduck(); return null;
+                // WPF RemoteControlService.cs:1457-1470. No clips: a silent no-op there, told to the controller here.
+                case "trigger_mind_wipe":
+                    if (CoreMindWipe.TriggerOnceProvider == null) return NotOnThisBuild;
+                    if (CoreMindWipe.ClipCount <= 0) return "no clips";
+                    CoreMindWipe.TriggerOnce();
+                    return null;
+                case "start_mind_wipe":
+                    if (CoreMindWipe.StartProvider == null) return NotOnThisBuild;
+                    CoreMindWipe.Start(s.MindWipeFrequency, s.MindWipeVolume / 100.0);
+                    return null;
+                case "stop_mind_wipe": CoreMindWipe.Stop(); return null;
                 case "enable_strict_lock": s.StrictLockEnabled = true; CoreSettings.Save(); return null;
                 case "disable_strict_lock": s.StrictLockEnabled = false; CoreSettings.Save(); return null;
                 case "enable_panic": s.PanicKeyEnabled = true; CoreSettings.Save(); SyncPanicUi(); return null;
@@ -114,6 +125,7 @@ namespace ConditioningControlPanel.Services
             if (force) StopHaptics(); else RemoteHaptics.Stop();
             try { CoreHaptics.Service?.PanicStop(); } catch { }
             CoreAudio.Unduck();
+            CoreMindWipe.Stop();   // WPF App.MindWipe?.Stop() on both stop paths
             if (force) CoreEngine.Stop();
             else
             {

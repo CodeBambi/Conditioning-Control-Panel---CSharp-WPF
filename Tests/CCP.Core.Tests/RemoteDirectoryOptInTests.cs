@@ -176,3 +176,51 @@ public sealed class RemoteDirectoryClaimTests
     public void Only_a_plain_web_address_reaches_the_browser(string? url, bool ok) =>
         Assert.Equal(ok, ConditioningControlPanel.Services.Lobby.RemoteDirectoryApi.SafeSessionUrl(url) != null);
 }
+
+/// <summary>The Mind Wipe verbs (WPF RemoteControlService.cs:1457-1470) on Core RemoteCommands.</summary>
+[Collection(SessionStatics.Name)]
+public sealed class RemoteMindWipeVerbTests
+{
+    [Fact]
+    public void Mind_wipe_verbs_reach_the_player_and_both_stop_paths_stop_it()
+    {
+        var saved = (ConditioningControlPanel.CoreMindWipe.TriggerOnceProvider, ConditioningControlPanel.CoreMindWipe.StartProvider,
+            ConditioningControlPanel.CoreMindWipe.StopProvider, ConditioningControlPanel.CoreMindWipe.ClipCountProvider);
+        var s = ConditioningControlPanel.CoreSettings.Current;
+        var (freq, vol) = (s.MindWipeFrequency, s.MindWipeVolume);
+        try
+        {
+            (ConditioningControlPanel.CoreMindWipe.TriggerOnceProvider, ConditioningControlPanel.CoreMindWipe.StartProvider) = (null, null);
+            Assert.Equal(RemoteCommands.NotOnThisBuild, RemoteCommands.Execute("trigger_mind_wipe", null));
+            Assert.Equal(RemoteCommands.NotOnThisBuild, RemoteCommands.Execute("start_mind_wipe", null));
+
+            int once = 0, stops = 0, clips = 0;
+            (double F, double V)? started = null;
+            ConditioningControlPanel.CoreMindWipe.TriggerOnceProvider = () => once++;
+            ConditioningControlPanel.CoreMindWipe.StartProvider = (f, v) => started = (f, v);
+            ConditioningControlPanel.CoreMindWipe.StopProvider = () => stops++;
+            ConditioningControlPanel.CoreMindWipe.ClipCountProvider = () => clips;
+
+            Assert.Equal("no clips", RemoteCommands.Execute("trigger_mind_wipe", null));   // the controller is told
+            Assert.Equal(0, once);
+            clips = 3;
+            Assert.Null(RemoteCommands.Execute("trigger_mind_wipe", null));
+            Assert.Equal(1, once);
+
+            (s.MindWipeFrequency, s.MindWipeVolume) = (6, 50);
+            Assert.Null(RemoteCommands.Execute("start_mind_wipe", null));
+            Assert.Equal((6.0, 0.5), started);   // the subject's own frequency and volume, never the controller's
+
+            Assert.Null(RemoteCommands.Execute("stop_mind_wipe", null));
+            Assert.Equal(1, stops);
+            RemoteCommands.StopEffects(force: false);   // the controller left / the session ended
+            Assert.Equal(2, stops);
+        }
+        finally
+        {
+            (ConditioningControlPanel.CoreMindWipe.TriggerOnceProvider, ConditioningControlPanel.CoreMindWipe.StartProvider,
+                ConditioningControlPanel.CoreMindWipe.StopProvider, ConditioningControlPanel.CoreMindWipe.ClipCountProvider) = saved;
+            (s.MindWipeFrequency, s.MindWipeVolume) = (freq, vol);
+        }
+    }
+}
