@@ -28,19 +28,22 @@
                             <Border x:Name="PART_Track"/>
                             <Border x:Name="PART_Indicator" HorizontalAlignment="Left" CornerRadius="8"
                                     Background="{TemplateBinding Foreground}">
-                                <!-- Static top gloss so the fill reads as a lit bar, not a flat strip.
-                                     Gradient only - no per-frame work. -->
-                                <Border CornerRadius="8">
-                                    <Border.Background>
-                                        <LinearGradientBrush StartPoint="0.5,0" EndPoint="0.5,1">
-                                            <GradientStop Color="#50FFFFFF" Offset="0"/>
-                                            <GradientStop Color="#00FFFFFF" Offset="0.55"/>
-                                            <GradientStop Color="#22000000" Offset="1"/>
-                                        </LinearGradientBrush>
-                                    </Border.Background>
-                                </Border>
+                                <!-- Depth wave 10: the TUBE (the XP bar's recipe from Depth.xaml).
+                                     Gloss over the program's accent, a bead riding the leading
+                                     edge. Static gradients, no per-frame work. -->
+                                <Grid>
+                                    <Border CornerRadius="8" Background="{StaticResource DepthTubeGloss}"/>
+                                    <Ellipse x:Name="TubeBead" Width="12" Height="12" Margin="0,0,2,0"
+                                             HorizontalAlignment="Right" IsHitTestVisible="False"
+                                             Fill="{StaticResource DepthTubeBead}"/>
+                                </Grid>
                             </Border>
                         </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="Value" Value="0">
+                                <Setter TargetName="TubeBead" Property="Visibility" Value="Collapsed"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
@@ -624,7 +627,7 @@
                                                         <DataTrigger.EnterActions>
                                                             <BeginStoryboard>
                                                                 <Storyboard RepeatBehavior="Forever" AutoReverse="True"
-                                                                            Timeline.DesiredFrameRate="24">
+                                                                            Timeline.DesiredFrameRate="30">
                                                                     <DoubleAnimation Storyboard.TargetName="PipGlow"
                                                                                      Storyboard.TargetProperty="Opacity"
                                                                                      From="0.35" To="0.95" Duration="0:0:1.2">
@@ -1123,7 +1126,15 @@
                                     </ItemsControl.ItemsPanel>
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
-                                            <Border Width="360" MinHeight="92" Margin="0,0,10,10" Padding="14,12"
+                                            <!-- Depth wave 10: each task is a FLOATING card. The band
+                                                 under it uses the 10 px gap the WrapPanel already had;
+                                                 the status border keeps its colour, the float rim sits
+                                                 just inside it. -->
+                                            <Grid Margin="0,0,10,10">
+                                            <Border Height="12" VerticalAlignment="Bottom" Margin="6,0,6,-8" CornerRadius="6"
+                                                    IsHitTestVisible="False" Opacity="{Binding RowOpacity}"
+                                                    Background="{StaticResource DepthFloatBand}"/>
+                                            <Border Width="360" MinHeight="92" Padding="14,12"
                                                     CornerRadius="12"
                                                     Opacity="{Binding RowOpacity}"
                                                     Background="{DynamicResource SurfaceBgBrush}"
@@ -1143,6 +1154,10 @@
                                                         <RowDefinition Height="Auto"/>
                                                         <RowDefinition Height="Auto"/>
                                                     </Grid.RowDefinitions>
+
+                                                    <Border Grid.ColumnSpan="3" Grid.RowSpan="3" Margin="-14,-12"
+                                                            CornerRadius="11" BorderThickness="1" IsHitTestVisible="False"
+                                                            BorderBrush="{StaticResource DepthFloatRim}"/>
 
                                                     <!-- The app's own product icon for whatever verifies
                                                          this task. Full-colour on purpose: the Dashboard
@@ -1213,14 +1228,19 @@
                                                         </Grid.ColumnDefinitions>
                                                         <Grid Grid.Column="0" Height="6" VerticalAlignment="Center">
                                                             <Border CornerRadius="3"
-                                                                    Background="{DynamicResource PanelAccentBrush}"/>
+                                                                    Background="{StaticResource DepthWellFloorBrush}"/>
+                                                            <Border Height="3" VerticalAlignment="Top" CornerRadius="3,3,0,0"
+                                                                    IsHitTestVisible="False" Background="{StaticResource DepthWellTop}"/>
                                                             <Grid>
                                                                 <Grid.ColumnDefinitions>
                                                                     <ColumnDefinition Width="{Binding ProgressStar}"/>
                                                                     <ColumnDefinition Width="{Binding RemainderStar}"/>
                                                                 </Grid.ColumnDefinitions>
                                                                 <Border Grid.Column="0" CornerRadius="3"
-                                                                        Background="{Binding AccentBrush}"/>
+                                                                        Background="{Binding AccentBrush}">
+                                                                    <Border CornerRadius="3" IsHitTestVisible="False"
+                                                                            Background="{StaticResource DepthTubeGloss}"/>
+                                                                </Border>
                                                             </Grid>
                                                         </Grid>
                                                         <TextBlock Grid.Column="1" Text="{Binding ProgressText}"
@@ -1252,6 +1272,7 @@
                                                             Click="BtnProgramOpenMantras_Click"/>
                                                 </Grid>
                                             </Border>
+                                            </Grid>
                                             <DataTemplate.Triggers>
                                                 <!-- One-shot pop when a task flips to complete. The
                                                      carrier's JustCompleted is true only on the rebuild

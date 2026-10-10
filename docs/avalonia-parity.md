@@ -527,3 +527,9 @@ ported-by-merge, needs-port (with its port lane) or n/a with a reason. Tick its 
 
 Row `win-descent-ceremony` was removed with the WPF window (`3aa4801fb`): main retired the migration
 ceremony, so the Avalonia `DescentCeremonyWindow` and Core `DescentCeremonyCopy` went too (-compat).
+
+## main-sync-6 (releases 7.1.0-7.1.5 "Stay Tuned", pin `11d7c3afc`)
+
+The delta ledger for the sixth main sync (`avalonia-port/main-20261009`) is
+[`avalonia-main-sync-20261009.md`](avalonia-main-sync-20261009.md): one row per non-merge commit (148), each
+ported-by-merge, needs-port (with its `sync6-*` port lane) or n/a with a reason. Tick its rows as each lane lands.

@@ -57,15 +57,14 @@
                                 <!-- Literal, not a loc key: the intake's own page content is
                                      English-only, and the launch button beside it has always been
                                      a literal too. Localise both together when the page localises. -->
-                                <TextBlock Text="Graded Intake" FontSize="17" FontWeight="Bold"
-                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <TextBlock Style="{StaticResource Type.CardTitle}" Text="Graded Intake" VerticalAlignment="Center"/>
                                 <Border Background="{DynamicResource TransparentPink20Brush}" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
                                         CornerRadius="6" Padding="6,1" Margin="10,0,0,0" VerticalAlignment="Center">
                                     <TextBlock Text="{loc:Str label_beta_2}" Foreground="{DynamicResource PinkBrush}" FontFamily="Consolas, Courier New" FontWeight="Bold" FontSize="9.5"/>
                                 </Border>
                             </StackPanel>
                             <TextBlock Text="A banded descent that reads how you answer - and how long you take - and drafts a personalised session from it."
-                                       Foreground="{StaticResource TextMutedBrush}" FontSize="11.5"
+                                       Foreground="{StaticResource TextSecondaryBrush}" FontSize="11.5"
                                        Margin="0,1,0,0" TextTrimming="CharacterEllipsis"/>
                         </StackPanel>
 

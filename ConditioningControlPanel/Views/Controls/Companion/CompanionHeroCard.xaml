@@ -590,7 +590,7 @@
                                             VerticalAlignment="Center"
                                             Visibility="{Binding ChatShortcutHint, Converter={StaticResource CmpHasContentToVis}}">
                                         <TextBlock Text="{Binding ChatShortcutHint}" FontSize="10" FontWeight="SemiBold"
-                                                   Foreground="White" Opacity="0.8"/>
+                                                   Foreground="{DynamicResource TextSecondaryBrush}"/>
                                     </Border>
                                 </StackPanel>
                             </Button>

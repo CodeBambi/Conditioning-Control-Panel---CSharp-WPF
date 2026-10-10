@@ -72,4 +72,56 @@ public class AnimatedLogoTests
         // Drawing another frame cannot accumulate transforms or damage the cached artwork.
         Assert.Equal(still, Render(0, 0, "restart"));
     });
+
+    [Fact]
+    public void RestDriveSitsOnTheIdleFloorAndHoverRunsThreeTimesFaster()
+    {
+        Assert.Equal(AnimatedLogoImage.IdleFloor, AnimatedLogoImage.Drive(0), 6);
+        Assert.Equal(1.0, AnimatedLogoImage.Drive(1), 6);
+        Assert.True(AnimatedLogoImage.IdleFloor >= .3 && AnimatedLogoImage.IdleFloor <= .4);
+        Assert.Equal(3.0, AnimatedLogoImage.PhaseRate(1) / AnimatedLogoImage.PhaseRate(0), 6);
+        Assert.Equal(Math.Tau / 12, AnimatedLogoImage.PhaseRate(0), 6);
+        // Out-of-range energy never pushes the drive past the hover look.
+        Assert.Equal(1.0, AnimatedLogoImage.Drive(4), 6);
+        Assert.Equal(AnimatedLogoImage.IdleFloor, AnimatedLogoImage.Drive(-1), 6);
+    }
+
+    [Fact]
+    public void RestFramesHalfASecondApartMoveVisiblyMoreThanTheOldStillRest() => WpfRenderHarness.OnStaThread(() =>
+    {
+        using var stream = Application.GetResourceStream(new Uri(AnimatedLogoImage.ArtworkUri)).Stream;
+        using var renderer = new DashboardLogoRenderer(stream);
+        using var surface = SKSurface.Create(new SKImageInfo(360, 360));
+        string? folder = Environment.GetEnvironmentVariable("CCP_LOGO_CAPTURE_DIR");
+        byte[] Render(double phase, double drive, string? label)
+        {
+            renderer.Draw(surface.Canvas, 360, 360, phase, drive);
+            using var image = surface.Snapshot();
+            using var pixels = SKBitmap.FromImage(image);
+            if (label != null && folder is { Length: > 0 })
+            {
+                Directory.CreateDirectory(folder);
+                using var encoded = image.Encode(SKEncodedImageFormat.Png, 100);
+                File.WriteAllBytes(Path.Combine(folder, "logo-" + label + ".png"), encoded.ToArray());
+            }
+            return pixels.Bytes;
+        }
+        static int Moved(byte[] a, byte[] b)
+        {
+            int moved = 0;
+            for (int i = 0; i < a.Length; i += 4)
+                if (Math.Abs(a[i] - b[i]) + Math.Abs(a[i + 1] - b[i + 1]) + Math.Abs(a[i + 2] - b[i + 2]) > 24) moved++;
+            return moved;
+        }
+        const double start = 1.1;
+        double later = start + AnimatedLogoImage.PhaseRate(0) * .5;
+        var restA = Render(start, AnimatedLogoImage.Drive(0), "rest-a");
+        var restB = Render(later, AnimatedLogoImage.Drive(0), "rest-b");
+        Render(later, AnimatedLogoImage.Drive(1), "hover");
+        var oldA = Render(start, 0, null);
+        var oldB = Render(later, 0, null);
+        int rest = Moved(restA, restB), old = Moved(oldA, oldB);
+        Assert.True(rest > 0, "the logo must move at rest");
+        Assert.True(rest > old * 1.3, $"rest motion {rest} px should clearly beat the old still rest {old} px");
+    });
 }

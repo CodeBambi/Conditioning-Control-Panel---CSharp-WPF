@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using ConditioningControlPanel.Controls.Depth;
+using ConditioningControlPanel.Controls.NavRail;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Services.Lobby;
 
@@ -33,6 +35,27 @@ public sealed class LobbyRowView
     /// <summary>The join would be refused by the game's gate: the button shows with a lock.</summary>
     public bool Locked { get; }
     public double ButtonOpacity => Locked ? 0.55 : 1.0;
+
+    // ---- polish wave 10 (depth): a lobby table is a FLOATING card, its Join / Watch button a
+    // RAISED plank. The page template binds these (the card rim, the float band under the card
+    // in the Social hue, the plank's bevel and sheen); nothing here moves at rest.
+
+    /// <summary>The Lobby lives in Social: its card shadows are tinted with Social's hue.</summary>
+    public static Color DepthHue => NavStripRules.Accent("social");
+    /// <summary>The 1 px rim of a floating card (theme DepthFloatRim).</summary>
+    public Brush? CardRim => PageDepthPaint.Theme("DepthFloatRim");
+    /// <summary>The soft band under the card: ShadowColor(Social, FloatAlpha), FloatPx long.</summary>
+    public Brush CardShadow => SharedCardShadow;
+    public double CardShadowPx => DepthRules.FloatPx;
+    /// <summary>The Join / Watch plank: raised bevel + sheen; a locked join stays raised but dim.</summary>
+    public Brush? ButtonBevel => PageDepthPaint.Theme("DepthRaisedBevel");
+    public Brush? ButtonSheen => PageDepthPaint.Theme("DepthRaisedSheen");
+    /// <summary>The plank's drop band, in the Social hue (ShadowAlpha), RaisedPx long.</summary>
+    public Brush ButtonDrop => SharedButtonDrop;
+    public double ButtonDropPx => DepthRules.RaisedPx;
+
+    private static readonly Brush SharedCardShadow = PageDepthPaint.Shadow(DepthHue, DepthRules.FloatAlpha);
+    private static readonly Brush SharedButtonDrop = PageDepthPaint.Shadow(DepthHue, DepthRules.ShadowAlpha);
 
     public LobbyRowView(LobbyRow row, LobbyGates gates, Func<string, string>? loc = null)
     {

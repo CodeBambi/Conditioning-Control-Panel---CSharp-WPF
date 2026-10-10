@@ -26,8 +26,8 @@ public class SparkleWalletRenderTests
             var wallet = new SparkleWallet();
             var host = new Grid { Background = Brushes.Transparent };
             host.Children.Add(wallet);
-            host.Measure(new Size(196, 48));
-            host.Arrange(new Rect(0, 0, 196, 48));
+            host.Measure(new Size(138, 29));
+            host.Arrange(new Rect(0, 0, 138, 29));
             host.UpdateLayout();
 
             var body = wallet.FindName("WaveArm") as Image;
@@ -35,22 +35,22 @@ public class SparkleWalletRenderTests
             Assert.NotNull(body!.Source);
             Assert.IsType<RotateTransform>(body.RenderTransform);
 
-            var rtb = new RenderTargetBitmap(196, 48, 96, 96, PixelFormats.Pbgra32);
+            var rtb = new RenderTargetBitmap(138, 29, 96, 96, PixelFormats.Pbgra32);
             rtb.Render(host);
-            var px = new byte[196 * 48 * 4];
-            rtb.CopyPixels(px, 196 * 4, 0);
+            var px = new byte[138 * 29 * 4];
+            rtb.CopyPixels(px, 138 * 4, 0);
 
-            // The mascot column is the first 50px. Count opaque pixels whose hue is gold-ish
+            // The mascot column is the first 31px (nav polish wave 6 sized the pill natively at 29 x 138). Count opaque pixels whose hue is gold-ish
             // (red and green well above blue), which only the sprite's casing can supply.
             int gold = 0;
-            for (int y = 0; y < 48; y++)
-                for (int x = 0; x < 50; x++)
+            for (int y = 0; y < 29; y++)
+                for (int x = 0; x < 31; x++)
                 {
-                    int i = (y * 196 + x) * 4;
+                    int i = (y * 138 + x) * 4;
                     byte b = px[i], g = px[i + 1], r = px[i + 2], a = px[i + 3];
                     if (a > 200 && r > 120 && g > 90 && r > b + 40 && g > b + 20) gold++;
                 }
-            Assert.True(gold > 150, $"expected the gold croupier casing in the mascot column, found {gold} gold pixels");
+            Assert.True(gold > 50, $"expected the gold croupier casing in the mascot column, found {gold} gold pixels");
         });
     }
 }

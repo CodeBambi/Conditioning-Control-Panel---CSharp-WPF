@@ -9187,6 +9187,25 @@ namespace ConditioningControlPanel.Models
         /// </summary>
         public int DashboardToggleHintUses { get; set; }
 
+        /// <summary>
+        /// Nav rework (2026-10-06): the last tab opened in each rail section, as a JSON object
+        /// {"section": "tabKey"}. Empty = every section opens on its default tab
+        /// (<see cref="Services.UI.NavSections.DefaultTab"/>). Machine-local view state.
+        /// </summary>
+        public string NavLastTabBySection { get; set; } = "";
+
+        /// <summary>Times the one-time "What moved" card has been shown (0 = never; the ladder
+        /// presents it once, replay lives in Help).</summary>
+        public int WhatMovedCardShown { get; set; }
+
+        /// <summary>Old tab keys followed to their new home. The "Moved: Section > Page" toast
+        /// shows for the first three hits, then retires itself.</summary>
+        public int NavMovedToastHits { get; set; }
+
+        /// <summary>The Ctrl+K palette's last five destinations (row ids, newest first), as a JSON
+        /// string array. Shown when the search box is empty; a stale id is skipped.</summary>
+        public string NavSearchRecents { get; set; } = "";
+
         /// <summary>Swap open and toggle gestures on Home feature tiles only.</summary>
         public bool DashboardInvertClicks { get; set; }
 
@@ -9229,6 +9248,30 @@ namespace ConditioningControlPanel.Models
         {
             get => _railRecent;
             set { _railRecent = value ?? new List<string>(); OnPropertyChanged(); }
+        }
+
+        /// <summary>
+        /// Nav polish wave 3: the FAVORITES + RECENT column is a drawer at the right edge of Home.
+        /// True = open. Closed by default; only the drawer's handle writes it (a pin opening it
+        /// for a moment never does), so it is where the player left it on the next launch.
+        /// </summary>
+        [JsonProperty("favorites_drawer_open")]
+        public bool FavoritesDrawerOpen { get; set; } = false;
+
+        private Dictionary<string, DateTime> _billboardSnoozedUntil = new(StringComparer.Ordinal);
+        /// <summary>
+        /// The Tonight Board (2026-10-07): card id to the UTC time its snooze runs out. The x on a
+        /// card puts it away for 7 days (<see cref="Services.DashboardBillboard.SnoozeFor"/>); a
+        /// board post can never be snoozed. Expired entries are pruned when Home builds the deck.
+        /// Machine-local view state.
+        /// </summary>
+        [JsonProperty("billboard_snoozed_until")]
+        public Dictionary<string, DateTime> BillboardSnoozedUntil
+        {
+            get => _billboardSnoozedUntil;
+            set => _billboardSnoozedUntil = value == null
+                ? new Dictionary<string, DateTime>(StringComparer.Ordinal)
+                : new Dictionary<string, DateTime>(value, StringComparer.Ordinal);
         }
 
         #endregion

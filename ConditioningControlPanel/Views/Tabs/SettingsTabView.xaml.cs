@@ -3,6 +3,16 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Automation;
+using System.Windows.Data;
+using System.Windows.Media.Animation;
+using System.Windows.Media.Effects;
+using ConditioningControlPanel.Controls;
+using ConditioningControlPanel.Controls.NavRail;
+using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services;
+using ConditioningControlPanel.Services.UI;
 
 namespace ConditioningControlPanel.Views.Tabs
 {
@@ -45,6 +55,283 @@ namespace ConditioningControlPanel.Views.Tabs
             // app's life, but the hook is balanced on Loaded/Unloaded all the same.
             Loaded += (_, _) => { Services.Prizes.PrizeGrants.GrantsChanged += RefreshV2Badges; RefreshV2Badges(); };
             Unloaded += (_, _) => Services.Prizes.PrizeGrants.GrantsChanged -= RefreshV2Badges;
+
+            // The favorites drawer (nav polish wave 3). Painted closed by the XAML; the saved
+            // state lands here when settings already exist and again from InitFavoritesRail.
+            _drawerPeekTimer.Tick += (_, _) => { _drawerPeekTimer.Stop(); if (!FavoritesDrawer.IsMouseOver) EndFavoritesDrawerPeek(animate: true); };
+            FavoritesDrawer.MouseLeave += (_, _) => { if (_drawerPeeking && !_drawerPeekTimer.IsEnabled) EndFavoritesDrawerPeek(animate: true); };
+            IsVisibleChanged += (_, _) => { if (!IsVisible && _drawerPeeking) EndFavoritesDrawerPeek(animate: false); };
+            ApplyFavoritesDrawerSetting();
+            // The handle wears the mod's colour and its juice (owner, 2026-10-06).
+            PaintFavoritesDrawer();
+            Loaded += (_, _) => { HookFavoritesDrawerMod(); StartFavoritesDrawerFx(); };
+            Unloaded += (_, _) => { UnhookFavoritesDrawerMod(); StopFavoritesDrawerFx(); };
+            IsVisibleChanged += (_, _) => { if (IsVisible) StartFavoritesDrawerFx(); else StopFavoritesDrawerFx(); };
+            FavoritesDrawerHandle.MouseEnter += (_, _) => TwinkleFavoritesDrawerStar(1.3, 150);
+        }
+
+        // ------------------------------------------------------------ the favorites drawer
+
+        /// <summary>The open body's width: the old column 0 (see FavoritesDrawerBody in the XAML).</summary>
+        internal const double FavoritesDrawerWidth = 92;
+        /// <summary>Open and close slide, in ms; instant under Motion Off.</summary>
+        internal const int FavoritesDrawerSlideMs = 200;
+        /// <summary>How long a pin keeps a closed drawer open before it closes again.</summary>
+        internal const int FavoritesDrawerPeekMs = 2500;
+
+        private readonly System.Windows.Threading.DispatcherTimer _drawerPeekTimer = new()
+        {
+            Interval = TimeSpan.FromMilliseconds(FavoritesDrawerPeekMs),
+        };
+        private bool _drawerOpen;
+        private bool _drawerPeeking;
+
+        /// <summary>True while the body is showing (open for good, or open for a pin's peek).</summary>
+        internal bool FavoritesDrawerIsOpen => _drawerOpen;
+
+        /// <summary>Paint the saved state with no slide (startup, settings reload).</summary>
+        internal void ApplyFavoritesDrawerSetting()
+        {
+            if (_drawerPeeking) return;
+            SetFavoritesDrawer(App.Settings?.Current?.FavoritesDrawerOpen == true, animate: false);
+        }
+
+        /// <summary>Open or close the body. Writes nothing: only the handle persists.</summary>
+        internal void SetFavoritesDrawer(bool open, bool animate)
+        {
+            _drawerOpen = open;
+            // The chevron points the way a click goes: left opens (the body comes in from the
+            // edge), right closes.
+            FavoritesDrawerChevron.Text = open ? "›" : "‹";
+            double to = open ? FavoritesDrawerWidth : 0;
+            double from = FavoritesDrawerBody.Width;   // the animated value while one is running
+            FavoritesDrawerBody.Width = to;
+            if (!animate || !Services.MotionFx.AllowTransitions || double.IsNaN(from) || from == to)
+            {
+                FavoritesDrawerBody.BeginAnimation(WidthProperty, null);
+                return;
+            }
+            var slide = new System.Windows.Media.Animation.DoubleAnimation(from, to, TimeSpan.FromMilliseconds(FavoritesDrawerSlideMs))
+            {
+                EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut },
+                FillBehavior = System.Windows.Media.Animation.FillBehavior.Stop,
+            };
+            FavoritesDrawerBody.BeginAnimation(WidthProperty, slide);
+        }
+
+        private void FavoritesDrawerHandle_Click(object sender, RoutedEventArgs e)
+        {
+            // A click during a pin's peek reads what the player sees: the body is out, so the
+            // handle puts it away.
+            _drawerPeeking = false;
+            _drawerPeekTimer.Stop();
+            bool open = !_drawerOpen;
+            BurstFavoritesDrawer(open ? 90 : 60);
+            TwinkleFavoritesDrawerStar(1.45, 220);
+            SetFavoritesDrawer(open, animate: true);
+            var s = App.Settings?.Current;
+            if (s == null || s.FavoritesDrawerOpen == open) return;
+            s.FavoritesDrawerOpen = open;
+            try { App.Settings?.Save(); }
+            catch (Exception ex) { App.Logger?.Debug("Favorites drawer save: {E}", ex.Message); }
+        }
+
+        /// <summary>
+        /// A destination was just pinned. Closed drawer on a visible Home: slide it out for
+        /// <see cref="FavoritesDrawerPeekMs"/>, glow the new chip, then put it away again unless
+        /// the pointer is inside (then it goes on MouseLeave). Open drawer: just the glow. Home
+        /// not on screen (a pin from Ctrl+K on another page): nothing to show, nothing moves.
+        /// </summary>
+        internal void PeekFavoritesDrawer(string pinnedId)
+        {
+            if (!IsVisible) return;
+            int glowAfter = 0;
+            if (!_drawerOpen)
+            {
+                _drawerPeeking = true;
+                SetFavoritesDrawer(true, animate: true);
+                glowAfter = Services.MotionFx.AllowTransitions ? FavoritesDrawerSlideMs + 40 : 0;
+            }
+            BurstFavoritesDrawer(90);
+            TwinkleFavoritesDrawerStar(1.45, 220);
+            if (_drawerPeeking)
+            {
+                _drawerPeekTimer.Stop();
+                _drawerPeekTimer.Start();
+            }
+
+            var glow = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(Math.Max(1, glowAfter)) };
+            glow.Tick += (_, _) =>
+            {
+                glow.Stop();
+                var chip = FindFavoriteChip(pinnedId);
+                ConditioningControlPanel.Controls.NavRail.NavGlow.Once(chip, ConditioningControlPanel.Controls.NavRail.NavStripRules.Lilac, why: "favorites pin " + pinnedId);
+            };
+            glow.Start();
+        }
+
+        /// <summary>The FAVORITES chip for a palette id (chips carry the id in Tag).</summary>
+        internal FrameworkElement? FindFavoriteChip(string id)
+        {
+            foreach (var child in FavoritesList.Children)
+                if (child is FrameworkElement fe && fe.Tag is string tag && string.Equals(tag, id, StringComparison.Ordinal))
+                    return fe;
+            return null;
+        }
+
+        private void EndFavoritesDrawerPeek(bool animate)
+        {
+            if (!_drawerPeeking) return;
+            _drawerPeeking = false;
+            _drawerPeekTimer.Stop();
+            SetFavoritesDrawer(App.Settings?.Current?.FavoritesDrawerOpen == true, animate);
+        }
+
+        // ---- the handle's colour and juice (owner, 2026-10-06: "the mod color and FX, add juice
+        // and make it more noticeable, maybe some particles")
+
+        /// <summary>Breathing glow on the handle: how far it swings and how long one breath takes.</summary>
+        internal const double FavoritesGlowLow = 0.30, FavoritesGlowHigh = 0.85;
+        internal const int FavoritesGlowBreathMs = 2600;
+        /// <summary>The star twinkles on its own this often while ambient loops are allowed.</summary>
+        internal const int FavoritesTwinkleEveryMs = 6500;
+
+        private EventHandler<Models.ModPackage>? _drawerModHook;
+        private System.Windows.Threading.DispatcherTimer? _drawerTwinkle;
+
+        /// <summary>The six FavHandle* brushes and the rail border, from the mod's glow colour
+        /// (FxTheme, the same source every ambient effect reads). Lilac only when no palette is up.</summary>
+        internal void PaintFavoritesDrawer()
+        {
+            try
+            {
+                var c = Services.FxTheme.GlowColor;
+                var res = FavoritesDrawer.Resources;
+                res["FavHandleFill"] = Frozen(c, 0x26);
+                res["FavHandleBorder"] = Frozen(c, 0x80);
+                res["FavHandleFillHover"] = Frozen(c, 0x4D);
+                res["FavHandleBorderHover"] = Frozen(c, 0xFF);
+                res["FavHandleText"] = Frozen(Lighten(c, 0.18), 0xFF);
+                res["FavHandleTextHover"] = Frozen(Lighten(c, 0.55), 0xFF);
+                ApplyFavoritesDrawerGlow(c);
+            }
+            catch (Exception ex) { App.Logger?.Debug("Favorites drawer paint: {E}", ex.Message); }
+        }
+
+        /// <summary>A soft glow in the mod colour under the handle; it breathes while ambient
+        /// loops are allowed, holds still under Reduced, and is absent under Off.</summary>
+        private void ApplyFavoritesDrawerGlow(Color c)
+        {
+            if (!Services.MotionFx.AllowTransitions) { FavoritesDrawerHandle.Effect = null; return; }
+            var glow = new System.Windows.Media.Effects.DropShadowEffect
+            {
+                Color = c, BlurRadius = 18, ShadowDepth = 0, Opacity = (FavoritesGlowLow + FavoritesGlowHigh) / 2,
+            };
+            FavoritesDrawerHandle.Effect = glow;
+            if (!Services.MotionFx.AllowAmbientLoops) return;
+            var breath = new System.Windows.Media.Animation.DoubleAnimation(FavoritesGlowLow, FavoritesGlowHigh, TimeSpan.FromMilliseconds(FavoritesGlowBreathMs))
+            {
+                AutoReverse = true,
+                RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever,
+                EasingFunction = new System.Windows.Media.Animation.SineEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseInOut },
+            };
+            System.Windows.Media.Animation.Timeline.SetDesiredFrameRate(breath, MainWindow.AmbientFrameRate);
+            glow.BeginAnimation(System.Windows.Media.Effects.DropShadowEffect.OpacityProperty, breath);
+        }
+
+        private void HookFavoritesDrawerMod()
+        {
+            if (_drawerModHook != null || App.Mods == null) return;
+            _drawerModHook = (_, _) => Dispatcher.BeginInvoke(new Action(() => { PaintFavoritesDrawer(); FavoritesDrawerFx?.StartLayers(FavoritesDrawerFxConfig()); }));
+            App.Mods.ModChanged += _drawerModHook;
+        }
+
+        private void UnhookFavoritesDrawerMod()
+        {
+            if (_drawerModHook == null || App.Mods == null) return;
+            App.Mods.ModChanged -= _drawerModHook;
+            _drawerModHook = null;
+        }
+
+        /// <summary>Motes rising along the handle, in the mod's particle colour, sparse: the
+        /// handle is 22 px wide and the canvas 58, so a handful reads as a glint, not weather.</summary>
+        private static AmbientFxConfig FavoritesDrawerFxConfig() => new()
+        {
+            Layers = AmbientFxLayers.Embers | AmbientFxLayers.DustField,
+            Intensity = 0.9,
+            DustDensity = 0.35,
+        };
+
+        private void StartFavoritesDrawerFx()
+        {
+            try
+            {
+                if (FavoritesDrawerFx == null) return;
+                if (FavoritesDrawerFx.IsRunning) FavoritesDrawerFx.Resume();
+                else FavoritesDrawerFx.StartLayers(FavoritesDrawerFxConfig());
+                if (Services.MotionFx.AllowAmbientLoops)
+                {
+                    _drawerTwinkle ??= new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(FavoritesTwinkleEveryMs) };
+                    _drawerTwinkle.Tick -= FavoritesTwinkle_Tick;
+                    _drawerTwinkle.Tick += FavoritesTwinkle_Tick;
+                    _drawerTwinkle.Start();
+                }
+            }
+            catch (Exception ex) { App.Logger?.Debug("Favorites drawer fx: {E}", ex.Message); }
+        }
+
+        private void StopFavoritesDrawerFx()
+        {
+            try { FavoritesDrawerFx?.Pause(); } catch { }
+            _drawerTwinkle?.Stop();
+        }
+
+        private void FavoritesTwinkle_Tick(object? sender, EventArgs e)
+        {
+            if (!IsVisible || FavoritesDrawerHandle.IsMouseOver) return;
+            TwinkleFavoritesDrawerStar(1.3, 190);
+        }
+
+        /// <summary>The star swells to <paramref name="scale"/> and settles back, <paramref name="ms"/> each way. No-op under Off.</summary>
+        internal void TwinkleFavoritesDrawerStar(double scale, int ms)
+        {
+            if (!Services.MotionFx.AllowTransitions) return;
+            if (FavoritesDrawerStar.RenderTransform is not ScaleTransform st) return;
+            var up = new System.Windows.Media.Animation.DoubleAnimation(1.0, scale, TimeSpan.FromMilliseconds(ms))
+            {
+                AutoReverse = true,
+                EasingFunction = new System.Windows.Media.Animation.BackEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut, Amplitude = 0.6 },
+            };
+            st.BeginAnimation(ScaleTransform.ScaleXProperty, up);
+            st.BeginAnimation(ScaleTransform.ScaleYProperty, up);
+        }
+
+        /// <summary>A spark burst at the handle's centre (mod particle colour). Nothing at the
+        /// Performance tier or under reduced motion: the canvas refuses it itself.</summary>
+        internal void BurstFavoritesDrawer(int count)
+        {
+            try
+            {
+                if (FavoritesDrawerFx == null || !FavoritesDrawerFx.IsRunning) return;
+                var p = FavoritesDrawerHandle.TranslatePoint(new Point(FavoritesDrawerHandle.ActualWidth / 2, FavoritesDrawerHandle.ActualHeight / 2), FavoritesDrawerFx);
+                FavoritesDrawerFx.Burst(p.X, p.Y, null, count);
+            }
+            catch (Exception ex) { App.Logger?.Debug("Favorites drawer burst: {E}", ex.Message); }
+        }
+
+        private static SolidColorBrush Frozen(Color c, byte alpha)
+        {
+            var b = new SolidColorBrush(Color.FromArgb(alpha, c.R, c.G, c.B));
+            b.Freeze();
+            return b;
+        }
+
+        /// <summary>Mix toward white by <paramref name="t"/> (0..1) so the label reads on the dark page.</summary>
+        internal static Color Lighten(Color c, double t)
+        {
+            t = Math.Clamp(t, 0, 1);
+            byte L(byte v) => (byte)Math.Round(v + (255 - v) * t);
+            return Color.FromRgb(L(c.R), L(c.G), L(c.B));
         }
 
         private readonly System.Windows.Threading.DispatcherTimer _clickChoiceClose = new()
@@ -126,16 +413,6 @@ namespace ConditioningControlPanel.Views.Tabs
                 var clip = new RectangleGeometry(new Rect(0, 0, section.ActualWidth, section.ActualHeight), 20, 20);
                 clip.Freeze();
                 section.Clip = clip;
-            }
-        }
-
-        private void BillboardArtwork_SizeChanged(object sender, SizeChangedEventArgs e)
-        {
-            if (sender is FrameworkElement art && art.ActualWidth > 0 && art.ActualHeight > 0)
-            {
-                var clip = new RectangleGeometry(new Rect(0, 0, art.ActualWidth, art.ActualHeight), 9, 9);
-                clip.Freeze();
-                art.Clip = clip;
             }
         }
 
@@ -249,18 +526,79 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.BtnReloadBrowser_Click(sender, e);
         }
-        // The browser card's fold chevron. MainWindow.DashboardFold.cs owns the setting, the row
-        // arithmetic and the height ease; this view only carries the button.
+        // The browser card's fold arrow. MainWindow.DashboardFold.cs owns the setting, the row
+        // arithmetic and the height ease; this view only carries the button and paints it.
         private void BtnFoldBrowser_Click(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.BtnFoldBrowser_Click(sender, e);
         }
-        // The billboard card in the row the folded browser gives back.
-        private void BillboardCard_Click(object sender, RoutedEventArgs e)
+
+        /// <summary>
+        /// Paints the fold arrow for the state the fold's one bool says (owner, 2026-10-06: the
+        /// arrow must be unmissable). Home's hue from the one hue table, the glyph and the label
+        /// for what a click will do, and while FOLDED a breathing glow so a shut browser is
+        /// obviously openable: a loop only under <see cref="MotionFx.AllowAmbientLoops"/>, a static
+        /// glow under Reduced (or a tier that refuses loops), nothing at Motion Off. Open, no glow.
+        /// Idempotent: the settle calls it every time it runs.
+        /// </summary>
+        internal void PaintFoldArrow(bool collapsed)
         {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.BillboardCard_Click(sender, e);
+            var btn = BtnFoldBrowser;
+            if (btn == null) return;
+            var hue = NavStripRules.Accent(NavSections.Home);
+            btn.Background = Tint(hue, BrowserFoldRule.ArrowFill);
+            btn.Tag = Tint(hue, BrowserFoldRule.ArrowHoverFill);
+            btn.BorderBrush = Tint(hue, BrowserFoldRule.ArrowBorder);
+            if (TxtFoldBrowser != null) TxtFoldBrowser.Text = BrowserFoldRule.Chevron(collapsed);
+            var labelKey = BrowserFoldRule.LabelKey(collapsed);
+            // Rebind rather than assign, so a language switch re-reads the label live.
+            if (TxtFoldBrowserLabel != null)
+                BindingOperations.SetBinding(TxtFoldBrowserLabel, TextBlock.TextProperty,
+                    new Binding($"[{labelKey}]") { Source = LocalizationManager.Instance, Mode = BindingMode.OneWay });
+            BindingOperations.SetBinding(btn, AutomationProperties.NameProperty,
+                new Binding($"[{labelKey}]") { Source = LocalizationManager.Instance, Mode = BindingMode.OneWay });
+            BindingOperations.SetBinding(btn, FrameworkElement.ToolTipProperty,
+                new Binding($"[{BrowserFoldRule.TooltipKey(collapsed)}]") { Source = LocalizationManager.Instance, Mode = BindingMode.OneWay });
+
+            var glow = btn.Effect as DropShadowEffect;
+            glow?.BeginAnimation(DropShadowEffect.OpacityProperty, null);
+            if (!collapsed || MotionFx.Level == MotionLevel.Off)
+            {
+                btn.Effect = null;
+                return;
+            }
+            if (glow == null)
+            {
+                glow = new DropShadowEffect { ShadowDepth = 0, BlurRadius = 16 };
+                btn.Effect = glow;
+            }
+            glow.Color = hue;
+            if (MotionFx.AllowAmbientLoops)
+            {
+                glow.Opacity = BrowserFoldRule.GlowLow;
+                var breath = new DoubleAnimation(BrowserFoldRule.GlowLow, BrowserFoldRule.GlowHigh,
+                    TimeSpan.FromMilliseconds(BrowserFoldRule.GlowBreathMs / 2))
+                {
+                    AutoReverse = true,
+                    RepeatBehavior = RepeatBehavior.Forever,
+                    EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
+                };
+                // An ambient loop: 24 fps is plenty for a breath and keeps the cost down.
+                Timeline.SetDesiredFrameRate(breath, 24);
+                glow.BeginAnimation(DropShadowEffect.OpacityProperty, breath);
+            }
+            else
+            {
+                glow.Opacity = BrowserFoldRule.GlowStatic;
+            }
+        }
+
+        private static SolidColorBrush Tint(Color hue, double alpha)
+        {
+            var b = new SolidColorBrush(Color.FromArgb((byte)Math.Round(255 * alpha), hue.R, hue.G, hue.B));
+            b.Freeze();
+            return b;
         }
         // Phase 2: BtnExportPhrases_Click / BtnImportPhrases_Click moved with the phrase-backup
         // card to Views/Controls/AppSettings/DataSettingsSection.xaml.cs.
@@ -458,18 +796,6 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.CardSystem_Click(sender, e);
         }
-        /// <summary>
-        /// Home's companion strip. Pure navigation into the Companion door - the strip owns no
-        /// portrait and no clock, so there is nothing to start or stop here (see the XAML note:
-        /// CompanionTheme.xaml budgets ONE Forever storyboard for the companion app-wide, and
-        /// CompanionHeroCard already spends it).
-        /// </summary>
-        private void CompanionStrip_Click(object sender, MouseButtonEventArgs e)
-        {
-            if (Window.GetWindow(this) is MainWindow mw)
-                mw.ShowTab("companion");
-        }
-
         // Home audio card. Pure forwarding, like every re-parented cell: the shell owns the
         // canonical Settings/Audio controls and mirrors both ways. See MainWindow.HomeAudio.cs.
         private void HomeSliderMaster_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)

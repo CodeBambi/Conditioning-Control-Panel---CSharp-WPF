@@ -49,6 +49,11 @@ namespace ConditioningControlPanel.Views.Controls.AppSettingsSections
             if (Main is { } mw) mw.BtnImportPhrases_Click(sender, e);
         }
 
+        private void BtnOpenLogsFolder_Click(object sender, RoutedEventArgs e)
+        {
+            if (Main is { } mw) mw.BtnViewLog_Click(sender, e);
+        }
+
         private void BtnGoToAccountBackup_Click(object sender, RoutedEventArgs e)
         {
             Main?.AppSettingsTab?.FocusSection("account");

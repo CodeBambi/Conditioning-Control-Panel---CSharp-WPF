@@ -1167,13 +1167,8 @@ namespace ConditioningControlPanel
                         glow.Color = LockdownCrimson;
                 }
 
-                // Header version
-                if (TxtHeaderVersion != null)
-                    TxtHeaderVersion.Foreground = new SolidColorBrush(LockdownCrimson);
-
-                // Level label
-                if (TxtLevelLabel != null)
-                    TxtLevelLabel.Foreground = new SolidColorBrush(LockdownCrimson);
+                // Level chip (a filled pill: the fill and its glow go crimson, the text stays white)
+                PaintLevelChip(LockdownCrimson);
 
                 // XP bar
                 if (XPBar != null)

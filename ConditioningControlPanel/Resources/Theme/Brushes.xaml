@@ -73,6 +73,12 @@
     <SolidColorBrush x:Key="ElevatedSurfaceBrush" Color="{DynamicResource ElevatedSurface}"/>
     <!-- New: quaternary text -->
     <SolidColorBrush x:Key="TextDimBrush" Color="{DynamicResource TextDim}"/>
+    <!-- Readability pass (polish 8): the section colours (see Colors.xaml SectionInk). The
+         Color keys are swapped at runtime per section, so these must stay DynamicResource. -->
+    <SolidColorBrush x:Key="SectionInkBrush" Color="{DynamicResource SectionInk}"/>
+    <SolidColorBrush x:Key="SectionTintBrush" Color="{DynamicResource SectionTint}"/>
+    <SolidColorBrush x:Key="SectionRuleBrush" Color="{DynamicResource SectionRule}"/>
+    <SolidColorBrush x:Key="SectionOutlineBrush" Color="{DynamicResource SectionOutline}"/>
     <!-- Velvet Kit: secondary text tier (see Colors.xaml). -->
     <SolidColorBrush x:Key="TextSecondaryBrush" Color="{DynamicResource TextSecondary}"/>
 
