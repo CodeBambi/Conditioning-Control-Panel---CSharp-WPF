@@ -211,6 +211,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             _runActive = false;
             _lastRunProgress = null;   // banked: nothing left for the teardown to pay
             _runStartedUtc = DateTime.MinValue;
+            try { global::ConditioningControlPanel.Services.Haptics.DtrhHapticDirector.OnRunEnded(); } catch (Exception ex) { Log.Debug("DtrhHost haptics run-ended: {E}", ex.Message); }   // WPF :619
             ApplyWorldFreeze(false);   // a run ending mid-freeze must resume native video, not wedge it through the hub
             ApplyDiveMute(false);      // a muted dive that ends must not leave every later video silent
             if (!DtrhRunCloseRule.ShouldPayBooking(wasActive))

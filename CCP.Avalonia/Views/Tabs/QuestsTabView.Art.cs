@@ -25,6 +25,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private static readonly Dictionary<string, Bitmap> QuestArtCache = new(StringComparer.OrdinalIgnoreCase);
         private static string? _questArtModId;
 
+        /// <summary>WPF ClearQuestArtCache: a mod switch can resolve the same quest to another file.</summary>
+        internal static void ClearQuestArtCache()
+        {
+            QuestArtCache.Clear();
+            _questArtModId = CoreMods.ActiveModId;
+        }
+
         /// <summary>WPF GetQuestArt: mode-aware, cached, null when the quest has no usable image.</summary>
         internal static Bitmap? GetQuestArt(QuestDefinition def)
         {

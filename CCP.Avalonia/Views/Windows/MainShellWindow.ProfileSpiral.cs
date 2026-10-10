@@ -4,9 +4,10 @@
 // row in the account menu. Both show only while the server has shipped this account a descent block
 // and the migration is not withholding the spiral; both paint a SpiralGlyph from that block.
 //
-// WireProfileSpiral (App startup, once DescentService is built) feeds the block provider and repaints both
-// doors on BlockChanged. The withheld provider stays unset: the migration ceremony is retired (auto-restore),
-// so nothing withholds the spiral on this head. With no block the doors stay hidden, as WPF hides them.
+// The block is App.Descent?.Current (Core DescentService, lane z1) and the withhold is Core
+// DescentMigration.SpiralWithheldFor; the two providers below are test seams that outrank them.
+// MainShellWindow.SpiralRoom.cs subscribes BlockChanged and calls OnSpiralBlockChanged (WPF
+// WireProfileSpiral). No block is WPF's own "outside the rollout" state: both doors stay hidden.
 //
 // Not ported: nothing calls RefreshSpiralGlyphMotion yet (SEAM(f-shell): the motion level change in Settings
 // should, as WPF CmbMotionLevel_SelectionChanged does; SpiralGlyph already re-reads it on show/hide).
@@ -22,41 +23,30 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
     public partial class MainShellWindow
     {
-        /// <summary>WPF App.Descent?.Current. Null provider or null block = no spiral for this account.</summary>
+        /// <summary>Test seam over WPF App.Descent?.Current. A null block = no spiral for this account.</summary>
         internal static Func<DescentBlock?>? ProfileSpiralBlock;
 
-        /// <summary>WPF App.DescentMigration?.SpiralWithheld.</summary>
+        /// <summary>Test seam over WPF App.DescentMigration?.SpiralWithheld.</summary>
         internal static Func<bool>? ProfileSpiralWithheld;
 
-        private static DescentBlock? SpiralBlock()
+        /// <summary>WPF App.Descent?.Current: the block every spiral surface gates on.</summary>
+        internal static DescentBlock? SpiralBlock()
         {
-            try { return ProfileSpiralBlock?.Invoke(); } catch { return null; }
+            try { return ProfileSpiralBlock != null ? ProfileSpiralBlock() : App.Descent?.Current; } catch { return null; }
         }
 
-        /// <summary>A rule that throws withholds: the door with the fewest promises.</summary>
-        private static bool SpiralWithheld()
+        /// <summary>WPF App.DescentMigration?.SpiralWithheld. The ceremony is retired (no window, the offer
+        /// is answered silently the moment it lands), so only the persisted marker can still withhold.
+        /// A rule that throws withholds: the door with the fewest promises.</summary>
+        internal static bool SpiralWithheld()
         {
-            try { return ProfileSpiralWithheld?.Invoke() == true; } catch { return true; }
-        }
-
-        /// <summary>The Spiral Room reads the same two answers the doors do.</summary>
-        internal static bool HasSpiralBlock => SpiralBlock() is not null;
-        internal static bool SpiralIsWithheld => SpiralWithheld();
-
-        private static DescentService? _spiralWiredTo;
-
-        /// <summary>WPF WireProfileSpiral: App.Descent's block feeds both doors, and a block that arrives or
-        /// is withdrawn repaints them on the live shell. Once per service.</summary>
-        internal static void WireProfileSpiral(DescentService? descent)
-        {
-            if (descent is null || ReferenceEquals(_spiralWiredTo, descent)) return;
-            _spiralWiredTo = descent;
-            ProfileSpiralBlock = () => descent.Current;
-            descent.BlockChanged += (_, _) => global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            try
             {
-                try { Current?.OnSpiralBlockChanged(); }
-                catch (Exception ex) { Log.Debug("OnSpiralBlockChanged: {E}", ex.Message); }
-            });
+                return ProfileSpiralWithheld != null
+                    ? ProfileSpiralWithheld()
+                    : DescentMigration.SpiralWithheldFor(CoreSettings.Current, offerInHand: false, ceremonyOpen: false);
+            }
+            catch { return true; }
         }
 
         /// <summary>WPF OnSpiralBlockChanged: a block that arrives or is withdrawn repaints both doors.</summary>

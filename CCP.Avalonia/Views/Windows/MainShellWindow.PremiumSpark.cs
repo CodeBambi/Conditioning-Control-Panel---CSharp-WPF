@@ -92,6 +92,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _sparkleWalletActive = true;
             if (CoreSettings.Service is { } service) service.CurrentReplaced += ReplaceSparkleWalletSettings;
             wallet.VisitRequested += VisitFromSparkleWallet;
+            ConditioningControlPanel.Services.SparklePointRewards.Awarded += OnSparklePointAwarded;
             Closed += (_, _) => ShutdownSparkleWallet();
             ReplaceSparkleWalletSettings();
         }
@@ -117,18 +118,37 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 global::Avalonia.Threading.Dispatcher.UIThread.Post(RefreshSparkleWalletBalance);
         }
 
-        /// <summary>Paints the balance. ponytail: WPF shows the "+N" reward from
-        /// SparklePointRewards.Awarded, which is not in Core; here a RISE in the ledger is the
-        /// award (purchases only ever lower it, the wallet rule), so the same badge shows.</summary>
+        /// <summary>Paints the balance. The "+N" badge is NOT shown here: a rise in the ledger can be
+        /// a restore, a sync or a server adoption, and WPF stays quiet for those.</summary>
         private void RefreshSparkleWalletBalance()
         {
             if (!_sparkleWalletActive || HeaderWallet is not { } wallet) return;
             var balance = CoreSettings.Current.SkillPoints;
             wallet.SetBalance(balance);
-            if (_sparkleWalletShown >= 0 && balance > _sparkleWalletShown
-                && IsVisible && WindowState != global::Avalonia.Controls.WindowState.Minimized)
-                wallet.ShowReward(balance - _sparkleWalletShown);
             _sparkleWalletShown = balance;
+        }
+
+        /// <summary>Rewards shown on the header wallet (tests).</summary>
+        internal int SparkleWalletRewardsShown { get; private set; }
+
+        /// <summary>WPF OnSparklePointAwarded: a settled LOCAL credit (a level-up, a 100-bubble
+        /// milestone) shows "+N" on the wallet, only while the window is on screen.</summary>
+        private void OnSparklePointAwarded(object? sender, ConditioningControlPanel.Services.SparklePointAward award)
+        {
+            var creditedSettings = CoreSettings.Current;
+            void Present()
+            {
+                if (!_sparkleWalletActive || !ReferenceEquals(CoreSettings.Current, creditedSettings)) return;
+                // Read the current ledger: another purchase or award may have occurred while queued.
+                RefreshSparkleWalletBalance();
+                if (IsVisible && WindowState != global::Avalonia.Controls.WindowState.Minimized)
+                {
+                    SparkleWalletRewardsShown++;
+                    HeaderWallet?.ShowReward(award.Amount);
+                }
+            }
+            if (global::Avalonia.Threading.Dispatcher.UIThread.CheckAccess()) Present();
+            else global::Avalonia.Threading.Dispatcher.UIThread.Post(Present);
         }
 
         /// <summary>ponytail: WPF opens the Back Room (BtnStartBackRoom_Click); this head reaches
@@ -142,6 +162,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private void ShutdownSparkleWallet()
         {
             _sparkleWalletActive = false;
+            ConditioningControlPanel.Services.SparklePointRewards.Awarded -= OnSparklePointAwarded;
             if (CoreSettings.Service is { } service) service.CurrentReplaced -= ReplaceSparkleWalletSettings;
             if (_sparkleWalletSettings != null) _sparkleWalletSettings.PropertyChanged -= OnSparkleWalletSettingChanged;
             _sparkleWalletSettings = null;

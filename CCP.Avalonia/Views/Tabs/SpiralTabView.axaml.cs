@@ -278,13 +278,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// </summary>
         internal void OnTabShown() => Refresh();
 
-        private global::ConditioningControlPanel.Services.Descent.DescentService? _wiredDescent;
-
-        /// <summary>WPF OnBlockChanged: a block that arrives or is withdrawn repaints the room.</summary>
-        private void OnBlockChanged(object? sender, EventArgs e) =>
-            global::Avalonia.Threading.Dispatcher.UIThread.Post(() => { if (IsVisible) Refresh(); });
-
-        /// <summary>WPF Wire: the fuse's phase and tick drive the fog; the block decides Spiral or Waiting.</summary>
+        /// <summary>WPF Wire: the fuse's phase and tick drive the fog; BlockChanged (which carries the
+        /// withhold too) moves the room between Waiting and Spiral.</summary>
         private void Wire()
         {
             if (_wiredDescent == null && App.Descent is { } descent)
@@ -298,10 +293,27 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             fuse.Tick += OnFuseTick;
         }
 
+        private ConditioningControlPanel.Services.Descent.DescentService? _wiredDescent;
+
+        /// <summary>WPF OnBlockChanged: raised from the sync path, so marshal, then repaint.</summary>
+        private void OnBlockChanged(object? sender, EventArgs e)
+        {
+            if (!global::Avalonia.Threading.Dispatcher.UIThread.CheckAccess())
+            {
+                global::Avalonia.Threading.Dispatcher.UIThread.Post(() => OnBlockChanged(sender, e));
+                return;
+            }
+            if (IsVisible) Refresh();
+        }
+
         /// <summary>Unwire from the fuse that was wired, even if the static has been swapped since.</summary>
         private void Unwire()
         {
-            if (_wiredDescent is { } descent) { _wiredDescent = null; descent.BlockChanged -= OnBlockChanged; }
+            if (_wiredDescent is { } descent)
+            {
+                _wiredDescent = null;
+                descent.BlockChanged -= OnBlockChanged;
+            }
             if (_wiredFuse is not { } fuse) return;
             _wiredFuse = null;
             fuse.PhaseChanged -= OnPhaseChanged;
@@ -352,9 +364,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                     CoreSettings.Current,
                     fuse?.LastAnnouncedPhase ?? DescentFusePhase.Dark,
                     fuse?.IsArmed == true,
-                    // The same two answers the profile's spiral doors read (MainShellWindow.WireProfileSpiral).
-                    spiralWithheld: global::ConditioningControlPanel.Avalonia.Views.Windows.MainShellWindow.SpiralIsWithheld,
-                    hasBlock: global::ConditioningControlPanel.Avalonia.Views.Windows.MainShellWindow.HasSpiralBlock));
+                    // WPF App.DescentMigration?.SpiralWithheld and App.Descent?.Current, through the
+                    // same two readers the profile doors use (one rule for every spiral surface).
+                    spiralWithheld: Windows.MainShellWindow.SpiralWithheld(),
+                    hasBlock: Windows.MainShellWindow.SpiralBlock() is not null));
             }
             catch (Exception ex)
             {
@@ -811,9 +824,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 var token = _splashFx.Token;
 
                 // One turn every 4.6s, about the glyph's own centre (Avalonia's default origin).
-                var spin = new RotateTransform();
-                _splashGlyph.RenderTransform = spin;
-                Helpers.BeatLoop.Run(_splashGlyph, token, t => spin.Angle = 360 * Helpers.BeatLoop.Saw(t, 4.6));
+                var spin = new Animation
+                {
+                    Duration = TimeSpan.FromSeconds(4.6),
+                    IterationCount = IterationCount.Infinite,
+                    Children =
+                    {
+                        new KeyFrame { Cue = new Cue(0d), Setters = { new Setter(RotateTransform.AngleProperty, 0d) } },
+                        new KeyFrame { Cue = new Cue(1d), Setters = { new Setter(RotateTransform.AngleProperty, 360d) } },
+                    },
+                };
+                _ = spin.RunAsync(_splashGlyph, token);
 
                 Breathe(_splashHalo, OpacityProperty, 0.08, 0.30, 2.2, token);
                 Breathe(_splashGlyph, OpacityProperty, 0.58, 0.96, 1.7, token);
@@ -827,17 +848,23 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             catch (Exception ex) { Log.Debug("[Spiral] splash up: {E}", ex.Message); }
         }
 
-        private static readonly (double At, double Value)[] DotKeys = { (0, 0.15), (0.34, 0.95), (1, 0.15) };
-
         private static void BeginDot(Visual dot, double offsetSeconds, CancellationToken token)
         {
             const double cycle = 1.45;
-            // 0.15 -> 0.95 at 34% of the cycle -> 0.15, sine per leg; the offset is a one-time delay.
-            Helpers.BeatLoop.Run(dot, token, t =>
+            var anim = new Animation
             {
-                if (t < offsetSeconds) return;
-                dot.Opacity = Helpers.BeatLoop.Keys(Helpers.BeatLoop.Saw(t - offsetSeconds, cycle), DotKeys, sine: true);
-            });
+                Duration = TimeSpan.FromSeconds(cycle),
+                IterationCount = IterationCount.Infinite,
+                Delay = TimeSpan.FromSeconds(offsetSeconds),
+                Easing = new SineEaseInOut(),
+                Children =
+                {
+                    new KeyFrame { Cue = new Cue(0d), Setters = { new Setter(OpacityProperty, 0.15) } },
+                    new KeyFrame { Cue = new Cue(0.34d), Setters = { new Setter(OpacityProperty, 0.95) } },
+                    new KeyFrame { Cue = new Cue(1d), Setters = { new Setter(OpacityProperty, 0.15) } },
+                },
+            };
+            _ = anim.RunAsync(dot, token);
         }
 
         /// <summary>
@@ -977,13 +1004,23 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// WPF's AutoReverse did — which is why the number is HALF the breath, exactly as it is in
         /// the original's call sites.
         /// </summary>
-        private static void Breathe(Visual target, AvaloniaProperty property,
+        private static void Breathe(Animatable target, AvaloniaProperty property,
                                     double min, double max, double halfCycleSeconds,
                                     CancellationToken token)
         {
-            // On the window's shared 30 fps beat: an infinite Animation composes the window at 60 Hz.
-            Helpers.BeatLoop.Run(target, token, t =>
-                target.SetValue(property, Math.Clamp(min + ((max - min) * Helpers.BeatLoop.Breath(t, halfCycleSeconds)), 0, 1)));
+            var anim = new Animation
+            {
+                Duration = TimeSpan.FromSeconds(halfCycleSeconds),
+                IterationCount = IterationCount.Infinite,
+                PlaybackDirection = PlaybackDirection.Alternate,
+                Easing = new SineEaseInOut(),
+                Children =
+                {
+                    new KeyFrame { Cue = new Cue(0d), Setters = { new Setter(property, min) } },
+                    new KeyFrame { Cue = new Cue(1d), Setters = { new Setter(property, max) } },
+                },
+            };
+            _ = anim.RunAsync(target, token);
         }
 
         /// <summary>
@@ -1000,19 +1037,38 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// <para>The resting state is <c>RenderTransform = null</c>, which is what the stop paths
         /// set: the animator's own group goes with it.</para>
         /// </summary>
-        private static void Pulse(Visual target, double halfCycleSeconds, double scale,
+        private static void Pulse(Animatable target, double halfCycleSeconds, double scale,
                                   CancellationToken token)
         {
-            // The loop owns a ScaleTransform it writes directly (about the centre, Avalonia's
-            // default origin); the stop paths still park at RenderTransform = null.
-            var grow = new ScaleTransform(1, 1);
-            target.RenderTransform = grow;
-            Helpers.BeatLoop.Run(target, token, t =>
+            var anim = new Animation
             {
-                double s = 1.0 + ((scale - 1.0) * Helpers.BeatLoop.Breath(t, halfCycleSeconds));
-                grow.ScaleX = s;
-                grow.ScaleY = s;
-            });
+                Duration = TimeSpan.FromSeconds(halfCycleSeconds),
+                IterationCount = IterationCount.Infinite,
+                PlaybackDirection = PlaybackDirection.Alternate,
+                Easing = new SineEaseInOut(),
+                Children =
+                {
+                    new KeyFrame
+                    {
+                        Cue = new Cue(0d),
+                        Setters =
+                        {
+                            new Setter(ScaleTransform.ScaleXProperty, 1.0),
+                            new Setter(ScaleTransform.ScaleYProperty, 1.0),
+                        },
+                    },
+                    new KeyFrame
+                    {
+                        Cue = new Cue(1d),
+                        Setters =
+                        {
+                            new Setter(ScaleTransform.ScaleXProperty, scale),
+                            new Setter(ScaleTransform.ScaleYProperty, scale),
+                        },
+                    },
+                },
+            };
+            _ = anim.RunAsync(target, token);
         }
 
         /// <summary>Cancel and clear one clock group. The resting values are the caller's job.</summary>
@@ -1119,31 +1175,45 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
                 Reflow();
 
-                if (_dots.Count == 0) return;
-                var moves = new TranslateTransform[_dots.Count];
-                var keys = new (double At, double Value)[_dots.Count][];
                 for (int i = 0; i < _dots.Count; i++)
                 {
-                    moves[i] = new TranslateTransform();
-                    _dots[i].RenderTransform = moves[i];
-                    keys[i] = new[] { (0d, 0d), (0.42, _seeds[i].Peak), (1d, 0d) };
-                }
+                    var seed = _seeds[i];
+                    var dot = _dots[i];
+                    var duration = TimeSpan.FromSeconds(seed.Seconds);
 
-                // One loop on the shared beat for the whole field. Each speck starts a fraction of
-                // its own cycle later (a one-time delay), which keeps the field from breathing as
-                // one animal; it rises RiseDistance per cycle and fades 0 -> peak (at 42%) -> 0.
-                Helpers.BeatLoop.Run(_host, token, t =>
-                {
-                    for (int i = 0; i < _dots.Count; i++)
+                    // Each speck starts a fraction of its own cycle later, which is what keeps the
+                    // field from breathing as one animal.
+                    var offset = TimeSpan.FromSeconds(seed.Seconds * (i / (double)Math.Max(1, _dots.Count)));
+
+                    var rise = new Animation
                     {
-                        double seconds = _seeds[i].Seconds;
-                        double local = t - (seconds * (i / (double)Math.Max(1, _dots.Count)));
-                        if (local < 0) continue;
-                        double u = Helpers.BeatLoop.Saw(local, seconds);
-                        moves[i].Y = -RiseDistance * u;
-                        _dots[i].Opacity = Math.Clamp(Helpers.BeatLoop.Keys(u, keys[i], sine: true), 0, 1);
-                    }
-                });
+                        Duration = duration,
+                        IterationCount = IterationCount.Infinite,
+                        Delay = offset,
+                        Children =
+                        {
+                            new KeyFrame { Cue = new Cue(0d), Setters = { new Setter(TranslateTransform.YProperty, 0d) } },
+                            new KeyFrame { Cue = new Cue(1d), Setters = { new Setter(TranslateTransform.YProperty, -RiseDistance) } },
+                        },
+                    };
+
+                    var fade = new Animation
+                    {
+                        Duration = duration,
+                        IterationCount = IterationCount.Infinite,
+                        Delay = offset,
+                        Easing = new SineEaseInOut(),
+                        Children =
+                        {
+                            new KeyFrame { Cue = new Cue(0d), Setters = { new Setter(OpacityProperty, 0d) } },
+                            new KeyFrame { Cue = new Cue(0.42d), Setters = { new Setter(OpacityProperty, seed.Peak) } },
+                            new KeyFrame { Cue = new Cue(1d), Setters = { new Setter(OpacityProperty, 0d) } },
+                        },
+                    };
+
+                    _ = rise.RunAsync(dot, token);
+                    _ = fade.RunAsync(dot, token);
+                }
             }
 
             /// <summary>Park the field invisible. The clocks themselves are cancelled by the token

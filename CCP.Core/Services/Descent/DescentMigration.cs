@@ -60,6 +60,22 @@ namespace ConditioningControlPanel.Services.Descent
             t is { Type: JTokenType.Integer or JTokenType.Float } ? t.Value<double>() : 0;
 
         /// <summary>
+        /// WPF DescentMigrationService.SpiralWithheldFor: the withhold, as arithmetic. OUTSTANDING is an
+        /// offer in hand, a window on screen (never, now) or the persisted marker from an older build
+        /// (<see cref="Models.AppSettings.DescentMigrationOffered"/>). ANSWERED is the server ack or a
+        /// valid pending choice. ANSWERED WINS. Null settings read as not withheld.
+        /// </summary>
+        public static bool SpiralWithheldFor(Models.AppSettings? settings, bool offerInHand, bool ceremonyOpen)
+        {
+            if (settings is null) return false;
+
+            if (settings.DescentMigrationCompleted) return false;
+            if (DescentMigrationChoices.IsValid(settings.PendingDescentMigrationChoice)) return false;
+
+            return offerInHand || ceremonyOpen || settings.DescentMigrationOffered;
+        }
+
+        /// <summary>
         /// WPF ApplyOfferNow + ApplyChoice(Restore): rewrite the ledger on curve v2 and arm the submit.
         /// Refused for a migrated account or one whose choice is already waiting for its ack. The pending
         /// choice is written LAST, so a crash before it leaves a client the next offer re-runs to the same

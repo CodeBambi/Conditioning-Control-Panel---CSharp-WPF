@@ -15,6 +15,7 @@
 // Controls are reached with Named<T>(name): the window loads with AvaloniaXamlLoader.Load.
 
 using System;
+using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -260,6 +261,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private string? _profileBubbleAvatarUrl;
         private IBrush? _profileBubblePhotoBrush;
         private DateTime _profileBubbleLastXpPulse;
+        private DateTime _profileBubbleLastWobble;
+        private DateTime _profileBubbleLastShimmer;
+
+        /// <summary>True while the face is the equipped preset bust (tests).</summary>
+        internal bool ProfileBubbleShowsBust { get; private set; }
+        /// <summary>Wobbles and shimmers started (tests).</summary>
+        internal int ProfileBubbleWobbles { get; private set; }
+        internal int ProfileBubbleShimmers { get; private set; }
 
         /// <summary>WPF InitializeProfileBubble's service half: the reaction events (static or app-lived,
         /// so they come off when the window closes, P41) and the first paint.</summary>
@@ -272,8 +281,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             ProgressionBank.Awarded += awarded;
             ProgressionBank.LevelUp += levelUp;
             if (engine != null) engine.Unlocked += unlocked;
+            // WPF App.Flash.FlashDisplayed / App.Subliminal.SubliminalDisplayed: Core raises both moments here.
+            Action flash = () => Dispatcher.UIThread.Post(OnBubbleFlashDisplayed);
+            Action subliminal = () => Dispatcher.UIThread.Post(OnBubbleSubliminalDisplayed);
+            CoreTubeEvents.FlashAboutToDisplay += flash;
+            CoreTubeEvents.SubliminalDisplayed += subliminal;
             Closed += (_, _) =>
             {
+                CoreTubeEvents.FlashAboutToDisplay -= flash;
+                CoreTubeEvents.SubliminalDisplayed -= subliminal;
                 ProgressionBank.Awarded -= awarded;
                 ProgressionBank.LevelUp -= levelUp;
                 if (engine != null) engine.Unlocked -= unlocked;
@@ -293,6 +309,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 initials.Text = loggedIn ? LeaderboardEntryData.BuildInitials(name) : "?";
                 fill.Fill = loggedIn ? Tabs.LeaderboardRow.BuildAvatarBrush(name) : ProfileBubbleNeutralBrush;
                 initials.IsVisible = true;
+
+                // The equipped preset bust (Own It cosmetic) beats initials (WPF CosmeticsCatalog.GetAvatarImage).
+                var bust = Helpers.ModArt.AvatarPreset(CoreSettings.Current.ProfileCosmetics?.AvatarId);
+                ProfileBubbleShowsBust = bust != null;
+                if (bust != null)
+                {
+                    fill.Fill = new ImageBrush(bust) { Stretch = Stretch.UniformToFill };
+                    initials.IsVisible = false;
+                }
 
                 string? url = null;
                 if (CoreSettings.Current.ShareProfilePicture && AccountSeed.Discord?.IsAuthenticated == true)
@@ -340,6 +365,48 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if ((DateTime.UtcNow - _profileBubbleLastXpPulse).TotalMilliseconds < 900) return;
             _profileBubbleLastXpPulse = DateTime.UtcNow;
             PulseProfileBubble(1.10, 260);
+        }
+
+        /// <summary>WPF OnBubbleFlashDisplayed: a flash pop wobbles the bubble, at most once per 2.5 s.</summary>
+        internal void OnBubbleFlashDisplayed()
+        {
+            if ((DateTime.UtcNow - _profileBubbleLastWobble).TotalMilliseconds < 2500) return;
+            _profileBubbleLastWobble = DateTime.UtcNow;
+            WobbleProfileBubble();
+        }
+
+        /// <summary>WPF OnBubbleSubliminalDisplayed: a subliminal dims the bubble once, at most once per 4 s.</summary>
+        internal void OnBubbleSubliminalDisplayed()
+        {
+            if ((DateTime.UtcNow - _profileBubbleLastShimmer).TotalMilliseconds < 4000) return;
+            _profileBubbleLastShimmer = DateTime.UtcNow;
+            ShimmerProfileBubble();
+        }
+
+        /// <summary>WPF WobbleProfileBubble: -12, 9, -5, 0 degrees at 90 / 220 / 340 / 480 ms, back to rest.</summary>
+        private void WobbleProfileBubble()
+        {
+            if (!AmbientFxCanvas.Env.AllowTransitions || Named<Grid>("ProfileBubbleVisual") is not { } visual) return;
+            var tilt = (visual.RenderTransform as TransformGroup)?.Children.OfType<RotateTransform>().FirstOrDefault();
+            if (tilt == null) return;
+            ProfileBubbleWobbles++;
+            Helpers.TransformTween.Run(tilt, TimeSpan.FromMilliseconds(480), new (double, AvaloniaProperty, double)[]
+            {
+                (0, RotateTransform.AngleProperty, 0), (90 / 480.0, RotateTransform.AngleProperty, -12),
+                (220 / 480.0, RotateTransform.AngleProperty, 9), (340 / 480.0, RotateTransform.AngleProperty, -5),
+                (1, RotateTransform.AngleProperty, 0),
+            });
+        }
+
+        /// <summary>WPF ShimmerProfileBubble: opacity 1 to 0.55 and back, 300 ms each way, sine.</summary>
+        private void ShimmerProfileBubble()
+        {
+            if (!AmbientFxCanvas.Env.AllowTransitions || Named<Grid>("ProfileBubbleVisual") is not { } visual) return;
+            ProfileBubbleShimmers++;
+            Helpers.TransformTween.Run(visual, TimeSpan.FromMilliseconds(600), new (double, AvaloniaProperty, double)[]
+            {
+                (0, OpacityProperty, 1.0), (0.5, OpacityProperty, 0.55), (1, OpacityProperty, 1.0),
+            }, new SineEaseInOut());
         }
 
         private void OnBubbleLevelUp()

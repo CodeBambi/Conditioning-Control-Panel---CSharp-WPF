@@ -3,8 +3,8 @@
 // the rail in the nav rework; "spiral" is a hidden tab of the You section (NavSections), reached
 // through ShowTab, the palette and the barks.
 //
-// The block's own subscription is MainShellWindow.WireProfileSpiral (profile doors) and SpiralTabView.Wire
-// (the room); here only the fuse and the language. BeginSpiralFirstLight has no caller here (DescentShowDirector is
+// DescentService.BlockChanged (Core, lane z1) repaints the two profile doors (WPF WireProfileSpiral);
+// the room itself subscribes while it is shown. BeginSpiralFirstLight has no caller here (DescentShowDirector is
 // WPF-only) and is not ported until it does.
 
 using System;
@@ -30,8 +30,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 var fuse = App.DescentCountdown;
                 if (fuse != null) fuse.PhaseChanged += OnSpiralRoomPhaseChanged;
                 LocalizationManager.Instance.LanguageChanged += OnSpiralRoomLanguageChanged;
+                // WPF WireProfileSpiral: a block landing before the menu is ever opened still repaints it.
+                var descent = App.Descent;
+                EventHandler onBlock = (_, _) =>
+                {
+                    if (global::Avalonia.Threading.Dispatcher.UIThread.CheckAccess()) OnSpiralBlockChanged();
+                    else global::Avalonia.Threading.Dispatcher.UIThread.Post(OnSpiralBlockChanged);
+                };
+                if (descent != null) descent.BlockChanged += onBlock;
                 Closed += (_, _) =>
                 {
+                    if (descent != null) descent.BlockChanged -= onBlock;
                     if (fuse != null) fuse.PhaseChanged -= OnSpiralRoomPhaseChanged;
                     LocalizationManager.Instance.LanguageChanged -= OnSpiralRoomLanguageChanged;
                 };

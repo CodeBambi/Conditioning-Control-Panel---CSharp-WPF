@@ -102,6 +102,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
         {
             Show("BannerImage", ChaosArtFile("banner.png"));
             Show("HubBackdrop", ChaosArtFile(System.IO.Path.Combine("hub", "backdrop.png")));
+            LoadMenuFrames();   // the menu's right panel: the flipbook, or a still (ChaosHubWindow.Art.cs)
 
             void Show(string name, string? path)
             {
@@ -510,8 +511,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             grid.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(1, GridUnitType.Star)));
             grid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
 
-            // ---- icon: a branch-tinted square with the glyph (ChaosArt sprites are head-side) ----
-            var icon = GlyphIcon(u.Glyph, 72, 14, accent, owned ? 1.0 : 0.5);
+            // ---- icon (real art if present, else a branch-tinted square with the glyph) ----
+            var icon = IconOrGlyph(ChaosArt.Resolve("upgrades", u.Id), u.Glyph, 72, 14, accent, owned ? 1.0 : 0.5);
             Grid.SetColumn(icon, 0);
             grid.Children.Add(icon);
 
@@ -579,9 +580,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             Margin = new Thickness(0, 0, 0, 4)
         };
 
-        /// <summary>WPF resolved real art through ChaosArt and fell back to this tinted glyph
-        /// square. Only the fallback exists on this head.
-        /// ponytail: needs ChaosArt, wired when it moves to Core.</summary>
+        /// <summary>The tinted glyph square WPF falls back to when a slot has no art
+        /// (<see cref="IconOrGlyph"/> in ChaosHubWindow.Art.cs asks ChaosArt first).</summary>
         private static Border GlyphIcon(string glyph, double size, double radius, Color accent, double opacity) => new()
         {
             Width = size, Height = size, CornerRadius = new CornerRadius(radius),
@@ -665,7 +665,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             grid.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(1, GridUnitType.Star)));
             grid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
 
-            var icon = GlyphIcon(rankLocked ? "?" : b.Glyph, 72, 14, BoonAccent,
+            var icon = IconOrGlyph(rankLocked ? null : ChaosArt.Resolve("boons", b.Id), rankLocked ? "?" : b.Glyph, 72, 14, BoonAccent,
                                  unlocked ? 1.0 : (rankLocked ? 0.6 : 0.5));
             ToolTip.SetTip(icon, rankLocked ? RankLockedTip : b.Desc);
             Grid.SetColumn(icon, 0);
@@ -921,7 +921,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
                     on ? TileState.Equipped : owned ? TileState.Owned : TileState.Locked,
                     onClick,
                     cornerBadge: on ? "✓" : null,
-                    flavor: u.Flavor));
+                    flavor: u.Flavor,
+                    art: ChaosArt.Resolve("upgrades", id)));
             }
             // Charms live with the habits: leveled, always-on once worn, toggled like a habit.
             foreach (var b in Shelf.Charms)
@@ -942,7 +943,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
                     active ? TileState.Equipped : unlocked ? TileState.Owned : TileState.Locked,
                     onClick,
                     cornerBadge: active ? "✓" : null,
-                    flavor: charmRankLocked ? null : b.Flavor));
+                    flavor: charmRankLocked ? null : b.Flavor,
+                    art: charmRankLocked ? TileUnknownArt : ChaosArt.Resolve("boons", bid)));
             }
             int shown = Shelf.Habits.Count + Shelf.Charms.Count;
             int target = Math.Max(16, ((shown + 3) / 4) * 4);
@@ -973,7 +975,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
                 var cell = LoadoutTile(b.Glyph, $"{b.Name} · L{b.Level}", b.Desc,
                     "click to unequip", BoonAccent, TileState.Equipped,
                     () => { Shelf.ToggleBoon(id); AfterBoonChange(); },
-                    size: 114, flavor: b.Flavor);
+                    size: 114, flavor: b.Flavor, art: ChaosArt.Resolve("boons", id));
                 cell.Margin = new Thickness(0, 0, 24, 0);
                 row.Children.Add(cell);
             }
@@ -1013,7 +1015,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
                     rankLocked ? "? ? ?" : unlocked ? $"{b.Name} · L{b.Level}" : b.Name,
                     rankLocked ? RankLockedTip : b.Desc, extra, BoonAccent, state, onClick,
                     cornerBadge: active ? "★" : null,
-                    flavor: rankLocked ? null : b.Flavor));
+                    flavor: rankLocked ? null : b.Flavor,
+                    art: rankLocked ? TileUnknownArt : ChaosArt.Resolve("boons", id)));
             }
             int target = Math.Max(padTo, ((boons.Count + 3) / 4) * 4);
             for (int i = boons.Count; i < target; i++)
@@ -1025,7 +1028,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
 
         private Control LoadoutTile(string glyph, string title, string? desc, string? extra, Color accent,
                                     TileState state, Action? onClick, string? cornerBadge = null,
-                                    double size = TILE, string? caption = null, string? flavor = null)
+                                    double size = TILE, string? caption = null, string? flavor = null,
+                                    global::Avalonia.Media.Imaging.Bitmap? art = null)
         {
             // Rounded clip so the square art can't poke past the ring corners (Border doesn't
             // clip children to its CornerRadius; the tile is fixed-size so a geometry works).
@@ -1033,6 +1037,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             {
                 Clip = new RectangleGeometry(new Rect(0, 0, size, size)) { RadiusX = 12, RadiusY = 12 }
             };
+            // WPF: real art when the slot has it; a mystery pad (Empty + the default ??? caption) wears
+            // the stitched keyhole; clickable "empty pocket" tiles keep the + (there it means "add one").
+            var keyhole = state == TileState.Empty && caption == null ? TileUnknownArt : null;
+            if (art != null && state != TileState.Empty)
+                content.Children.Add(new Image { Source = art, Stretch = Stretch.UniformToFill, Opacity = state == TileState.Locked ? 0.35 : 1.0 });
+            else if (keyhole != null)
+                content.Children.Add(new Image
+                {
+                    Source = keyhole, Width = size * 0.5, Height = size * 0.5, Stretch = Stretch.Uniform, Opacity = 0.45,
+                    HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center
+                });
+            else
             content.Children.Add(new TextBlock
             {
                 Text = glyph,
@@ -1862,10 +1878,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             _howToStep.Text = $"STEP {_howToIdx + 1} / {_howToCards.Length}";
             _howToTitle.Text = card.Title;
 
-            // Card art comes from ChaosArt.Resolve("howto", …) in the head; with no art the box
-            // collapses, exactly as it does in WPF when no screenshot has been dropped in.
-            // ponytail: needs ChaosArt, wired when it moves to Core.
-            _howToImageBox.IsVisible = false;
+            // image (graceful hide when no screenshot dropped in yet, as WPF)
+            PaintHowToImage(card.Image);
 
             // body lines
             _howToBody.Children.Clear();
@@ -1956,7 +1970,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
 
         /// <summary>WPF advanced the crossfading flipbook on a click and restarted the dwell
         /// timer. ponytail: needs the ChaosArt frames + the Skia scene, wired with them.</summary>
-        private void MenuArt_Click(object? sender, PointerPressedEventArgs e) { }
+        private void MenuArt_Click(object? sender, PointerPressedEventArgs e) => MenuArtClicked();
 
         // ============================ menu music ============================
 
