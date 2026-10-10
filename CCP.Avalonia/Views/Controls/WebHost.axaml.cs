@@ -181,12 +181,26 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
         internal const string WindowsBrowserArguments =
             "--autoplay-policy=no-user-gesture-required --disable-background-timer-throttling --disable-backgrounding-occluded-windows";
 
-        private static void OnEnvironmentRequested(object? sender, WebViewEnvironmentRequestedEventArgs e)
+        /// <summary>The WebView2 profile folder NAME under UserData (Platform/WebProfiles: WPF's own
+        /// names, so sign-ins survive the upgrade). Set it before the control is shown: the engine
+        /// asks once, when the native view first attaches. Windows only; WebKitGTK ignores it.</summary>
+        public string Profile { get; set; } = Platform.WebProfiles.Browser;
+
+        private void OnEnvironmentRequested(object? sender, WebViewEnvironmentRequestedEventArgs e)
         {
-            if (e is WindowsWebView2EnvironmentRequestedEventArgs win)
-                win.AdditionalBrowserArguments = string.IsNullOrWhiteSpace(win.AdditionalBrowserArguments)
-                    ? WindowsBrowserArguments
-                    : win.AdditionalBrowserArguments + " " + WindowsBrowserArguments;
+            if (e is not WindowsWebView2EnvironmentRequestedEventArgs win) return;
+            win.AdditionalBrowserArguments = string.IsNullOrWhiteSpace(win.AdditionalBrowserArguments)
+                ? WindowsBrowserArguments
+                : win.AdditionalBrowserArguments + " " + WindowsBrowserArguments;
+            // In UserData, never beside the exe (the default): an update or a mirrored deploy of the
+            // install folder would wipe the profile, and Program Files is not writable.
+            try
+            {
+                var folder = Platform.WebProfiles.FolderFor(Profile);
+                System.IO.Directory.CreateDirectory(folder);
+                win.UserDataFolder = folder;
+            }
+            catch (Exception ex) { Serilog.Log.Warning(ex, "WebHost: profile folder {Profile} unavailable; engine default", Profile); }
         }
 
         public WebHost()

@@ -71,7 +71,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
         private static readonly List<GameWindow> Open = new();
 
         internal Game Spec { get; }
-        internal WebHost Web { get; } = new();
+        internal WebHost Web { get; }
         internal Uri? PageUrl { get; private set; }
 
         /// <summary>WPF LaunchCore: one live window per game, focused rather than relaunched (a
@@ -93,6 +93,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
         internal GameWindow(Game spec)
         {
             Spec = spec;
+            // WPF gives each game its own WebView2 profile folder; same names here (Platform/WebProfiles).
+            Web = new WebHost { Profile = Platform.WebProfiles.ForGame(spec.Id) };
             Title = Loc.Get(spec.TitleKey);
             Width = 1280;
             Height = 800;
