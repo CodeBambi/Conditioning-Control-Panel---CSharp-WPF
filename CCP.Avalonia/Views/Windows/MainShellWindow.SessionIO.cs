@@ -146,7 +146,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     break;
                 case DropType.Enhancement:
                     // WPF ImportEnhancementFiles (DeeperTab.cs:819): copy into the library, then reload the hub.
-                    Views.Deeper.DeeperImport.ImportFiles(files);
+                    DeeperDropImport(files);
                     InitializeDeeperHub();
                     break;
                 case DropType.Mod:

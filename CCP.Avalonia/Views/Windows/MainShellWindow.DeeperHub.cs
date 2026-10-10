@@ -38,6 +38,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         internal static Func<Window, string, string, Task<bool>> DeeperConfirm = (owner, title, message) =>
             MessageDialog.ConfirmAsync(owner, title, message, okText: Loc.Get("btn_delete"), cancelText: Loc.Get("btn_cancel"));
 
+        /// <summary>A dropped enhancement goes into the library (tests swap it so no library file is written).</summary>
+        internal static Func<IEnumerable<string>, string?> DeeperDropImport = files => DeeperImport.ImportFiles(files);
+
         private readonly Dictionary<string, DeeperEditorWindow> _deeperOpenEditors = new(StringComparer.OrdinalIgnoreCase);
         private DispatcherTimer? _deeperDeleteTimer;
 
