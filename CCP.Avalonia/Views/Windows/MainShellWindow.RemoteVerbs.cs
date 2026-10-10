@@ -111,6 +111,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         internal bool IsSessionRemoteStarted =>
             _remoteStartedSession != null && App.Sessions is { IsRunning: true } r && ReferenceEquals(r.CurrentSession, _remoteStartedSession);
 
+        /// <summary>The rule's second lock: true when a start_session still names strict_lock here.</summary>
+        internal static bool RemoteStartAsksStrictLock(JObject? p) => RemoteCommandGate.DropsStrictLockFlag("start_session", p);
+
         string? RemoteCommands.IRemoteHead.Session(string verb, JObject? p)
         {
             if (App.Sessions is not { } runner) return RemoteCommands.NotOnThisBuild;
@@ -118,8 +121,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             {
                 case "start_session":
                     var session = RemoteSessionFor(p?["session_id"]?.ToString());
-                    if (ConditioningControlPanel.Services.Leash.LeashRemoteRule.AsksStrictLock(p))
-                        Log.Information("[RemoteControl] start_session asked for strict lock; dropped on this head");
+                    // Owner, 2026-10-10: a remote session start never turns Strict Lock on, for any controller
+                    // on any tier. RemoteCommandGate removes the flag before this runs; StartSession takes no
+                    // strict argument at all, so a flag that slipped through still does nothing here.
+                    if (RemoteStartAsksStrictLock(p))
+                        Log.Warning("[RemoteControl] start_session reached the head with strict_lock; ignored");
                     if (runner.IsRunning) runner.Stop(completed: false);   // WPF: stop the running one first
                     _remoteStartedSession = session;                       // before the start, as WPF
                     StartSession(session);
