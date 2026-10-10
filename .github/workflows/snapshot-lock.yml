@@ -1,0 +1,39 @@
+name: snapshot-lock
+
+# The snapshot step of build.yml, also on avalonia-port/** pushes, so a branch can prove its baselines
+# (rendered on a dev box) still match on ubuntu-latest before a PR exists. build.yml stays the PR gate.
+on:
+  workflow_dispatch:
+  push:
+    branches: ['avalonia-port/**']
+    paths:
+      - 'CCP.Avalonia/**'
+      - 'CCP.Core/**'
+      - 'Tests/CCP.Avalonia.Snapshot.Tests/**'
+      - '.github/workflows/snapshot-lock.yml'
+
+concurrency:
+  group: snapshot-lock-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  snapshots:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            10.0.x
+      - run: dotnet test Tests/CCP.Avalonia.Snapshot.Tests/CCP.Avalonia.Snapshot.Tests.csproj -c Release
+      # On a mismatch the received files are the evidence: diff them against the committed baselines.
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: snapshot-received
+          path: Tests/CCP.Avalonia.Snapshot.Tests/Snapshots/
+          retention-days: 14
