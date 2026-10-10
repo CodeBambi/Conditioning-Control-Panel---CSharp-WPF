@@ -46,6 +46,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             {
                 _state = new ChaosRunState(cfg);
                 _active = true;
+                if (!isRestart) global::ConditioningControlPanel.Services.SeasonFeatureTracker.TrackFeature(global::ConditioningControlPanel.Models.SeasonFeatureKeys.ChaosMode);   // WPF ChaosModeService:300
                 _hud = new ChaosHudWindow(_state);
                 _hud.Show();
                 _overlay = ChaosOverlayWindow.ForRun();

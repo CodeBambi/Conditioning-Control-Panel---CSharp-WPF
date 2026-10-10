@@ -78,7 +78,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     mods?.GetQuizPraiseHeardQuestionOverride());
                 var question = pool[_random.Next(pool.Length)];
                 new PopQuizWindow(question, isTest).Show();
-                // ponytail: WPF also calls SeasonRecapService.TrackFeature(PopQuiz); that service is head-side.
+                if (!isTest) global::ConditioningControlPanel.Services.SeasonFeatureTracker.TrackFeature(global::ConditioningControlPanel.Models.SeasonFeatureKeys.PopQuiz);   // WPF PopQuizService:260
                 Log.Information("Pop Quiz shown: {Question}", question.QuestionText);
             }
             catch (Exception ex)

@@ -151,11 +151,16 @@ namespace ConditioningControlPanel.Services
         /// shrunk to local-only). Xp is the TOTAL, as WPF sends it.</summary>
         /// <param name="cosmetics">An explicit loadout save (WPF BuildCosmeticsPayload after a load: the sanitized
         /// loadout, the empty one included - that is the unequip-everything clear). Null leaves the key out.</param>
-        public static SyncBody Body(AppSettings s, IEnumerable<string>? achievements, ProfileCosmetics? cosmetics = null, SyncBody.Field consent = SyncBody.Field.None) => new()
+        public static SyncBody Body(AppSettings s, IEnumerable<string>? achievements, ProfileCosmetics? cosmetics = null, SyncBody.Field consent = SyncBody.Field.None,
+            List<Dictionary<string, object>>? featureDayLog = null) => new()
         {
             Known = (achievements == null ? Sent & ~SyncBody.Field.Achievements : Sent)
                     | (cosmetics == null ? SyncBody.Field.None : SyncBody.Field.Cosmetics)
-                    | (consent & Privacy),
+                    | (consent & Privacy)
+                    | (featureDayLog == null ? SyncBody.Field.None : SyncBody.Field.Stats),
+            // WPF stats["feature_day_log"] (ProfileSyncService.cs:1811), the one stat this head knows: the server
+            // lifts it off the payload before its per-key stats merge, so a stats object with nothing else changes nothing.
+            Stats = featureDayLog == null ? null : new Dictionary<string, object> { ["feature_day_log"] = featureDayLog },
             UnifiedId = s.UnifiedId,
             Xp = (int)ProfileAdopt.TotalXp(s),
             Level = s.PlayerLevel,
@@ -224,7 +229,8 @@ namespace ConditioningControlPanel.Services
                 var consent = ConsentFields(s, _consentAdopted);
                 // Snapshot what this body says, to tell a switch flipped while it was in flight.
                 var consentSent = (s.AllowDiscordDm, s.ShowOnlineStatus, s.ShareProfilePicture, s.PublicShareRealAvatar, s.GoonShareAvatar, s.GoonShareDiscordDm);
-                var body = JsonConvert.SerializeObject(Body(s, server?.Concat(_localAchievements() ?? Array.Empty<string>()), cosmetics, consent));
+                var body = JsonConvert.SerializeObject(Body(s, server?.Concat(_localAchievements() ?? Array.Empty<string>()), cosmetics, consent,
+                    FeatureDayLogService.WirePayloadForSync()));   // WPF ProfileSyncService.cs:1762: Flush, then the log
                 // THE CHOICE SUBMIT (WPF SyncProfileAsync): grafted on only while a choice waits for its ack, so
                 // every other sync is byte-identical. The re-derived ledger rides the ordinary xp/level fields.
                 var pendingChoice = s.PendingDescentMigrationChoice;

@@ -752,6 +752,9 @@ namespace ConditioningControlPanel.Avalonia
                 // caller's thread; the popup hops to the UI thread as WPF's DispatcherHelper does.
                 Achievements = new AchievementEngine(new AchievementStore(AchievementsPath));
                 WireAchievementUnlocks(Achievements);
+                // WPF App.xaml.cs:2121: per-day feature use, read off the lifetime counters every 60 s.
+                try { FeatureDayLogService.Current = new FeatureDayLogService(FeatureDayLogService.DefaultPath, () => FeatureDayLogService.ReadCounters(Achievements?.Progress, CoreSettings.Current)); }
+                catch (Exception exDayLog) { Serilog.Log.Warning(exDayLog, "[FeatureDayLog] service construction failed; per-day feature use is not recorded this run"); }
                 Platform.LoginStreak.Start(Achievements);   // progression#42: WPF AchievementService ctor + App.xaml.cs:2732 + CheckDayRollover
                 WardrobeCatalog.ProgressProvider = () => Achievements?.Progress;
                 CoreProgram.UnlockAchievementProvider = id => Achievements?.TryUnlock(id);
@@ -1187,6 +1190,7 @@ namespace ConditioningControlPanel.Avalonia
             // WPF AchievementService.Dispose saves synchronously; only when dirty here, so an idle exit
             // never rewrites the file (or rotates its .bak) - it may be shared with the WPF head.
             try { if (Achievements is { IsDirty: true } a) a.Save(); } catch { /* the store logs write failures */ }
+            try { FeatureDayLogService.Current?.Dispose(); } catch { /* WPF App.OnExit:5773; the last tick and the file */ }
             try { Platform.AwarenessHead.Shutdown(); } catch { /* WPF App.OnExit:5779; flushes the ledger */ }
             try { Quests?.Dispose(); } catch { /* WPF App.OnExit:6104; saves only when dirty */ }
             try { Programs?.Dispose(); } catch { /* WPF App.OnExit:6309; idempotent after StopPrograms */ }
