@@ -283,13 +283,14 @@ public sealed partial class FriendsDrawer
     private void ShowNote(string friendId, string key) { _results[friendId] = (Loc.Get(key), true); Render(); }
 }
 
-/// <summary>WPF InviteCodes + CatalogueWatches. This head hosts neither a Goon room nor a chess board, so
-/// both tiles are shut ("not on this build"); whoever ports a host sets these.</summary>
+/// <summary>WPF InviteCodes + CatalogueWatches. The chess board is hosted (Views/Games/GameWindow.Pbp.cs:
+/// the board opens on a challenge and hands back its id). SEAM(g3): this head hosts no Goon room yet, so
+/// that tile stays shut ("not on this build") until the Goon host sets GoonCode.</summary>
 internal static class FriendsInviteCodes
 {
     public static Func<string?> GoonCode { get; set; } = () => null;
-    public static Func<string, TimeSpan, Task<string?>> ChallengeFriend { get; set; } = (_, _) => Task.FromResult<string?>(null);
-    public static Func<bool> HostsChess { get; set; } = () => false;
+    public static Func<string, TimeSpan, Task<string?>> ChallengeFriend { get; set; } = Games.GameWindow.PbpChallengeFriendAsync;
+    public static Func<bool> HostsChess { get; set; } = () => true;
     public static Func<IReadOnlyList<(string Id, string Title)>> CatalogueWatches { get; set; } = () => Array.Empty<(string, string)>();
 
     /// <summary>The loc key of why a tile is shut, or null when it can be sent.</summary>
