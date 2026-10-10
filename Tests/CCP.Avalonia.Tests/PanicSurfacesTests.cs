@@ -171,6 +171,7 @@ public sealed class PanicSurfacesTests
         ["LeashTaskHost"] = "registers itself at startup (LeashTaskHost.HookPanic: the leash-task stop, right after intake)",
         ["LeashExplainHost"] = "the leash '?' help router: a still explainer card the player opened, starts no feature; WPF panic leaves it alone",
         ["FriendsFeedHost"] = "the friends feed log: opens no surface, nothing to stop",
+        ["WinRtScreenReader"] = "screen OCR (RecognizeAsync is not the mic): WPF parity, a panic leaves the keyword screen reader to its switches (WPF stops it only in the panic fallback path and restarts it); it shows nothing itself",
     };
 
     [Fact]
