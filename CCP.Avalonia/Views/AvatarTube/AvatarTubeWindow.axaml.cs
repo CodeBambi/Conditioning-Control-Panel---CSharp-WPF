@@ -279,19 +279,12 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             // set ARROWS are blocked on the companion coupling, NOT on the set list - see
             // SelectAvatarSet. The static four-pose path below is the one every set-1 user is on.
 
-            // ponytail: the ~14 App.* services the WPF constructor subscribed to (Video, BubbleCount,
-            // Flash, Subliminal, Bubbles, Achievements, Progression, Companion, WindowAwareness,
-            // MindWipe, BrainDrain, ModerationCounter, Mods, MainWindow.EngineStopped). Two of those
-            // names DO have seams and still do not help: CoreMods raises ModChanged but none of the
-            // avatar-set handlers hang off it, and CoreProgression is write-only (AddXP, no level
-            // event), so the caption cannot re-read itself when she levels. The other twelve are
-            // head-side services in ConditioningControlPanel/Services/ with no seam at all, and
-            // their handlers live in the Reactions/Speech partials that did not port.
-
-            // ponytail: the WPF ctor also started four timers here - a 2s greeting, the idle-giggle,
-            // the trigger and the random-bubble loops. Deliberately NOT started: every one of them
-            // calls into a partial this layer does not have, and --render-all constructs ~180 windows
-            // in one process, where a stray timer firing at a closed window is a flaky failure.
+            // The app reactions the WPF constructor subscribed to (video, flash, subliminal, bubbles,
+            // bubble count, achievements, level up, companion level and switch, mind wipe, brain drain,
+            // engine stop) arrive through one hub, CoreTubeEvents: AvatarTubeWindow.AppReactions.cs,
+            // attached from OnOpened. Barks come through Platform/BarkHead (Core BarkEngine). The four
+            // self-starting loops (greeting, idle, trigger, random bubble) also start from OnOpened, never
+            // here: --render-all constructs ~180 windows in one process and opens none of them.
 
             // WPF did this from Loaded on this window; same here. See ApplyChatShortcutTo for why
             // the binding on THIS window is the lesser half.

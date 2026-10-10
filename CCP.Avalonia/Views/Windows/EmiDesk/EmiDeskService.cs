@@ -17,10 +17,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
     /// Dismiss :420, EnsureWindow :607, MaybeAskAboutMuting :1541, AvatarMuted :80. The dock chip,
     /// the hover x and the settings switch all route here, so none of them owns her twice.</para>
     ///
-    /// <para>ponytail: not here yet, each a named WPF member: the moment bus (<c>Fire</c>, greeting,
-    /// backSoon/weekend/bedtime beats, needs EmiLineEngine + EmiState), the nudge machine, the
-    /// knock (<c>TryKnock</c>) and the tube hand-off (<c>TubeDeskVisibility</c>). The system-wide chord
-    /// (<c>ApplyHotkey</c>) is here, grabbed through Platform/X11SummonChord.</para>
+    /// <para>The moment bus (Fire, hold faces, the summon greeting) is EmiDeskService.Moments.cs, the
+    /// nudge machine EmiDeskService.Nudges.cs, the knock EmiDeskService.Knock.cs. ponytail: offers
+    /// (ShowAsk), the glass channels, the gif rain and the tube hand-off (<c>TubeDeskVisibility</c>)
+    /// are not here yet. The system-wide chord (<c>ApplyHotkey</c>) is grabbed through Platform/X11SummonChord.</para>
     /// </summary>
     internal sealed partial class EmiDeskService
     {
