@@ -123,8 +123,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             catch (Exception ex) { Log.Warning(ex, "Possession: remember install failed"); }
         }
 
-        /// <summary>WPF PossessionSceneCatalog, minus the rail sweep (its victims are the rail doors,
-        /// which are buttons and not enrolled on this head).</summary>
+        /// <summary>WPF PossessionSceneCatalog (the rail sweep joined with the doors, k22).</summary>
         internal static IPossessionScene[] PossessionHeadScenes() => new IPossessionScene[]
         {
             new Services.Possession.Scenes.TheCountScene(), new Services.Possession.Scenes.WhereYouAreScene(),
@@ -168,10 +167,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         // ---- the reactive layer (WPF PossessionEvents, the card half) -----------------------------
         // A press on a haunted room's card makes that card breathe. The press is only WATCHED: it is
-        // never handled, so whatever was pressed still gets it. Not here, on purpose: a pressed rail
-        // door dropping (a button), Start / Stop dodging the pointer (a stop control may never get
-        // harder to hit), and the typo that answers a changed setting (a setting can be changed by a
-        // remote controller, and no remote path may feed the haunt).
+        // never handled, so whatever was pressed still gets it. The pointer reaching Start asks for a
+        // dodge (a START only: a Start that reads Stop is a safety control). Not here, on purpose: a
+        // pressed rail door dropping its letters (drop is not ported), and the typo that answers a
+        // changed setting (a setting can be changed by a remote controller, and no remote path may
+        // feed the haunt).
         private bool _possessionPressHooked;
 
         private void HookPossessionPress()
