@@ -105,6 +105,45 @@ public sealed class FypEyeControlTests
         });
     }
 
+    private sealed class DeadCamera : ConditioningControlPanel.Avalonia.Platform.IFrameSource
+    {
+        public bool Throws;
+        public bool Open() => Throws ? throw new InvalidOperationException("driver") : false;
+        public bool Read(OpenCvSharp.Mat bgr) => false;
+        public void Dispose() { }
+    }
+
+    [Fact]
+    public void TheAppsOwnEye_TellsAMissingCameraFromAFault() => AvaloniaTestDispatcher.Run(() =>
+    {
+        // WPF :1246: no camera to open reads "no-camera"; only an engine fault reads "error".
+        var tracker = ConditioningControlPanel.Avalonia.Platform.WebcamTracker.Instance;
+        var s = CoreSettings.Current;
+        var old = (s.WebcamConsentGiven, s.WebcamConsentVersion, ConditioningControlPanel.Avalonia.Platform.WebcamTracker.SourceFactory);
+        try
+        {
+            s.WebcamConsentGiven = true;
+            s.WebcamConsentVersion = ConditioningControlPanel.Services.Webcam.WebcamConsent.ConsentVersion;
+            var camera = new DeadCamera();
+            ConditioningControlPanel.Avalonia.Platform.WebcamTracker.SourceFactory = () => camera;
+
+            Assert.False(tracker.Start());
+            Assert.StartsWith("No camera could be opened", tracker.LastError);
+            Assert.True(tracker.StartFoundNoCamera);
+            Assert.False(GameWindow.TrackerFypEye.Instance.Faulted);     // the page hears "no-camera"
+
+            camera.Throws = true;
+            Assert.False(tracker.Start());
+            Assert.False(tracker.StartFoundNoCamera);
+            Assert.True(GameWindow.TrackerFypEye.Instance.Faulted);      // the page hears "error"
+        }
+        finally
+        {
+            tracker.Stop();
+            (s.WebcamConsentGiven, s.WebcamConsentVersion, ConditioningControlPanel.Avalonia.Platform.WebcamTracker.SourceFactory) = old;
+        }
+    });
+
     private static void Settle(GameWindow w)
     {
         for (var i = 0; i < 20 && !w.FypEyeTask.IsCompleted; i++) Dispatcher.UIThread.RunJobs();

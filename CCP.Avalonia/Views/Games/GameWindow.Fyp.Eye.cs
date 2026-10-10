@@ -208,6 +208,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                     PostFypEyeStatus(null);
                     return;
                 }
+                ExitFypGhost();   // WPF :1371: a parked window cannot host a modal dot dance
                 await FypEyeCalibrate(this);
                 SyncFypGazeSubscription();
                 PostFypEyeStatus(null);
@@ -257,7 +258,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             private static WebcamTracker T => WebcamTracker.Instance;
             public bool IsRunning => T.IsRunning;
             public bool Calibrated => T.Calibration != null;
-            public bool Faulted => T.LastError != null && !T.StartWasStopped;
+            // WPF :1246: only WebcamTrackingState.Error reads "error"; a camera that would not open
+            // (missing, denied, in use) reads "no-camera".
+            public bool Faulted => T.LastError != null && !T.StartWasStopped && !T.StartFoundNoCamera;
             public (double OriginX, double OriginY, double Scale) CalSpace
             {
                 get

@@ -58,6 +58,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             JustDropHostService.CloseActiveProvider = GameWindow.CloseJustDrop;
             FypHostService.LaunchProvider = () => GameWindow.Launch(GameWindow.FypId);
             FypHostService.IsActiveProvider = GameWindow.IsFypOpen;
+            FypHostService.IsGhostedProvider = GameWindow.IsFypGhostedAny;
             FypHostService.CloseProvider = GameWindow.CloseFyp;
         }
 

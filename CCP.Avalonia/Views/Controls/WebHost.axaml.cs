@@ -199,7 +199,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
         /// ponytail: WebKitGTK has no such switch here; autoplay there needs the page's own gesture.</summary>
         internal const string WindowsBrowserArguments = AutoplaySwitch + " " + NoThrottlingSwitches;
         private const string AutoplaySwitch = "--autoplay-policy=no-user-gesture-required";
-        private const string NoThrottlingSwitches = "--disable-background-timer-throttling --disable-backgrounding-occluded-windows";
+        // CalculateNativeWinOcclusion off (WPF ChaosWebViewHost passes it to every host): the For You
+        // ghost parks its window off the virtual desktop, and Chromium would call it occluded, stop
+        // rendering and freeze the mirror on a still frame.
+        private const string NoThrottlingSwitches = "--disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-features=CalculateNativeWinOcclusion";
 
         /// <summary>What a WebView2 environment gets: the whole constant, or (CCP_WEBVIEW_AUTOPLAY=off)
         /// the same without the autoplay switch, so <see cref="AutoplayWithoutGesture"/> stays the truth.</summary>
