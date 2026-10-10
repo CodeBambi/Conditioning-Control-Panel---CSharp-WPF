@@ -52,9 +52,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Studio
             {
                 if (_loading) return;
                 CoreSettings.Current.BrainDrainVolume = (int)e.NewValue;
-                // The player reads the setting when it starts a clip, so the next clip has it.
-                // SEAM(core): WPF RefreshVolume also turns a clip that is ALREADY playing; CoreBrainDrain
-                // has no volume provider yet (Platform/BrainDrainPlayer keeps the live voice).
+                // WPF RefreshVolume: a clip that is ALREADY playing turns with the slider; the next
+                // clip reads the setting when it starts.
+                CoreBrainDrain.RefreshVolume();
                 CoreSettings.Save();
             };
             high.IsCheckedChanged += (_, _) =>

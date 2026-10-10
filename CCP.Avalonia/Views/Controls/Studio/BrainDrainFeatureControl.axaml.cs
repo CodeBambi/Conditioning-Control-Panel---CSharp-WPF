@@ -57,6 +57,20 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Studio
             }
             finally { _loading = false; }
 
+            // not ported: the haze on Linux (no screen grab that leaves the app's own overlays out).
+            // The four rows that only steer the haze are greyed with the reason; the audio half runs.
+            if (!Overlays.BrainDrainOverlay.IsSupported)
+            {
+                foreach (var c in new Control[] { blur, melt, keep, capture })
+                {
+                    c.IsEnabled = false;
+                    if (c.Parent is Control row)
+                        row.Bind(ToolTip.TipProperty, new global::Avalonia.Data.Binding("[exclusives_not_on_this_build]") { Source = LocalizationManager.Instance });
+                }
+            }
+
+            // The overlay follows these settings by itself (BrainDrainOverlay.OnSettingChanged), as
+            // WPF OverlayService follows them: the handlers below only write and save.
             blur.ValueChanged += (_, e) =>
             {
                 if (_loading) return;

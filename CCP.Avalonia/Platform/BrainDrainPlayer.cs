@@ -50,6 +50,19 @@ namespace ConditioningControlPanel.Avalonia.Platform
             CoreBrainDrain.IntensityProvider = v => Intensity = v;
             CoreBrainDrain.ClipCountProvider = () => ClipCount;
             CoreBrainDrain.ReloadClipsProvider = ReloadClips;
+            CoreBrainDrain.RefreshVolumeProvider = RefreshVolume;
+        }
+
+        /// <summary>WPF RefreshVolume (#1104): the clip that is playing right now takes the new
+        /// master x Brain Drain volume; with nothing playing the next clip reads it anyway.</summary>
+        internal void RefreshVolume()
+        {
+            MindWipePlayer.IVoice? voice;
+            lock (_lock) voice = _voice;
+            if (voice == null) return;
+            var s = CoreSettings.Current;
+            try { voice.Volume = BrainDrainSchedule.EffectiveVolume(s.MasterVolume, s.BrainDrainVolume); }
+            catch (Exception ex) { Log.Debug("BrainDrain: volume refresh failed: {E}", ex.Message); }
         }
 
         internal void ReloadClips()

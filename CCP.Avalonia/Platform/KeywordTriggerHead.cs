@@ -325,7 +325,9 @@ internal static class KeywordTriggerHead
                     // ponytail: no OverlayService.PulseOverlays twin on this head (studio lane).
                     break;
                 case KeywordVisualEffect.BrainDrain:
-                    // ponytail: BrainDrainMeltPayload needs the Brain Drain runtime (studio#3, wave B8).
+                    // WPF new BrainDrainMeltPayload().Fire(): ten seconds of haze on the user's own
+                    // blur dial, one drain at a time (BubbleOverlay.FireDrain is that payload).
+                    Overlay(host => BubbleOverlay.FireDrain(host));
                     break;
             }
         }

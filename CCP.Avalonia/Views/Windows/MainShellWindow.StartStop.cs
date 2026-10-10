@@ -80,6 +80,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 PinkRushHost.Start();              // WPF StartEngine :309 App.SkillTree?.Start()
                 PinkFilterOverlay.Refresh(this);   // WPF App.Overlay.Start()
                 SpiralOverlay.Refresh(this);
+                BrainDrainOverlay.Refresh(this);   // the haze follows the engine (WPF App.Overlay.Start / Stop)
                 UpdateStartButton();
             });
         }
@@ -91,6 +92,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _engineGen++;
             App.Sessions?.Pause();
             CoreEngine.Stop();
+            Overlays.BrainDrainOverlay.CloseAll();   // the haze goes on every stop and panic, engine running or not
         }
 
         /// <summary><see cref="CoreEngine.StoppedHook"/>: the head half of StopEngineCore.</summary>

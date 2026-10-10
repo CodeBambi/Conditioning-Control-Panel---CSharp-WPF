@@ -131,7 +131,7 @@
                                 <TextBlock Grid.Column="0" Text="{loc:Str st4_braindrain_blur_strength}" FontSize="13" FontWeight="SemiBold"
                                            Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
                                 <Slider Grid.Column="1" x:Name="SliderBlurStrength" sessionLock:SessionLock.Owned="True"
-                                        Minimum="1" Maximum="100" Value="50"
+                                        Minimum="0" Maximum="100" Value="50"
                                         VerticalAlignment="Center" Margin="10,0"/>
                                 <TextBlock Grid.Column="2" x:Name="TxtBlurStrength" Text="50%"
                                            HorizontalAlignment="Right" VerticalAlignment="Center"
