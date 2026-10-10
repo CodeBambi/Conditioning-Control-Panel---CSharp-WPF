@@ -85,6 +85,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             PageUrl = new Uri(JustDropHostService.BuildStartUrl(_justDropNext));
             Web.Navigate(PageUrl);
             Log.Information("[Game] justdrop: launched ({Kind})", replay ? "replay" : "shop");   // never the url: it names the account
+            Closed += (_, _) => JustDropOrdersService.NoteDrawerChanged();   // WPF JustDropHostService.cs:309: the shelf repaints
             if (!replay) return;
             Opened += (_, _) => { SetWindowFullscreen(true); DuckShellForDrop(); };
             Closed += (_, _) => RestoreDuckedShell();
