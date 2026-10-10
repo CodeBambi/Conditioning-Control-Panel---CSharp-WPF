@@ -662,7 +662,28 @@ public class BoardTilesTests
         // With the message glow, field/message passes, face cache and packed CRT (same day, watch-party
         // sample, every effect): pitch 14 + CRT 1.6-1.7 ms (1.93 ms before on the same machine).
         // This guard is loose (Debug, cold JIT, a loaded CI runner) and only catches a gross regression.
-        Assert.True(ms < 12, $"a board frame took {ms:F2} ms");
+        // TEMP DIAG (ci-green): remove before merge.
+        var proc = Process.GetCurrentProcess();
+        string Pass(int n)
+        {
+            var per = new double[n]; var cpu0 = proc.TotalProcessorTime; var w = Stopwatch.StartNew();
+            for (int k = 0; k < n; k++)
+            {
+                var f = Stopwatch.StartNew(); double t = 0.5 + k / 30.0;
+                BoardScene.Compute(pic, 0, fx, t, 10, ripples, t, false, c, z, ro);
+                r.Draw(c, z, true, 0.02, ro, BoardFxMath.GlowStrength(t, 10, false, true));
+                per[k] = f.Elapsed.TotalMilliseconds;
+            }
+            proc.Refresh();
+            double cores = (proc.TotalProcessorTime - cpu0).TotalMilliseconds / w.Elapsed.TotalMilliseconds;
+            var s = per.OrderBy(x => x).ToArray();
+            return $"mean {per.Average():F2} min {s[0]:F2} med {s[n / 2]:F2} max {s[^1]:F2} procCores {cores:F2} threads {proc.Threads.Count} | " + string.Join(" ", per.Select(x => x.ToString("F1")));
+        }
+        var first = Pass(60);
+        for (int k = 0; k < 100; k++) { BoardScene.Compute(pic, 0, fx, 0.3, 10, ripples, 0.3, false, c, z, ro); r.Draw(c, z, true, 0.02, ro, 0.9); }
+        Thread.Sleep(300);
+        var warm = Pass(60);
+        Assert.Fail($"DIAG cpus {Environment.ProcessorCount} orig {ms:F2} ms\nPASS-A {first}\nPASS-B(after 100 more + 300ms) {warm}");
     }
 
     // ---- the view ----------------------------------------------------------------------------

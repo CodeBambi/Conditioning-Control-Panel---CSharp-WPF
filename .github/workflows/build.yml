@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 jobs:
   # THE ANTI-DRIFT JOB. Its entire value is that it runs on a machine where WPF cannot exist:
