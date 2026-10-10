@@ -3,7 +3,10 @@ using System.Collections.Generic;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Headless;
+using Avalonia.Media;
 using Avalonia.Threading;
 using CCP.Avalonia.Testing;
 using ConditioningControlPanel;
@@ -49,17 +52,43 @@ public sealed class VerifiedRowSnapshotTests
         Directory.CreateDirectory(profile);
         Environment.SetEnvironmentVariable("CCP_USERDATA_DIR", profile);
         AppDomain.CurrentDomain.ProcessExit += (_, _) => { try { Directory.Delete(profile, true); } catch { } };
+
         VerifyAvalonia.Initialize();
         VerifierSettings.UseSsimForPng(SsimThreshold);
+    }
+
+    private static bool _setUp;
+
+    /// <summary>
+    /// RenderProof.EnsureSetUp (the --render-all path: app builder, Inter, Skia, real drawing) plus one
+    /// pin: glyphs Inter lacks (emoji) fall back to the bundled Noto Emoji before the system's fontconfig,
+    /// which picked Noto Sans Symbols 2 for the headphones on Arch and another face on ubuntu-latest,
+    /// shifting the whole layout (CI run 38052778670).
+    /// </summary>
+    private static void SetUpOnce()
+    {
+        if (_setUp) return;
+        Program.BuildAvaloniaApp()
+            .UseSkia()
+            .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+            .With(new FontManagerOptions
+            {
+                FontFallbacks = [new FontFallback { FontFamily = new FontFamily("avares://CCP.Avalonia.Snapshot.Tests/Fonts#Noto Emoji") }],
+            })
+            .SetupWithoutStarting();
+        // A missing resource would silently fall through to fontconfig again: fail loudly instead.
+        if (!FontManager.Current.TryMatchCharacter(0x1F3A7, FontStyle.Normal, FontWeight.Normal, FontStretch.Normal,
+                null, null, out var face) || face.FontFamily.Name != "Noto Emoji")
+            throw new InvalidOperationException("snapshot fallback font is not the bundled Noto Emoji");
+        _setUp = true;
     }
 
     [Theory]
     [MemberData(nameof(RowIds))]
     public Task VerifiedRowRenderIsLocked(string rowId) => AvaloniaTestDispatcher.RunAsync(async () =>
     {
-        // The --render-all path: app builder, Inter font, Skia, real drawing, in-memory state only.
         RenderProof.Rendering = true;
-        RenderProof.EnsureSetUp();
+        SetUpOnce();
         CoreSettings.Current.MotionLevel = MotionLevel.Off;
 
         var window = Rows[rowId]();

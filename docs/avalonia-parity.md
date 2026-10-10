@@ -23,7 +23,7 @@ Locking a row: a `verified`/`improved` row must have a snapshot, or the gate fai
 (`ledger-snapshot-check.sh`). Add the row id and its window to `Rows` in
 `Tests/CCP.Avalonia.Snapshot.Tests/VerifiedRowSnapshotTests.cs`, run that project once, read
 `Snapshots/<row-id>.received.png`, rename it (and the `.received.txt` tree) to `.verified.*`. It renders
-through RenderProof (Inter, Skia, Motion off, throwaway profile) and compares by SSIM 0.995. Accept a new
+through the RenderProof setup (Inter, Skia, Motion off, throwaway profile) with the bundled Noto Emoji pinned as the fallback font, so it matches on ubuntu-latest, and compares by SSIM 0.995. Accept a new
 or changed baseline only with the WPF side-by-side image path in the commit message.
 
 Starting totals (2026-09-28): 362 rows: 59 missing, 247 stub, 56 wired, 0 verified.

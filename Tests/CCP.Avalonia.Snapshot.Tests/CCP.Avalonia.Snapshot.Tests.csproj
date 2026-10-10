@@ -28,5 +28,7 @@
   <ItemGroup>
     <Compile Include="..\Shared\AvaloniaTestDispatcher.cs" Link="AvaloniaTestDispatcher.cs" />
     <ProjectReference Include="..\..\CCP.Avalonia\CCP.Avalonia.csproj" />
+    <!-- Pinned fallback for glyphs Inter lacks (see FontFallbacks in the test). Noto Emoji, OFL. -->
+    <AvaloniaResource Include="Fonts\NotoEmoji-wght.ttf" />
   </ItemGroup>
 </Project>
