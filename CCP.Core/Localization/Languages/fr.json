@@ -7605,5 +7605,13 @@
   "kwt_effect_image_flash": "Flash d'image",
   "kwt_effect_overlay_pulse": "Pulsation d'overlay",
   "kwt_effect_mind_wipe": "Mind Wipe",
-  "kwt_effect_bubbles": "Bulles"
+  "kwt_effect_bubbles": "Bulles",
+  "label_asset_preset_default_0": "Préréglage {0}",
+  "msg_asset_preset_saved_0": "Préréglage '{0}' enregistré !\n\n{1} images, {2} vidéos activées.\n{3} fichiers désactivés.",
+  "msg_asset_preset_updated_0": "Préréglage '{0}' mis à jour !\n\n{1} images, {2} vidéos activées.\n{3} fichiers désactivés.",
+  "msg_update_asset_preset_confirm_0": "Mettre à jour le préréglage '{0}' avec la sélection actuelle ?",
+  "title_no_preset_selected": "Aucun préréglage sélectionné",
+  "title_cannot_update_default": "Impossible de mettre à jour le défaut",
+  "title_cannot_delete_default": "Impossible de supprimer le défaut",
+  "title_update_preset": "Mettre à jour le préréglage"
 }
