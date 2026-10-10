@@ -8026,6 +8026,18 @@ namespace ConditioningControlPanel.Models
             set { _screenOcrEnabled = value; OnPropertyChanged(); }
         }
 
+        private bool _keywordTriggersOffByPanic;
+        /// <summary>
+        /// Owner, 2026-10-10 ("stop until re-enabled"): a panic press switched the screen read
+        /// (<see cref="ScreenOcrEnabled"/>) off. Only the Awareness tab's notice reads it; it clears
+        /// when the user switches the screen read back on. Never switches anything on by itself.
+        /// </summary>
+        public bool KeywordTriggersOffByPanic
+        {
+            get => _keywordTriggersOffByPanic;
+            set { _keywordTriggersOffByPanic = value; OnPropertyChanged(); }
+        }
+
         private int _screenOcrIntervalMs = 3000;
         public int ScreenOcrIntervalMs
         {

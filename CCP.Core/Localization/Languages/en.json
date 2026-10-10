@@ -4468,6 +4468,7 @@
   "awareness_tour_tip": "Walk through the Awareness Engine: sources, cooldowns, presets and the editor.",
   "awareness_master_title": "Awareness Engine - Master Switch",
   "awareness_master_desc": "Turns the whole Awareness system on or off. When ON, enabled signal sources (OCR + keyboard) feed words into the trigger engine and matching keywords fire their actions in real time. When OFF, nothing detects anything. Installed presets stay on disk but do nothing.",
+  "awareness_off_by_panic": "Switched off by a panic press.",
   "awareness_packs_hint": "One-click packs. Click any card to preview or install.",
   "awareness_word_cooldown_desc": "Independent of the \"cooldown between effects\" above: a different word can still fire within this window. 15s default. Up to an hour.",
   "awareness_ocr_desc": "Scans your screen every few seconds with optical character recognition and feeds detected words into the trigger engine. This is how the companion notices text inside other apps: Discord, browsers, image viewers, game UIs, anything visible.",

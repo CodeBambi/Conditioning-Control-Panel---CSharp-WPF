@@ -3317,6 +3317,7 @@
   "awareness_tour_tip": "Führt durch die Awareness-Engine: Quellen, Abklingzeiten, Presets und den Editor.",
   "awareness_master_title": "Awareness-Engine - Hauptschalter",
   "awareness_master_desc": "Schaltet das ganze Awareness-System ein oder aus. EIN: aktive Signalquellen (OCR + Tastatur) liefern Wörter an die Trigger-Engine, und passende Schlüsselwörter lösen ihre Aktionen in Echtzeit aus. AUS: nichts erkennt irgendetwas. Installierte Presets bleiben auf der Festplatte, tun aber nichts.",
+  "awareness_off_by_panic": "Durch die Panik-Taste ausgeschaltet.",
   "awareness_packs_hint": "Pakete mit einem Klick. Karte anklicken für Vorschau oder Installation.",
   "awareness_word_cooldown_desc": "Unabhängig von der \"Abklingzeit zwischen Effekten\" oben: ein anderes Wort kann in diesem Fenster trotzdem auslösen. Standard 15 s. Bis zu einer Stunde.",
   "awareness_ocr_desc": "Scannt deinen Bildschirm alle paar Sekunden per Texterkennung und gibt erkannte Wörter an die Trigger-Engine. So bemerkt der Companion Text in anderen Apps: Discord, Browser, Bildbetrachter, Spieloberflächen, alles Sichtbare.",

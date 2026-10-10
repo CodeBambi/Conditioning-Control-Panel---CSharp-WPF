@@ -228,20 +228,26 @@ public sealed class AwarenessObserverHeadTests
         Assert.False(probe.IsTypingBurst);
     }
 
-    // ---- panic: WPF stops screen OCR only in the fallback path and queues its restart ----
+    // ---- panic: the fallback stops screen OCR and, owner 2026-10-10, queues the switch-off, never a restart ----
 
     [Fact]
-    public void ThePanicFallbackQueuesTheScreenReaderRestart()
+    public void ThePanicFallbackQueuesTheKeywordSwitchOffNeverARestart()
     {
-        var wasPost = PanicWatchdog.PostToUi;
+        var (wasPost, wasOff) = (PanicWatchdog.PostToUi, PanicWatchdog.KeywordOff);
         var queued = new List<Action>();
+        var switchedOff = 0;
         PanicWatchdog.PostToUi = queued.Add;
+        PanicWatchdog.KeywordOff = () => switchedOff++;
         try
         {
             PanicWatchdog.Teardown();
             Assert.False(ScreenOcrService.IsRunning);
-            Assert.Single(queued);   // the restart waits for the UI thread, as WPF QueuePanicFallbackRecovery
+            Assert.Single(queued);          // it waits for the UI thread
+            Assert.Equal(0, switchedOff);   // nothing off-thread touches the settings
+            queued[0]();
+            Assert.Equal(1, switchedOff);
+            Assert.False(ScreenOcrService.IsRunning);
         }
-        finally { PanicWatchdog.PostToUi = wasPost; }
+        finally { (PanicWatchdog.PostToUi, PanicWatchdog.KeywordOff) = (wasPost, wasOff); }
     }
 }
