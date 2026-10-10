@@ -359,6 +359,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
 
             ApplyBodyWidth(_bodyWidth);
             SetPose("idle");
+            HookArcademyOutfit();   // WPF :359 RefreshOutfit: she wears what the Arcademy Locker armed and the wallet backs
             DrawFace(RestFace);
 
             try { OnReadyCore(); }

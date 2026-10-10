@@ -35,6 +35,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             if (Spec.Id is "backroom" or "breakout" or "breakoutdemo") OpenBackRoom();
             if (Spec.Id is "dtrh" or "arcademy") StartHeartbeatWatch();
             if (Spec.Id == PbpId) OpenPbp();   // chess host (GameWindow.Pbp.cs); it unhooks itself on Closed
+            if (Spec.Id == "arcademy") OpenArcademy();
         }
 
         private void OnGameClosed()
@@ -52,6 +53,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             if (Spec.Id == "race" && HandleRace(o)) return true;   // RaceWindow.Host.cs
             if (Spec.Id == PbpId && HandlePbp(o)) return true;
             if (Spec.Id == "goon" && HandleGoon(o)) return true;
+            if (Spec.Id == "arcademy" && HandleArcademy(o)) return true;
             return false;
         }
 

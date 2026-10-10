@@ -337,7 +337,7 @@ function loomSpiralRows(settings) {
     const list = settings && Array.isArray(settings.loomSpirals) ? settings.loomSpirals : [];
     const seen = new Set();
     for (const u of list) {
-      if (typeof u !== 'string' || !/^https:\/\/ccp\.spirals\//.test(u) || seen.has(u)) continue;
+      if (typeof u !== 'string' || !/^(https:\/\/|http:\/\/127\.0\.0\.1:\d+\/)ccp\.spirals\//.test(u) || seen.has(u)) continue;
       seen.add(u);
       out.push([u, LOOM_WEIGHT]);
       if (out.length >= LOOM_CAP) break;
@@ -347,7 +347,7 @@ function loomSpiralRows(settings) {
 }
 /** Resolve one pool row's file to the url the engine would actually paint. */
 function spiralUrlFor(file) {
-  if (/^https:\/\//.test(file)) return file;
+  if (/^(https:\/\/|http:\/\/127\.0\.0\.1:\d+\/ccp\.spirals\/)/.test(file)) return file;
   return new URL('../../dtrh/assets/bubbles/effects/spirals/' + file, import.meta.url).href;
 }
 /**
