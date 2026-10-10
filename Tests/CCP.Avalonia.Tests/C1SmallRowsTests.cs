@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Headless;
@@ -65,6 +66,34 @@ public sealed class C1SmallRowsTests
             return Task.CompletedTask;
         });
     }
+
+    /// <summary>X7: the shell's ambient loops ride the shared 30 fps beat. An infinite Avalonia Animation
+    /// ticks at render rate and keeps the whole window composing at 60 Hz for as long as it runs.</summary>
+    [Theory]
+    [InlineData("CCP.Avalonia/Views/Windows/MainShellWindow.TabFxTakeoverLabStatus.cs")]
+    [InlineData("CCP.Avalonia/Views/Windows/MainShellWindow.Animations.cs")]
+    [InlineData("CCP.Avalonia/Views/Windows/MainShellWindow.DescentFuse.cs")]
+    public void ShellAmbientLoops_RunNoInfiniteAnimation(string file)
+    {
+        var code = string.Join("\n", System.IO.File.ReadAllLines(System.IO.Path.Combine(Root(), file))
+            .Where(l => !l.TrimStart().StartsWith("//")));
+        Assert.DoesNotContain("IterationCount.Infinite", code);
+        Assert.DoesNotContain(".RunAsync(", code);
+    }
+
+    [Fact]
+    public void AmbientLoop_Curves_MatchTheAnimationsTheyReplace()
+    {
+        Assert.Equal(0, global::ConditioningControlPanel.Avalonia.Helpers.AmbientLoop.Breath(0, 2), 6);
+        Assert.Equal(1, global::ConditioningControlPanel.Avalonia.Helpers.AmbientLoop.Breath(2, 2), 6);
+        Assert.Equal(0, global::ConditioningControlPanel.Avalonia.Helpers.AmbientLoop.Breath(4, 2), 6);
+        Assert.Equal(0.5, global::ConditioningControlPanel.Avalonia.Helpers.AmbientLoop.PingPong(0.75, 1.5), 6);
+        Assert.Equal(0.5, global::ConditioningControlPanel.Avalonia.Helpers.AmbientLoop.PingPong(2.25, 1.5), 6);
+        Assert.Equal(0.25, global::ConditioningControlPanel.Avalonia.Helpers.AmbientLoop.Saw(3.75, 3), 6);
+    }
+
+    private static string Root([System.Runtime.CompilerServices.CallerFilePath] string here = "") =>
+        System.IO.Path.GetFullPath(System.IO.Path.Combine(System.IO.Path.GetDirectoryName(here)!, "..", ".."));
 
     [Fact]
     public async Task DeeperTrackerButton_FollowsTheTracker()
