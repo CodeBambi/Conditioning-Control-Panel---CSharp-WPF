@@ -22,22 +22,24 @@
         exist from this control's constructor. See MainWindow.NavRail.cs.
     -->
     <!--
-        HEIGHT IS PINNED to the ring's 40px, and the muted pill never wraps. The shut rail is 56px
-        wide, so column 1 below is 0px wide while the rail is collapsed (which is most of the time).
-        A TextBlock with TextWrapping="Wrap" measured at width 0 breaks after EVERY character: the
-        29-character pill used to stand ~260px tall the moment EMI came out, the rail's pinned
-        bottom stack grew by that much, and the doors' ScrollViewer above it was squeezed until the
-        last medallion was cut to an arc. The row is now the same 40px whether she is out or not.
-        EmiDockRailFitTests pins both halves.
+        HEIGHT IS PINNED, and no text in the chip wraps. Nav polish wave 6 (owner, 2026-10-06): the
+        word "EMI" sits UNDER her face like every door's label, so the chip is one centred column:
+        the 40px ring on top, the 10.5px ExtraBold label beneath, and the muted pill (shown while EMI
+        is out) under that. The height is the same 64px whether she is out or not, so the rail's
+        pinned foot never grows when she comes out. History: the chip once had a 0px wide text
+        column, and a TextBlock with TextWrapping="Wrap" measured at width 0 breaks after EVERY
+        character (the muted pill stood ~260px tall and squeezed the doors above it). Every
+        TextBlock here stays NoWrap with an ellipsis. EmiDockRailFitTests pins both halves.
     -->
-    <Grid Height="40">
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="56"/>
-            <ColumnDefinition Width="*"/>
-        </Grid.ColumnDefinitions>
+    <Grid Height="64">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="40"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
 
         <Button x:Name="BtnChip"
-                Grid.Column="0"
+                Grid.Row="0"
                 Width="40" Height="40"
                 HorizontalAlignment="Center" VerticalAlignment="Center"
                 Background="Transparent" BorderThickness="0" Padding="0"
@@ -76,23 +78,30 @@
             </Grid>
         </Button>
 
-        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,10,0">
-            <TextBlock x:Name="TxtName"
-                       Text="EMI"
-                       Foreground="#FF69B4"
-                       FontSize="11" FontWeight="SemiBold"/>
-            <!-- The muted pill. Press Start 2P is bundled as woff2 for the web layers and WPF
-                 cannot load woff2, so this asks for the installed family and falls through to a
-                 mono stack. It is 7px chrome either way. -->
-            <TextBlock x:Name="TxtMuted"
-                       Text="avatar muted while EMI is out"
-                       Visibility="Collapsed"
-                       Foreground="#9A8FB5"
-                       FontFamily="Press Start 2P, Consolas, Global Monospace"
-                       FontSize="7"
-                       TextWrapping="NoWrap"
-                       TextTrimming="CharacterEllipsis"
-                       Margin="0,3,0,0"/>
-        </StackPanel>
+        <!-- The label, set like a door's (NavSectionLabel in MainWindow.xaml): 10.5px ExtraBold,
+             centred under the face, in her pink. -->
+        <TextBlock x:Name="TxtName"
+                   Grid.Row="1"
+                   Text="EMI"
+                   Foreground="#FF69B4"
+                   FontSize="10.5" FontWeight="ExtraBold"
+                   HorizontalAlignment="Center" TextAlignment="Center"
+                   TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                   MaxWidth="86" Margin="0,1,0,0"/>
+        <!-- The muted pill. Press Start 2P is bundled as woff2 for the web layers and WPF
+             cannot load woff2, so this asks for the installed family and falls through to a
+             mono stack. It is 7px chrome either way, one line, centred under the label. -->
+        <TextBlock x:Name="TxtMuted"
+                   Grid.Row="2"
+                   Text="avatar muted while EMI is out"
+                   Visibility="Collapsed"
+                   Foreground="#9A8FB5"
+                   FontFamily="Press Start 2P, Consolas, Global Monospace"
+                   FontSize="7"
+                   HorizontalAlignment="Center" TextAlignment="Center"
+                   TextWrapping="NoWrap"
+                   TextTrimming="CharacterEllipsis"
+                   MaxWidth="86"
+                   Margin="0,1,0,0"/>
     </Grid>
 </UserControl>

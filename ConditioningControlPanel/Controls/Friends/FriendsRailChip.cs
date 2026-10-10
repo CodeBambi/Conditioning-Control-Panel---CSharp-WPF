@@ -49,7 +49,7 @@ public sealed class FriendsRailChip : UserControl
     private readonly Border _badge = new();
     private readonly TextBlock _badgeText = new();
     private readonly TextBlock _name = new();
-    private readonly StackPanel _nameLine = new() { Orientation = Orientation.Horizontal };
+    private readonly Grid _nameLine = new();
     private readonly Border _face = new();
     private readonly Popup _popup;
     private readonly FriendsDrawer _drawer;
@@ -141,9 +141,14 @@ public sealed class FriendsRailChip : UserControl
         _name.TextWrapping = TextWrapping.NoWrap;
         _name.TextTrimming = TextTrimming.CharacterEllipsis;
         _name.VerticalAlignment = VerticalAlignment.Center;
+        // A Grid, not a horizontal StackPanel: a StackPanel hands the name infinite width, so the
+        // ellipsis never fired and the clip cut "CodeBambi" to "Code". Star column = trimmed name,
+        // Auto column = the tier plate; the full name rides the tooltip.
+        _nameLine.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        _nameLine.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         _nameLine.Children.Add(_name);
         _nameLine.VerticalAlignment = VerticalAlignment.Center;
-        _nameLine.Margin = new Thickness(0, 0, 10, 0);
+        _nameLine.Margin = new Thickness(0, 0, 4, 0);
         _nameLine.ClipToBounds = true;
         Grid.SetColumn(_nameLine, 1);
         grid.Children.Add(_nameLine);
@@ -281,7 +286,11 @@ public sealed class FriendsRailChip : UserControl
             _avatarHost.Children.Add(FriendsLook.Avatar(name, null, 40));
 
             while (_nameLine.Children.Count > 1) _nameLine.Children.RemoveAt(1);
-            if (FriendsLook.TierPlate(_drawer.MeTier(), 13) is { } plate) _nameLine.Children.Add(plate);
+            if (FriendsLook.TierPlate(_drawer.MeTier(), 13) is { } plate)
+            {
+                Grid.SetColumn(plate, 1);
+                _nameLine.Children.Add(plate);
+            }
             UpdatePill(animate: false);
         }
         catch (Exception ex) { App.Logger?.Debug("[Friends] chip paint failed: {E}", ex.Message); }
@@ -341,9 +350,11 @@ public sealed class FriendsRailChip : UserControl
         try { if (_svc?.Available != false) n = _feed?.Unread ?? 0; } catch { }
         _badgeText.Text = FriendsFeedRules.BadgeText(n);
         _badge.Visibility = n > 0 ? Visibility.Visible : Visibility.Collapsed;
+        // The rail trims the name, so the tooltip leads with it in full.
+        var who = string.IsNullOrWhiteSpace(_name.Text) ? "" : _name.Text + "\n";
         ToolTip = n > 0
-            ? Loc.Get("friends_chip_tooltip") + "\n" + Loc.GetF("friends_feed_new", n)
-            : Loc.Get("friends_chip_tooltip");
+            ? who + Loc.Get("friends_chip_tooltip") + "\n" + Loc.GetF("friends_feed_new", n)
+            : who + Loc.Get("friends_chip_tooltip");
         if (animate && n > _lastUnread && _lastUnread >= 0 && n > 0) Bump(_badge);
         _lastUnread = n;
     }

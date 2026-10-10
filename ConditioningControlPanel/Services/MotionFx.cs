@@ -26,7 +26,7 @@ namespace ConditioningControlPanel.Services
         private const int PressMs = 80;
         private const int StaggerMs = 40;
         private const int StaggerCap = 6;
-        private const int AmbientFrameRate = 24;
+        private const int AmbientFrameRate = 30;
 
         /// <summary>
         /// The pure part of the reduced-motion decision: the user's setting, capped to Reduced when

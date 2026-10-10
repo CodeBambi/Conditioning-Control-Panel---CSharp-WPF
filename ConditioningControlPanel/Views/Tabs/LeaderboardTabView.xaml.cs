@@ -11,19 +11,10 @@ namespace ConditioningControlPanel.Views.Tabs
 {
     public partial class LeaderboardTabView : UserControl
     {
-        /// <summary>
-        /// Ticks the season countdown in the header. One minute is plenty for a
-        /// "2d 14h" readout, and the timer is stopped whenever the tab is hidden or
-        /// unloaded so it can't keep a dead visual tree alive (CLAUDE.md: "Event
-        /// handlers on closed windows").
-        /// </summary>
-        private DispatcherTimer? _seasonTimer;
-
         public LeaderboardTabView()
         {
             InitializeComponent();
             Loaded += OnLeaderboardTabLoaded;
-            Unloaded += OnLeaderboardTabUnloaded;
             IsVisibleChanged += OnLeaderboardTabVisibleChanged;
         }
 
@@ -43,7 +34,7 @@ namespace ConditioningControlPanel.Views.Tabs
             set => SetValue(ShowTrophyStatsProperty, value);
         }
 
-        /// <summary>True while the All-Time board is showing (no season countdown).</summary>
+        /// <summary>True while the All-Time board is showing.</summary>
         internal bool IsAllTimeMode { get; private set; }
 
         internal void SetLeaderboardMode(bool isAllTime)
@@ -78,129 +69,41 @@ namespace ConditioningControlPanel.Views.Tabs
         }
 
         // ------------------------------------------------------------------
-        // Season countdown
+        // Header title (seasons are retired, owner 2026-09-24: no season name,
+        // no countdown, no recap button; the board just says which board it is)
         // ------------------------------------------------------------------
 
         private void OnLeaderboardTabLoaded(object sender, RoutedEventArgs e)
         {
             RefreshSeasonHeader();
             ApplyModeLabels();
-            if (IsVisible) StartSeasonTimer();
-        }
-
-        private void OnLeaderboardTabUnloaded(object sender, RoutedEventArgs e)
-        {
-            StopSeasonTimer();
         }
 
         private void OnLeaderboardTabVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
         {
-            if (IsVisible)
-            {
-                RefreshSeasonHeader();
-                StartSeasonTimer();
-            }
-            else
-            {
-                StopSeasonTimer();
-            }
+            if (IsVisible) RefreshSeasonHeader();
         }
 
-        private void StartSeasonTimer()
-        {
-            try
-            {
-                if (Application.Current?.Dispatcher == null) return;
-                if (Application.Current.Dispatcher.HasShutdownStarted) return;
-                if (_seasonTimer != null) { _seasonTimer.Start(); return; }
+        /// <summary>The two header lines for the board that is showing.</summary>
+        internal static (string Title, string Sub) HeaderText(bool isAllTime) => isAllTime
+            ? (Loc.Get("lb_all_time_title"), Loc.Get("lb_all_time_sub"))
+            : (Loc.Get("social_lb_month_title"), Loc.Get("social_lb_month_sub"));
 
-                _seasonTimer = new DispatcherTimer(DispatcherPriority.Background, Application.Current.Dispatcher)
-                {
-                    Interval = TimeSpan.FromMinutes(1)
-                };
-                _seasonTimer.Tick += (_, _) => RefreshSeasonHeader();
-                _seasonTimer.Start();
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Warning(ex, "Leaderboard season countdown failed to start");
-            }
-        }
-
-        private void StopSeasonTimer()
-        {
-            try
-            {
-                if (_seasonTimer == null) return;
-                _seasonTimer.Stop();
-                _seasonTimer = null;
-            }
-            catch { }
-        }
-
-        /// <summary>
-        /// Repaint the season name + countdown. Derived entirely locally: the board's
-        /// season key is <c>DateTime.UtcNow.ToString("yyyy-MM")</c>, so the season ends
-        /// at the first instant of the next UTC month. No server call.
-        /// </summary>
+        /// <summary>Repaints the header title for the active board. The name is kept for its
+        /// callers; there is no season left in it.</summary>
         internal void RefreshSeasonHeader()
         {
             try
             {
                 if (TxtLeaderboardSeason == null || TxtLeaderboardSubtitle == null) return;
-
-                // The Descent branch below collapses the subtitle outright; restore it up front so
-                // a mode switch can never leave it collapsed against a line that does have text.
+                var (title, sub) = HeaderText(IsAllTimeMode);
+                TxtLeaderboardSeason.Text = title;
+                TxtLeaderboardSubtitle.Text = sub;
                 TxtLeaderboardSubtitle.Visibility = Visibility.Visible;
-
-                if (IsAllTimeMode)
-                {
-                    TxtLeaderboardSeason.Text = Loc.Get("lb_all_time_title");
-                    TxtLeaderboardSubtitle.Text = Loc.Get("lb_all_time_sub");
-                    return;
-                }
-
-                var seasonTitle = App.QuestDefinitions?.SeasonTitle;
-                TxtLeaderboardSeason.Text = string.IsNullOrWhiteSpace(seasonTitle)
-                    ? Loc.Get("section_seasons")
-                    : seasonTitle;
-
-                // THE DESCENT (2026-09-01) ENDED MONTHLY SEASONS, so there is no next season end to
-                // count down to. The arithmetic below is pure wall-clock — first instant of the next
-                // UTC month, no server involved — so left alone it would go right on promising a
-                // season end on the 1st of every month, forever, for a season system that no longer
-                // exists. There is no honest number to put in its place either, so the line goes away
-                // and the season title above stands on its own.
-                if (DescentEpochs.SeasonsHaveEnded)
-                {
-                    TxtLeaderboardSubtitle.Text = string.Empty;
-                    TxtLeaderboardSubtitle.Visibility = Visibility.Collapsed;
-                    return;
-                }
-
-                var now = DateTime.UtcNow;
-                var seasonEnd = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc).AddMonths(1);
-                var left = seasonEnd - now;
-
-                if (left <= TimeSpan.Zero)
-                {
-                    TxtLeaderboardSubtitle.Text = Loc.Get("lb_season_ended");
-                    return;
-                }
-
-                string span;
-                if (left.TotalDays >= 1)
-                    span = Loc.GetF("lb_time_dh", (int)left.TotalDays, left.Hours);
-                else if (left.TotalHours >= 1)
-                    span = Loc.GetF("lb_time_hm", (int)left.TotalHours, left.Minutes);
-                else
-                    span = Loc.GetF("lb_time_m", Math.Max(1, (int)left.TotalMinutes));
-
-                TxtLeaderboardSubtitle.Text = Loc.GetF("lb_season_ends_in", span);
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "Failed to refresh leaderboard season header");
+                App.Logger?.Warning(ex, "Failed to refresh leaderboard header");
             }
         }
 

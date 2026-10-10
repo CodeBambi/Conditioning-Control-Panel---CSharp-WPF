@@ -102,6 +102,7 @@ namespace ConditioningControlPanel.Services
             ["door.companion"] = Plate("nav/door_companion.png"),
             ["door.play"] = Plate("nav/door_play.png"),
             ["door.you"] = Plate("nav/door_you.png"),
+            ["door.social"] = Plate("nav/door_social.png"), // its own medallion since polish wave 11 (was skills/hive_mind.png)
             ["door.library"] = Plate("nav/door_library.png"),
             ["door.settings"] = Plate("nav/door_settings.png"),
             // The tab rows that land on the same room as a door wear the same medallion.
@@ -123,6 +124,7 @@ namespace ConditioningControlPanel.Services
             // The Velvet Vault storefront. vault.png ships themed faces (vault_bambi.png and
             // friends), so this chip re-skins with the active built-in mod for free.
             ["tab.exclusives"] = Cover("features/vault.png"),
+            ["tab.premium"] = Cover("features/vault.png"),
             ["tab.gradedintake"] = Cover("features/lab_quiz_hero.png"),
             ["tab.lockdown"] = Cover("lockdown_icon.png"),
             ["tab.blinktrainer"] = Cover("features/blink_trainer.png"),
@@ -148,7 +150,7 @@ namespace ConditioningControlPanel.Services
             // reskins the Mods chip with it, exactly as one who reskins features/vault.png
             // reskins the Vault chip.
             ["tab.presets"] = Cover("Cards/spotlight.png"),            // a session, as the session-complete card draws one
-            ["tab.availablesubjects"] = Cover("skills/hive_mind.png"), // two dolls and a live count
+            ["tab.availablesubjects"] = Plate("nav/door_social.png"),  // the Lobby wears its door's medallion
             ["tab.quests"] = Cover("quests/daily_devotion_d.png"),     // the daily quest tile
             ["tab.achievements"] = Cover("achievements/honor_roll.png"),
             ["tab.enhancements"] = Cover("skills/sparkle_boost_3.png"),// a skill node, which is what the tree is made of
@@ -159,6 +161,42 @@ namespace ConditioningControlPanel.Services
             ["launch.catalogue"] = Cover("achievements/curator.png"),  // a wall of cards under a glass
             ["launch.phrases"] = Cover("achievements/word_perfect.png"),
             ["launch.medialog"] = Cover("achievements/screen_time.png"),
+
+            // Nav rework (2026-10-06): the new pills. All reuse shipped feature art.
+            ["tab.personality"] = Cover("features/lab_aimemory_hero.png"),  // the AI memory hero: who she is
+            ["tab.permissions"] = Cover("features/Phrase_Lock.png"),        // the lock card, which most permissions gate
+            ["tab.companionlinks"] = Cover("features/mandatory_videos.png"),// videos she can play
+            ["tab.companionai"] = Cover("features/brain_drain.png"),          // which brain it runs on
+            ["tab.friends"] = Cover("features/lobby_remote.png"),
+            ["tab.leash"] = Cover("features/remote_control.png"),           // a holder's remote
+            ["tab.folders"] = Cover("features/mysterybox.png"),             // a box of your own things
+            ["tab.playsessions"] = Cover("features/deeper_editor.png"),
+            ["tab.playeyes"] = Cover("features/lab_gaze_hero.png"),
+            ["tab.ramp"] = Cover("features/loom.png"),
+
+            // Nav polish (2026-10-06): launcher games and Studio rack modules pin too. Games wear
+            // their launcher tile art; a rack module wears its feature card. rack.visuals has no
+            // picture of its own, so it is not listed and FavoritesRailRule keeps it off the rail.
+            ["game.backroom"] = Cover("features/backroom.png"),
+            ["game.race"] = Cover("features/race.png"),
+            ["game.dtrh"] = Cover("features/dtrh.png"),
+            ["game.arcademy"] = Cover("features/arcademy.png"),
+            ["game.goon"] = Cover("features/goon_game_tile.png"),
+            ["game.piecebypiece"] = Cover("features/piecebypiece.png"),
+            ["game.breakout"] = Cover("features/breakout.png"),
+            ["game.breakoutdemo"] = Cover("features/breakout.png"),
+            ["game.intake"] = Cover("features/lab_quiz_hero.png"),
+            ["rack.flash"] = Cover("features/flash.png"),
+            ["rack.video"] = Cover("features/mandatory_videos.png"),
+            ["rack.subliminal"] = Cover("features/subliminal.png"),
+            ["rack.spiral"] = Cover("features/spiral_overlay.png"),
+            ["rack.pinkfilter"] = Cover("features/Pink_filter.png"),
+            ["rack.bubbles"] = Cover("features/Bubble_pop.png"),
+            ["rack.bubblecount"] = Cover("features/Bubble_count.png"),
+            ["rack.lockcard"] = Cover("features/Phrase_Lock.png"),
+            ["rack.bouncingtext"] = Cover("features/bouncing_text.png"),
+            ["rack.mindwipe"] = Cover("features/Mind_Wipers.png"),
+            ["rack.braindrain"] = Cover("features/brain_drain.png"),
         };
 
         private static RailChipArt Cover(string path) => new(path, RailArtFit.Cover);

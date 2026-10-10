@@ -408,6 +408,9 @@
     <!-- Nav rail door art (2026-08-11 emoji purge): one emblem per door, referenced by
          MainWindow.xaml pack URIs - a missing file here crashes InitializeComponent. -->
     <Resource Include="..\Assets\nav\*.png" Link="Resources\nav\%(RecursiveDir)%(Filename)%(Extension)" />
+    <!-- Per-mod embedded twins of nav art (polish wave 11): ModResourceResolver tries
+         nav/mods/<mod-id>/<file> when the active mod's pack has no nav/<file> (Social door). -->
+    <Resource Include="..\Assets\nav\mods\**\*.png" Link="Resources\nav\mods\%(RecursiveDir)%(Filename)%(Extension)" />
     <!-- Home dashboard billboard posters (2026-09-12), one per roster card in
          Services/DashboardBillboard.cs. 688x384, 16:9, no text: the bottom third of each is
          dark and calm on purpose so the shade with the eyebrow, title and line sits there.

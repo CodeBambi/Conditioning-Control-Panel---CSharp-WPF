@@ -17,8 +17,55 @@ namespace ConditioningControlPanel.Views.Tabs
 
         private void AssetsTabView_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
         {
+            if (IsVisible) PaintAssetsFolder();
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.OnAssetsTabVisibilityChanged(IsVisible);
+        }
+
+        // ---- LIBRARY > FOLDERS (nav rework 2026-10-06) --------------------------------------
+
+        /// <summary>Zone keys the Library section strip reaches (nav rework).</summary>
+        public static readonly string[] ZoneKeys = { "folders" };
+
+        /// <summary>
+        /// "folders": the page does not scroll (fixed rows), so this paints the current folder,
+        /// brings the chip into view and glows it and the preset picker once for 2 s (skipped
+        /// under reduced or no motion). Any other key does nothing.
+        /// </summary>
+        public void ScrollToZone(string zone)
+        {
+            if (!string.Equals((zone ?? "").Trim(), "folders", StringComparison.OrdinalIgnoreCase)) return;
+            PaintAssetsFolder();
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                try
+                {
+                    ZoneFolders.BringIntoView();
+                    App.Logger?.Debug("Assets ScrollToZone(folders)");
+                    var sage = global::ConditioningControlPanel.Controls.NavRail.NavStripRules.Accent(global::ConditioningControlPanel.Services.UI.NavSections.Library);
+                    global::ConditioningControlPanel.Controls.NavRail.NavGlow.Once(ZoneFolders, sage, why: "library.folders");
+                    global::ConditioningControlPanel.Controls.NavRail.NavGlow.Once(CmbAssetPresets, sage, why: "library.presets");
+                }
+                catch (Exception ex) { App.Logger?.Debug("Assets ScrollToZone: {E}", ex.Message); }
+            }), System.Windows.Threading.DispatcherPriority.Normal);
+        }
+
+        /// <summary>The folder the app reads today, as one line; the full path is the tooltip.</summary>
+        internal void PaintAssetsFolder()
+        {
+            try
+            {
+                var path = App.EffectiveAssetsPath ?? "";
+                TxtAssetsFolderPath.Text = path;
+                TxtAssetsFolderPath.ToolTip = string.IsNullOrEmpty(path) ? null : path;
+            }
+            catch (Exception ex) { App.Logger?.Debug("PaintAssetsFolder: {E}", ex.Message); }
+        }
+
+        private void BtnPickAssetsFolder_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw) mw.RequestPickAssetsFolder();
+            PaintAssetsFolder();
         }
 
         private void PackCard_MouseEnter(object sender, MouseEventArgs e)

@@ -145,7 +145,8 @@ public static class EmiTargets
         ["remotecontrol"] = "remote",
         ["bambitakeover"] = "takeover",
         ["lockdown"] = "lockdown",
-        ["exclusives"] = "vault",
+        // Polish 12 (2026-10-07): "exclusives" redirects before the counter, "premium" is the page.
+        ["premium"] = "vault",
         ["discord"] = "profile",
         ["appsettings"] = "settings",
         ["progression"] = "progression",
@@ -240,7 +241,7 @@ public static class EmiTargets
         "remote" => D(Always, () => !PremiumOk("emi_desk_target_remote", "remote"), () => Nav("remotecontrol")),
         "takeover" => D(Always, () => !PremiumOk("emi_desk_target_takeover", "takeover"), () => Nav("bambitakeover")),
         "lockdown" => D(Always, () => !PremiumOk("emi_desk_target_lockdown", null), () => Nav("lockdown")),
-        "vault" => D(Always, Never, () => Nav("exclusives")),
+        "vault" => D(Always, Never, () => Nav("premium")),
         "goon" => D(Always, Never, () => GoonGame.GoonHostService.Launch()),
 
         // The Back Room: free for everyone, so never locked.

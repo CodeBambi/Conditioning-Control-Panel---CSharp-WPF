@@ -180,10 +180,17 @@ internal static class FriendsDrawerRules
         _ => TrailTone.Going,
     };
 
-    /// <summary>Digits only, at most eight: the HT box's whole grammar.</summary>
+    private static readonly System.Text.RegularExpressions.Regex HtLinkId = new(
+        @"-(\d{1,8})\.html", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    /// <summary>Digits only, at most eight: the HT box's whole grammar. A pasted Hypnotube link
+    /// (<c>.../video/some-slug-12345.html</c>) gives the number before <c>.html</c>, never the
+    /// digits scattered through its slug (ccp-bugs #1368).</summary>
     public static string NormaliseHtId(string? typed)
     {
         if (string.IsNullOrEmpty(typed)) return "";
+        var links = HtLinkId.Matches(typed);
+        if (links.Count > 0) return links[^1].Groups[1].Value;
         var sb = new StringBuilder(8);
         foreach (var c in typed)
         {
