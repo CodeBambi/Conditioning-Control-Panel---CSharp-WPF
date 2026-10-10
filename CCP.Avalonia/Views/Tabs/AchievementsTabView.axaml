@@ -82,8 +82,7 @@
           <Button x:Name="HelpBtnAchievements" Theme="{StaticResource HelpButtonStyle}"
                   HorizontalAlignment="Right" Tag="Achievements"/>
         </Grid>
-        <TextBlock Text="{loc:Str achv_subtitle_rewards}"
-                   Foreground="{DynamicResource TextMutedBrush}" FontSize="12" Margin="0,0,0,10"/>
+        <TextBlock Theme="{StaticResource Type.Body}" Text="{loc:Str achv_subtitle_rewards}" Margin="0,0,0,10"/>
 
         <!-- Filter chips (populated in code-behind: All / Unlocked / Locked / Rewards) -->
         <WrapPanel x:Name="AchievementFilters" Margin="0,0,0,8"/>
@@ -99,7 +98,7 @@
         <!-- Third, independent counter: wardrobe items earned through achievements.
              Never folded into the free or patron achievement counts. -->
         <TextBlock x:Name="TxtRewardCount" Text="{Binding LocRewardCount}" IsVisible="{Binding RewardCountVisible}"
-                   Foreground="#8079A3" FontSize="12"
+                   Foreground="{DynamicResource TextMutedBrush}" FontSize="12"
                    HorizontalAlignment="Center" Margin="0,4,0,0"/>
 
         <!-- Patron-exclusive achievements: separate section with its OWN counter.
@@ -107,8 +106,7 @@
         <Border Height="1" Background="#33FFFFFF" Margin="0,24,0,0"/>
         <TextBlock Theme="{StaticResource SectionHeader}"
                    Text="{loc:Str section_patron_achievements}" Margin="0,18,0,0"/>
-        <TextBlock Text="{loc:Str label_patron_achievements_subtitle}"
-                   Foreground="{DynamicResource TextMutedBrush}" FontSize="12" Margin="0,0,0,12"/>
+        <TextBlock Theme="{StaticResource Type.Body}" Text="{loc:Str label_patron_achievements_subtitle}" Margin="0,0,0,12"/>
 
         <Grid Margin="0,5,0,0">
           <StackPanel>
