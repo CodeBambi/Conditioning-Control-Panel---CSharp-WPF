@@ -144,10 +144,19 @@ public sealed class AvatarTubeMenuTests
         Assert.Equal(1.0, tube.CurrentScale, 3);
         Assert.Equal(stock, tube.Width, 1);
 
+        // WPF Window_PreviewMouseWheel: Ctrl+scroll steps the same scale; a plain scroll is not taken.
+        Assert.False(tube.WheelZoom(ctrl: false, deltaY: 1));
+        Assert.Equal(1.0, tube.CurrentScale, 3);
+        Assert.True(tube.WheelZoom(ctrl: true, deltaY: 1));
+        Assert.Equal(1.25, tube.CurrentScale, 3);
+        Assert.True(tube.WheelZoom(ctrl: true, deltaY: -1));
+        Assert.Equal(1.0, tube.CurrentScale, 3);
+
         // Docked again she is stock size and the three items go away.
         Click(grow);
         Click(Item(tube, "MenuItemAttach"));
         Assert.False(tube.IsDetached);
+        Assert.False(tube.WheelZoom(ctrl: true, deltaY: 1));   // docked: the wheel never resizes her
         Assert.Equal(stock, tube.Width, 1);
         Assert.False(shrink.IsVisible);
 

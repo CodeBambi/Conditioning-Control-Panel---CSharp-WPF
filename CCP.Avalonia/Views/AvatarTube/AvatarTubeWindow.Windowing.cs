@@ -56,6 +56,11 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             if (this.FindControl<MenuItem>("MenuItemShrink") is { } shrink) shrink.Click += (_, _) => StepScale(-ScaleStep);
             if (this.FindControl<MenuItem>("MenuItemGrow") is { } grow) grow.Click += (_, _) => StepScale(+ScaleStep);
             if (this.FindControl<MenuItem>("MenuItemDismiss") is { } dismiss) dismiss.Click += (_, _) => DismissFromMenu();
+            // WPF Window_PreviewMouseWheel (Windowing.cs:2393): Ctrl+scroll resizes the free tube.
+            AddHandler(PointerWheelChangedEvent, (_, e) =>
+            {
+                if (WheelZoom(e.KeyModifiers.HasFlag(global::Avalonia.Input.KeyModifiers.Control), e.Delta.Y)) e.Handled = true;
+            }, global::Avalonia.Interactivity.RoutingStrategies.Tunnel);
             // WPF Windowing.cs:2716: the saved scale comes back with her (#669).
             var saved = CoreSettings.Current.AvatarTubeScale;
             if (!double.IsNaN(saved) && saved > 0) _currentScale = Math.Clamp(saved, MinScale, MaxScale);
@@ -225,6 +230,15 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
                 KeepOnScreenAfterResize();
             }
             catch (Exception ex) { Log.Warning(ex, "AvatarTubeWindow: resize from the menu failed"); }
+        }
+
+        /// <summary>WPF Window_PreviewMouseWheel: only detached and only with Ctrl held; up is bigger, down
+        /// smaller, one step a notch, clamped like the menu's Grow / Shrink. True when the wheel was taken.</summary>
+        internal bool WheelZoom(bool ctrl, double deltaY)
+        {
+            if (_isAttached || !ctrl || deltaY == 0) return false;
+            StepScale(deltaY > 0 ? +ScaleStep : -ScaleStep);
+            return true;
         }
 
         private void KeepOnScreenAfterResize()
