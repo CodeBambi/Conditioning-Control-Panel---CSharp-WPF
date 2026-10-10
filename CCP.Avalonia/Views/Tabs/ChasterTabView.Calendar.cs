@@ -2,8 +2,9 @@
 // CalendarSpan (:451), BuildCalendar (:466), Cell (:511), Cross (:576), on Core LockCalendar.
 // Cross (bent strokes + splat), Ring (two passes of the pen), Sticker (gold foil + key), the padlock
 // stamp (the padlock art as an ink mask) and tonight's tag under today's square are WPF's (:526-700).
-// ponytail: the marker draw-in, the sheet flutter and the tag's bob (Fx.cs) are not ported.
+// The marker draw-in, the sheet's flutter, the tag's bob, the ring's pulse and the comet are ChasterTabView.Fx.cs.
 using System;
+using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
@@ -56,6 +57,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             {
                 _calendarKey = null;
                 _tonightCell = null;
+                FxCalendarReset();
                 Calendar.Children.Clear();
                 CalendarRow.IsVisible = false;
                 CalendarTag.IsVisible = false;
@@ -69,15 +71,20 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             }
             _calendarKey = key;
             _tonightCell = null;
+            FxCalendarReset();
             Calendar.Children.Clear();
             var elided = LockCalendar.ElidedDays(lockSpan.Start, lockSpan.End);
             foreach (var day in LockCalendar.CellsFor(lockSpan.Start, lockSpan.End, today))
             {
                 var square = Cell(day, (day.Date - lockSpan.Start.Date).Days + 1, elided);
                 Calendar.Children.Add(square);
-                if (day.Today) _tonightCell = square;
+                var mark = (square.Child as Panel)?.Children.OfType<Canvas>().FirstOrDefault();
+                if (day.Today) { _tonightCell = square; _tonightMark = mark; }
+                else if (day.Served && !day.IsKey && mark != null) _calendarDraws.Add(mark);
+                if (day.IsKey) _keyCell = square;
             }
             CalendarRow.IsVisible = true;
+            if (IsEffectivelyVisible) FxCalendarDrawIn();   // WPF :511
             RefreshTag(Platform.ChasterHead.Service?.BalanceSeconds ?? 0);
             global::Avalonia.Threading.Dispatcher.UIThread.Post(PlaceCalendarTag, global::Avalonia.Threading.DispatcherPriority.Loaded);
         }
@@ -183,7 +190,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// the second lighter, the way a pen goes round twice.</summary>
         private static Canvas Ring(int seed)
         {
-            var canvas = new Canvas { Width = CellSize, Height = CellSize, IsHitTestVisible = false };
+            // the ring pulses and pops about its own centre (WPF :632)
+            var canvas = new Canvas
+            {
+                Width = CellSize, Height = CellSize, IsHitTestVisible = false,
+                RenderTransformOrigin = new RelativePoint(12.5 / CellSize, 9.5 / CellSize, RelativeUnit.Relative), RenderTransform = new ScaleTransform(1, 1),
+            };
             var tilt = -9 + (seed % 4) * 2;
             var first = new EllipseGeometry { Center = new Point(12.5, 9.5), RadiusX = 11.5, RadiusY = 8.2, Transform = new RotateTransform(tilt, 12.5, 9.5) };
             var second = new EllipseGeometry { Center = new Point(13.2, 10), RadiusX = 12, RadiusY = 7.6, Transform = new RotateTransform(tilt + 11, 13.2, 10) };

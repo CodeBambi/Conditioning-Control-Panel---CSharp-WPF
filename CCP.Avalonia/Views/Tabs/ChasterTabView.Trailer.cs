@@ -3,8 +3,10 @@
 // sign, the plain explanation with the live figure in it, and the figure itself. It opens 150 ms
 // after the pointer settles on a row, stays while the pointer is on the card, and closes 140 ms
 // after it leaves both. It sits BELOW the row (a popup over its own trigger flickers).
-// not ported: the WPF vignette scene (ChasterTrailerView, a WebView2 page) and FxTrailerStart's
-// floating figure and picture pan; the still picture is the scene, as WPF shows it without a browser.
+// The picture drifts and pans while the card is up, and the app's own floating figure lifts off the plate
+// every 1.7 s (FxTrailerStart, ChasterTabView.Fx.cs). The printed figure under it stays (this head's own).
+// not ported: the WPF vignette scene (ChasterTrailerView, a WebView2 page); the picture is the scene,
+// as WPF shows it without a browser.
 using System;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -90,6 +92,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 TxtTrailerFigure.Foreground = new SolidColorBrush(shown.Seconds > 0 ? CostColour : EarnColour);
                 Trailer.PlacementTarget = row;
                 _trailerShown = true;
+                FxTrailerStart(shown);
             }
             catch (Exception ex) { Serilog.Log.Debug(ex, "[Chaster] trailer"); }
             try { Trailer.IsOpen = true; }
@@ -103,6 +106,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             _overTrailer = false;
             if (!_trailerShown) return;
             _trailerShown = false;
+            FxTrailerStop();
             try { Trailer.IsOpen = false; }
             catch (Exception ex) { Serilog.Log.Debug(ex, "[Chaster] trailer close"); }
         }

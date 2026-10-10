@@ -2,8 +2,8 @@
 // RefreshDay (:771), LayoutCap (:791), RefreshRun (:809), StatRun_Click + BuildBill (:816-826).
 // The tab's own receipt: the third number opens and closes the bill on paper under the numbers.
 // The cap meter fills to its new width in 0.6 s, quad out (WPF MotionFx.BarFill), at once under motion Off.
-// ponytail: FxBill's print-down (height grow/fade/settle, Fx.cs:762) and the cap bloom are not ported;
-// the receipt opens and closes at once, as WPF does under reduced motion.
+// The bloom at the meter's tip lights as the fill arrives (0 until 80 % of the 0.6 s, full at the end, gone
+// 0.45 s later). The third number pops, the tag takes a tug and the bill prints down (FxBill, Fx.cs).
 using Avalonia.Media;
 using ConditioningControlPanel.Avalonia.Platform;
 using ConditioningControlPanel.Localization;
@@ -16,6 +16,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private bool _billOpen;
         private double _capFraction;
         private global::Avalonia.Threading.DispatcherTimer? _capRun;
+        private Helpers.FxTrack.Run? _bloomRun;
+        internal const double CapFillSeconds = 0.6, CapBloomTailSeconds = 0.45;
 
         private void NumbersInit()
         {
@@ -56,20 +58,33 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             var from = double.IsNaN(CapFill.Width) ? 0 : CapFill.Width;
             _capRun?.Stop();
             _capRun = null;
+            _bloomRun?.Finish();
+            _bloomRun = null;
+            CapBloom.Width = width;
             if (animate && System.Math.Abs(width - from) > 0.5 && IsVisible
                 && global::ConditioningControlPanel.Avalonia.Controls.AmbientFxCanvas.Env.Level != Models.MotionLevel.Off)
-                _capRun = Helpers.TransformTween.Run(CapFill, System.TimeSpan.FromSeconds(0.6),
+            {
+                _capRun = Helpers.TransformTween.Run(CapFill, System.TimeSpan.FromSeconds(CapFillSeconds),
                     new (double, global::Avalonia.AvaloniaProperty, double)[] { (0, WidthProperty, from), (1, WidthProperty, width) },
                     new global::Avalonia.Animation.Easings.QuadraticEaseOut());
-            else CapFill.Width = width;
+                // WPF MotionFx.BarFill's bloom: linear keys at 0, 80 % of the fill, the fill's end, and 0.45 s after.
+                double fill = CapFillSeconds * 1000, total = fill + (CapBloomTailSeconds * 1000);
+                _bloomRun = Helpers.FxTrack.Play(total, ms => CapBloom.Opacity = Helpers.FxTrack.Clamp01(
+                        Helpers.FxTrack.Keys(ms, (0, 0, null), (fill * 0.8, 0, null), (fill, 1, null), (total, 0, null))),
+                    () => CapBloom.Opacity = 0, _fxRuns);
+            }
+            else { CapFill.Width = width; CapBloom.Opacity = 0; }
         }
 
         internal void ToggleBill()
         {
             _billOpen = !_billOpen;
             if (_billOpen) Receipt.Show(ChasterHead.Service?.Bill());
-            ReceiptHost.IsVisible = _billOpen;
-            TxtRunChevron.Text = _billOpen ? "\u25B4" : "\u25BE";
+            // WPF StatRun_Click: the number pops, the tag takes a tug, the bill prints down (or rolls back up)
+            // and the arrow turns with it.
+            FxPop(StatRun, 1.04);
+            FxTagTug();
+            FxBill(_billOpen);
         }
 
         private IBrush FigureBrush(int seconds) =>
