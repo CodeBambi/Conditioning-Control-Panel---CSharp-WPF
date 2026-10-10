@@ -80,7 +80,7 @@ public sealed class ChaosRunHostTests
         });
     }
 
-    /// <summary>Decisions 2026-10-08 (panic-surfaces): the safe word, the only exit under Lockdown, ends a run.</summary>
+    /// <summary>Decisions 2026-10-08 (panic-surfaces): the safe word ends a run (outside Lockdown and Strict Lock: owner 2026-10-10, it follows the panic key).</summary>
     [Fact]
     public async Task The_safe_word_ends_the_run()
     {

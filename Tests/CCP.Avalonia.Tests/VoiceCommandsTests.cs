@@ -20,8 +20,8 @@ namespace CCP.Avalonia.Tests;
 
 /// <summary>She's Listening's consumer on this head (WPF AutonomyService.Voice/VoiceCommands): the
 /// wake loop opens the mic only when armed + consented + entitled, Stop / revoke / lapse close it,
-/// panic aborts the capture in flight but leaves the loop armed, and the spoken safe word works
-/// under Lockdown (decisions "Panic ↔ mic"). Fed by Vosk's test.wav through a fake mic, never a
+/// panic aborts the capture in flight but leaves the loop armed, and the spoken safe word is refused
+/// wherever the panic key is (owner, 2026-10-10; it used to work under Lockdown). Fed by Vosk's test.wav through a fake mic, never a
 /// real microphone. The WAV says "one zero zero zero one", which the user sets as the wake phrase.</summary>
 public sealed class VoiceCommandsTests
 {
@@ -132,9 +132,10 @@ public sealed class VoiceCommandsTests
     });
 
     [Fact]
-    public Task TheSpokenSafeWordWorksUnderLockdown() => Run(async (shell, mic, engine) =>
+    public Task TheSpokenSafeWordIsRefusedUnderLockdownAndWorksOutsideIt() => Run(async (shell, mic, engine) =>
     {
         var s = CoreSettings.Current;
+        var savedKeys = (s.PanicKeyEnabled, s.StrictLockEnabled);
         s.AutonomyConsentGiven = true;
         using var ld = LockdownService.Current = new LockdownService();
         try
@@ -152,12 +153,20 @@ public sealed class VoiceCommandsTests
 
             Assert.True(shell.VoiceCmds.TryHandleInlineCommand("hey bambi red", wake));
             Dispatcher.UIThread.RunJobs();
-            Assert.False(shell.Autonomy.IsEnabled);      // the safe word is never refused
+            Assert.True(shell.Autonomy.IsEnabled);       // Lockdown refuses the panic key, so it refuses the word
+
+            // The other direction: with Lockdown gone and the key usable, the same word stops everything.
+            LockdownService.Current = null;
+            (s.PanicKeyEnabled, s.StrictLockEnabled) = (true, false);
+            Assert.True(shell.VoiceCmds.TryHandleInlineCommand("hey bambi red", wake));
+            Dispatcher.UIThread.RunJobs();
+            Assert.False(shell.Autonomy.IsEnabled);
         }
         finally
         {
             shell.Autonomy.Stop();
             LockdownService.Current = null;
+            (s.PanicKeyEnabled, s.StrictLockEnabled) = savedKeys;
             (s.AutonomyModeEnabled, s.AutonomyConsentGiven) = (false, false);
         }
         await Task.CompletedTask;
