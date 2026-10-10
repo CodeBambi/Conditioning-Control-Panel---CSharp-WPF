@@ -96,6 +96,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             ["shelistening"] = "SheListeningTab", ["gradedintake"] = "GradedIntakeTab",
             ["appsettings"] = "AppSettingsTab",  ["spiral"] = "SpiralTab",
             ["exclusives"] = "ExclusivesTab", ["chaster"] = "ChasterTab",
+            // Nav rework zone pills (WPF MainWindow.TabNavigation.cs:521/572/666): places inside a page.
+            ["playeyes"] = "PlayTab", ["playsessions"] = "PlayTab", ["folders"] = "AssetsTab", ["ramp"] = "StudioTab",
         };
 
         /// <summary>Keys that open a window or a service rather than a tab. ShowTab leaves the
@@ -121,11 +123,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private static readonly (string Door, string DefaultTab, string[] Tabs, string? Panel)[] NavDoorMap =
         {
             ("home",        "settings",    new[] { "settings", "progression" },                                   null),
-            ("studio",      "studio",      new[] { "studio", "presets", "haptics" },                              "DoorPanelStudio"),
+            ("studio",      "studio",      new[] { "studio", "presets", "haptics", "ramp" },                              "DoorPanelStudio"),
             ("companion",   "companion",   new[] { "companion", "bambitakeover", "shelistening", "awareness" },   "DoorPanelCompanion"),
-            ("play",        "play",        new[] { "play", "lab", "deeper", "exclusives", "gradedintake", "lockdown", "blinktrainer", "remotecontrol", "availablesubjects" }, "DoorPanelPlay"),
+            ("play",        "play",        new[] { "play", "lab", "playeyes", "playsessions", "deeper", "exclusives", "gradedintake", "lockdown", "blinktrainer", "remotecontrol", "availablesubjects" }, "DoorPanelPlay"),
             ("you",         "discord",     new[] { "discord", "spiral", "quests", "achievements", "enhancements", "programs", "leaderboard" }, "DoorPanelYou"),
-            ("library",     "assets",      new[] { "assets" },                                                    "DoorPanelLibrary"),
+            ("library",     "assets",      new[] { "assets", "folders" },                                                    "DoorPanelLibrary"),
             ("appsettings", "appsettings", new[] { "appsettings" },                                               null),
         };
 
@@ -164,6 +166,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             CurrentTab = tab;
             SetExpandedDoor(NavDoorForTab(tab));
             SwitchTabFx(tab);
+            SyncSectionChrome(tab); // the pill strip + breadcrumb (MainShellWindow.SectionChrome.cs)
             // A tooltip opened by a stationary pointer outlives the tab it belongs to, because
             // nothing ever moved the pointer off its owner. Same call, same place, as WPF's
             // MainWindow.TabNavigation.cs:186 (MainShellWindow.ToolTipHygiene.cs).
@@ -190,9 +193,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     case "progression": RefreshFavoritesRail(); break; // WPF TabNavigation.cs:308 (RefreshDashboardRail)
                     case "studio": StudioRack?.OnTabShown(); RefreshSessionFeatureLock(); MaybeShowFeatureIntro("studio-rack", "studio"); break;
                     case "haptics": StudioRack?.FocusRackEntry("haptics"); RefreshSessionFeatureLock(); MaybeShowFeatureIntro("haptics"); break;
+                    // WPF :666, the "Scheduler & Ramp" zone pill: the rack's scheduler module.
+                    case "ramp": StudioRack?.FocusRackEntry("scheduler"); RefreshSessionFeatureLock(); break;
 
                     // WPF MainWindow.TabNavigation.cs:420/457/527/534 - the door tour cards (studio-rack: :505, case "studio").
-                    case "play": case "lab": MaybeShowFeatureIntro("play-wall", "play"); break;
+                    case "play": case "lab": case "playeyes": case "playsessions": MaybeShowFeatureIntro("play-wall", "play"); break;
                     case "awareness": MaybeShowFeatureIntro("awareness"); break;
                     case "lockdown": MaybeShowFeatureIntro("lockdown"); break;
                     case "blinktrainer": MaybeShowFeatureIntro("blinktrainer"); break;
