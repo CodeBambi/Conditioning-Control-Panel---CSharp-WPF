@@ -1812,3 +1812,15 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/sync6-companion-pages: +134
 - Companion Personality/Permissions/Links pills open the Companion tab scrolled to their zone (zone pills until the v2 page lands; decision B+C).
 - Rows 5681c132a/f3a00a9dc stay needs-port, folded into views-companion-v2-conversation; CompanionZonePillsTests fail-proven.
+
+## avalonia-port/reference-render-ci: +430
+- reference-render.yml: WPF (Windows) vs Avalonia renders paired per parity row into side-by-side PNGs; first run 173 WPF / 213 Avalonia / 280 rows paired.
+- Opt-in WpfReferenceRender test + pair-renders.py; fetch with ~/ccp-port/bin/fetch-renders.sh <branch>.
+
+## avalonia-port/snapshot-lock: +197
+- Verify.Avalonia SSIM (0.995) snapshots lock the 2 verified parity rows in their own testhost (RenderProof setup + pinned Noto Emoji fallback). They pass on Arch and on ubuntu-latest (run 38055802311).
+- `ledger-snapshot-check.sh` fails any verified/improved row without a baseline. The parity doc now has a "Locking a row" rule.
+
+## avalonia-port/icons-infra: +1000
+- Fluent UI System Icons infrastructure (L0a): fx:IconGlyph/IconLabel/IconMap/IconText, {loc:StrBare}, Theme/Icons.axaml brushes and ramp; PremiumGateFx and HoverBubbleBar now go through IconGlyph.
+- Tests: render (non-blank, not .notdef, inherited Foreground, Regular != Filled), map/split, contrast; 16 fail-proofs; --scale 2 renders.

@@ -92,6 +92,9 @@ jobs:
 
       - name: Test Avalonia General settings picker (isolated profile)
         run: dotnet test Tests/CCP.Avalonia.GeneralSettings.Tests/CCP.Avalonia.GeneralSettings.Tests.csproj -c Release
+      # Linux only: baselines are Linux renders. Own testhost so RenderProof's setup (Inter, Skia) draws them.
+      - name: Test snapshot lock of verified parity rows
+        run: dotnet test Tests/CCP.Avalonia.Snapshot.Tests/CCP.Avalonia.Snapshot.Tests.csproj -c Release
 
       # The VR head. Builds and self-checks on ubuntu with no OpenXR runtime and no headset -
       # StereoKit ships natives for linux-x64/arm64 and android-arm64, so the same assembly

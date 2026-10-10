@@ -87,7 +87,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
         private const double BreathScale = 1.05;
 
         /// <summary>The spiral arm in unit space. One geometry for the whole app.</summary>
-        private static readonly StreamGeometry UnitSpiral = BuildUnitSpiral();
+        internal static readonly StreamGeometry UnitSpiral = BuildUnitSpiral();
 
         // ---- parts ----
 

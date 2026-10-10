@@ -1,0 +1,2 @@
+*.verified.txt text eol=lf
+*.verified.png binary

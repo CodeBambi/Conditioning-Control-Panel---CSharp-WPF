@@ -135,14 +135,21 @@ Things that will bite, all found by rendering or running rather than by reading:
    anything with a number in it is set from code with `Loc.GetF` and format arguments. Inventing a
    key name produces a plausible-looking string that is also structurally wrong.
 
-3. **`EmojiToImageSource` is not needed on Avalonia.** It exists because "WPF's TextBlock can't
-   render COLR/CPAL color fonts" (see `Helpers/EmojiImage.cs`), so the app ships Twemoji SVGs and
-   renders them through SharpVectors from `pack://` URIs. Avalonia renders colour emoji natively -
-   verified on Linux with Noto Color Emoji. That collapses ~103 converter usages, the SharpVectors
-   dependency and those `pack://` URIs to a plain `<TextBlock Text="🔒"/>` on that head.
-   `BoolToVisibility` (~27 usages) likewise disappears: Avalonia binds `IsVisible` to a bool directly.
-   `helpers:EmojiTextBlock` (128 usages) is a `TextBlock` subclass for the same reason and becomes
-   a plain `TextBlock`.
+3. **Icons are Fluent UI System Icons through `fx:IconGlyph`, not emoji** (decision 2026-10-10,
+   `docs/avalonia-decisions.md`). WPF's `EmojiToImageSource`/Twemoji SVGs, `helpers:EmojiTextBlock` and
+   MDL2 glyphs all become `<fx:IconGlyph Kind="LockClosed"/>` (`Controls/Icons`); a Core loc string with
+   a leading icon ("⚙ System") becomes `<fx:IconLabel Key="section_system"/>` or `{loc:StrBare key}`
+   beside its own `IconGlyph`. Never edit the JSON. Emoji stay only in content: chat text, user/mod
+   data, prose. `Kind` is compile-checked (`IconKind` alias); swap state with `glyph.Kind = …`, assert
+   `.Kind` in tests, never compare emoji text. Mapping table and brushes: `IconMap`, `Theme/Icons.axaml`.
+   Only `Controls/Icons/*` may name `FluentIcons.*`. `BoolToVisibility` (~27 usages) still disappears:
+   Avalonia binds `IsVisible` to a bool directly.
+   - **Never put an `IconGlyph` instance in a `Setter` value or a shared resource**: a Control has one
+     parent, so the second use throws or vanishes. Use a `DataTemplate` or build one per site.
+   - An icon-only button needs `AutomationProperties.Name` (its tooltip key): an emoji used to be its
+     own accessible name, an `IconGlyph` is decorative (`Raw`) until named.
+   - Code that finds a control by its emoji text (`PremiumGateFx` padlock, `Content == "▶"`) breaks
+     silently when that emoji is converted; grep for it before converting a file.
 
 4. **A property-only `ControlTheme` on a templated control draws nothing.** A WPF keyed `<Style>`
    overrides setters and keeps the control's default template. An Avalonia `ControlTheme` replaces
