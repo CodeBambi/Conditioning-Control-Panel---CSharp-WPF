@@ -127,6 +127,10 @@ public sealed class SocialPagesTests
     [Fact]
     public Task TheRailChipTrimsALongNameAndItsTooltipCarriesItWhole() => AvaloniaTestDispatcher.RunAsync(() =>
     {
+        if (Application.Current is null)
+            AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>()
+                .UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                .SetupWithoutStarting();
         var old = CoreAccount.DisplayNameProvider;
         const string name = "CodeBambiWithAVeryLongDisplayName";
         CoreAccount.DisplayNameProvider = () => name;
@@ -136,6 +140,18 @@ public sealed class SocialPagesTests
             var label = chip.Children.OfType<TextBlock>().Single(t => t.Text == name); // the rail name, not the drawer head
             Assert.Equal(TextTrimming.CharacterEllipsis, label.TextTrimming);
             Assert.Equal(name + "\n" + Loc.Get("friends_chip_tooltip"), ToolTip.GetTip(chip) as string);
+
+            // A language switch rebuilds the code-set tooltip while the chip is in a window (WPF UpdateTooltip).
+            var host = new Window { Content = chip };
+            try
+            {
+                host.Show();
+                var en = ToolTip.GetTip(chip) as string;
+                LocalizationManager.Instance.SetLanguage("de");
+                Assert.Equal(name + "\n" + Loc.Get("friends_chip_tooltip"), ToolTip.GetTip(chip) as string);
+                Assert.NotEqual(en, ToolTip.GetTip(chip) as string);
+            }
+            finally { LocalizationManager.Instance.SetLanguage("en"); host.Close(); }
         }
         finally { CoreAccount.DisplayNameProvider = old; }
         return Task.CompletedTask;

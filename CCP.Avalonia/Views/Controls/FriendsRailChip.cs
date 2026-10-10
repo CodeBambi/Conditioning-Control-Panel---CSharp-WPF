@@ -59,14 +59,17 @@ public sealed class FriendsRailChip : Grid
             if (e.Source is Visual s && (ReferenceEquals(s, Drawer) || Drawer.IsVisualAncestorOf(s))) return;
             if (e.InitialPressMouseButton == MouseButton.Left) { Toggle(); e.Handled = true; }
         };
-        AttachedToVisualTree += (_, _) => Rebind();
-        DetachedFromVisualTree += (_, _) => { _popup.IsOpen = false; Unwire(); Drawer.Unsubscribe(); };
+        AttachedToVisualTree += (_, _) => { Rebind(); LocalizationManager.Instance.LanguageChanged += OnLanguage; };
+        DetachedFromVisualTree += (_, _) => { _popup.IsOpen = false; Unwire(); Drawer.Unsubscribe(); LocalizationManager.Instance.LanguageChanged -= OnLanguage; };
         Rebind();
     }
     internal FriendsDrawer Drawer { get; }
     internal bool IsOpen => _popup.IsOpen;
 
     /// <summary>The rail trims the name, so the tooltip leads with it in full (WPF UpdateTooltip).</summary>
+    /// <summary>WPF UpdateTooltip runs on a language switch too: the tooltip is code-set, so rebuild it.</summary>
+    private void OnLanguage(object? sender, EventArgs e) => ToolTip.SetTip(this, Tip(_name.Text));
+
     internal static string Tip(string? name) =>
         (string.IsNullOrWhiteSpace(name) ? "" : name + "\n") + Loc.Get("friends_chip_tooltip");
 

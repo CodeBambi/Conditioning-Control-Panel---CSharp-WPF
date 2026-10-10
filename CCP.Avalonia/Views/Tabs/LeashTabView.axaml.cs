@@ -13,6 +13,7 @@ public partial class LeashTabView : UserControl
         EmptyButton.Click += (_, _) => (TopLevel.GetTopLevel(this) as MainShellWindow)?.ShowTab("friends");
     }
 
-    /// <summary>True while there is nothing leash-shaped to show (always, until feat-leash lands).</summary>
+    /// <summary>True while there is nothing leash-shaped to show (always, until feat-leash lands; so
+    /// tests assert it, it is not fail-provable yet).</summary>
     internal bool ShowingEmpty => EmptyPanel.IsVisible;
 }
