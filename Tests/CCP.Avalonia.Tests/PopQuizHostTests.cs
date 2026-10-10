@@ -71,8 +71,10 @@ public sealed class PopQuizHostTests
 
     /// <summary>WPF 7.1.5 (f154640bb): the card's "Turn these off" link switches PopQuizEnabled off,
     /// keeps the Graded Intake switch in step, closes like Esc and stops the schedule.</summary>
-    [Fact]
-    public Task TurnOffLinkSwitchesQuizzesOffAndSyncsTheIntakeSwitch() => AvaloniaTestDispatcher.RunAsync(() =>
+    [Theory]
+    [InlineData(false)]   // Enter on the focused link
+    [InlineData(true)]    // left click (WPF MouseLeftButtonUp)
+    public Task TurnOffLinkSwitchesQuizzesOffAndSyncsTheIntakeSwitch(bool byMouse) => AvaloniaTestDispatcher.RunAsync(() =>
     {
         if (Application.Current is null)
             AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>()
@@ -98,11 +100,18 @@ public sealed class PopQuizHostTests
 
             var link = quiz.FindControl<global::Avalonia.Controls.TextBlock>("TxtTurnOff")!;
             Assert.True(link.Focusable);
-            link.RaiseEvent(new global::Avalonia.Input.KeyEventArgs
+            if (byMouse)
             {
-                RoutedEvent = global::Avalonia.Input.InputElement.KeyDownEvent,
-                Key = global::Avalonia.Input.Key.Enter,
-            });
+                var at = link.TranslatePoint(new Point(link.Bounds.Width / 2, link.Bounds.Height / 2), quiz)!.Value;
+                quiz.MouseDown(at, global::Avalonia.Input.MouseButton.Left);
+                quiz.MouseUp(at, global::Avalonia.Input.MouseButton.Left);
+            }
+            else
+                link.RaiseEvent(new global::Avalonia.Input.KeyEventArgs
+                {
+                    RoutedEvent = global::Avalonia.Input.InputElement.KeyDownEvent,
+                    Key = global::Avalonia.Input.Key.Enter,
+                });
             Dispatcher.UIThread.RunJobs();
 
             Assert.False(CoreSettings.Current.PopQuizEnabled);

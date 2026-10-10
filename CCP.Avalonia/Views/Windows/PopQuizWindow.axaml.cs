@@ -167,7 +167,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             {
                 Log.Warning(ex, "PopQuiz: turning off from the card failed");
             }
-            CleanupAndClose();
+            CleanupAndClose("turned off from the card");
             CoreEngine.PopQuiz?.Stop();
         }
 
@@ -211,9 +211,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             CleanupAndClose();
         }
 
-        private void CleanupAndClose()
+        private void CleanupAndClose(string? reason = null)
         {
-            _closeReason = _answered ? "answered, auto-dismiss" : "ESC";
+            _closeReason = reason ?? (_answered ? "answered, auto-dismiss" : "ESC");
             // Mark answered BEFORE completing: OnClosed re-Completes when !_answered as a
             // safety net, and the ESC path (still unanswered) would otherwise double-Complete —
             // the second call hits the mismatch branch and clears whatever interaction the
