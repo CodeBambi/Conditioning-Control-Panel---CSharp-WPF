@@ -45,7 +45,7 @@ Kind of limit:
 | Icon glyphs (Segoe MDL2 Assets) | Missing. Nav pills and hover bubbles fall back (text only, or an emoji). Other glyph-only buttons draw an empty box or nothing. | not built |
 | Display face (Fredoka) | Packed (`Assets/fonts`, SIL OFL 1.1) and mapped by name on both OSes since 2026-10-10. Headless tests resolve it; no desk run yet. | built, needs a run |
 | Web pages (games, intake, Chaos) | WebKitGTK. No autoplay without a click, no background-timer switches, WebRTC often missing. | fundamental for the switches |
-| Goon video over 5 MB | Cannot be sent. **Same on Windows** in the port (the transcoder is WinRT in WPF, not ported). | not built, both OSes |
+| Goon video over 5 MB | Cannot be sent: it shows as failed (no-decoder) in the Goon library and is never offered. Windows shrinks it with the OS transcoder, as WPF does. | not built |
 | In-app updater | Opens the releases page. No download and install. | by design (packages update through their own channel) |
 | Ducking other apps' audio | `pactl` only. **Not built on Windows** in the port. | Linux works on paper; Windows not built |
 | Microphone-in-use (meeting guard) | No probe. Reads as "unknown", which counts as "not in use". Windows reads the capture session list since 2026-10-10 (`Platform/MicrophoneInUseProbe.cs`). | not built on Linux |
@@ -103,7 +103,7 @@ Kind of limit:
 | Timers while the window is hidden | Throttled by WebKit. | The WebView2 no-throttling switches have no WebKitGTK twin. A game left behind another window may run its clock slowly. | fundamental | `WebHost.BrowserArguments` |
 | WebRTC (Goon peer link) | Depends on the distro's WebKitGTK build. Often missing. | The page falls back to the server relay. Not re-checked in the code today (lane note). | needs a run | `Views/Games/GameWindow.Goon.cs` |
 | Browser mute | A page script on both OSes. | A page that builds its own audio graph after the script ran can escape it. Not re-checked today (lane note). | both OSes | `Views/Controls/WebHostMedia.cs` |
-| Goon own-media video | Pictures, and clips small enough to go as they are. | A clip that needs shrinking (over 5 MB per the lane note; the figure was not re-read today) cannot be sent: the transcoder is not ported (WPF uses WinRT MediaTranscoder). Linux would use LibVLC `sout` or ffmpeg. | not built, both OSes | `Views/Games/GameWindow.GoonTransfer.cs` |
+| Goon own-media video | Pictures, and clips of 5 MB or less (they go as they are). | A clip over 5 MB needs shrinking to 720p H.264 first. Windows does it with WinRT MediaTranscoder (`Platform/WinRtVideoTranscoder.cs`, the engine WPF uses). Linux has no engine behind the three `VideoTranscodeLane` seams yet, so the clip is refused as no-decoder and never offered. It would take LibVLC `sout` or ffmpeg seeded in `SeedGoonVideoEngine`. | not built | `Views/Games/GameWindow.GoonTransfer.cs` |
 
 ## System integration
 
