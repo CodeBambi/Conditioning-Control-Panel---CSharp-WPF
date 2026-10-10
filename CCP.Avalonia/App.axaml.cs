@@ -982,6 +982,8 @@ namespace ConditioningControlPanel.Avalonia
                 Platform.KeywordTriggerHead.Start();
                 // EMI Desk summon chord (WPF MainWindow.xaml.cs:246 arms it from the shell's Loaded).
                 Views.Windows.EmiDesk.EmiDeskService.Instance.ApplyHotkey();
+                // hunt3 IC7 (WPF App.xaml.cs:1730, :2107): the last run died with the engine on. EMI hears it once.
+                Platform.CrashRecoveryHead.Start();
                 // Do-not-disturb reads the foreground app from X (WPF DoNotDisturbGuard: user32).
                 ConditioningControlPanel.Services.UI.DndGuard.ForegroundProcess = OperatingSystem.IsWindows()
                     ? Platform.DoNotDisturbGuard.ForegroundProcessName   // user32 (merge: Windows half)
@@ -1176,6 +1178,7 @@ namespace ConditioningControlPanel.Avalonia
             if (Interlocked.Exchange(ref _exitHandled, 1) != 0) return;
             _exiting = true;
             ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("appClosing");   // WPF App.xaml.cs:5644 (never speaks)
+            Platform.CrashRecoveryHead.CleanExit();   // WPF App.xaml.cs:5651: a clean shutdown is not a crash
 
             // WPF App.OnExit:5965: haptics FIRST and synchronously (bounded ~2 s). A Lovense level has no
             // server-side watchdog, so a toy not countermanded here keeps running after the app is gone.
