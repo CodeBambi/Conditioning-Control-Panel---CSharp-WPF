@@ -294,6 +294,72 @@ namespace ConditioningControlPanel.Services.Possession.Effects
             Twin = null;
         }
     }
+
+    /// <summary>R3 "reorderdoors": two rail doors trade places for ten seconds, then glide back.
+    /// Nothing is reordered: each door rides a borrowed transform to the row of the other, so it is
+    /// clickable exactly where it lands and opens its OWN section. One pair (WPF trades several).
+    /// A door stops nothing and leads to no exit; the pair is put back the moment either is pressed.</summary>
+    internal sealed class ReorderDoorsEffect : PossessionEffectBase
+    {
+        private static readonly PossessionRole[] _roles = { PossessionRole.TabHeader };
+        internal const double TradeMs = 600;
+        private PossessionTarget? _partner;
+        private IDisposable? _partnerWatch;
+
+        public override string Id => "reorderdoors";
+        public override PossessionRung MinRung => PossessionRung.Collapse;
+        public override PossessionIntensity MinIntensity => PossessionIntensity.Eerie;
+        public override bool IsBig => true;
+        public override double Weight => 2;
+        public override TimeSpan HoldFor => TimeSpan.FromSeconds(10);
+        public override IReadOnlyList<PossessionRole> Roles => _roles;
+        protected override bool TakesInteractive => true;
+        internal PossessionTarget? Partner => _partner;
+
+        private static PossessionTarget? FindPartner(PossessionContext ctx, PossessionTarget? mine)
+        {
+            var free = new List<PossessionTarget>();
+            foreach (var t in ctx.Host.Targets())
+            {
+                if (t == null || ReferenceEquals(t, mine) || t.Role != PossessionRole.TabHeader || t.IsLive) continue;
+                if (mine != null && ReferenceEquals(t.Element, mine.Element)) continue;
+                if (t.CooldownUntil > DateTime.Now) continue;
+                if (t.Element is not Control c || !c.IsEffectivelyVisible || !PossessionTree.MayTouch(c, PossessionRole.TabHeader, true)) continue;
+                free.Add(t);
+            }
+            return free.Count == 0 ? null : free[ctx.Rng.Next(free.Count)];
+        }
+
+        protected override bool CanApplyCore(PossessionContext ctx, PossessionTarget? target) => FindPartner(ctx, target) != null;
+
+        protected override void ApplyCore(PossessionContext ctx, PossessionTarget? target)
+        {
+            if (Victim is not { } a || FindPartner(ctx, target) is not { Element: Control b } partner) return;
+            if (TopLevel.GetTopLevel(a) is not { } top) return;
+            if (a.TranslatePoint(new Point(0, 0), top) is not { } pa || b.TranslatePoint(new Point(0, 0), top) is not { } pb) return;
+            _partner = partner;
+            partner.IsLive = true;
+            _partnerWatch = PossessionGuard.Watch(b, () => _ = UndoAsync(TimeSpan.Zero));
+            var la = LeaseFor(a, RelativePoint.Center);
+            var lb = LeaseFor(b, RelativePoint.Center);
+            Tween(la.Translate, TradeMs, false,
+                (0, TranslateTransform.XProperty, 0), (1, TranslateTransform.XProperty, pb.X - pa.X),
+                (0, TranslateTransform.YProperty, 0), (1, TranslateTransform.YProperty, pb.Y - pa.Y));
+            Tween(lb.Translate, TradeMs, false,
+                (0, TranslateTransform.XProperty, 0), (1, TranslateTransform.XProperty, pa.X - pb.X),
+                (0, TranslateTransform.YProperty, 0), (1, TranslateTransform.YProperty, pa.Y - pb.Y));
+        }
+
+        protected override bool SettleCore(double ms) => SettleLeases(ms);
+
+        protected override void RestoreCore()
+        {
+            try { _partnerWatch?.Dispose(); } catch { }
+            _partnerWatch = null;
+            if (_partner != null) _partner.IsLive = false;
+            _partner = null;
+        }
+    }
 }
 
 namespace ConditioningControlPanel.Services.Possession.Scenes

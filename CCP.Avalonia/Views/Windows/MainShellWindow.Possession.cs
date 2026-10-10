@@ -62,7 +62,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             new Services.Possession.Effects.GlitchPortraitEffect(),
             // k22, reach = WPF: the effects written for the roles the user acts on.
             new Services.Possession.Effects.DodgeEffect(), new Services.Possession.Effects.WobbleEffect(),
-            new Services.Possession.Effects.RelabelEffect(), new Services.Possession.Effects.ToggleLieEffect(),
+            new Services.Possession.Effects.RelabelEffect(), new Services.Possession.Effects.ToggleLieEffect(), new Services.Possession.Effects.ReorderDoorsEffect(),
         };
 
         internal const string PossessionRulesKey = "intro:possession";

@@ -94,7 +94,7 @@ public sealed class PossessionEffectsTests
             // The law is asked again at each effect's door: a hand-built target cannot get past it.
             var host = new PossessionHost();
             var effects = MainShellWindow.PossessionHeadEffects();
-            Assert.Equal(new[] { "nudge", "typo", "breathe", "drift", "rewrite", "toast", "melt", "glyphrot", "xpdrain", "crack", "retitle", "glitchportrait", "dodge", "wobble", "relabel", "togglelie" }, effects.Select(e => e.Id).ToArray());
+            Assert.Equal(new[] { "nudge", "typo", "breathe", "drift", "rewrite", "toast", "melt", "glyphrot", "xpdrain", "crack", "retitle", "glitchportrait", "dodge", "wobble", "relabel", "togglelie", "reorderdoors" }, effects.Select(e => e.Id).ToArray());
             // Photosafe: the one flicker in the deck says so (the deck skips it) and refuses by itself too.
             var flicker = Assert.Single(effects, e => e.UsesFlicker);
             Assert.Equal("glitchportrait", flicker.Id);

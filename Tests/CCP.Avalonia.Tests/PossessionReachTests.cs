@@ -156,6 +156,7 @@ public sealed class PossessionReachTests
             var phraseAt = InWindow(r.Phrase, win);
             var cardAt = InWindow(r.Card, win);
             var exitRest = r.Exit.RenderTransform;
+            var exitMatrix = r.Exit.TransformToVisual(win);
             Assert.True(breathe.CanApply(Ctx(host), card));
             breathe.ApplyAsync(Ctx(host), card, default);
             Assert.True(breathe.IsLive && breathe.IsGlowing);
@@ -165,7 +166,6 @@ public sealed class PossessionReachTests
             {
                 breathe.PaintGlow(ms);
                 Dispatcher.UIThread.RunJobs();
-                AvaloniaHeadlessPlatform.ForceRenderTimerTick();
                 Assert.Equal(exitAt, InWindow(r.Exit, win));       // rest position and size, every frame
                 Assert.Equal(phraseAt, InWindow(r.Phrase, win));
                 Assert.Equal(cardAt, InWindow(r.Card, win));
@@ -174,8 +174,10 @@ public sealed class PossessionReachTests
                 Assert.Equal(1, r.Card.Opacity);
                 Assert.True(r.Card.IsHitTestVisible && r.Exit.IsHitTestVisible && r.Exit.IsEnabled);
                 Assert.True(new Rect(win.ClientSize).Contains(exitAt));
-                var hit = r.Exit.InputHitTest(new Point(exitAt.Width / 2, exitAt.Height / 2)) as Visual;
-                Assert.Same(r.Exit, hit == null ? null : FindButton(hit));
+                // The whole road from the window to the button: same matrix, nothing switched off.
+                Assert.Equal(exitMatrix, r.Exit.TransformToVisual(win));
+                for (Visual? v = r.Exit; v != null && v != win; v = global::Avalonia.VisualTree.VisualExtensions.GetVisualParent(v))
+                    Assert.True(v.IsVisible && v.Opacity == 1 && (v as Control)?.IsHitTestVisible != false && (v as Control)?.IsEnabled != false);
                 if (r.Card.BoxShadow.Count > 0 && r.Card.BoxShadow[0].Color.A > 40) glowed = true;
             }
             Assert.True(glowed);
@@ -361,8 +363,41 @@ public sealed class PossessionReachTests
         });
 
     [Fact]
+    public void TwoDoorsTradePlaces_NeitherIsASafetyControl_AndAPressPutsBothBack() =>
+        InRoom((r, win, _) =>
+        {
+            var cache = new Dictionary<string, PossessionTarget>();
+            var host = new PossessionHost { IsUsable = () => true, Targets = () => PossessionTree.Collect(win, cache) };
+            var mine = host.Targets().First(t => t.Key == "DoorHome");
+            var rest = r.Door.RenderTransform;
+            var trade = new ReorderDoorsEffect();
+            Assert.False(trade.CanApply(Ctx(host), Target(r.Exit, PossessionRole.TabHeader)));
+            Assert.False(trade.CanApply(Ctx(host), Target(r.StopAll, PossessionRole.TabHeader)));
+            Assert.True(trade.CanApply(Ctx(host), mine));
+            trade.ApplyAsync(Ctx(host), mine, default);
+            Assert.True(trade.IsLive);
+            var partner = trade.Partner!;
+            Assert.Equal(PossessionRole.TabHeader, partner.Role);
+            Assert.True(partner.IsLive);                                    // booked: nothing else takes it
+            Assert.False(PossessionTree.IsSafety((Control)partner.Element));
+            Assert.IsType<TransformGroup>(r.Door.RenderTransform);
+            Assert.IsType<TransformGroup>(((Control)partner.Element).RenderTransform);
+
+            ((Button)partner.Element).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Assert.False(trade.IsLive);
+            Assert.False(partner.IsLive);
+            Assert.Equal(rest, r.Door.RenderTransform);
+            Assert.Equal(rest, ((Control)partner.Element).RenderTransform);
+
+            trade.ApplyAsync(Ctx(host), mine, default);
+            trade.UndoAsync(TimeSpan.Zero);                                 // panic
+            Assert.All(new[] { r.Door, r.Door2, r.Door3 }, d => Assert.Equal(rest, d.RenderTransform));
+            Assert.All(host.Targets(), t => Assert.False(t.IsLive));
+        });
+
+    [Fact]
     public void NothingNewBlinks() =>
-        Assert.All(new IPossessionEffect[] { new DodgeEffect(), new WobbleEffect(), new RelabelEffect(), new ToggleLieEffect(), new RailSweepScene() },
+        Assert.All(new IPossessionEffect[] { new DodgeEffect(), new WobbleEffect(), new RelabelEffect(), new ToggleLieEffect(), new ReorderDoorsEffect(), new RailSweepScene() },
             e => Assert.False(e.UsesFlicker));
 
     // ---- the room ------------------------------------------------------------------------------
