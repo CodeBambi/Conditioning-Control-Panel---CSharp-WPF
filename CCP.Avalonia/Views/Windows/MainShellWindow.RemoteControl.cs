@@ -6,8 +6,9 @@
 // button lock while a controller drives.
 // The verbs that need a window (overlays, Melt, lock card, Takeover, session verbs) are in
 // MainShellWindow.RemoteVerbs.cs. ponytail: still missing here - tray minimise/restore
-// for remote, the taskbar flash on join (no Avalonia API), the RemoteHud pill and the browser
-// blindfold (no embedded browser under the overlay on this head).
+// for remote, the taskbar flash on join (no Avalonia API) and the browser
+// blindfold (no embedded browser under the overlay on this head). The RemoteHud pill is in
+// MainShellWindow.RemoteHud.cs + RemoteHudWindow.cs.
 
 using System;
 using System.Linq;
@@ -60,6 +61,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 r.CommandReceived -= command;
                 if (ReferenceEquals(RemoteCommands.Head, this)) RemoteCommands.Head = null;
                 _remoteOverlayTimer?.Stop();
+                DisposeRemoteHud();
             };
             // WPF fades the overlay in 300 ms and the toast in 200 ms (out: 200 / 300 ms).
             if (Named<Border>("RemoteControlOverlay") is { } o)
@@ -73,8 +75,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             var connected = RemoteControllerConnected;
             UpdateStartButtonForRemoteControl(connected);
-            if (connected) { ShowRemoteControlOverlay(); NotifyRemoteControllerJoined(); }
-            else HideRemoteControlOverlay();
+            if (connected) { ShowRemoteControlOverlay(); NotifyRemoteControllerJoined(); EnsureRemoteHud(); }
+            else { HideRemoteControlOverlay(); RefreshRemoteHud(); }
         }
 
         /// <summary>WPF OnRemoteControllerIdleChanged (:818): orange "may be idle", else the grey default.</summary>
@@ -92,6 +94,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             HideRemoteControlOverlay();
             UpdateStartButtonForRemoteControl(false);
+            RefreshRemoteHud();
         }
 
         /// <summary>WPF OnRemoteCommandReceived (:1091): quiet verbs make no toast.</summary>

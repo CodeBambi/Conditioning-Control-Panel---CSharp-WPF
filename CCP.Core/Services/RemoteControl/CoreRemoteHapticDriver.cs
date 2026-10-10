@@ -52,6 +52,9 @@ namespace ConditioningControlPanel.Services.Remote
             }
         }
 
+        /// <summary>The Easy factor moved: replay what plays at the new strength, from its top (WPF Rescale).</summary>
+        public void Rescale() { lock (_gate) { if (_player.Plan is { } plan) Play(plan); } }
+
         /// <summary>Every controller command counts as activity for the loop idle cap.</summary>
         public void NoteCommand() { lock (_gate) _player.NoteCommand(Now); }
 

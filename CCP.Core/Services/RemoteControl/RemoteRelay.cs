@@ -82,6 +82,51 @@ namespace ConditioningControlPanel.Services
         public double PollInterval { get; private set; } = PollIntervalSeconds;
 
         public event EventHandler? ControllerConnectedChanged, ControllerIdleChanged, SessionEnded;
+
+        // ---- Remote Control v2 (WPF Services/Remote/RemoteControlService.V2.cs): what the HUD pill reads.
+        /// <summary>The three signals the subject can send up: more, easy, stop.</summary>
+        public static readonly string[] SignalKinds = { "more", "easy", "stop" };
+        /// <summary>The name the controller typed when connecting, or null.</summary>
+        public string? ControllerName { get; private set; }
+        /// <summary>When the current controller connected (UTC), or null when nobody is connected.</summary>
+        public DateTime? ControllerConnectedSinceUtc { get; private set; }
+        /// <summary>Human words for the last command that landed, e.g. "Spiral", "Toy buzz".</summary>
+        public string? LastActionLabel { get; private set; }
+        /// <summary>Raised when a new command lands (and <see cref="LastActionLabel"/> moved).</summary>
+        public event EventHandler? LastActionChanged;
+        /// <summary>The subject's Easy factor (see <see cref="RemoteCommands.EasyFactor"/>).</summary>
+        public double EasyFactor => RemoteCommands.EasyFactor;
+        public event EventHandler? EasyChanged { add => RemoteCommands.EasyChanged += value; remove => RemoteCommands.EasyChanged -= value; }
+
+        /// <summary>WPF SendSignalAsync: the subject's own button, "more", "easy" or "stop". Easy and Stop act
+        /// HERE first (they mean something even if the network never answers), then the signal goes up the
+        /// emote channel (same auth and rate limit, no debounce: a Stop right after an emote is never
+        /// swallowed). True when the signal reached the server. The controller stays connected either way.</summary>
+        public async Task<bool> SendSignalAsync(string kind)
+        {
+            kind = (kind ?? "").Trim().ToLowerInvariant();
+            if (Array.IndexOf(SignalKinds, kind) < 0 || !IsActive) return false;
+            if (kind == "easy") OnUi(RemoteCommands.ApplyEasy);
+            else if (kind == "stop") OnUi(() => _stopEffects(true));
+            var uid = _unifiedId();
+            if (string.IsNullOrEmpty(uid) || _baseUrl == null) return false;
+            try
+            {
+                using var resp = await PostAsync("/v2/remote/emote", new { unified_id = uid, text = kind, icon = "", kind = "signal" }).ConfigureAwait(false);
+                if (resp.IsSuccessStatusCode) { Log.Information("[RemoteControl] Signal sent: {Kind}", kind); return true; }
+                Log.Warning("[RemoteControl] Signal {Kind} not sent: {Status}", kind, resp.StatusCode);
+                return false;
+            }
+            catch (Exception ex) { Log.Warning(ex, "[RemoteControl] Signal {Kind} failed", kind); return false; }
+        }
+
+        /// <summary>Runs on the UI thread and waits; posted instead if a stalled UI cancels the wait.</summary>
+        private static void OnUi(Action work)
+        {
+            void Safe() { try { work(); } catch (Exception ex) { Log.Warning(ex, "[RemoteControl] local signal action failed"); } }
+            var (done, _) = CoreDispatch.Invoke(() => { Safe(); return 0; }, TimeSpan.FromSeconds(10));
+            if (!done) CoreDispatch.Post(Safe);
+        }
         /// <summary>Raised for every command that ran (WPF CommandReceived); refused ones are not.</summary>
         public event EventHandler<string>? CommandReceived;
 
@@ -187,9 +232,16 @@ namespace ConditioningControlPanel.Services
             (_lastOptInTags, _lastOptInStatus) = (null, null);
             // StopAsync and the poll loop land here off the UI thread, and the stops close windows: run
             // them on the UI like ControllerLeft, posted if a stalled UI cancels the Invoke.
-            void StopEffects() { try { _stopEffects(false); } catch (Exception ex) { Log.Warning(ex, "[RemoteControl] stop effects failed"); } }
+            void StopEffects()
+            {
+                try { _stopEffects(false); } catch (Exception ex) { Log.Warning(ex, "[RemoteControl] stop effects failed"); }
+                // WPF ResetV2SessionState: Easy hands the subject's own opacity back and returns to 1.
+                try { RemoteCommands.ResetEasy(); } catch (Exception ex) { Log.Warning(ex, "[RemoteControl] easy reset failed"); }
+            }
             var (done, _) = CoreDispatch.Invoke(() => { StopEffects(); return 0; }, TimeSpan.FromSeconds(10));
             if (!done) CoreDispatch.Post(StopEffects);
+            (ControllerName, ControllerConnectedSinceUtc) = (null, null);
+            if (LastActionLabel != null) { LastActionLabel = null; LastActionChanged?.Invoke(this, EventArgs.Empty); }
             if (ControllerConnected) { ControllerConnected = false; ControllerConnectedChanged?.Invoke(this, EventArgs.Empty); }
             SessionEnded?.Invoke(this, EventArgs.Empty);
         }
@@ -221,7 +273,9 @@ namespace ConditioningControlPanel.Services
                 _consecutiveFailures = 0;
                 _pollBackedOff = false;
                 var changed = ApplyControllerState(result["controller_connected"]?.Value<bool>() ?? false,
-                                                   result["controller_idle"]?.Value<bool>() ?? false);
+                                                   result["controller_idle"]?.Value<bool>() ?? false,
+                                                   Remote.RemoteControllerName.Sanitize(
+                                                       result["controller_name"]?.Type == JTokenType.String ? result["controller_name"]!.ToString() : null));
 
                 string? lastId = null, lastAction = null;
                 // Fetched before a panic or a leave: never runs after it, however late its dispatch lands.
@@ -248,7 +302,7 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>WPF's connect/idle block (RemoteControlService.cs:537-625). True when connected changed.</summary>
-        private bool ApplyControllerState(bool serverConnected, bool idle)
+        private bool ApplyControllerState(bool serverConnected, bool idle, string? controllerName = null)
         {
             var connected = serverConnected;
             if (connected && _autoDisconnected)
@@ -258,10 +312,12 @@ namespace ConditioningControlPanel.Services
             }
             if (!serverConnected) _autoDisconnected = false;
 
+            ControllerName = connected ? controllerName : null;
             var changed = connected != ControllerConnected;
             if (changed)
             {
                 ControllerConnected = connected;
+                ControllerConnectedSinceUtc = connected ? Now() : null;
                 if (!connected) { ControllerLeft(); _ = RepublishDirectoryIfOptedInAsync(); }
                 ControllerConnectedChanged?.Invoke(this, EventArgs.Empty);
             }
@@ -275,6 +331,7 @@ namespace ConditioningControlPanel.Services
             {
                 Log.Information("[RemoteControl] Controller idle for {Seconds:F0}s - auto-disconnecting", (Now() - since).TotalSeconds);
                 (_autoDisconnected, ControllerConnected, ControllerIdle) = (true, false, false);
+                ControllerConnectedSinceUtc = null;
                 ControllerLeft();
                 _ = RepublishDirectoryIfOptedInAsync();
                 ControllerConnectedChanged?.Invoke(this, EventArgs.Empty);
@@ -364,6 +421,9 @@ namespace ConditioningControlPanel.Services
                 Log.Warning("[RemoteControl] {Action} not delivered: {Reason}", action, reason);
                 return;
             }
+            // WPF NoteLandedCommand: the HUD's "Last: ..." line.
+            LastActionLabel = Remote.RemoteActionLabels.For(action);
+            LastActionChanged?.Invoke(this, EventArgs.Empty);
             CommandReceived?.Invoke(this, action);
         }
 
