@@ -883,7 +883,8 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
 - Package `FluentIcons.Avalonia` 2.1.343 (MIT, ~5 MB, built for Avalonia 12.0; proven on 12.1.2 headless by
   IconGlyphRenderTests), wrapped in one control `fx:IconGlyph`; only `Controls/Icons/*` names `FluentIcons.*`
   (`IconKind`/`IconVariant` global aliases), so a bundled-font fallback edits one folder.
-- Defaults (supervisor-approved): an in-house extension glyph for the spiral only (bubbles = Fluent BubbleMultiple);
+- Defaults (supervisor-approved): extension glyphs for spiral + bubbles; the worker narrowed it to the spiral only, because
+  2.1.343 has Fluent BubbleMultiple (the oracle had flagged it missing) - revisit if it reads wrong;
   EmiDesk pixel art kept; Chaster uses Key (the padlock means premium); user/custom session and preset icons stay
   emoji (content); typographic stand-ins (✕ ✓ ▾ › ●) in scope except prose, bullets and PasswordChar.
 - Semantic brushes (`Theme/Icons.axaml`) carry the colour emoji used to (tier gold/violet, success, warn, danger,

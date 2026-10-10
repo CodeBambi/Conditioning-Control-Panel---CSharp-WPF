@@ -184,7 +184,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
         /// SettingsPaletteIndex entries ("door.x" / "tab.x") through <see cref="ForPalette"/>.</summary>
         public static IconEntry? ForTab(string? id) => id switch
         {
-            "home" or "dashboard" => new(IconKind.Home, R), "premium" or "exclusives" => new(IconKind.Star, F, Gold),
+            "home" or "dashboard" or "settings" => new(IconKind.Home, R), "premium" or "exclusives" => new(IconKind.Star, F, Gold),
             "achievements" => new(IconKind.Trophy, R), "studio" => new(IconKind.Color, R),
             "presets" => new(IconKind.Options, R), "haptics" => new(IconKind.PhoneVibrate, R),
             "justdrop" => new(IconKind.Drop, R), "ramp" => new(IconKind.ArrowTrending, R),
@@ -199,9 +199,9 @@ namespace ConditioningControlPanel.Avalonia.Controls
             "discord" or "profile" or "you" => new(IconKind.Person, R), "quests" => new(IconKind.TaskList, R),
             "enhancements" => new(IconKind.Flash, R), "programs" => new(IconKind.Calendar, R),
             "chaster" => new(IconKind.Key, R),              // decision: Key, the padlock means premium
-            "assets" => new(IconKind.Folder, R), "mods" => new(IconKind.PuzzlePiece, R),
+            "assets" => new(IconKind.Folder, R), "folders" => new(IconKind.FolderOpen, R), "fyp" => new(IconKind.PhoneArrowRight, R), "mods" => new(IconKind.PuzzlePiece, R),
             "catalogue" or "library" => new(IconKind.Book, R), "phrases" => new(IconKind.TextQuote, R),
-            "medialog" => new(IconKind.TextBulletList, R), "settings" or "appsettings" => new(IconKind.Settings, R),
+            "medialog" => new(IconKind.TextBulletList, R), "appsettings" => new(IconKind.Settings, R),
             "lockdown" => new(IconKind.LockClosed, F, Tier1), "gradedintake" => new(IconKind.TicketDiagonal, R),
             _ => null,
         };
@@ -209,7 +209,8 @@ namespace ConditioningControlPanel.Avalonia.Controls
         /// <summary>SettingsPaletteIndex door/tab entry id ("door.studio", "tab.quests") -> icon by its
         /// tab id; other entries (null) draw their Glyph through <see cref="TryGet"/>.</summary>
         public static IconEntry? ForPalette(string? entryId) =>
-            entryId?.StartsWith("door.") == true ? ForTab(entryId[5..])
+            entryId == "door.settings" ? ForTab("appsettings")   // the Settings door; tab "settings" is the Dashboard
+            : entryId?.StartsWith("door.") == true ? ForTab(entryId[5..])
             : entryId?.StartsWith("tab.") == true ? ForTab(entryId[4..]) : null;
     }
 }

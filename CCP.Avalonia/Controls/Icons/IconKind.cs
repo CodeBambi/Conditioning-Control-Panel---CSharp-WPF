@@ -8,7 +8,7 @@ global using IconVariant = FluentIcons.Common.IconVariant;
 namespace ConditioningControlPanel.Avalonia.Controls
 {
     /// <summary>In-house "extension glyphs" for brand marks Fluent has no icon for. Decision
-    /// 2026-10-10: the spiral only (bubbles use Fluent's BubbleMultiple).</summary>
+    /// 2026-10-10 approved spiral + bubbles; bubbles use Fluent's BubbleMultiple, which exists in 2.1.343.</summary>
     public enum IconBrand { None, Spiral }
 
     /// <summary>Resource keys of the semantic icon brushes (Theme/Icons.axaml). Hearts use the

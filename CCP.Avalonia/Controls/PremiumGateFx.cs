@@ -23,8 +23,8 @@ namespace ConditioningControlPanel.Avalonia.Controls
     /// <para>House rules kept: one cached attachment per gate (safe from every refresh); every
     /// clock gated on AllowAmbientLoops plus the gate actually being visible; colour re-read on
     /// ModChanged; every entry point wrapped - a decoration may never be why a gate fails.</para>
-    /// <para>Avalonia: this head draws the padlock as an emoji TextBlock (Avalonia renders colour
-    /// emoji natively), so the padlock is the first Image OR the first "🔒" TextBlock.</para>
+    /// <para>Avalonia: the padlock is the first Image, "🔒" TextBlock or (Fluent icons, 2026-10-10)
+    /// IconGlyph with Kind LockClosed - see <see cref="IsPadlock"/>.</para>
     /// </summary>
     internal sealed class PremiumGateFx(Border gate, AmbientFxCanvas fog, Control? padlock, Button? cta)
     {

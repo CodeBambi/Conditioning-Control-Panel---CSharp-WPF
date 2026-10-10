@@ -58,10 +58,12 @@ public sealed class IconMapTests
         Assert.All(FeatureDefinition.GetAllFeatures(), f => Assert.NotNull(IconMap.ForFeature(f.Id)));
         Assert.Equal(IconKind.Keyboard, IconMap.ForFeature("lock_cards")!.Value.Kind);   // not a premium padlock
         Assert.All(SkillDefinition.All, s => Assert.True(IconMap.ForSkill(s.Id) != null, s.Id));
-        var doors = SettingsPaletteIndex.All.Where(e => e.Id.StartsWith("door.")).ToList();
+        var doors = SettingsPaletteIndex.All.Where(e => e.Id.StartsWith("door.") || e.Id.StartsWith("tab.")).ToList();
         Assert.NotEmpty(doors);
         Assert.All(doors, d => Assert.True(IconMap.ForPalette(d.Id) != null, d.Id));
         Assert.Equal(IconKind.Key, IconMap.ForTab("chaster")!.Value.Kind);
+        Assert.Equal(IconKind.Home, IconMap.ForPalette("tab.settings")!.Value.Kind);      // WPF E80F: the Dashboard
+        Assert.Equal(IconKind.Settings, IconMap.ForPalette("door.settings")!.Value.Kind);
         Assert.Null(IconMap.ForPalette("set.spiral"));
     }
 
