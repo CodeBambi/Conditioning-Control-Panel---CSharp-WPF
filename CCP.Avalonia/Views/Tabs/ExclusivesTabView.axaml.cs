@@ -455,7 +455,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         public string Title => Loc.Get($"premium_group_{Key}");
         public string Sub => Loc.Get($"premium_group_{Key}_sub");
         public string Count { get; } = Loc.GetF("premium_group_count", open, total);
-        public Bitmap? Sign => Group == Services.UI.PremiumGroup.Free ? null : ModArt.TryLoad($"features/tier_badge_t{(Group == Services.UI.PremiumGroup.Basic ? 1 : 2)}.png", 240);
+        /// <summary>Loaded once per row (ModArt keeps no cache); WPF builds its headers once.</summary>
+        public Bitmap? Sign { get; } = group == Services.UI.PremiumGroup.Free ? null : ModArt.TryLoad($"features/tier_badge_t{(group == Services.UI.PremiumGroup.Basic ? 1 : 2)}.png", 240);
         public bool HasSign => Sign != null;
         public IBrush HueBrush => new SolidColorBrush(Hue);
         public IBrush PillBackground => new SolidColorBrush(Color.FromArgb(0x1F, Hue.R, Hue.G, Hue.B));

@@ -58,6 +58,22 @@ public sealed class ExclusivesVaultTests
                 Assert.Equal(ConditioningControlPanel.Localization.Loc.GetF("premium_group_count", 0, rows.Count(r => r.Tier == 1)), basic.Count);
                 Assert.True(basic.HasSign);
                 Assert.False(items.OfType<ExclusiveGroupRow>().Last().HasSign);
+
+                // WPF binds the shelf words live (BindVaultLoc): a language switch rebuilds the rows (P09).
+                // The group lines are not translated yet on main; the rows are rebuilt (new ItemsSource) and re-read.
+                var en = rows.Single(r => r.Feature.Key == "haptics").Tagline;
+                var before = view.FindControl<ItemsControl>("ExclusivesShelf")!.ItemsSource;
+                var lang = ConditioningControlPanel.Localization.LocalizationManager.Instance.CurrentLanguage;
+                try
+                {
+                    ConditioningControlPanel.Localization.LocalizationManager.Instance.SetLanguage("de");
+                    Dispatcher.UIThread.RunJobs();
+                    var de = Rows(view).Single(r => r.Feature.Key == "haptics").Tagline;
+                    Assert.NotEqual(en, de);
+                    Assert.NotSame(before, view.FindControl<ItemsControl>("ExclusivesShelf")!.ItemsSource);   // rebuilt, so bindings re-read
+                    Assert.Equal(ConditioningControlPanel.Localization.Loc.Get("exclusives_tag_haptics"), de);
+                }
+                finally { ConditioningControlPanel.Localization.LocalizationManager.Instance.SetLanguage(lang); Dispatcher.UIThread.RunJobs(); }
                 ExclusiveFeature.ArcademyDoorProvider = () => true;
                 view.RefreshVault();
                 Assert.Contains(Rows(view), r => r.Feature.Key == "arcademy");
