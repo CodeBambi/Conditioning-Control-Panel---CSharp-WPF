@@ -111,6 +111,22 @@ namespace ConditioningControlPanel.Services
             if (_cornerHooked) { CoreCornerGif.StandaloneChanged -= RefreshCornerGifPolicy; _cornerHooked = false; }
         }
 
+        /// <summary>WPF UpdateCornerGifPath / Size / Position / Opacity (#474): a live edit from the session
+        /// detail. The new value is kept for a GIF that has not started yet; one on screen is recreated in
+        /// place (a recreate, not a teardown: the corner stays the session's).</summary>
+        public void UpdateCornerGif(string? path = null, CornerPosition? position = null, int? size = null, int? opacity = null)
+        {
+            var ss = CurrentSession?.Settings;
+            if (ss == null) return;
+            if (path != null) ss.CornerGifPath = path;
+            if (position is { } p) ss.CornerGifPosition = p;
+            if (size is { } s) ss.CornerGifSize = s;
+            if (opacity is { } o) ss.CornerGifOpacity = o;
+            if (!_cornerShown) return;
+            if (CanRaiseCornerGif(ss)) ShowCornerGif(ss);
+            else CloseCornerGif();
+        }
+
         /// <summary>WPF PanicCloseCornerGif: off the screen now, the session keeps its claim.</summary>
         public void PanicCloseCornerGif()
         {

@@ -95,6 +95,49 @@ public sealed class C1SmallRowsTests
     private static string Root([System.Runtime.CompilerServices.CallerFilePath] string here = "") =>
         System.IO.Path.GetFullPath(System.IO.Path.Combine(System.IO.Path.GetDirectoryName(here)!, "..", ".."));
 
+    /// <summary>W9 (PresetsTabView): the session detail's corner GIF option. The switch folds its
+    /// settings, and the picks ride the session as it starts; unticked means off.</summary>
+    [Fact]
+    public async Task SessionCornerGifOption_FoldsItsSettings_AndThePicksRideTheSession()
+    {
+        await AvaloniaTestDispatcher.RunAsync(() =>
+        {
+            EnsureApp();
+            var tab = new PresetsTabView();
+            T Part<T>(string name) where T : global::Avalonia.Controls.Control => global::Avalonia.Controls.ControlExtensions.FindControl<T>(tab, name)!;
+            var session = new ConditioningControlPanel.Models.Session
+            {
+                Id = "c1", Name = "c1", DurationMinutes = 10, HasCornerGifOption = true,
+                Settings = new ConditioningControlPanel.Models.SessionSettings(),
+            };
+            var chk = Part<global::Avalonia.Controls.CheckBox>("ChkCornerGifEnabled");
+            var fold = Part<global::Avalonia.Controls.StackPanel>("CornerGifSettings");
+            Assert.False(fold.IsVisible);
+            chk.IsChecked = true;
+            Assert.True(fold.IsVisible);
+
+            Part<global::Avalonia.Controls.RadioButton>("RbCornerTR").IsChecked = true;
+            Part<global::Avalonia.Controls.Slider>("SliderCornerGifSize").Value = 240;
+            Part<global::Avalonia.Controls.Slider>("SliderCornerGifOpacity").Value = 35;
+            Assert.Equal("240px", Part<global::Avalonia.Controls.TextBlock>("TxtCornerGifSize").Text);
+            Assert.Equal("35%", Part<global::Avalonia.Controls.TextBlock>("TxtCornerGifOpacity").Text);
+            tab.SetCornerGifPath(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "mine.gif"));
+
+            tab.ApplyCornerGifPicks(session);
+            Assert.True(session.Settings.CornerGifEnabled);
+            Assert.EndsWith("mine.gif", session.Settings.CornerGifPath);
+            Assert.Equal(ConditioningControlPanel.Models.CornerPosition.TopRight, session.Settings.CornerGifPosition);
+            Assert.Equal(240, session.Settings.CornerGifSize);
+            Assert.Equal(35, session.Settings.CornerGifOpacity);
+
+            chk.IsChecked = false;
+            Assert.False(fold.IsVisible);
+            tab.ApplyCornerGifPicks(session);
+            Assert.False(session.Settings.CornerGifEnabled);   // never left on from the last start
+            return Task.CompletedTask;
+        });
+    }
+
     [Fact]
     public async Task DeeperTrackerButton_FollowsTheTracker()
     {

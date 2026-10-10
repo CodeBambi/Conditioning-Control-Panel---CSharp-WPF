@@ -147,6 +147,20 @@ public sealed class SessionRunnerCornerGifTests : IDisposable
     }
 
     [Fact]
+    public void LiveEdits_RecreateAShownGif_AndAreKeptForOneThatHasNotStarted()
+    {
+        _runner.Start(Make(ss => ss.CornerGifStartMinute = 5));
+        _runner.UpdateCornerGif(size: 200, opacity: 60);       // not on screen yet: kept, nothing drawn
+        Assert.Empty(_calls);
+        _runner.Tick(TimeSpan.FromMinutes(5.5));
+        Assert.Equal($"show {Path.GetFileName(_art)} TopRight 200 60", _calls[^1]);
+
+        _runner.UpdateCornerGif(position: CornerPosition.BottomLeft);
+        Assert.Equal($"show {Path.GetFileName(_art)} BottomLeft 200 60", _calls[^1]);   // recreated in place
+        Assert.DoesNotContain("hide+handback", _calls);                                   // the corner stays the session's
+    }
+
+    [Fact]
     public void AdmissionRule_TruthTable()
     {
         Assert.True(CornerGifMedia.AllowSessionCornerGif(true, true, false, false, false, true));
