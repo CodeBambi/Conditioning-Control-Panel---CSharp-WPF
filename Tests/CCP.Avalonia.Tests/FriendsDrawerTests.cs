@@ -97,6 +97,11 @@ public sealed class FriendsDrawerTests
         Assert.False(Tagged<Button>(d, "friends-ht-send")!.IsEnabled);
         box.Text = "ht-1234!";
         Assert.Equal("1234", box.Text);   // digits only, as typed (FriendsDrawerRules.NormaliseHtId)
+        // A pasted Hypnotube link gives the number before .html, not the slug's digits (WPF 43137acb4: no MaxLength cut).
+        box.Text = "";
+        box.RaiseEvent(new TextInputEventArgs { RoutedEvent = InputElement.TextInputEvent, Text = "https://hypnotube.com/video/bimbo-2024-trance-12345.html" });
+        Assert.Equal("12345", box.Text);
+        box.Text = "1234";
         Assert.True(Tagged<Button>(d, "friends-ht-send")!.IsEnabled);
         Click(d, "friends-ht-send");
         Assert.Equal(SendResult.Sent, await d.SendWatchAsync("u_on", new WatchRef(WatchKind.Flavour, "pink", "Pink")));
