@@ -344,8 +344,29 @@ namespace ConditioningControlPanel.Avalonia.Controls
         /// </summary>
         public void Retint(Color tint)
         {
-            _config.Tint = tint;
-            RefreshPalette();
+            try
+            {
+                // Only the accent dots, like WPF's ApplyAccent: no ReadEnvironment, so the governor
+                // and the clock keep their state.
+                _config.Tint = tint;
+                ApplyAccent(tint, tint);
+                InvalidateVisual();
+            }
+            catch (Exception ex) { Log.Debug("AmbientFxCanvas.Retint: {E}", ex.Message); }
+        }
+
+        /// <summary>Rebuild the particle, glow and ember dots. Shared by ReadEnvironment and Retint.</summary>
+        private void ApplyAccent(Color particle, Color glow)
+        {
+            _particleDot = MakeDot(particle, 0f);
+            _glowDot = MakeDot(glow, 0f);
+            // The tighter-cored radial the glow-breath layer wants; the WPF twin baked a second
+            // 160px sprite with a 0.28 core stop for exactly this.
+            _glowSoft = MakeDot(glow, 0.28f);
+            // Embers sit halfway between the particle colour and a candle gold, so they read
+            // warm on every palette without leaving the theme (WPF ApplyAccent).
+            _emberDot = MakeDot(Color.FromRgb((byte)((particle.R + 255) / 2), (byte)((particle.G + 196) / 2),
+                                              (byte)((particle.B + 110) / 2)), 0f);
         }
 
         /// <summary>
@@ -577,16 +598,8 @@ namespace ConditioningControlPanel.Avalonia.Controls
                 }
 
                 _mistDot = MakeDot(mist, 0f);
-                _particleDot = MakeDot(particle, 0f);
-                _glowDot = MakeDot(glow, 0f);
                 _flashDot = MakeDot(flash, 0f);
-                // The tighter-cored radial the glow-breath layer wants; the WPF twin baked a second
-                // 160px sprite with a 0.28 core stop for exactly this.
-                _glowSoft = MakeDot(glow, 0.28f);
-                // Embers sit halfway between the particle colour and a candle gold, so they read
-                // warm on every palette without leaving the theme (WPF ApplyAccent).
-                _emberDot = MakeDot(Color.FromRgb((byte)((particle.R + 255) / 2), (byte)((particle.G + 196) / 2),
-                                                  (byte)((particle.B + 110) / 2)), 0f);
+                ApplyAccent(particle, glow);
 
                 _liveBudget = _particleBudget;
                 _fogOnly = false;
