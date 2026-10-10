@@ -2514,8 +2514,11 @@
              which is all Row 4 / Column 1 ever was, so the per-view Grid.Row/Grid.Column
              moved onto the wrapper. Nothing about tab visibility, ShowTab or any x:Name
              changed. -->
-        <Panel Grid.Row="4" Grid.Column="1">
-            <Grid>
+        <Grid Grid.Row="4" Grid.Column="1" RowDefinitions="Auto,*">
+            <!-- Nav rework 2026-10-06 (WPF MainWindow.xaml:2039): row 0 = the section's pill strip +
+                 breadcrumb (hidden on Home), row 1 = the one-cell stack of tab views, unchanged. -->
+            <cmp:SectionTabStrip x:Name="SectionStrip" Grid.Row="0" Margin="10,8,10,4" />
+            <Grid Grid.Row="1">
                 <!-- Main Content - Settings Tab -->
                 <views:SettingsTabView x:Name="SettingsTab" Margin="10,5,10,2" />
 
@@ -2686,7 +2689,7 @@
                 <!-- No Just Drop tab. It is a window now - see the rail comment above and
                      Services/JustDrop/JustDropHostService.cs. -->
             </Grid>
-        </Panel>
+        </Grid>
 
 
 

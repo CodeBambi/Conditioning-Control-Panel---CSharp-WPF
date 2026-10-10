@@ -107,6 +107,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             InitFavoritesRail(); // MainShellWindow.FavoritesRail.cs (WPF MainWindow.xaml.cs:3501)
             ApplyEnableDeeper(); // MainShellWindow.DeeperTab.cs (WPF LoadSettings: rail door follows EnableDeeper)
             InitializeTabHistoryInput(); // MainShellWindow.TabHistory.cs (WPF MainWindow ctor)
+            InitializePaletteShortcut(); // MainShellWindow.SectionChrome.cs (WPF EnsurePaletteShortcut, d858d6108)
             // The mod switcher's rows, the saved mod's palette and the pending first-run choice
             // (MainShellWindow.ModSwitch.cs). No-op on the headless render path (no App.Mods).
             AttachModSwitch();
