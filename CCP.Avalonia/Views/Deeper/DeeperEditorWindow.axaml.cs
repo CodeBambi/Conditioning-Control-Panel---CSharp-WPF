@@ -614,7 +614,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         /// </summary>
         private void StartEditorTutorial()
         {
-            Log.Debug("DeeperEditor: editor tutorial requested; CoreTutorial is unseeded on this head");
+            // WPF DeeperEditorWindow.StartEditorTutorial: the coachmarks, over THIS window.
+            try
+            {
+                if (CoreTutorial.IsActive) CoreTutorial.Skip();
+                CoreTutorial.Start("DeeperEditor");
+                if (!CoreTutorial.IsActive) return;
+                new global::ConditioningControlPanel.Avalonia.Views.Windows.TutorialOverlay(this).Show();
+            }
+            catch (Exception ex) { Log.Warning(ex, "DeeperEditor: the editor tutorial failed to start"); }
         }
 
         private void LoadEnhancement(Enhancement enhancement, string? filePath)

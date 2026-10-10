@@ -457,6 +457,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// skipped) pops the Puppy preset's editor (MainWindow.Settings.cs:689). This head does NOT
         /// seed CoreTutorial.StartAction today, so no tour appears yet - the seam's documented no-op.
         /// </summary>
+        /// <summary>The ? panel's Awareness row: the same tour with the same one-shot.</summary>
+        internal void StartTutorialFromHelp() => BtnAwarenessTutorial_Click(this, new RoutedEventArgs());
+
         private void BtnAwarenessTutorial_Click(object? sender, RoutedEventArgs e)
         {
             CoreTutorial.Start("Awareness");

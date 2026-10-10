@@ -306,6 +306,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private void UpdateStep(TutorialStep step)
         {
+            if (RetargetIfNeeded(step)) return;
             _step = step;
 
             // WPF retargeted here when step.TargetWindowTypeName named a different window, and
@@ -361,13 +362,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // MouseDown, or the button below never sets IsPressed and its Click never fires.
             // UpdateSpotlight has its own timer-based retry for the "target not laid out yet" case.
             try { UpdateSpotlight(step); } catch { /* a step must never take the window down */ }
+            if (_live) { try { SubscribeAdvanceTrigger(step); } catch { /* the step still has Skip step / Skip */ } }
 
             // Deferred, exactly as in WPF: UpdateStep can run inside the target's own click
             // handling, and focusing here would steal keyboard focus mid-click and break the
             // button's Click sequence. This is what makes Escape -> Skip reachable.
             Dispatcher.UIThread.Post(() =>
             {
-                try { Focus(); } catch { /* window already closing */ }
+                // A live card lives inside the host window and never takes focus (Escape is tunnelled there).
+                if (!_live) { try { Focus(); } catch { /* window already closing */ } }
             }, DispatcherPriority.Background);
 
             // ponytail: SubscribeAdvanceTrigger is head work, not a seam call — it hooks the target control
@@ -446,6 +449,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // header for what a step behind a collapsed drawer degrades to.
             try { _targetWindow.UpdateLayout(); } catch { /* not laid out yet */ }
 
+            PrepareTarget(step);
+            try { _targetWindow.UpdateLayout(); } catch { /* not laid out yet */ }
             var targetElement = FindElementByName(_targetWindow, step.TargetElementName);
             if (targetElement == null)
             {
@@ -559,8 +564,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // Until that method exists, no door is opened, so a step whose target sits behind a
             // collapsed door falls through to the full-overlay path below — the same degraded card
             // WPF draws when an element cannot be found.
-            _ = step;
-            return false;
+            // 7.1.5 nav (this head): the rail has no doors to open. The step's tab switch (OnActivate)
+            // is what moves the target, so a step that names a tab is re-measured once the page settles.
+            return _live && HeadStepFor(step)?.RequiresTab != null;
         }
 
         private void DrawFullOverlay(bool blockClicks = true)
@@ -571,8 +577,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             byte alpha = blockClicks ? DimAlpha() : (byte)0x00;
             var overlay = new Rectangle
             {
-                Width = Bounds.Width,
-                Height = Bounds.Height,
+                Width = StageW,
+                Height = StageH,
                 Fill = new SolidColorBrush(Color.FromArgb(alpha, 0x00, 0x00, 0x00)),
                 IsHitTestVisible = blockClicks,
             };
@@ -602,7 +608,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 highlightBounds.Height + padding * 2
             );
 
-            var fullRect = new RectangleGeometry(new Rect(0, 0, Bounds.Width, Bounds.Height));
+            var fullRect = new RectangleGeometry(new Rect(0, 0, StageW, StageH));
             var spotlightRect = new RectangleGeometry(glowBounds) { RadiusX = 8, RadiusY = 8 };
 
             // When clickThroughHole=true the dark fill is the full rect MINUS the spotlight rect,
@@ -629,14 +635,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 BorderThickness = new Thickness(2),
                 Background = Brushes.Transparent,
                 IsHitTestVisible = false,
-                Effect = new DropShadowEffect
-                {
-                    Color = Color.FromRgb(0xFF, 0x69, 0xB4),
-                    BlurRadius = 15,
-                    OffsetX = 0,
-                    OffsetY = 0,
-                    Opacity = 0.7,
-                },
+                // WPF: DropShadowEffect blur 15, opacity 0.7. A BoxShadow here: no Effect over the shell's FX layers.
+                BoxShadow = new BoxShadows(new BoxShadow { Blur = 15, Color = Color.FromArgb(0xB3, 0xFF, 0x69, 0xB4) }),
             };
             Canvas.SetLeft(glowBorder, glowBounds.X);
             Canvas.SetTop(glowBorder, glowBounds.Y);
@@ -683,7 +683,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>X11Overlay handles X11 and (via Win32Overlay) Windows, and returns false everywhere
         /// else (native Wayland, the headless render), so it is called unconditionally.</summary>
         private void SetWholeWindowClickThrough(bool clickThrough)
-            => X11Overlay.SetClickThrough(this, clickThrough);
+        {
+            if (_stage != null || _live) return;   // the live card is not a window; its hole is real hit-testing
+            X11Overlay.SetClickThrough(this, clickThrough);
+        }
 
         // ---- Card placement ---------------------------------------------------------
 
@@ -704,8 +707,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             var (left, top) = ComputePanelPosition(position, targetBounds, panelWidth, panelHeight, margin);
 
             // Clamp to overlay extent.
-            double clampedLeft = Math.Max(margin, Math.Min(left, Bounds.Width - panelWidth - margin));
-            double clampedTop = Math.Max(margin, Math.Min(top, Bounds.Height - panelHeight - margin));
+            double clampedLeft = Math.Max(margin, Math.Min(left, StageW - panelWidth - margin));
+            double clampedTop = Math.Max(margin, Math.Min(top, StageH - panelHeight - margin));
 
             // If clamping moved us into / over the target (small overlay or target near an edge),
             // flip to the opposite side so the card never sits on top of the spotlighted control.
@@ -714,8 +717,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             {
                 var flipped = FlipPosition(position);
                 var (altLeft, altTop) = ComputePanelPosition(flipped, targetBounds, panelWidth, panelHeight, margin);
-                double altClampedLeft = Math.Max(margin, Math.Min(altLeft, Bounds.Width - panelWidth - margin));
-                double altClampedTop = Math.Max(margin, Math.Min(altTop, Bounds.Height - panelHeight - margin));
+                double altClampedLeft = Math.Max(margin, Math.Min(altLeft, StageW - panelWidth - margin));
+                double altClampedTop = Math.Max(margin, Math.Min(altTop, StageH - panelHeight - margin));
                 var altRect = new Rect(altClampedLeft, altClampedTop, panelWidth, panelHeight);
                 if (!altRect.Intersects(targetBounds))
                 {
@@ -816,6 +819,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             try
             {
+                if (_stage != null)
+                {
+                    var p = element.TranslatePoint(new Point(0, 0), _stage);
+                    return p is { } tl ? new Rect(tl, element.Bounds.Size) : new Rect(0, 0, 0, 0);
+                }
                 var screenTopLeft = element.PointToScreen(new Point(0, 0));
                 var overlayLocal = this.PointToClient(screenTopLeft);
                 return new Rect(overlayLocal, element.Bounds.Size);
@@ -855,7 +863,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (!Dispatcher.UIThread.CheckAccess()) { Dispatcher.UIThread.Post(() => OnBusEvent(sender, eventName)); return; }
             try
             {
-                if (eventName.StartsWith("WindowLoaded:", StringComparison.Ordinal)) return;
+                if (eventName.StartsWith("WindowLoaded:", StringComparison.Ordinal))
+                {
+                    OnWindowLoadedEvent(eventName.Substring("WindowLoaded:".Length));
+                    return;
+                }
                 if (CoreTutorial.CurrentStep is { } cs && cs.Advance == CoreTutorial.AdvanceTrigger.OnEvent
                     && cs.AdvanceEventName == eventName)
                     Advance();

@@ -251,8 +251,7 @@
 
             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center"
                         Margin="16,0,0,0">
-                <!-- Hidden: waits for the Companion tour (tours are not on this head). -->
-                <Button x:Name="BtnCompanionTutorial" IsVisible="False"
+                <Button x:Name="BtnCompanionTutorial"
                         Theme="{StaticResource CmpChipButtonStyle}" Command="{Binding TutorialCommand}"
                         Margin="0" VerticalAlignment="Center">
                     <StackPanel Orientation="Horizontal">

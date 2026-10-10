@@ -939,7 +939,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
             if (_index < 0 || _index >= cards.Count) return;
             var card = cards[_index];
             if (card.Target != null) { EmiTargets.Find(card.Target)?.Open(); return; }
-            Log.Debug("[EmiDesk] book tour for {Card} is not wired on this head", card.Id);
+            if (card.Tour == null) return;
+            // WPF EmiBookWindow.Go: a NAME, never an ordinal. The book closes first: a book sitting on
+            // top of the coach marks is exactly the thing the coach marks point at.
+            if (!Enum.TryParse<global::ConditioningControlPanel.Avalonia.Tours.TutorialType>(card.Tour, out _))
+            {
+                Log.Warning("[EmiDesk] book card {Card} names an unknown tour {Tour}", card.Id, card.Tour);
+                return;
+            }
+            try { Close(); } catch { /* it is going away either way */ }
+            CoreTutorial.Start(card.Tour);
         }
 
         private void RenderTabs()
