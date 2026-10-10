@@ -84,8 +84,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // WPF AnnounceAction: the tube says it (text only; no event audio here).
             Autonomy.AnnouncementMade += (_, phrase) => Dispatcher.UIThread.Post(() =>
                 _avatarTubeWindow?.GigglePriority(phrase, false, aiGenerated: false));
-            Closed += (_, _) => { CancelAutonomyPulses(); Autonomy.Stop(); _takeoverQuestTick?.Stop(); StopVoiceInput(); };
-            Opened += (_, _) => { ResumeAutonomyOnStartup(); RefreshVoiceInputModes(); };
+            Closed += (_, _) =>
+            {
+                CancelAutonomyPulses(); Autonomy.Stop(); _takeoverQuestTick?.Stop(); StopVoiceInput();
+                // WPF App.OnExit: the user's own wallpaper is back before the app is gone, and she stops chanting.
+                try { Platform.WallpaperHead.Restore(); } catch (Exception ex) { Log.Debug("Wallpaper restore on close: {E}", ex.Message); }
+                try { Platform.MantraChantService.Instance.Stop(); } catch (Exception ex) { Log.Debug("Chant stop on close: {E}", ex.Message); }
+            };
+            Opened += (_, _) =>
+            {
+                ResumeAutonomyOnStartup(); RefreshVoiceInputModes();
+                // WPF App.xaml.cs:2693 new WallpaperService(): a wallpaper a dead session left behind goes back now (#692).
+                try { _ = Platform.WallpaperHead.Service; } catch (Exception ex) { Log.Debug("Wallpaper startup restore: {E}", ex.Message); }
+            };
         }
 
         private bool CanPerformAutonomy(AutonomyActionType a) => a switch
@@ -100,6 +111,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             AutonomyActionType.Video => CoreEngine.Video != null,
             AutonomyActionType.StartBubbles => CoreBubbles.StartAction != null,
             AutonomyActionType.BouncingText => CoreBouncingText.StartAction != null,
+            // WPF: App.Wallpaper exists. Here: only where the desktop's wallpaper can be read back and restored.
+            AutonomyActionType.WallpaperShuffle => Platform.WallpaperHead.Supported,
             // WPF SelectAction's mantraOk: engine up and idle, no prompt in flight, the tube shown and the
             // active mod ships mantras. Consent and "no wake word / PTT" are Core Candidates' half.
             AutonomyActionType.SpokenMantra => VoiceSpeech is { IsAvailable: true, IsListening: false }
@@ -139,6 +152,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 case AutonomyActionType.Comment: MakeAutonomyComment(); break;
                 case AutonomyActionType.MindWipe: CoreMindWipe.TriggerOnce(); break;
                 case AutonomyActionType.SpokenMantra: _ = RequestVoiceCommandAsync(allowCommands: false); break;
+                case AutonomyActionType.WallpaperShuffle: Platform.WallpaperHead.TriggerChange(); break;
             }
         }
 
@@ -218,6 +232,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (_bubblesPulse) { _bubblesPulse = false; CoreBubbles.Stop(); }
             if (_bouncingPulse) { _bouncingPulse = false; CoreBouncingText.Stop(); }
             EndPinkPulse(cancelled: true);
+            // WPF AutonomyService.Stop: the desktop comes back, unless the user asked her changes to stay.
+            try { Platform.WallpaperHead.OnTakeoverStopped(); } catch (Exception ex) { Log.Debug("Wallpaper restore: {E}", ex.Message); }
         }
 
         /// <summary>
@@ -271,6 +287,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// already refused the panic before this is reached.</summary>
         internal void StopAutonomyForPanic()
         {
+            // WPF App.xaml.cs:1254-1260: panic ENDS the chant (the saved switch is cleared, #685) and
+            // puts the wallpaper back whatever "keep" says.
+            try { Platform.MantraChantService.Instance.StopAndDisarm(); } catch (Exception ex) { Log.Debug("Panic chant stop: {E}", ex.Message); }
+            try { Platform.WallpaperHead.Restore(); } catch (Exception ex) { Log.Debug("Panic wallpaper restore: {E}", ex.Message); }
+            try { Named<Tabs.BambiTakeoverTabView>("BambiTakeoverTab")?.SyncFromSettings(); } catch (Exception ex) { _ = ex; }
             Autonomy.Stop();
             CancelVoicePrompt();   // decisions "Panic ↔ mic": the capture in flight ends, the loop stays armed
         }
@@ -280,6 +301,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private void ResumeAutonomyOnStartup()
         {
             var s = CoreSettings.Current;
+            if (!Platform.MantraChantService.Instance.IsRunning) Platform.MantraChantService.ClearStaleSwitchOnLaunch();
             if (s.AutonomyResumeOnStartup && s.AutonomyModeEnabled && s.AutonomyConsentGiven)
             {
                 if (Autonomy.Start()) Log.Information("Re-armed Takeover on startup (AutonomyResumeOnStartup opt-in)");
