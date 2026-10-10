@@ -18,7 +18,7 @@ namespace ConditioningControlPanel.Services
     /// cut to what is known): the body carries ONLY <see cref="Sent"/>, achievements = server-loaded ∪ local. Gates, all
     /// required: signed in, loaded THIS session (<see cref="MarkLoaded"/>; stricter than WPF's defaults-guard), the 30 s
     /// cooldown and the XP watermark. Also the 120 s heartbeat and the coalesced XP nudge. No periodic push (WPF has none).
-    /// ponytail: no restore-from-backup reconcile, 401 recovery or heartbeat adopt - add with the features that need them.
+    /// ponytail: no restore-from-backup reconcile or heartbeat adopt - add with the features that need them.
     /// </summary>
     public sealed class SyncPush
     {
@@ -278,6 +278,10 @@ namespace ConditioningControlPanel.Services
                         Log.Warning("V2 Profile sync refused by server ({Status}), will retry after the cooldown", (int)response.StatusCode);
                         return false;
                     }
+                    // WPF SyncProfileAsync: a 401 runs the recovery (no retry here; the next trigger pushes with
+                    // whatever it recovered). Real network only: a test transport must never reach the proxy.
+                    if (_handler == null && response.StatusCode == HttpStatusCode.Unauthorized)
+                        await AuthRecovery.HandleUnauthorizedAsync(response);
                     Log.Warning("V2 Profile sync failed: {Status} (error body {Bytes} bytes)", (int)response.StatusCode, json.Length);
                     NoteFailureForBackoff((int)response.StatusCode, tokenUsed);
                     return false;

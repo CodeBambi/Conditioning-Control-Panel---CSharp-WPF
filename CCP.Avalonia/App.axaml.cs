@@ -570,6 +570,14 @@ namespace ConditioningControlPanel.Avalonia
                         PointsSpent = cost => Achievements?.TrackSkillPointsSpent(cost),
                         LifetimeSpentReconciled = total => Achievements?.ReconcileLifetimePointsSpent(total),
                     };
+                    // WPF SkillTreeService.PurchaseSkillAsync: SkillUnlocked feeds the bark's skill_unlock rule, and
+                    // buying Pink Rush starts its check timer at once (ApplySkillEffects case "pink_rush").
+                    SkillPurchase.Current.SkillUnlocked += (_, id) =>
+                    {
+                        CoreBark.NotifySkillUnlocked(id);
+                        if (id == Models.PinkRushRules.SkillId)
+                            global::Avalonia.Threading.Dispatcher.UIThread.Post(Views.Windows.PinkRushHost.Start);
+                    };
                     ProgressionBank.LevelUp += level => sync.PushAsync($"level-up {level}");
                     ProgressionBank.Awarded += (amount, source) =>
                     {

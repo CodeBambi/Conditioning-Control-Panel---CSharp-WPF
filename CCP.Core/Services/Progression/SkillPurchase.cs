@@ -22,9 +22,9 @@ namespace ConditioningControlPanel.Services
     /// survives a sync, which adopts the server's number (<see cref="SparklePoints.AfterBalanceRefusal"/>, #1268
     /// #1269 #1300).</para>
     ///
-    /// <para>ponytail: no 401 auth recovery (WPF HandleUnauthorizedAsync retries once on a recovered token; this
-    /// head has no recovery, so a 401 goes straight to the "session has expired" message); no Pink Rush check
-    /// timer on buying pink_rush (the timer is SkillTreeService's, not ported).</para>
+    /// <para>A 401 runs the recovery (<see cref="AuthRecovery"/>) and the purchase is retried ONCE on a recovered
+    /// token; only then does it read "session has expired". The Pink Rush check timer is the head's: it listens
+    /// to <see cref="SkillUnlocked"/>.</para>
     /// </summary>
     public sealed class SkillPurchase
     {

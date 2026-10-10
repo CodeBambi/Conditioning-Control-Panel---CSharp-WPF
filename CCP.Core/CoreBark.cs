@@ -46,6 +46,8 @@ namespace ConditioningControlPanel
 
         /// <summary>Chaos Mode: the run crossed into a new rank, by its lowercase name.</summary>
         public static volatile Action<string>? ChaosRankUp;
+        /// <summary>A skill was bought (WPF BarkService wires App.SkillTree.SkillUnlocked: the skill_unlock rule).</summary>
+        public static volatile Action<string>? SkillUnlocked;
 
         /// <summary>WPF BarkService.DispatchIdle: the tube's idle beat asks the bark engine first (barks ARE the
         /// idle chatter). True when a bark spoke; false (or unseeded) = fall back to the preset phrase.</summary>
@@ -103,6 +105,9 @@ namespace ConditioningControlPanel
             try { ChaosResultsShown?.Invoke(score, bestScore, pbDelta, isPb, defused, detonated, bestCombo, difficulty); }
             catch { }
         }
+
+        public static void NotifySkillUnlocked(string skillId)
+        { try { SkillUnlocked?.Invoke(skillId); } catch { } }
 
         public static void NotifyChaosRankUp(string rank)
         { try { ChaosRankUp?.Invoke(rank); } catch { } }

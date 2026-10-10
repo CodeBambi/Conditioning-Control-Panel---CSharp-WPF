@@ -70,6 +70,8 @@ internal static class BarkHead
         };
         CoreBark.ChaosDraftAutopick = () => e.Raise("ChaosDraftAutopick");
         CoreBark.ChaosRankUp = rank => e.Raise("ChaosRankUp", c => c.Set("rank", rank));
+        // WPF BarkService.cs:810: the one voice line for a purchase (the page plays no clip of its own, #366).
+        CoreBark.SkillUnlocked = id => e.Raise("SkillUnlocked", c => c.Set("skill", id ?? ""));
         CoreBark.ChaosResultsShown = (score, best, pbDelta, isPb, defused, detonated, bestCombo, difficulty) =>
             e.Raise("ChaosResultsShown", c => c
                 .Set("score", score).Set("best_score", best).Set("pb_delta", pbDelta).Set("is_pb", isPb)
