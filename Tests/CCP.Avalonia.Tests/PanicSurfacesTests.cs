@@ -117,7 +117,7 @@ public sealed class PanicSurfacesTests
 
     [Fact]
     public void TheSurfaceListIsExactAndOrdered() =>
-        Assert.Equal(new[] { "intake", "games", "voice-capture", "ai-followups", "blink-trainer", "gaze-minigame", "mantra", "chaos", "haptics", "remote-haptics",
+        Assert.Equal(new[] { "intake", "games", "friends-landing", "voice-capture", "ai-followups", "blink-trainer", "gaze-minigame", "mantra", "chaos", "haptics", "remote-haptics",
             "takeover", "engine", "pink-rush", "corner-gif", "tube", "lock-cards", "attention-test", "deeper-editor-audio", "camera" }, PanicSurfaces.All.Select(x => x.Id));
     public void EveryIdIsUniqueAndEverySafetyCriticalIdIsRegistered()
     {
