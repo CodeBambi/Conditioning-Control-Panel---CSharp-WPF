@@ -126,18 +126,9 @@
             <Setter Property="Theme" Value="{StaticResource CmpBubbleEchoTextStyle}"/>
         </Style>
 
-        <!-- CmpThinkingDotsStoryboard: opacity 0.25 to 1.0, 0.45s each way, only while a send is
-             in flight - the .thinking class comes off with IsThinking, so nothing loops on an idle
-             page. ponytail: no per-dot 150ms stagger; add three keyed styles with Delay if it matters. -->
-        <Style Selector="StackPanel#ThinkingDots.thinking Ellipse">
-            <Style.Animations>
-                <Animation Duration="0:0:0.9" IterationCount="INFINITE">
-                    <KeyFrame Cue="0%"><Setter Property="Opacity" Value="0.25"/></KeyFrame>
-                    <KeyFrame Cue="50%"><Setter Property="Opacity" Value="1.0"/></KeyFrame>
-                    <KeyFrame Cue="100%"><Setter Property="Opacity" Value="0.25"/></KeyFrame>
-                </Animation>
-            </Style.Animations>
-        </Style>
+        <!-- CmpThinkingDotsStoryboard (opacity 0.25 to 1.0, 0.45s each way, only while a send is in
+             flight) runs from the code-behind on the shared 30 fps beat: a looping style Animation
+             kept the whole window composing at 60 Hz. -->
     </UserControl.Styles>
 
     <Border Theme="{StaticResource CmpCardStyle}">

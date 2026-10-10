@@ -138,25 +138,8 @@
                 </LinearGradientBrush>
             </Setter>
         </Style>
-        <!-- CmpPortraitBreatheStoryboard (CompanionTheme.axaml §17): scale 1.000 to 1.015, 2.5s
-             each way, SineEaseInOut, forever. The code-behind adds/removes the class, which is
-             how the loop is started and parked. A Transform cannot be animated directly on
-             Avalonia (the animator wants a Visual), so the setters target the Ellipse. -->
-        <Style Selector="Ellipse.ring.breathe">
-            <Style.Animations>
-                <Animation Duration="0:0:2.5" IterationCount="Infinite" PlaybackDirection="Alternate"
-                           Easing="SineEaseInOut">
-                    <KeyFrame Cue="0%">
-                        <Setter Property="ScaleTransform.ScaleX" Value="1.0"/>
-                        <Setter Property="ScaleTransform.ScaleY" Value="1.0"/>
-                    </KeyFrame>
-                    <KeyFrame Cue="100%">
-                        <Setter Property="ScaleTransform.ScaleX" Value="1.015"/>
-                        <Setter Property="ScaleTransform.ScaleY" Value="1.015"/>
-                    </KeyFrame>
-                </Animation>
-            </Style.Animations>
-        </Style>
+        <!-- CmpPortraitBreatheStoryboard (scale 1.000 to 1.015, 2.5s each way, SineEaseInOut,
+             forever) runs from the code-behind on the shared 30 fps beat (StartAmbientLoop). -->
         <Style Selector="Ellipse.ring.asleep">
             <Setter Property="Fill" Value="#FF3A3552"/>
             <Setter Property="Effect" Value="{x:Null}"/>

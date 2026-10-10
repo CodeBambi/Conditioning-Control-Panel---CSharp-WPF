@@ -588,19 +588,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
 
         private BreathClock? _breathClock;
 
-        private static Animation Breathe(AvaloniaProperty prop, double min, double max) => new()
-        {
-            Duration = TimeSpan.FromSeconds(ActiveBreathSeconds),
-            IterationCount = IterationCount.Infinite,
-            PlaybackDirection = PlaybackDirection.Alternate,
-            Easing = new SineEaseInOut(),
-            Children =
-            {
-                new KeyFrame { Cue = new Cue(0d), Setters = { new Setter(prop, min) } },
-                new KeyFrame { Cue = new Cue(1d), Setters = { new Setter(prop, max) } },
-            },
-        };
-
         private bool AmbientAllowed =>
             IsEffectivelyVisible
             && (_hostWindow == null || (_hostWindow.IsActive && _hostWindow.WindowState != WindowState.Minimized))

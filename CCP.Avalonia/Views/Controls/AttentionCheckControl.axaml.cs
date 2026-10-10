@@ -35,7 +35,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
     {
         private readonly Ellipse _dotRingFg;
         private readonly ScaleTransform _dotRingScale;
-        private CancellationTokenSource? _pulse;
+        private Helpers.BeatLoop? _pulseLoop;
+        internal bool IsPulsing => _pulseLoop?.IsRunning == true;
 
         public AttentionCheckControl()
         {
@@ -68,48 +69,20 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
         public void StartPulse()
         {
             StopPulse();
-            // WPF's Storyboard + RepeatBehavior.Forever + AutoReverse is Avalonia's
-            // IterationCount.Infinite + PlaybackDirection.Alternate; same 420ms sine ease.
-            var sb = new Animation
+            // WPF's Storyboard (Forever + AutoReverse): 1.0 -> 1.18 over 420 ms on a sine ease, and
+            // back. On the shared beat; the loop writes the ScaleTransform directly.
+            _pulseLoop ??= new Helpers.BeatLoop(_dotRingFg, t =>
             {
-                Duration = TimeSpan.FromMilliseconds(420),
-                IterationCount = IterationCount.Infinite,
-                PlaybackDirection = PlaybackDirection.Alternate,
-                Easing = new SineEaseInOut(),
-                Children =
-                {
-                    new KeyFrame
-                    {
-                        Cue = new Cue(0d),
-                        Setters =
-                        {
-                            new Setter(ScaleTransform.ScaleXProperty, 1.0),
-                            new Setter(ScaleTransform.ScaleYProperty, 1.0),
-                        },
-                    },
-                    new KeyFrame
-                    {
-                        Cue = new Cue(1d),
-                        Setters =
-                        {
-                            new Setter(ScaleTransform.ScaleXProperty, 1.18),
-                            new Setter(ScaleTransform.ScaleYProperty, 1.18),
-                        },
-                    },
-                },
-            };
-            _pulse = new CancellationTokenSource();
-            // Target the ELLIPSE, not the transform: Avalonia's TransformAnimator casts its target
-            // to Visual and then finds the matching transform inside the visual's RenderTransform.
-            // Passing the ScaleTransform compiles and throws InvalidCastException at run time.
-            _ = sb.RunAsync(_dotRingFg, _pulse.Token);
+                double s = 1.0 + (0.18 * Helpers.BeatLoop.Breath(t, 0.42));
+                _dotRingScale.ScaleX = s;
+                _dotRingScale.ScaleY = s;
+            });
+            _pulseLoop.Start();
         }
 
         public void StopPulse()
         {
-            _pulse?.Cancel();
-            _pulse?.Dispose();
-            _pulse = null;
+            _pulseLoop?.Stop();
             _dotRingScale.ScaleX = 1.0;
             _dotRingScale.ScaleY = 1.0;
         }

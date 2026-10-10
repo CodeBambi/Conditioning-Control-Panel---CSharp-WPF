@@ -39,17 +39,8 @@
         Topmost="True">
 
     <Window.Styles>
-        <!-- The WPF StartPulse() DoubleAnimation, verbatim: 1.0 -> 0.55 over 900ms, autoreversed
-             forever on a sine ease. StopPulse() removes the class. -->
-        <Style Selector="Border.pulse">
-            <Style.Animations>
-                <Animation Duration="0:0:0.9" IterationCount="INFINITE"
-                           PlaybackDirection="Alternate" Easing="SineEaseInOut">
-                    <KeyFrame Cue="0%"><Setter Property="Opacity" Value="1.0"/></KeyFrame>
-                    <KeyFrame Cue="100%"><Setter Property="Opacity" Value="0.55"/></KeyFrame>
-                </Animation>
-            </Style.Animations>
-        </Style>
+        <!-- The WPF StartPulse() DoubleAnimation (1.0 -> 0.55 over 900ms, autoreversed forever on
+             a sine ease) runs from StartPulse() on the shared 30 fps beat. -->
     </Window.Styles>
 
     <Border Background="{DynamicResource DarkerBgBrush}" CornerRadius="15" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="2"

@@ -51,9 +51,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// <summary>The status row's current state; read by tests and by nothing else yet.</summary>
         internal BlinkTrainerStatusState StatusState { get; private set; }
 
+        internal Helpers.VisibleBeat? EyeLogoBlink { get; private set; }
+
         public BlinkTrainerTabView()
         {
             InitializeComponent(); // generated: fills the x:Name fields (AvaloniaXamlLoader.Load would not)
+            // Eye logo: open for 3.6 s, closed for 0.4 s, a hard cut both ways (Opacity, so both
+            // canvases stay measured). Parks open.
+            EyeLogoBlink = Helpers.VisibleBeat.Attach(EyeLogoOpen, t =>
+            {
+                bool closed = Helpers.BeatLoop.Saw(t, 4) >= 0.9;
+                EyeLogoOpen.Opacity = closed ? 0 : 1;
+                EyeLogoClosed.Opacity = closed ? 1 : 0;
+            }, () => { EyeLogoOpen.Opacity = 1; EyeLogoClosed.Opacity = 0; });
             Helpers.ModArt.BindFeaturePlates(this, "features/blink_trainer.png", HeroArt, SideArt);
 
             // WPF fades with a 200ms QuadraticEase InOut storyboard per swap.

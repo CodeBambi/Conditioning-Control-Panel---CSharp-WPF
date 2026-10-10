@@ -46,9 +46,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         private bool _shimmerPlayed;
         private ChatThresholdViewModel? _vm;
 
+        private Helpers.VisibleBeat? _thinkingBeat;
+        internal bool ThinkingDotsRunning => _thinkingBeat?.IsRunning == true;
+
         public ChatThresholdView()
         {
             InitializeComponent();
+            // "Thinking" dots: 0.25 -> 1.0 -> 0.25 over 0.9 s, while the row shows (IsThinking).
+            if (this.FindControl<StackPanel>("ThinkingDots") is { } thinkingDots)
+            {
+                _thinkingBeat = Helpers.VisibleBeat.Attach(thinkingDots, t =>
+                {
+                    double o = 0.25 + (0.75 * Helpers.BeatLoop.PingPong(t, 0.45));
+                    foreach (var dot in thinkingDots.Children) dot.Opacity = o;
+                }, decoration: false);
+            }
             DataContext = _vm = new ChatThresholdViewModel();
             DataContextChanged += (_, _) =>
             {

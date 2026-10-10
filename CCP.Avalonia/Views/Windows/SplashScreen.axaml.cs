@@ -54,6 +54,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _txtStatus = this.FindControl<TextBlock>("TxtStatus")!;
             _txtHint = this.FindControl<TextBlock>("TxtHint")!;
             this.FindControl<Border>("ProgressFill")!.RenderTransform = _progressScale;
+            if (this.FindControl<Border>("Shimmer") is { } shimmer)
+            {
+                var sweep = new TranslateTransform(-90, 0);
+                shimmer.RenderTransform = sweep;
+                // A loading signal, not decoration: the motion level does not silence it.
+                Helpers.VisibleBeat.Attach(shimmer, t => sweep.X = -90 + (430 * Helpers.BeatLoop.Saw(t, 1.6)),
+                    () => sweep.X = -90, decoration: false);
+            }
 
             // WPF's `TxtVersion.Text = $"v{UpdateService.AppVersion}"`. UpdateService stays in the
             // WPF head (it is the installer's release constants), but the version it reported is
