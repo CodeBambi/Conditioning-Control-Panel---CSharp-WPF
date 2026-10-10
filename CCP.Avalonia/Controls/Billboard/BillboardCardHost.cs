@@ -469,7 +469,9 @@ namespace ConditioningControlPanel.Avalonia.Controls.Billboard
             fill = new Rectangle
             {
                 Fill = new SolidColorBrush(tint, 0.93), HorizontalAlignment = HorizontalAlignment.Left,
-                Width = 0, IsVisible = current, IsHitTestVisible = false,
+                // The hold scales the fill (render only), never its Width (a layout pass per tick).
+                Width = DotCurrentPx - 2, IsVisible = current, IsHitTestVisible = false,
+                RenderTransformOrigin = new RelativePoint(0, 0.5, RelativeUnit.Relative), RenderTransform = new ScaleTransform(0, 1),
             };
             var rest = Blend(Plate, tint, current ? 0.22 : 0.62);
             var face = new Border
@@ -505,7 +507,7 @@ namespace ConditioningControlPanel.Avalonia.Controls.Billboard
 
         private void SetFill(double progress)
         {
-            if (_fill != null) _fill.Width = Math.Clamp(progress, 0, 1) * (DotCurrentPx - 2);
+            if (_fill?.RenderTransform is ScaleTransform scale) scale.ScaleX = Math.Clamp(progress, 0, 1);
         }
 
         /// <summary>Runs the fill from where it stands; the fill reaching the end moves the deck on, so
