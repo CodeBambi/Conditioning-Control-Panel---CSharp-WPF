@@ -282,10 +282,24 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             ApplyActiveState();
         }
 
+        private bool _tutorialPreviewActive;
+        private bool PaintActive => IsActive || _tutorialPreviewActive;
+        /// <summary>Test seam: the card is painted as on (really on, or lit by the welcome show).</summary>
+        internal bool PaintsActive => PaintActive && !IsLocked;
+
+        /// <summary>WPF SetTutorialPreview (FeatureCard.xaml.cs:535). Appearance only: tutorial emphasis
+        /// never toggles a feature or overwrites its binding. IN = lit as an on card, OUT = back to its truth.</summary>
+        internal void SetTutorialPreview(bool active)
+        {
+            if (_tutorialPreviewActive == active) return;
+            _tutorialPreviewActive = active;
+            ApplyActiveState();
+        }
+
         private void ApplyActiveState()
         {
             // A locked feature can't really be "on" even if the underlying setting is true.
-            var showActive = IsActive && !IsLocked;
+            var showActive = PaintActive && !IsLocked;
             _activeBorder.IsVisible = showActive;
             ApplyRestOpacity();
             ApplyMute(CardMuteRule.TransitionMs(Env.AllowTransitions, IsLoaded));
@@ -302,7 +316,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
         {
             _contentRoot.Opacity =
                 IsLocked ? LockedContentOpacity
-                : DimWhenInactive && !IsActive && (DashboardDepth || !_hovered) ? InactiveContentOpacity
+                : DimWhenInactive && !PaintActive && (DashboardDepth || !_hovered) ? InactiveContentOpacity
                 : 1.0;
         }
 
@@ -310,7 +324,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
         /// weight, on <see cref="CardMuteRule"/>'s verdict. A one-shot fade, or a snap.</summary>
         private void ApplyMute(int ms)
         {
-            bool mute = CardMuteRule.ShouldMute(DimWhenInactive, IsActive, IsLocked, _hovered && !DashboardDepth, TeaseTier > 0);
+            bool mute = CardMuteRule.ShouldMute(DimWhenInactive, PaintActive, IsLocked, _hovered && !DashboardDepth, TeaseTier > 0);
             _txtTitle.Opacity = mute ? MutedTitleOpacity : 1.0;
             CardMuteRule.Fade(_imgIconMute, mute, ms);
             IsMuted = mute;

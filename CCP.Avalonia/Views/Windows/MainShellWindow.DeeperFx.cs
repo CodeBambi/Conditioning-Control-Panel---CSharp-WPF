@@ -1,9 +1,9 @@
 // PORTED-IN-PART from ConditioningControlPanel/MainWindow/MainWindow.DeeperFx.cs (207 lines).
 //
 // The hero loop is live: the Deeper header's wave glyph drifts. WPF ran two DoubleAnimations with
-// AutoReverse + RepeatBehavior.Forever on one TranslateTransform; Avalonia's twin is two
-// Animations with PlaybackDirection.Alternate + IterationCount.Infinite over the same transform,
-// which is the same motion rather than an approximation of it. The amplitudes and the deliberately
+// AutoReverse + RepeatBehavior.Forever on one TranslateTransform; here one Controls.Fx.FrameClock
+// writes both axes of the same transform from the elapsed time (never an infinite Avalonia Animation:
+// one makes the whole window compose at 60 Hz). The amplitudes and the deliberately
 // mismatched half-periods are verbatim (3.0dip over 11.5s, 2.0dip over 15.5s), so the path still
 // never repeats on a beat the eye can find and the glyph reads as floating, not as a pendulum.
 //
@@ -12,8 +12,8 @@
 //
 // WPF's gates are kept: MotionFx.AllowAmbientLoops (AmbientFxCanvas.Env) and DeeperFxOnScreen
 // (active, not minimised; Activated/Deactivated/WindowState re-evaluate it). Dropped: only
-// DeeperGlyphFrameRate = 10 - Avalonia has no per-animation clock rate (see
-// MainShellWindow.AmbientFx.cs); a 3px sine over 11.5s is sub-pixel per frame either way.
+// DeeperGlyphFrameRate = 10 as a separate rate - the drift rides the FrameClock's own beat; a 3px
+// sine over 11.5s is sub-pixel per frame either way.
 // OnDeeperRowHover (the 2px library-row lift) is driven by DeeperTabView's row enter/leave.
 
 using System;

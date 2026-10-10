@@ -31,6 +31,10 @@ public sealed partial class FriendsDrawer
     private readonly Dictionary<string, Control> _avatars = new();
     private readonly List<Control> _rowsInOrder = new();
     private BreathClock? _breath;
+    /// <summary>WPF FriendsLook.Glow as a BoxShadow: no offset, the colour at the glow's opacity.</summary>
+    internal static BoxShadows CountGlow(Color c, double blur = 8, double opacity = 0.7) =>
+        new(new BoxShadow { Blur = blur, Color = Color.FromArgb((byte)Math.Round(255 * opacity), c.R, c.G, c.B) });
+
     internal static readonly Color MintC = Friends.FriendsLook.Mint, PinkC = Friends.FriendsLook.Pink, LilacC = Friends.FriendsLook.Lilac, GoldC = Friends.FriendsLook.Gold;
 
     /// <summary>The spring the card opens with: up from the chip, a little overshoot, rows staggering in.</summary>

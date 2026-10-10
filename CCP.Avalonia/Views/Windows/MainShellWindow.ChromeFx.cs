@@ -26,8 +26,8 @@
 //      through a CancellationTokenSource, the pattern .DeeperFx.cs already uses. The band, its
 //      SkewTransform and its FxGlowColor stop are already in the axaml.
 //   3. the breathing glows - ApplyNavGlowBreath, ApplyStartButtonGlow and their six
-//      Min/MaxOpacity/BreathSeconds constants. PlaybackDirection.Alternate +
-//      IterationCount.Infinite over the effect's Opacity, per CLAUDE.md.
+//      Min/MaxOpacity/BreathSeconds constants. A breath on the shared 30 fps beat (Helpers.VisibleBeat /
+//      BeatLoop) over a glow LAYER's Opacity; never an infinite Animation, never an animated Effect.
 //   4. the tab transition and card stagger - AnimateTabIn, SlideTabIn, FadeOutgoingTab,
 //      CollapseOutgoingTab, EnsureTabTranslate, ResetTabSlide, StaggerTabCards,
 //      StaggerCleanupTimer_Tick, CancelStaggerCleanup, FindStaggerTargets, _pendingTabKey,
