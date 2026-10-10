@@ -55,9 +55,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 try
                 {
                     runner.Start(session);
+                    Platform.ProgramEngineBridge.RaiseSessionChanged();   // the Programs session row (WPF OnSessionStarted)
                     PinkRushHost.Start();          // WPF: a session starts through StartEngine -> SkillTree.Start()
                     PinkFilterOverlay.Refresh(this);
                     SpiralOverlay.Refresh(this);
+                    BrainDrainOverlay.Refresh(this);   // the haze follows the engine (WPF App.Overlay.Start / Stop)
                     Log.Information("Started session: {Name} ({Difficulty}, +{XP} XP)", session.Name, session.Difficulty, session.BonusXP);
                 }
                 catch (Exception ex)
@@ -111,6 +113,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     r.Resume();
                     PinkFilterOverlay.Refresh(this);
                     SpiralOverlay.Refresh(this);
+                    BrainDrainOverlay.Refresh(this);   // the haze follows the engine (WPF App.Overlay.Start / Stop)
                     SetPauseButton(false);
                     OnSessionTick();
                 });
@@ -123,6 +126,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             runner.Pause();
             PinkFilterOverlay.Refresh(this);   // WPF App.Overlay.Stop()
             SpiralOverlay.Refresh(this);
+            BrainDrainOverlay.Refresh(this);   // the haze follows the engine (WPF App.Overlay.Start / Stop)
             SetPauseButton(true);
         }
 
@@ -145,6 +149,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             RefreshSessionFeatureLock(force: false);
             if (App.Sessions is not { IsRunning: true, CurrentSession: { } session } runner) return;
             PinkFilterOverlay.Refresh(this);   // the delayed start and the ramp (SessionRunner.PinkOpacity)
+            SpiralOverlay.Refresh(this);   // the delayed start and the ramp (SessionRunner.SpiralOpacity)
             if (Named<Button>("BtnPauseSession") is { IsVisible: false }) SetPauseButton(false);   // WPF OnSessionStarted
             var remaining = runner.Remaining;
             var showCountdown = CoreSettings.Current.ShowSessionCountdown != false;
@@ -167,8 +172,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// completed or ended early. Raised on the runner's thread; hops to the UI thread.</summary>
         private SessionCompleteWindow? _liveSessionRecap;
 
+        /// <summary>Set by <see cref="EndProgramSessionQuietly"/>; the next recap is skipped once.</summary>
+        private bool _suppressNextSessionSummary;
+
         internal void OnSessionLogReady(object? sender, SessionLogReadyEventArgs e)
         {
+            if (_suppressNextSessionSummary) { _suppressNextSessionSummary = false; return; }
             var log = e.Log;
             Dispatcher.UIThread.Post(() =>
             {

@@ -22,6 +22,8 @@ namespace ConditioningControlPanel.Avalonia.Platform
         /// <summary>Monotonic clock; a test steps it (P08).</summary>
         internal Func<TimeSpan>? Clock;
         internal bool TickRunning => _tick?.IsEnabled == true;
+        /// <summary>The overlay left the screen (WPF's inactive arm: a continuous count starts over).</summary>
+        internal Action? Hidden;
 
         public OverlayQuestMinutes(Action<double> track) => _track = track;
 
@@ -37,7 +39,7 @@ namespace ConditioningControlPanel.Avalonia.Platform
         {
             if (showing && TickRunning) return;   // a repaint of an overlay already counting
             Sample(showing);                       // opens the stamp on show, closes it on hide
-            if (!showing) { _tick?.Stop(); return; }
+            if (!showing) { _tick?.Stop(); try { Hidden?.Invoke(); } catch { } return; }
             _tick ??= new DispatcherTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Background, (_, _) => Sample(true));
             _tick.Start();
         }

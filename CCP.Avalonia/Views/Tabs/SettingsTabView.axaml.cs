@@ -6,6 +6,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
 using ConditioningControlPanel.Avalonia.Controls;
+using ConditioningControlPanel.Services;
 
 namespace ConditioningControlPanel.Avalonia.Views.Tabs
 {
@@ -46,6 +47,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         public SettingsTabView()
         {
             InitializeComponent(); // generated: loads the XAML and fills the x:Name fields
+#if !DEBUG
+            // HA9: the diagnostics window is a developer affordance; players never see its bubble.
+            BtnOpenDiagnostics.IsVisible = false;
+#endif
 
             MarqueeFadeHost.SizeChanged += MarqueeFadeHost_SizeChanged;
             HomeBtnAudioAdvanced.IsCheckedChanged += HomeBtnAudioAdvanced_Changed;
@@ -61,6 +66,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             AttachedToVisualTree += (_, _) => NotifyShellVisibility();
             PropertyChanged += (_, e) => { if (e.Property == IsVisibleProperty) NotifyShellVisibility(); };
 
+            InitializeMarqueeStrip();
             WireStubs();
         }
 
@@ -78,6 +84,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         {
             try
             {
+                // WPF 7.1.5 Home: the browser fold and the favourites drawer (shell state).
+                Shell?.InitHomeDashboard();
+
                 if (_fxComposed) return;
                 _fxComposed = true;
 
@@ -172,35 +181,22 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             ProgramTodayCard.Loaded += ProgramTodayCard_Loaded;
             ProgramTodayCard.Click += ProgramTodayCard_Click;
 
-            // Velvet mosaic. Left-click opens the half's Studio module, right-click toggles it;
-            // the three diagonal combo tiles forward per-half. A = the top-left half, B = the
-            // bottom-right, as authored in XAML.
-            CardFlash.Click += CardFlash_Click;
-            CardFlash.ToggleRequested += CardFlash_Toggle;
-            CardSubliminal.Click += CardSubliminal_Click;
-            CardSubliminal.ToggleRequested += CardSubliminal_Toggle;
-            CardBouncingText.Click += CardBouncingText_Click;
-            CardBouncingText.ToggleRequested += CardBouncingText_Toggle;
-            CardBubblePop.Click += CardBubblePop_Click;
-            CardBubblePop.ToggleRequested += CardBubblePop_Toggle;
-            CardLockCard.Click += CardLockCard_Click;
-            CardLockCard.ToggleRequested += CardLockCard_Toggle;
-            ComboVideoBubble.ClickA += ComboVideoBubble_ClickA;
-            ComboVideoBubble.ClickB += ComboVideoBubble_ClickB;
-            ComboVideoBubble.ToggleA += ComboVideoBubble_ToggleA;
-            ComboVideoBubble.ToggleB += ComboVideoBubble_ToggleB;
-            ComboSpiralPink.ClickA += ComboSpiralPink_ClickA;
-            ComboSpiralPink.ClickB += ComboSpiralPink_ClickB;
-            ComboSpiralPink.ToggleA += ComboSpiralPink_ToggleA;
-            ComboSpiralPink.ToggleB += ComboSpiralPink_ToggleB;
-            ComboMindDrain.ClickA += ComboMindDrain_ClickA;
-            ComboMindDrain.ClickB += ComboMindDrain_ClickB;
-            ComboMindDrain.ToggleA += ComboMindDrain_ToggleA;
-            ComboMindDrain.ToggleB += ComboMindDrain_ToggleB;
+            // Velvet mosaic (WPF 7.1.5). Left-click opens the half's Studio module, right-click
+            // switches it on or off; "Left or right?" on the favourites drawer swaps the two on
+            // Home tiles only (HomeDashboardRules.GestureToggles). The three diagonal combo tiles
+            // forward per half: A = the top-left half, B = the bottom-right, as authored in XAML.
+            WireTile(CardFlash, "flash");
+            WireTile(CardSubliminal, "subliminal");
+            WireTile(CardBouncingText, "bouncingtext");
+            WireTile(CardBubblePop, "bubbles");
+            WireTile(CardLockCard, "lockcard");
+            WireSplit(ComboVideoBubble, "video", "bubblecount");
+            WireSplit(ComboSpiralPink, "spiral", "pinkfilter");
+            WireSplit(ComboMindDrain, "mindwipe", "braindrain");
             CardMystery.Click += CardMystery_Click;
             MysteryRevealFace.PointerReleased += MysteryRevealFace_Click;
             CardVault.Click += CardVault_Click;
-            CardJustDrop.Click += CardJustDrop_Click;
+            CardDeeperEditor.Click += CardDeeperEditor_Click;   // a door: no ToggleRequested handler on purpose
             LogoBrandFrame.PointerPressed += ImgLogo_MouseLeftButtonDown;
             IntakePassFace.PointerPressed += IntakePassFace_MouseLeftButtonDown;
 
@@ -215,6 +211,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             BtnPopOutBrowser.Click += BtnPopOutBrowser_Click;
             ToggleEnhanceIfPossible.IsCheckedChanged += ToggleEnhanceIfPossible_Changed;
             ChkForceShowBambiCloud.IsCheckedChanged += ChkForceShowBambiCloud_Changed;
+            HookBrowserCard();   // SettingsTabView.BrowserCard.cs
 
             // Home audio card: the same binder as Settings · Audio, so both surfaces write through
             // one path and repaint each other (WPF MainWindow.HomeAudio.cs mirrors instead).
@@ -223,13 +220,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 HomeCmbAudioOutputDevice, HomeBtnAudioOutputRefresh, HomeBtnTestAudio);
             HomeBtnAudioLayers.Click += HomeBtnAudioLayers_Click;
 
-            // Companion + account strips.
-            CompanionStrip.PointerPressed += CompanionStrip_Click;
+            // The account strip (one line since WPF 7.1.5) and the browser fold arrow.
+            BtnFoldBrowser.Click += BtnFoldBrowser_Click;
             BtnUnifiedLogin.Click += BtnUnifiedLogin_Click;
             BtnQuickLogout.Click += BtnQuickLogout_Click;
             BtnLinkPhone.Click += BtnLinkPhone_Click;
             BtnDiscord.Click += BtnDiscord_Click;
+            SyncQuickRichPresence();
             ChkQuickDiscordRichPresence.IsCheckedChanged += ChkDiscordRichPresence_Changed;
+            // The Privacy dialog's switch and this one are the same setting: each repaints when the other moves.
+            AttachedToVisualTree += (_, _) => { App.RichPresenceChanged -= SyncQuickRichPresence; App.RichPresenceChanged += SyncQuickRichPresence; };
+            DetachedFromVisualTree += (_, _) => App.RichPresenceChanged -= SyncQuickRichPresence;
 
             // Quick-toggles row.
             VelvetBtnWebcam.Click += VelvetBtnWebcam_Click;
@@ -237,38 +238,76 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             VelvetBtnAppInfo.Click += VelvetBtnAppInfo_Click;
             VelvetBtnSchedulerRamp.Click += VelvetBtnSchedulerRamp_Click;
             VelvetBtnCatalogue.Click += VelvetBtnCatalogue_Click;
+
+            WireHome();   // SettingsTabView.Home.cs: drawer, fold arrow, gesture caption, depth
         }
 
         /// <summary>WPF's <c>Window.GetWindow(this) is MainWindow mw</c>: the view forwards, the shell decides.</summary>
         private Windows.MainShellWindow? Shell => TopLevel.GetTopLevel(this) as Windows.MainShellWindow;
+
         // -- velvet mosaic (4x4 hybrid wall) --------------------------------------------
-        private void CardFlash_Click(object? sender, RoutedEventArgs e) => Shell?.OpenStudioModule("flash");
-        private void CardFlash_Toggle(object? sender, RoutedEventArgs e) => Shell?.ToggleWallFeature("flash");
-        private void CardSubliminal_Click(object? sender, RoutedEventArgs e) => Shell?.OpenStudioModule("subliminal");
-        private void CardSubliminal_Toggle(object? sender, RoutedEventArgs e) => Shell?.ToggleWallFeature("subliminal");
-        private void CardBouncingText_Click(object? sender, RoutedEventArgs e) => Shell?.OpenStudioModule("bouncingtext");
-        private void CardBouncingText_Toggle(object? sender, RoutedEventArgs e) => Shell?.ToggleWallFeature("bouncingtext");
-        private void CardBubblePop_Click(object? sender, RoutedEventArgs e) => Shell?.OpenStudioModule("bubbles");
-        private void CardBubblePop_Toggle(object? sender, RoutedEventArgs e) => Shell?.ToggleWallFeature("bubbles");
-        private void CardLockCard_Click(object? sender, RoutedEventArgs e) => Shell?.OpenStudioModule("lockcard");
-        private void CardLockCard_Toggle(object? sender, RoutedEventArgs e) => Shell?.ToggleWallFeature("lockcard");
-        private void ComboVideoBubble_ClickA(object? sender, RoutedEventArgs e) => Shell?.OpenStudioModule("video");
-        private void ComboVideoBubble_ClickB(object? sender, RoutedEventArgs e) => Shell?.OpenStudioModule("bubblecount");
-        private void ComboVideoBubble_ToggleA(object? sender, RoutedEventArgs e) => Shell?.ToggleWallFeature("video");
-        private void ComboVideoBubble_ToggleB(object? sender, RoutedEventArgs e) => Shell?.ToggleWallFeature("bubblecount");
-        private void ComboSpiralPink_ClickA(object? sender, RoutedEventArgs e) => Shell?.OpenStudioModule("spiral");
-        private void ComboSpiralPink_ClickB(object? sender, RoutedEventArgs e) => Shell?.OpenStudioModule("pinkfilter");
-        private void ComboSpiralPink_ToggleA(object? sender, RoutedEventArgs e) => Shell?.ToggleWallFeature("spiral");
-        private void ComboSpiralPink_ToggleB(object? sender, RoutedEventArgs e) => Shell?.ToggleWallFeature("pinkfilter");
-        private void ComboMindDrain_ClickA(object? sender, RoutedEventArgs e) => Shell?.OpenStudioModule("mindwipe");
-        private void ComboMindDrain_ClickB(object? sender, RoutedEventArgs e) => Shell?.OpenStudioModule("braindrain");
-        private void ComboMindDrain_ToggleA(object? sender, RoutedEventArgs e) => Shell?.ToggleWallFeature("mindwipe");
-        private void ComboMindDrain_ToggleB(object? sender, RoutedEventArgs e) => Shell?.ToggleWallFeature("braindrain");
-        private void CardMystery_Click(object? sender, RoutedEventArgs e) { }         // mw.CardMystery_Click(...)
+        private void WireTile(Views.Features.FeatureCard card, string key)
+        {
+            card.Click += (_, _) => TileGesture(key, rightClick: false);
+            card.ToggleRequested += (_, _) => TileGesture(key, rightClick: true);
+        }
+
+        private void WireSplit(Views.Features.SplitFeatureCard card, string a, string b)
+        {
+            card.ClickA += (_, _) => TileGesture(a, rightClick: false);
+            card.ToggleA += (_, _) => TileGesture(a, rightClick: true);
+            card.ClickB += (_, _) => TileGesture(b, rightClick: false);
+            card.ToggleB += (_, _) => TileGesture(b, rightClick: true);
+        }
+
+        /// <summary>One Home tile press. Right-click (or left, when swapped) toggles the feature
+        /// and counts toward retiring the gesture caption; the other button opens its module.</summary>
+        private void TileGesture(string key, bool rightClick)
+        {
+            if (HomeDashboardRules.GestureToggles(rightClick, CoreSettings.Current.DashboardInvertClicks))
+            {
+                Shell?.ToggleWallFeature(key);
+                NoteToggleHintUse();
+            }
+            else Shell?.OpenStudioModule(key);
+        }
+
+        /// <summary>WPF CardMystery_Click (MainWindow.Presets.cs:1084): the ? box navigates to today's
+        /// free feature. Navigate, never launch; the gate stays with the destination.</summary>
+        internal void CardMystery_Click(object? sender, RoutedEventArgs e)
+        {
+            try { if (MysteryTabFor(TodayFreeKey()) is { } tab) Shell?.ShowTab(tab); }
+            catch (Exception ex) { Serilog.Log.Debug("CardMystery_Click: {E}", ex.Message); }
+        }
         /// <summary>Clicking the revealed face is clicking the box - one navigation, two faces.</summary>
-        private void MysteryRevealFace_Click(object? sender, PointerReleasedEventArgs e) { }   // mw.CardMystery_Click(...)
+        private void MysteryRevealFace_Click(object? sender, PointerReleasedEventArgs e) => CardMystery_Click(sender, e);
+
+        /// <summary>The rotation's keys in WPF order. The service instance is private to App, so today's
+        /// key is read back through the same provider TierGate asks (CoreEntitlement.IsFreeToday).</summary>
+        internal static readonly string[] MysteryKeys = { "takeover", "awareness", "haptics", "voice", "fyp", "remote", "dtrh" };
+
+        internal static string? TodayFreeKey()
+        {
+            foreach (var key in MysteryKeys)
+                if (ConditioningControlPanel.CoreEntitlement.IsFreeToday(key)) return key;
+            return null;
+        }
+
+        internal static string? MysteryTabFor(string? key) => key switch
+        {
+            "takeover" => "bambitakeover",
+            "awareness" => "awareness",
+            "haptics" => "haptics",
+            "voice" => "shelistening",
+            "fyp" => "fyp",
+            "remote" => "remotecontrol",
+            "dtrh" => "play",   // Drop days go to the Play door, where the game's card lives
+            _ => null,
+        };
         private void CardVault_Click(object? sender, RoutedEventArgs e) => Shell?.BtnPatreonExclusives_Click(sender, e);
-        private void CardJustDrop_Click(object? sender, RoutedEventArgs e) { }        // mw.CardJustDrop_Click(...)
+        /// <summary>The Deeper editor tile: ShowTab("deeper") and nothing else (owner, 2026-09-12:
+        /// "the deeper editor should link and open the deeper page, not the editor").</summary>
+        private void CardDeeperEditor_Click(object? sender, RoutedEventArgs e) => Shell?.ShowTab("deeper");
         /// <summary>
         /// WIRED (the bark and the easter egg). WPF's handler
         /// (MainWindow.UiUpdates.cs:1210) does four things: an achievement track, a bark
@@ -337,17 +376,31 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// <summary>Weekly intake pass card face (the flipped-over centre logo tile). Sits INSIDE
         /// LogoBrandFrame, so the click would otherwise bubble on into the logo's click-pulse
         /// easter egg; MainWindow's handler marks the event handled to stop that.</summary>
-        private void IntakePassFace_MouseLeftButtonDown(object? sender, PointerPressedEventArgs e) { } // mw.IntakePassFace_MouseLeftButtonDown(...)
+        internal void IntakePassFace_MouseLeftButtonDown(object? sender, PointerPressedEventArgs e)
+        {
+            e.Handled = true;   // never a logo poke
+            // The "(?)" belongs to its help popover (WPF MainWindow.UiUpdates.cs:1922).
+            if (e.Source is Visual src && BtnIntakePassHelp is { } help
+                && (ReferenceEquals(src, help) || global::Avalonia.VisualTree.VisualExtensions.IsVisualAncestorOf(help, src))) return;
+            // WPF BtnStartIntake_Click: the intake page owns every gate, so the face only goes there.
+            try { Shell?.ShowTab("gradedintake"); }
+            catch (Exception ex) { Serilog.Log.Warning(ex, "Intake pass tile: open failed"); }
+        }
 
         // -- browser card ---------------------------------------------------------------
-        private void BrowserLoadingText_Click(object? sender, PointerPressedEventArgs e) { }   // mw.BrowserLoadingText_Click(...)
-        private void BrowserSiteToggle_Click(object? sender, RoutedEventArgs e) => Shell?.BrowserSiteToggle_Click(sender, e);
-        private void BtnReloadBrowser_Click(object? sender, RoutedEventArgs e) => Shell?.BtnReloadBrowser_Click(sender, e);
-        private void BtnWebcamTracking_Click(object? sender, RoutedEventArgs e) { }   // mw.BtnWebcamTracking_Click(...)
-        private void BtnMuteBrowser_Click(object? sender, RoutedEventArgs e) { }      // mw.BtnMuteBrowser_Click(...)
-        private void BtnPopOutBrowser_Click(object? sender, RoutedEventArgs e) { }    // mw.BtnPopOutBrowser_Click(...)
-        private void ToggleEnhanceIfPossible_Changed(object? sender, RoutedEventArgs e) { }  // mw.ToggleEnhanceIfPossible_Changed(...)
-        private void ChkForceShowBambiCloud_Changed(object? sender, RoutedEventArgs e) { }   // mw.ChkForceShowBambiCloud_Changed(...)
+        private void BrowserLoadingText_Click(object? sender, PointerPressedEventArgs e) => OnBrowserPromptClick();   // SettingsTabView.BrowserCard.cs
+        private void BrowserSiteToggle_Click(object? sender, RoutedEventArgs e)
+        {
+            Shell?.RevealDashboardBrowser("site-toggle");
+            Shell?.BrowserSiteToggle_Click(sender, e);
+        }
+        private void BtnReloadBrowser_Click(object? sender, RoutedEventArgs e)
+        {
+            Shell?.RevealDashboardBrowser("reload");
+            Shell?.BtnReloadBrowser_Click(sender, e);
+        }
+        private void BtnFoldBrowser_Click(object? sender, RoutedEventArgs e) => Shell?.BtnFoldBrowser_Click();
+        // Webcam, Mute, Pop out, Enhance and the BambiCloud override: SettingsTabView.BrowserCard.cs.
 
         // -- home audio card ------------------------------------------------------------
         /// <summary>Self-contained on the old dashboard too - it only opens a window.</summary>
@@ -355,9 +408,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             => Windows.LayeredAudioWindow.Open(this);
 
         // -- companion + account strips --------------------------------------------------
-        /// <summary>Home's companion strip. Pure navigation into the Companion door - the strip
-        /// owns no portrait and no clock, so there is nothing to start or stop here.</summary>
-        private void CompanionStrip_Click(object? sender, PointerPressedEventArgs e) => Shell?.ShowTab("companion");
         private async void BtnUnifiedLogin_Click(object? sender, RoutedEventArgs e)
         {
             if (TopLevel.GetTopLevel(this) is Windows.MainShellWindow mw) await mw.OpenUnifiedLoginDialog();
@@ -367,14 +417,89 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private async void BtnLinkPhone_Click(object? sender, RoutedEventArgs e)
             => await new Dialogs.LinkPhoneDialog().ShowDialogSafe(TopLevel.GetTopLevel(this) as Window);
         private void BtnDiscord_Click(object? sender, RoutedEventArgs e) => (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.BtnDiscord_Click(sender, e);
-        private void ChkDiscordRichPresence_Changed(object? sender, RoutedEventArgs e) { }   // mw.ChkDiscordRichPresence_Changed(...)
+        private bool _syncingRichPresence;
+
+        /// <summary>Seeds the quick checkbox from settings without running its handler.</summary>
+        internal void SyncQuickRichPresence()
+        {
+            _syncingRichPresence = true;
+            try { ChkQuickDiscordRichPresence.IsChecked = CoreSettings.Current.DiscordRichPresenceEnabled; }
+            finally { _syncingRichPresence = false; }
+        }
+
+        /// <summary>WPF ChkDiscordRichPresence_Changed (MainWindow.AccountShell.cs:279): refused, with
+        /// the reason, unless a Discord is linked; otherwise the setting is written and saved.
+        /// Then the presence client is armed or dropped and the Privacy dialog's switch repaints
+        /// (App.ApplyRichPresence).</summary>
+        internal void ChkDiscordRichPresence_Changed(object? sender, RoutedEventArgs e)
+        {
+            if (_syncingRichPresence) return;
+            try
+            {
+                var s = CoreSettings.Current;
+                bool on = ChkQuickDiscordRichPresence.IsChecked == true;
+                if (on && !s.HasLinkedDiscord)
+                {
+                    SyncQuickRichPresenceTo(false);
+                    if (TopLevel.GetTopLevel(this) is Window { IsVisible: true } owner && !SuppressDialogsForTest)
+                        _ = Dialogs.MessageDialog.ShowAsync(owner, ConditioningControlPanel.Localization.Loc.Get("label_discord_rich_presence"),
+                            ConditioningControlPanel.Localization.Loc.Get("msg_discord_rich_presence_requires_a_linked_disco"));
+                    return;
+                }
+                if (s.DiscordRichPresenceEnabled == on) return;
+                s.DiscordRichPresenceEnabled = on;
+                CoreSettings.Save();
+                App.ApplyRichPresence();
+                Serilog.Log.Information("Discord Rich Presence {Status}", on ? "enabled" : "disabled");
+            }
+            catch (Exception ex) { Serilog.Log.Warning(ex, "ChkDiscordRichPresence_Changed failed"); }
+        }
+
+        private void SyncQuickRichPresenceTo(bool value)
+        {
+            _syncingRichPresence = true;
+            try { ChkQuickDiscordRichPresence.IsChecked = value; }
+            finally { _syncingRichPresence = false; }
+        }
+
+        /// <summary>Test seam: a headless run answers no dialogs.</summary>
+        internal static bool SuppressDialogsForTest;
 
         // -- quick-toggles row -----------------------------------------------------------
-        private void VelvetBtnWebcam_Click(object? sender, RoutedEventArgs e) { }            // mw.VelvetBtnWebcam_Click(...)
+        /// <summary>WPF VelvetBtnWebcam_Click (MainWindow.Presets.cs:1475): the bark this pill always
+        /// fired, then Settings, Devices.</summary>
+        internal void VelvetBtnWebcam_Click(object? sender, RoutedEventArgs e)
+        {
+            try { CoreBark.NotifyFeatureOpened("Webcam"); } catch { /* a bark never breaks a navigation */ }
+            Shell?.OpenDeviceSettings();
+        }
         /// <summary>Quick-toggles row · "System". This pill is the ONLY route to
         /// <c>MainWindow.CardSystem_Click</c> since the mosaic tile was deleted.</summary>
-        private void VelvetBtnSystem_Click(object? sender, RoutedEventArgs e) { }            // mw.CardSystem_Click(...)
-        private void VelvetBtnAppInfo_Click(object? sender, RoutedEventArgs e) { }           // mw.VelvetBtnAppInfo_Click(...)
+        internal void VelvetBtnSystem_Click(object? sender, RoutedEventArgs e)
+        {
+            try { CoreBark.NotifyFeatureOpened("System"); } catch { /* a bark never breaks a navigation */ }
+            Shell?.OpenAppSettingsSection("monitors");
+        }
+
+        private Features.FeaturePopupWindow? _appInfoPopup;
+        internal Features.FeaturePopupWindow? AppInfoPopup => _appInfoPopup;
+
+        /// <summary>WPF VelvetBtnAppInfo_Click (MainWindow.Presets.cs:1482): About + support forms in
+        /// the feature popup. One at a time; a second click replaces the first.</summary>
+        internal void VelvetBtnAppInfo_Click(object? sender, RoutedEventArgs e)
+        {
+            try
+            {
+                _appInfoPopup?.Close();
+                var popup = new Features.FeaturePopupWindow(new Features.AppInfoFeatureControl(),
+                    ConditioningControlPanel.Localization.Loc.Get("label_app_info"), glyph: "\u2139");
+                popup.Closed += (_, _) => { if (ReferenceEquals(_appInfoPopup, popup)) _appInfoPopup = null; };
+                _appInfoPopup = popup;
+                if (TopLevel.GetTopLevel(this) is Window { IsVisible: true } owner) popup.Show(owner);
+                else popup.Show();
+            }
+            catch (Exception ex) { Serilog.Log.Warning(ex, "VelvetBtnAppInfo_Click failed"); }
+        }
         private void VelvetBtnSchedulerRamp_Click(object? sender, RoutedEventArgs e) => Shell?.OpenStudioModule("scheduler");
         private void VelvetBtnCatalogue_Click(object? sender, RoutedEventArgs e) => Shell?.BtnCatalogue_Click(sender, e);
 
@@ -403,7 +528,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private MainWindow? _diagnostics;
 
         // -- training programs "today" card ----------------------------------------------
-        private void ProgramTodayCard_Loaded(object? sender, RoutedEventArgs e) { }          // mw.ProgramTodayCard_Loaded(...)
-        private void ProgramTodayCard_Click(object? sender, RoutedEventArgs e) { }           // mw.ProgramTodayCard_Click(...)
+        private void ProgramTodayCard_Loaded(object? sender, RoutedEventArgs e) => (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.ProgramTodayCard_Loaded();   // progression#1
+        private void ProgramTodayCard_Click(object? sender, RoutedEventArgs e) => (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.ProgramTodayCard_Click();
     }
 }

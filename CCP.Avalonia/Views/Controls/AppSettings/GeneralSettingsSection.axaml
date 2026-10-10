@@ -48,8 +48,7 @@
                     <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                         <TextBlock Text="🌍" FontSize="14" Margin="0,0,6,0" VerticalAlignment="Center"/>
                         <TextBlock Theme="{StaticResource SectionHeader}" Text="{loc:Str set2_general_language_title}"
-                                   Foreground="{StaticResource SectionHueGeneralBrush}"
-                                   FontSize="13" VerticalAlignment="Center" Margin="0"/>
+                                   Foreground="{StaticResource SectionHueGeneralBrush}" VerticalAlignment="Center" Margin="0"/>
                     </StackPanel>
 
                     <Grid MinHeight="34" ColumnDefinitions="*,Auto" ToolTip.Tip="{loc:Str set2_general_language_hint}">
@@ -76,14 +75,13 @@
                     <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                         <TextBlock Text="🖥" FontSize="14" Margin="0,0,6,0" VerticalAlignment="Center"/>
                         <TextBlock Theme="{StaticResource SectionHeader}" Text="{loc:Str set2_general_display_title}"
-                                   Foreground="{StaticResource SectionHueGeneralBrush}"
-                                   FontSize="13" VerticalAlignment="Center" Margin="0"/>
+                                   Foreground="{StaticResource SectionHueGeneralBrush}" VerticalAlignment="Center" Margin="0"/>
                     </StackPanel>
 
-                    <feat:MonitorTargetPicker x:Name="ContentMonitorPicker"/>
+                    <!-- Nav rework (WPF 7.1.5): the monitor picker lives in Settings > Monitors only. -->
 
                     <!-- The START button's MM:SS while a session runs. Default on; AppSettings.ShowSessionCountdown. -->
-                    <Border Theme="{StaticResource SettingChip}" Margin="0,8,0,0"
+                    <Border Theme="{StaticResource SettingChip}" Margin="0"
                             ToolTip.Tip="{loc:Str set2_general_show_countdown_tip}">
                         <Grid MinHeight="22" ColumnDefinitions="*,Auto">
                             <TextBlock Grid.Column="0" Text="{loc:Str set2_general_show_countdown}"
@@ -110,8 +108,7 @@
                     <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                         <TextBlock Text="🚀" FontSize="14" Margin="0,0,6,0" VerticalAlignment="Center"/>
                         <TextBlock Theme="{StaticResource SectionHeader}" Text="{loc:Str set2_general_startup_title}"
-                                   Foreground="{StaticResource SectionHueStartupBrush}"
-                                   FontSize="13" VerticalAlignment="Center" Margin="0"/>
+                                   Foreground="{StaticResource SectionHueStartupBrush}" VerticalAlignment="Center" Margin="0"/>
                     </StackPanel>
 
                     <!-- Four related switches = one 2-column chip grid. ChkWinStart keeps Click (NOT
@@ -201,8 +198,7 @@
                     <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                         <TextBlock Text="🪟" FontSize="14" Margin="0,0,6,0" VerticalAlignment="Center"/>
                         <TextBlock Theme="{StaticResource SectionHeader}" Text="{loc:Str set2_general_tray_title}"
-                                   Foreground="{StaticResource SectionHueGeneralBrush}"
-                                   FontSize="13" VerticalAlignment="Center" Margin="0"/>
+                                   Foreground="{StaticResource SectionHueGeneralBrush}" VerticalAlignment="Center" Margin="0"/>
                     </StackPanel>
                     <TextBlock Text="{loc:Str set2_general_tray_body}" TextWrapping="Wrap"
                                Foreground="{DynamicResource TextMutedBrush}" FontSize="11"/>
@@ -222,8 +218,7 @@
                     <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                         <TextBlock Text="🌊" FontSize="14" Margin="0,0,6,0" VerticalAlignment="Center"/>
                         <TextBlock Theme="{StaticResource SectionHeader}" Text="{loc:Str section_deeper}"
-                                   Foreground="{DynamicResource DeeperAccentBrush}"
-                                   FontSize="13" VerticalAlignment="Center" Margin="0"/>
+                                   Foreground="{DynamicResource DeeperAccentBrush}" VerticalAlignment="Center" Margin="0"/>
                     </StackPanel>
                     <Grid MinHeight="34" ColumnDefinitions="*,Auto" ToolTip.Tip="{loc:Str tooltip_deeper_enable}">
                         <TextBlock Grid.Column="0" Theme="{StaticResource SettingLabel}"

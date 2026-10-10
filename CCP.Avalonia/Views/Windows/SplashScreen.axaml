@@ -41,20 +41,8 @@
          nothing and keeps it renderable before App resources exist. -->
 
     <Window.Styles>
-        <!-- ponytail: local copy of Windows/SplashScreen.xaml.cs:StartShimmer (a code-behind
-             DoubleAnimation there), hoist when a second view needs a sweep -->
-        <Style Selector="Border#Shimmer">
-            <Style.Animations>
-                <Animation Duration="0:0:1.6" IterationCount="Infinite">
-                    <KeyFrame Cue="0%">
-                        <Setter Property="TranslateTransform.X" Value="-90"/>
-                    </KeyFrame>
-                    <KeyFrame Cue="100%">
-                        <Setter Property="TranslateTransform.X" Value="340"/>
-                    </KeyFrame>
-                </Animation>
-            </Style.Animations>
-        </Style>
+        <!-- The shimmer sweep (Windows/SplashScreen.xaml.cs StartShimmer: X -90 -> 340 over 1.6s,
+             forever) runs from the code-behind on the shared 30 fps beat. -->
     </Window.Styles>
 
     <Border Background="#FF121220" CornerRadius="15" BorderBrush="#FFFF69B4" BorderThickness="2">

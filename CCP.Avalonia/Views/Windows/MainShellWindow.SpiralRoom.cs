@@ -1,16 +1,13 @@
-// PORTED from ConditioningControlPanel/MainWindow/MainWindow.SpiralRoom.cs: the Spiral rail row's
-// visibility and label, read from Core SpiralRoom.StateFor - the same pure function the tab paints
-// from, so the row and the room cannot disagree.
+// PORTED from ConditioningControlPanel/MainWindow/MainWindow.SpiralRoom.cs (WPF 7.1.5): the fuse
+// and language subscriptions the Spiral room's rail row used to repaint from. The row itself left
+// the rail in the nav rework; "spiral" is a hidden tab of the You section (NavSections), reached
+// through ShowTab, the palette and the barks.
 //
-// ponytail: DescentService (the block, BlockChanged) and DescentMigrationService (SpiralWithheld)
-// are WPF-head network services, so this head reads hasBlock=false / withheld=false: the row shows
-// only in the fog era (gold ellipsis) and never wears "The Spiral". BeginSpiralFirstLight has no
-// caller here (DescentShowDirector is WPF-only) and is not ported until it does.
+// DescentService.BlockChanged (Core, lane z1) repaints the two profile doors (WPF WireProfileSpiral);
+// the room itself subscribes while it is shown. BeginSpiralFirstLight has no caller here (DescentShowDirector is
+// WPF-only) and is not ported until it does.
 
 using System;
-using Avalonia.Controls;
-using Avalonia.Media;
-using Avalonia.Media.Immutable;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Services.Descent;
 using Serilog;
@@ -19,12 +16,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
     public partial class MainShellWindow
     {
-        /// <summary>WPF SpiralRailAnonymousLabel: one character during the fog, never a word.</summary>
-        private const string SpiralRailAnonymousLabel = "…";
-
-        /// <summary>FuseGold, never the mod accent (WPF SpiralRailAnonymousBrush).</summary>
-        private static readonly IBrush SpiralRailAnonymousBrush = new ImmutableSolidColorBrush(Color.FromRgb(0xE0, 0xB0, 0x52));
-
         private bool _spiralRoomWired;
 
         /// <summary>WPF InitializeSpiralRoom: subscriptions plus one catch-up paint. Idempotent.</summary>
@@ -39,8 +30,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 var fuse = App.DescentCountdown;
                 if (fuse != null) fuse.PhaseChanged += OnSpiralRoomPhaseChanged;
                 LocalizationManager.Instance.LanguageChanged += OnSpiralRoomLanguageChanged;
+                // WPF WireProfileSpiral: a block landing before the menu is ever opened still repaints it.
+                var descent = App.Descent;
+                EventHandler onBlock = (_, _) =>
+                {
+                    if (global::Avalonia.Threading.Dispatcher.UIThread.CheckAccess()) OnSpiralBlockChanged();
+                    else global::Avalonia.Threading.Dispatcher.UIThread.Post(OnSpiralBlockChanged);
+                };
+                if (descent != null) descent.BlockChanged += onBlock;
                 Closed += (_, _) =>
                 {
+                    if (descent != null) descent.BlockChanged -= onBlock;
                     if (fuse != null) fuse.PhaseChanged -= OnSpiralRoomPhaseChanged;
                     LocalizationManager.Instance.LanguageChanged -= OnSpiralRoomLanguageChanged;
                 };
@@ -53,36 +53,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private void OnSpiralRoomLanguageChanged(object? sender, EventArgs e) => RefreshSpiralRailEntry();
 
-        /// <summary>WPF RefreshSpiralRailEntry: show, hide and name the row from scratch.</summary>
+        /// <summary>WPF RefreshSpiralRailEntry. Nav rework (2026-10-06): the Spiral row left the
+        /// rail; the You strip lists "spiral" as a hidden tab (NavSections), so there is no row to
+        /// paint. Kept, as 7.1.5 keeps it, as the one place the fuse events land, so a fog-era pill
+        /// reveal can hook in here.</summary>
         internal void RefreshSpiralRailEntry()
         {
-            if (Named<Button>("BtnNavSpiral") is not { } row) return;
-            try
-            {
-                var fuse = App.DescentCountdown;
-                var state = SpiralRoom.StateFor(
-                    CoreSettings.Current,
-                    fuse?.LastAnnouncedPhase ?? DescentFusePhase.Dark,
-                    fuse?.IsArmed == true,
-                    spiralWithheld: false,   // ponytail: App.DescentMigration is WPF-only
-                    hasBlock: false);        // ponytail: App.Descent is WPF-only
-
-                bool show = SpiralRoom.RailEntryVisible(state);
-                row.IsVisible = show;
-                if (!show || Named<TextBlock>("TxtNavSpiral") is not { } label) return;
-
-                if (SpiralRoom.RailEntryIsAnonymous(state))
-                {
-                    label.Text = SpiralRailAnonymousLabel;
-                    label.Foreground = SpiralRailAnonymousBrush;
-                }
-                else
-                {
-                    label.Text = Loc.Get("tab_spiral");
-                    label.ClearValue(TextBlock.ForegroundProperty);   // the theme's brush stays live
-                }
-            }
-            catch (Exception ex) { Log.Debug("[Spiral] rail row repaint failed: {E}", ex.Message); }
         }
 
         /// <summary>The rail row's click. The tab does all the deciding.</summary>

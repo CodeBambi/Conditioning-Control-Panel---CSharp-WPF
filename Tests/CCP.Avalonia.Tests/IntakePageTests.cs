@@ -145,18 +145,27 @@ public sealed class IntakePageTests
             File.WriteAllText(Path.Combine(web, "settings.json"), "{}");
             File.WriteAllText(Path.Combine(web, "w.png"), "x");
             Directory.CreateDirectory(Path.Combine(assets, "images"));
-            Directory.CreateDirectory(Path.Combine(assets, ".temp"));
-            foreach (var f in new[] { "images/a.gif", "images/off.png", "images/page.html", ".temp/t.png" })
+            Directory.CreateDirectory(Path.Combine(assets, ".temp", "sub"));
+            Directory.CreateDirectory(Path.Combine(assets, ".packs"));
+            foreach (var f in new[] { "images/a.gif", "images/off.png", "images/page.html", ".temp/t.png", ".temp/sub/s.png", ".packs/p.png" })
                 File.WriteAllText(Path.Combine(assets, f), "x");
             File.WriteAllText(Path.Combine(outside, "secret.png"), "x");
-            File.CreateSymbolicLink(Path.Combine(assets, "images", "link.png"), Path.Combine(outside, "secret.png"));
+            try { File.CreateSymbolicLink(Path.Combine(assets, "images", "link.png"), Path.Combine(outside, "secret.png")); }
+            catch (IOException) when (OperatingSystem.IsWindows())
+            {
+                // Windows creates symlinks only elevated or with Developer Mode on (Linux CI keeps the proof).
+                Assert.Skip("Windows refused to create a symlink (needs admin or Developer Mode).");
+            }
             Directory.CreateSymbolicLink(Path.Combine(assets, "images", "out"), outside);
 
             using var server = new WebAssetServer(web) { AssetsRoot = () => assets, DisabledAssets = () => new[] { "images/off.png" } };
             string P(string rel) => "/" + WebAssetServer.AssetsPrefix + rel;
             Assert.Equal(Path.Combine(assets, "images", "a.gif"), server.ResolveFile(P("images/a.gif")));
             Assert.Null(server.ResolveFile(P("images/page.html")));     // not media
-            Assert.Null(server.ResolveFile(P(".temp/t.png")));          // the app's own folder
+            // WPF maps ccp.assets over the whole folder: the warm Scrolller clips in .temp are legal urls.
+            Assert.Equal(Path.Combine(assets, ".temp", "t.png"), server.ResolveFile(P(".temp/t.png")));
+            Assert.Null(server.ResolveFile(P(".temp/sub/s.png")));      // only .temp's own top-level files
+            Assert.Null(server.ResolveFile(P(".packs/p.png")));         // any other app dot-folder
             Assert.Null(server.ResolveFile(P("images/off.png")));       // unchecked in the Assets tree
             Assert.Null(server.ResolveFile(P("../settings.json")));
             Assert.Null(server.ResolveFile(P("../" + Path.GetFileName(web) + "/w.png")));
@@ -172,7 +181,7 @@ public sealed class IntakePageTests
         }
         finally
         {
-            File.Delete(profileImage);
+            if (File.Exists(profileImage)) File.Delete(profileImage);
             Directory.Delete(web, true);
             Directory.Delete(assets, true);
             Directory.Delete(outside, true);
@@ -185,12 +194,15 @@ public sealed class IntakePageTests
         await AvaloniaTestDispatcher.RunAsync(() =>
         {
             EnsureApp();
-            var host = new ConditioningControlPanel.Avalonia.Views.Controls.WebHost
-            {
-                Source = new Uri("http://127.0.0.1:5000/intake/index.html?ccp_t=ABC&x=1"),
-            };
-            var text = host.FindControl<global::Avalonia.Controls.TextBlock>("TxtSource")!.Text;
-            Assert.Equal("http://127.0.0.1:5000/intake/index.html?x=1", text);
+            var src = new Uri("http://127.0.0.1:5000/intake/index.html?ccp_t=ABC&x=1");
+            const string shown = "http://127.0.0.1:5000/intake/index.html?x=1";
+            // The rule the panel paints with, on every machine.
+            Assert.Equal(shown, ConditioningControlPanel.Avalonia.Views.Controls.WebHost.WithoutToken(src));
+            var host = new ConditioningControlPanel.Avalonia.Views.Controls.WebHost { Source = src };
+            // With a web engine installed (WebView2 on Windows) the page loads and the fallback
+            // panel is never painted; the panel itself is only reachable with no engine.
+            if (!host.HasEngine)
+                Assert.Equal(shown, host.FindControl<global::Avalonia.Controls.TextBlock>("TxtSource")!.Text);
             return Task.CompletedTask;
         });
     }

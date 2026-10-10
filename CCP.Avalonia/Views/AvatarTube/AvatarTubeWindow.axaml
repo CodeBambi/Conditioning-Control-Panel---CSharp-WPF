@@ -47,9 +47,7 @@
        ItemsControl DataTrigger IsUser -> Classes.user="{Binding IsUser}" + a Style selector.
                                           Avalonia has no DataTriggers.
        Tag="{Binding Text}" +
-       Loaded="ChatHistoryText_Loaded" -> Text="{Binding Text}".
-                                          ponytail: the WPF loader re-rendered each history line as
-                                          Inlines with clickable video links; link detection is lost.
+       Loaded="ChatHistoryText_Loaded" -> crt:CompanionLinkedText.Text="{Binding Text}" (same links as the bubble).
        Window.CommandBindings          -> dropped. Avalonia has no CommandBindings.
                                           The user's chat shortcut is NOT lost with them:
                                           ApplyChatShortcutTo (code-behind) builds the KeyBinding
@@ -61,6 +59,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
         xmlns:at="clr-namespace:ConditioningControlPanel.Avalonia.Views.AvatarTube"
+        xmlns:crt="clr-namespace:ConditioningControlPanel.Avalonia.Views.Controls.Companion.Runtime"
         x:Class="ConditioningControlPanel.Avalonia.Views.AvatarTube.AvatarTubeWindow"
         Title="{loc:Str dialog_avatar_tube}"
 
@@ -136,14 +135,17 @@
                     IsVisible="False"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Bottom"
-                    Opacity="0.92"
+                    Opacity="1"
                     Margin="0,0,125,550"
                     MinWidth="120" MaxWidth="380"
-                    Background="{StaticResource BubbleGradient}"
-                    CornerRadius="20"
+                    Background="#EB150F1E"
+                    CornerRadius="14"
                     BorderBrush="{DynamicResource PinkBrush}"
-                    BorderThickness="3"
-                    Padding="15,12">
+                    BorderThickness="1"
+                    Padding="16,14">
+                <!-- WPF 7.1.5 glass card (Speech.cs:660-689 ApplyBubbleBackgroundForMod): near-black
+                     violet at ~92%, white text, the mod accent only on the thin border. Pink text on
+                     the old purple gradient was unreadable (owner, Sep 25; again on this head, Oct 9). -->
 
                 <Grid>
                     <!-- Single-message mode: existing bubble content -->
@@ -156,16 +158,13 @@
                         <!-- Speech text with bubbly pink font -->
                         <TextBlock x:Name="TxtSpeech"
                                    Text=""
-                                   Foreground="{DynamicResource PinkBrush}"
-                                   FontSize="20"
-                                   FontWeight="Bold"
+                                   Foreground="#F4EEF8"
+                                   FontSize="15"
+                                   FontWeight="Normal"
+                                   LineHeight="21"
                                    TextWrapping="Wrap"
                                    TextAlignment="Left"
-                                   Padding="0,0,8,0">
-                            <TextBlock.Effect>
-                                <DropShadowEffect Color="Black" BlurRadius="2" OffsetX="1" OffsetY="1" Opacity="0.8"/>
-                            </TextBlock.Effect>
-                        </TextBlock>
+                                   Padding="0,0,6,0"/>
                         <!-- Ask card answers (AvatarTubeWindow.Chat.cs); empty and hidden otherwise -->
                         <WrapPanel x:Name="AskButtons" IsVisible="False" Margin="0,10,0,0"/>
                         </StackPanel>
@@ -270,7 +269,7 @@
                                                     Classes.user="{Binding IsUser}"
                                                     CornerRadius="10" Padding="9,6" Margin="2,3" MaxWidth="380">
                                                 <StackPanel>
-                                                    <TextBlock Text="{Binding Text}"
+                                                    <TextBlock crt:CompanionLinkedText.Text="{Binding Text}"
                                                                Foreground="White"
                                                                FontSize="14"
                                                                TextWrapping="Wrap"/>
@@ -341,32 +340,31 @@
                     <ContextMenu x:Name="AvatarContextMenu">
                         <MenuItem x:Name="MenuItemTalkToBambi" Header="{loc:Str section_talk_to_companion}" Foreground="{DynamicResource PinkBrush}" FontWeight="Bold"/>
                         <Separator/>
-                        <MenuItem x:Name="MenuItemDetach" Header="{loc:Str section_detach}"/>
-                        <MenuItem x:Name="MenuItemAttach" Header="{loc:Str section_attach_to_main_window}" IsVisible="False"/>
-                        <MenuItem x:Name="MenuItemShrink" Header="{loc:Str section_shrink}" IsVisible="False"/>
-                        <MenuItem x:Name="MenuItemGrow" Header="{loc:Str section_grow}" IsVisible="False"/>
-                        <MenuItem x:Name="MenuItemDismiss" Header="{loc:Str section_dismiss}" IsVisible="False"/>
+                        <MenuItem x:Name="MenuItemDetach" Foreground="White" Header="{loc:Str section_detach}"/>
+                        <MenuItem x:Name="MenuItemAttach" Foreground="White" Header="{loc:Str section_attach_to_main_window}" IsVisible="False"/>
+                        <MenuItem x:Name="MenuItemShrink" Foreground="White" Header="{loc:Str section_shrink}" IsVisible="False"/>
+                        <MenuItem x:Name="MenuItemGrow" Foreground="White" Header="{loc:Str section_grow}" IsVisible="False"/>
+                        <MenuItem x:Name="MenuItemDismiss" Foreground="White" Header="{loc:Str section_dismiss}" IsVisible="False"/>
                         <Separator/>
                         <MenuItem x:Name="MenuItemEngine" Header="{loc:Str section_start_engine}" Foreground="#90EE90"/>
-                        <MenuItem x:Name="MenuItemTriggerMode" Header="{loc:Str section_trigger_mode}"/>
-                        <MenuItem x:Name="MenuItemBambiTakeover" Header="{loc:Str section_takeover}"/>
+                        <MenuItem x:Name="MenuItemTriggerMode" Foreground="White" Header="{loc:Str section_trigger_mode}"/>
+                        <MenuItem x:Name="MenuItemBambiTakeover" Foreground="White" Header="{loc:Str section_takeover}"/>
                         <MenuItem x:Name="MenuItemPersonality" Header="{loc:Str section_personality}" Foreground="{DynamicResource PinkBrush}"/>
-                        <MenuItem x:Name="MenuItemMute" Header="{loc:Str section_mute_avatar}"/>
+                        <MenuItem x:Name="MenuItemMute" Foreground="White" Header="{loc:Str section_mute_avatar}"/>
                         <!-- Emote MenuItems replace the 5 items above (Engine, TriggerMode, BambiTakeover,
                              Personality, Mute) whenever a remote controller is connected. On WPF their
                              headers are filled in AvatarContextMenu_Opened from RemoteEmotePresets.
-                             They stay IsVisible="False" on this head: the presets are in Core, but the
-                             swap is driven by App.RemoteControl.ControllerConnected and each item sends
-                             through MainWindow.SendEmoteAndReportAsync, both head-side. -->
+                             Here the swap and the send are in AvatarTubeWindow.QuickMenu.cs
+                             (RefreshEmoteMenuItemsForRemoteState, OnMenuEmote). -->
                         <MenuItem x:Name="MenuItemEmote1" Header="" IsVisible="False"/>
                         <MenuItem x:Name="MenuItemEmote2" Header="" IsVisible="False"/>
                         <MenuItem x:Name="MenuItemEmote3" Header="" IsVisible="False"/>
                         <MenuItem x:Name="MenuItemEmote4" Header="" IsVisible="False"/>
                         <MenuItem x:Name="MenuItemEmote5" Header="" IsVisible="False"/>
                         <Separator/>
-                        <MenuItem x:Name="MenuItemShowChatHistory" Header="{loc:Str section_show_chat_history}"/>
-                        <MenuItem x:Name="MenuItemMuteWhispers" Header="{loc:Str section_mute_whispers}"/>
-                        <MenuItem x:Name="MenuItemPauseBrowser" Header="{loc:Str section_pause_browser}"/>
+                        <MenuItem x:Name="MenuItemShowChatHistory" Foreground="White" Header="{loc:Str section_show_chat_history}"/>
+                        <MenuItem x:Name="MenuItemMuteWhispers" Foreground="White" Header="{loc:Str section_mute_whispers}"/>
+                        <MenuItem x:Name="MenuItemPauseBrowser" Foreground="White" Header="{loc:Str section_pause_browser}"/>
                     </ContextMenu>
                 </Border.ContextMenu>
                 <!-- ponytail: AvatarBounceScale (click-squash), AvatarScale/AvatarRotate/AvatarTranslate
@@ -413,9 +411,8 @@
                         </Ellipse.Fill>
                     </Ellipse>
                     <!-- Animated GIF avatar (for level 20+).
-                         ponytail: WPF drove this through XamlAnimatedGif (gif:AnimationBehavior),
-                         a WPF-only package. Avalonia needs its own GIF decoder; the layer is kept
-                         so the crossfade code has its slot, but nothing animates it. -->
+                         WPF drove this through XamlAnimatedGif (WPF-only); here AvatarTubeWindow.Emotes.cs
+                         feeds it from a SkiaSharp GifPlayer (Helpers/GifClip.cs). -->
                     <Image x:Name="ImgAvatarAnimated"
                            Stretch="Uniform"
                            MaxHeight="306"
@@ -484,9 +481,7 @@
 
             <!-- Takeover countdown bar - thin pink bar under the avatar, drains toward the next
                  random Takeover action. Shown only while Takeover is running (driven in code-behind).
-                 ponytail: the WPF fill was horizontally scaled by the x:Named TakeoverCountdownScale
-                 (1.0 full -> 0 about to fire) from InitTakeoverCountdownBar, which lives in a partial
-                 this layer does not port. The transform is dropped, so the bar renders full. -->
+                 The fill is scaled 1.0 (full) to 0 (about to fire) by AvatarTubeWindow.TakeoverBar.cs. -->
             <Border x:Name="TakeoverCountdownBar"
                     ZIndex="5"
                     HorizontalAlignment="Center"

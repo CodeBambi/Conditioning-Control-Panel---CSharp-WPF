@@ -8026,6 +8026,18 @@ namespace ConditioningControlPanel.Models
             set { _screenOcrEnabled = value; OnPropertyChanged(); }
         }
 
+        private bool _keywordTriggersOffByPanic;
+        /// <summary>
+        /// Owner, 2026-10-10 ("stop until re-enabled"): a panic press switched the screen read
+        /// (<see cref="ScreenOcrEnabled"/>) off. Only the Awareness tab's notice reads it; it clears
+        /// when the user switches the screen read back on. Never switches anything on by itself.
+        /// </summary>
+        public bool KeywordTriggersOffByPanic
+        {
+            get => _keywordTriggersOffByPanic;
+            set { _keywordTriggersOffByPanic = value; OnPropertyChanged(); }
+        }
+
         private int _screenOcrIntervalMs = 3000;
         public int ScreenOcrIntervalMs
         {
@@ -8369,6 +8381,20 @@ namespace ConditioningControlPanel.Models
             get => _goonShareDiscordDm;
             set { _goonShareDiscordDm = value; OnPropertyChanged(); }
         }
+
+        /// <summary>
+        /// The account whose consent switches were SET ON THIS INSTALL (Core SyncPush). The profile read
+        /// returns only two of the six consent values, so the other four ride a sync only for the account
+        /// that chose them here: a local default can never overwrite what another device granted or revoked.
+        /// Machine-local; never synced.
+        /// </summary>
+        [JsonProperty("consentOwnedAccount")]
+        public string? ConsentOwnedAccount { get; set; }
+
+        /// <summary>A consent switch changed here and no sync has delivered it yet (survives a restart, so a
+        /// revoke made offline is pushed before the server's older value could be adopted back).</summary>
+        [JsonProperty("consentPushPending")]
+        public bool ConsentPushPending { get; set; }
 
         private bool _goonRichPresence = false;
         /// <summary>
@@ -9187,6 +9213,25 @@ namespace ConditioningControlPanel.Models
         /// </summary>
         public int DashboardToggleHintUses { get; set; }
 
+        /// <summary>
+        /// Nav rework (2026-10-06): the last tab opened in each rail section, as a JSON object
+        /// {"section": "tabKey"}. Empty = every section opens on its default tab
+        /// (<see cref="ConditioningControlPanel.Nav.NavSections.DefaultTab"/>). Machine-local view state.
+        /// </summary>
+        public string NavLastTabBySection { get; set; } = "";
+
+        /// <summary>Times the one-time "What moved" card has been shown (0 = never; the ladder
+        /// presents it once, replay lives in Help).</summary>
+        public int WhatMovedCardShown { get; set; }
+
+        /// <summary>Old tab keys followed to their new home. The "Moved: Section > Page" toast
+        /// shows for the first three hits, then retires itself.</summary>
+        public int NavMovedToastHits { get; set; }
+
+        /// <summary>The Ctrl+K palette's last five destinations (row ids, newest first), as a JSON
+        /// string array. Shown when the search box is empty; a stale id is skipped.</summary>
+        public string NavSearchRecents { get; set; } = "";
+
         /// <summary>Swap open and toggle gestures on Home feature tiles only.</summary>
         public bool DashboardInvertClicks { get; set; }
 
@@ -9229,6 +9274,31 @@ namespace ConditioningControlPanel.Models
         {
             get => _railRecent;
             set { _railRecent = value ?? new List<string>(); OnPropertyChanged(); }
+        }
+
+        /// <summary>
+        /// Nav polish wave 3 (WPF 7.1.5): the FAVORITES + RECENT column is a drawer at the right
+        /// edge of Home. True = open. Closed by default; only the drawer's handle writes it (a pin
+        /// opening it for a moment never does), so it is where the player left it next launch.
+        /// </summary>
+        [JsonProperty("favorites_drawer_open")]
+        public bool FavoritesDrawerOpen { get; set; } = false;
+
+        private Dictionary<string, DateTime> _billboardSnoozedUntil = new(StringComparer.Ordinal);
+        /// <summary>
+        /// The Tonight Board (2026-10-07): card id to the UTC time its snooze runs out, as WPF 7.1.5
+        /// stores it (<see cref="Services.Billboard.DashboardBillboard.SnoozeFor"/>). Kept so a
+        /// settings.json shared with the WPF app round-trips; this head's deck reads and writes its
+        /// snoozes through <c>BillboardSnoozeStore</c> (CCP.Core/Board), not this property.
+        /// Machine-local view state.
+        /// </summary>
+        [JsonProperty("billboard_snoozed_until")]
+        public Dictionary<string, DateTime> BillboardSnoozedUntil
+        {
+            get => _billboardSnoozedUntil;
+            set => _billboardSnoozedUntil = value == null
+                ? new Dictionary<string, DateTime>(StringComparer.Ordinal)
+                : new Dictionary<string, DateTime>(value, StringComparer.Ordinal);
         }
 
         #endregion

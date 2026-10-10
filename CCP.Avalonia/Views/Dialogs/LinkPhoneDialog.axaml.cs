@@ -79,8 +79,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                     _txtStatus.Text = result.Error switch
                     {
                         "not_logged_in" => "You need to be logged in to link a phone.",
-                        "invalid_auth_token" => "Your session has expired — please log in again.",
-                        "legacy_user_reauth_required" => "Your session has expired — please log in again.",
+                        "invalid_auth_token" => "Your session has expired - please log in again.",
+                        "legacy_user_reauth_required" => "Your session has expired - please log in again.",
                         "rate_limited" => "Too many codes requested. Wait a minute and try again.",
                         _ => $"Couldn't get a link code ({result.Error ?? "unknown error"}). Try again."
                     };

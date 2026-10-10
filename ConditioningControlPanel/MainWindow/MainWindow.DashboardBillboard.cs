@@ -1,92 +1,27 @@
 using System;
-using System.Collections.ObjectModel;
-using System.ComponentModel;
-using System.Runtime.CompilerServices;
+using System.Collections.Generic;
 using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Media;
-using System.Windows.Media.Animation;
-using System.Windows.Media.Imaging;
 using System.Windows.Threading;
-using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Controls.Billboard;
 using ConditioningControlPanel.Services;
+using ConditioningControlPanel.Services.Billboard;
+using ConditioningControlPanel.Services.Launcher;
 
 namespace ConditioningControlPanel
 {
-    /// <summary>The WPF pack URI for a billboard card's art (Core stores the bare Resources path).</summary>
-    internal static class BillboardPoster
-    {
-        internal static string Uri(Services.BillboardCard card) => "pack://application:,,,/Resources/" + card.Poster;
-    }
-
     /// <summary>
-    /// The visible dashboard slide. Its art and copy update together when navigating.
-    /// </summary>
-    internal sealed class BillboardSlotVm : INotifyPropertyChanged
-    {
-        private string _id = string.Empty;
-        private ImageSource? _art;
-        private bool _plate;
-        private string _eyebrow = string.Empty;
-        private string _title = string.Empty;
-        private string _line = string.Empty;
-        private string _tip = string.Empty;
-
-        /// <summary>Roster id of the card in this slot; what the click resolves through.</summary>
-        public string Id { get => _id; set => Set(ref _id, value); }
-
-        public ImageSource? Art { get => _art; set => Set(ref _art, value); }
-
-        public string Eyebrow { get => _eyebrow; set => Set(ref _eyebrow, value); }
-        public string Title { get => _title; set => Set(ref _title, value); }
-        public string Line { get => _line; set => Set(ref _line, value); }
-        public string Tip { get => _tip; set => Set(ref _tip, value); }
-
-        /// <summary>True for a square mark, which gets the plate instead of a cover fit.</summary>
-        public bool Plate
-        {
-            get => _plate;
-            set
-            {
-                if (_plate == value) return;
-                _plate = value;
-                Raise(nameof(Plate));
-                Raise(nameof(CoverVisibility));
-                Raise(nameof(PlateVisibility));
-            }
-        }
-
-        public Visibility CoverVisibility => _plate ? Visibility.Collapsed : Visibility.Visible;
-        public Visibility PlateVisibility => _plate ? Visibility.Visible : Visibility.Collapsed;
-
-        public event PropertyChangedEventHandler? PropertyChanged;
-
-        private void Set<T>(ref T field, T value, [CallerMemberName] string? name = null)
-        {
-            if (Equals(field, value)) return;
-            field = value;
-            Raise(name);
-        }
-
-        private void Raise(string? name) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
-    }
-
-    /// <summary>
-    /// One full-size promo slide in the folded browser space. Automatic rotation pauses while
-    /// reading or focusing the card; manual navigation remains available with motion disabled.
+    /// The Tonight Board on Home (2026-10-07): the deck of cards in the row the folded browser
+    /// gives back. This file only hosts it: it makes the deck and the card host once, keeps the
+    /// snoozes in AppSettings and runs a card's button. The rules are <see cref="DashboardBillboard"/>,
+    /// the drawing and the juice are <see cref="BillboardCardHost"/>, and the provider list is
+    /// <see cref="BillboardWiring"/>.
     /// </summary>
     public partial class MainWindow
     {
-        private const int BillboardFadeMs = 220;
+        private BillboardCardHost? _billboardHost;
+        private bool _billboardProvidersHooked;
 
-        private readonly ObservableCollection<BillboardSlotVm> _billboardSlots = new();
-        private DispatcherTimer? _billboardTimer;
-        private BillboardRack? _billboardRack;
-        private bool _billboardPointerOver;
-        private bool _billboardWired;
-        private bool _billboardPaused;
-
-        /// <summary>The fold's one hook: the rack exists only while the browser is shut.</summary>
+        /// <summary>The fold's one hook: the board exists only while the browser is shut.</summary>
         partial void OnBrowserFoldChanged(bool collapsed)
         {
             try { ApplyBillboard(BrowserFoldRule.BillboardShown(collapsed)); }
@@ -99,204 +34,97 @@ namespace ConditioningControlPanel
             if (host == null) return;
 
             host.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
-            if (!show)
-            {
-                StopBillboardClock();
-                return;
-            }
-
-            EnsureBillboardWired();
-            RestartBillboardClock();
+            if (show) EnsureBillboard();
+            // The host follows its own IsVisible for the clock and the art; this covers the case
+            // where the visibility did not change but the gates did.
+            _billboardHost?.RefreshMotion();
         }
 
         /// <summary>
-        /// One-time wiring: the visible slide, navigation, and the reasons the clock ever
-        /// stops. The pointer pauses it, and the host's own visibility starts and stops it, so
-        /// switching away from Home costs nothing and coming back needs no help from the tab
-        /// machinery.
+        /// One-time wiring: start the providers, make the deck over the saved snoozes, drop the card
+        /// host into its slot and show the first card still. The host pauses itself whenever Home
+        /// is not on screen, so switching away costs nothing.
         /// </summary>
-        private void EnsureBillboardWired()
+        private void EnsureBillboard()
         {
-            if (_billboardWired) return;
-            var dash = SettingsTab;
-            var host = dash?.DashBillboard;
-            var rack = dash?.BillboardRackHost;
-            if (host == null || rack == null) return;
+            if (_billboardHost != null) return;
+            var slot = SettingsTab?.BillboardHostSlot;
+            if (slot == null) return;
 
-            _billboardRack = Services.DashboardBillboard.InitialRack(Services.DashboardBillboard.Roster.Count, slots: 1);
-            _billboardSlots.Clear();
-            for (int i = 0; i < _billboardRack.Slots.Count; i++)
+            BillboardWiring.Start();
+
+            var settings = App.Settings?.Current;
+            var snoozes = settings?.BillboardSnoozedUntil ?? new Dictionary<string, DateTime>(StringComparer.Ordinal);
+            if (DashboardBillboard.PruneSnoozes(snoozes, DateTime.UtcNow)) SaveBillboardSnoozes();
+
+            var deck = new BillboardDeck(
+                () => BillboardWiring.Providers,
+                BillboardWiring.Context,
+                snoozes,
+                SaveBillboardSnoozes);
+
+            var cardHost = new BillboardCardHost(deck);
+            cardHost.ActionRequested += RunBillboardAction;
+            slot.Children.Clear();
+            slot.Children.Add(cardHost);
+            _billboardHost = cardHost;
+
+            if (!_billboardProvidersHooked)
             {
-                var vm = new BillboardSlotVm();
-                FillBillboardSlot(vm, _billboardRack.Slots[i]);
-                _billboardSlots.Add(vm);
-            }
-            rack.ItemsSource = _billboardSlots;
-            for (int i = 0; i < Services.DashboardBillboard.Roster.Count; i++)
-            {
-                int index = i;
-                var dot = new RadioButton
+                _billboardProvidersHooked = true;
+                // Providers may raise from any thread; the deck only listens on the UI thread.
+                BillboardWiring.ProvidersChanged += (_, _) =>
                 {
-                    GroupName = "DashboardSlides",
-                    Style = (Style)dash!.BillboardDots.FindResource("SlideDot"),
-                    ToolTip = Loc.Get(Services.DashboardBillboard.CardAt(i).TitleKey),
+                    try { Dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(() => _billboardHost?.MarkDirty())); }
+                    catch (Exception ex) { App.Logger?.Debug("Billboard dirty mark failed: {E}", ex.Message); }
                 };
-                System.Windows.Automation.AutomationProperties.SetName(dot, (string)dot.ToolTip);
-                dot.Click += (_, _) => StepBillboardRack(index - (_billboardRack?.Slots[0] ?? 0), automatic: false);
-                dash.BillboardDots.Children.Add(dot);
             }
-            UpdateBillboardPosition();
-            dash!.BillboardPrevious.Click += (_, _) => StepBillboardRack(-1, automatic: false);
-            dash.BillboardNext.Click += (_, _) => StepBillboardRack(1, automatic: false);
-            dash.BillboardPause.Click += (_, _) =>
-            {
-                _billboardPaused = !_billboardPaused;
-                dash.BillboardPause.Content = _billboardPaused ? "▶" : "Ⅱ";
-                var label = Loc.Get(_billboardPaused ? "btn_program_resume" : "btn_program_pause");
-                dash.BillboardPause.ToolTip = label;
-                System.Windows.Automation.AutomationProperties.SetName(dash.BillboardPause, label);
-                RestartBillboardClock();
-            };
-            host.IsKeyboardFocusWithinChanged += (_, _) => RestartBillboardClock();
 
-            host.MouseEnter += (_, _) => { _billboardPointerOver = true; StopBillboardClock(); };
-            host.MouseLeave += (_, _) => { _billboardPointerOver = false; RestartBillboardClock(); };
-            host.IsVisibleChanged += (_, _) =>
-            {
-                if (host.IsVisible) RestartBillboardClock();
-                else StopBillboardClock();
-            };
-            _billboardWired = true;
+            cardHost.Begin();
         }
 
-        private void RestartBillboardClock()
+        /// <summary>The motion level changed (MainWindow.UiUpdates): the board re-reads its gates.</summary>
+        internal void RefreshBillboardMotion()
         {
-            StopBillboardClock();
-
-            var host = SettingsTab?.DashBillboard;
-            if (host == null || !host.IsVisible) return;
-            if (_billboardPaused || host.IsKeyboardFocusWithin || !MotionFx.AllowAmbientLoops) return;
-            if (!Services.DashboardBillboard.ShouldAdvance(_billboardPointerOver, onScreen: true)) return;
-
-            _billboardTimer = new DispatcherTimer(DispatcherPriority.Background)
-            {
-                Interval = TimeSpan.FromSeconds(Services.DashboardBillboard.RotateSeconds),
-            };
-            _billboardTimer.Tick += (_, _) => StepBillboardRack();
-            _billboardTimer.Start();
+            try { _billboardHost?.RefreshMotion(); }
+            catch (Exception ex) { App.Logger?.Debug("Billboard motion refresh failed: {E}", ex.Message); }
         }
 
-        private void StopBillboardClock()
+        private void SaveBillboardSnoozes()
         {
-            try { _billboardTimer?.Stop(); } catch { }
-            _billboardTimer = null;
-        }
-
-        /// <summary>One swap: the content of exactly one slot, and nothing else anywhere.</summary>
-        private void StepBillboardRack(int direction = 1, bool automatic = true)
-        {
-            try
-            {
-                var host = SettingsTab?.DashBillboard;
-                if (host?.IsVisible != true) return;
-                if (automatic && (_billboardPaused || host.IsKeyboardFocusWithin || !MotionFx.AllowAmbientLoops ||
-                    !Services.DashboardBillboard.ShouldAdvance(_billboardPointerOver, onScreen: true)))
-                {
-                    StopBillboardClock();
-                    return;
-                }
-                if (_billboardRack == null) return;
-
-                int count = Services.DashboardBillboard.Roster.Count;
-                int index = Services.DashboardBillboard.SlideIndex(_billboardRack.Slots[0], direction, count);
-                var next = Services.DashboardBillboard.NextRack(_billboardRack with { NextCard = index }, count);
-                _billboardRack = next;
-                int slot = next.ChangedSlot;
-                if (slot < 0 || slot >= _billboardSlots.Count) return;
-
-                FillBillboardSlot(_billboardSlots[slot], next.Slots[slot]);
-                FadeBillboardSlot(slot);
-                UpdateBillboardPosition();
-                if (!automatic) RestartBillboardClock();
-            }
-            catch (Exception ex) { App.Logger?.Warning(ex, "Dashboard billboard: rack step failed"); }
-        }
-
-        private void UpdateBillboardPosition()
-        {
-            if (SettingsTab == null || _billboardRack == null) return;
-            for (int i = 0; i < SettingsTab.BillboardDots.Children.Count; i++)
-                ((RadioButton)SettingsTab.BillboardDots.Children[i]).IsChecked = i == _billboardRack.Slots[0];
-        }
-
-        private void FillBillboardSlot(BillboardSlotVm vm, int cardIndex)
-        {
-            var card = Services.DashboardBillboard.CardAt(cardIndex);
-            vm.Id = card.Id;
-            vm.Eyebrow = Loc.Get(card.EyebrowKey);
-            vm.Title = Loc.Get(card.TitleKey);
-            vm.Line = Loc.Get(card.LineKey);
-            vm.Tip = Loc.Get(card.TitleKey) + "  ·  " + Loc.Get(card.LineKey);
-            vm.Plate = card.Art == BillboardArt.Plate;
-            vm.Art = LoadBillboardArt(card);
-        }
-
-        private static ImageSource? LoadBillboardArt(BillboardCard card)
-        {
-            try
-            {
-                // Missing art must leave the words readable over the shade, not throw.
-                var art = new BitmapImage();
-                art.BeginInit();
-                art.UriSource = new Uri(BillboardPoster.Uri(card), UriKind.Absolute);
-                art.CacheOption = BitmapCacheOption.OnLoad;
-                art.EndInit();
-                art.Freeze();
-                return art;
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Debug("Billboard art {Poster} did not load: {E}", card.Poster, ex.Message);
-                return null;
-            }
-        }
-
-        /// <summary>Fades the one slot that changed, and only when the motion gate allows it.</summary>
-        private void FadeBillboardSlot(int slot)
-        {
-            if (!MotionFx.AllowTransitions) return;
-            var rack = SettingsTab?.BillboardRackHost;
-            if (rack?.ItemContainerGenerator.ContainerFromIndex(slot) is not UIElement container) return;
-            container.BeginAnimation(UIElement.OpacityProperty, null);
-            container.Opacity = 0;
-            container.BeginAnimation(UIElement.OpacityProperty,
-                new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(BillboardFadeMs))
-                {
-                    EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
-                });
+            try { App.Settings?.Save(); }
+            catch (Exception ex) { App.Logger?.Debug("Billboard snooze save failed: {E}", ex.Message); }
         }
 
         /// <summary>
-        /// The only thing on the rack that ever leaves the page. A Link goes out through
-        /// BrowserLauncher - the four-strategy opener with the clipboard fallback, the same one the
-        /// Web App door uses - and a Tab is a plain in-app navigation.
+        /// A card's one button. A Link goes out through BrowserLauncher (the four-strategy opener
+        /// with the clipboard fallback); a Tab is plain in-app navigation; Launch starts a launcher
+        /// game the way the launcher does; a Callback goes back to the provider that issued it.
+        /// The deck already refused anything outside its rules (<see cref="DeckCard.Action"/>).
         /// </summary>
-        internal void BillboardCard_Click(object sender, RoutedEventArgs e)
+        private void RunBillboardAction(DeckCard card)
         {
             try
             {
-                if ((sender as FrameworkElement)?.DataContext is not BillboardSlotVm vm) return;
-                BillboardCard? card = null;
-                foreach (var c in Services.DashboardBillboard.Roster)
-                    if (string.Equals(c.Id, vm.Id, StringComparison.Ordinal)) { card = c; break; }
-                if (card == null) return;
-
-                if (card.Kind == BillboardTargetKind.Link)
-                    Helpers.BrowserLauncher.OpenUrlOrPrompt(card.Target, Loc.Get(card.TitleKey));
-                else
-                    ShowTab(card.Target);
+                var action = card.Action;
+                switch (action.Kind)
+                {
+                    case BillboardActionKind.Tab:
+                        ShowTab(action.Target);
+                        break;
+                    case BillboardActionKind.Link:
+                        Helpers.BrowserLauncher.OpenUrlOrPrompt(action.Target, card.Spec.Title);
+                        break;
+                    case BillboardActionKind.Launch:
+                        if (!LauncherHost.LaunchGame(action.Target))
+                            App.Logger?.Information("Billboard: launch of {Id} was refused", action.Target);
+                        break;
+                    case BillboardActionKind.Callback:
+                        card.Provider?.Invoke(action.Target);
+                        break;
+                }
             }
-            catch (Exception ex) { App.Logger?.Warning(ex, "Dashboard billboard: card click failed"); }
+            catch (Exception ex) { App.Logger?.Warning(ex, "Dashboard billboard: card action failed ({Id})", card.Spec.Id); }
         }
     }
 }

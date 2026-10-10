@@ -43,6 +43,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             InitializeComponent();
 
             _dailyCards = new[] { DailyCard0, DailyCard1, DailyCard2 };
+            DepthInit();   // QuestsTabView.Depth.cs
             RoadmapScrollContainer.TemplateApplied += (_, _) => _rescanParticles = true; // QuestsTabView.Fx.cs
 
             BtnQuestSubDaily.Click += (_, _) => ShowDailyWeekly();
@@ -130,14 +131,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 _ = Dialogs.MessageDialog.ShowAsync(owner, ConditioningControlPanel.Localization.Loc.Get("quest_reroll_limit_title"), ConditioningControlPanel.Localization.Loc.Get(key));
         }
 
-        // ponytail: there is NO QuestStreakService - the name in the note this replaces does not
-        // exist anywhere in the repo. The streak fix is
-        // ConditioningControlPanel/Services/Progression/SkillTreeService.cs:423 (UseStreakShield,
-        // for the charge count) plus the signed-in check, painted by
-        // ConditioningControlPanel/MainWindow/MainWindow.QuestsTab.cs:748. The dates it writes,
-        // AppSettings.StreakShieldUsedDates, are already in Core.
-        private void FixStreak() { }
-
         // ---- STREAK CALENDAR ------------------------------------------------------
 
         /// <summary>
@@ -145,7 +138,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// day, accent-filled when a daily quest was completed, gold ring on today, 🛡 on shielded
         /// days, joined by an accent line between consecutive completed days. Without a service
         /// (headless render) it paints a seven-pip sample so the band is not a blank.
-        /// ponytail: no streak-fix mode (pulsing missed days) - SpendStreakFix is a server round trip.
+        /// Fix mode (pulsing missed days) is QuestsTabView.StreakFix.cs.
         /// </summary>
         private void PaintStreakCalendar()
         {

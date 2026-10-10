@@ -21,14 +21,14 @@ public sealed class ProgramCapabilitiesTests
     private static readonly Dictionary<string, string[]> Needs = new()
     {
         ["first_week"] = new string[0],
-        ["presentation"] = new[] { "Ritual" },
-        ["the_takeover"] = new[] { "Ritual" },
-        ["kept"] = new[] { "KeywordTrigger", "Ritual" },
-        ["firmware_install"] = new[] { "KeywordTrigger" },
+        ["presentation"] = new string[0],
+        ["the_takeover"] = new string[0],
+        ["kept"] = new string[0],
+        ["firmware_install"] = new string[0],
     };
 
     [Fact]
-    public void EveryBuiltInProgramIsClassifiedAndOnlyFirstWeekIsEnrollable()
+    public void EveryBuiltInProgramIsClassifiedAndEnrollable()
     {
         var all = BuiltInPrograms.All();
         Assert.Equal(Needs.Keys.OrderBy(k => k), all.Select(p => p.Id).OrderBy(k => k));
@@ -39,8 +39,8 @@ public sealed class ProgramCapabilitiesTests
                 .Distinct().OrderBy(s => s);
             Assert.True(Needs[p.Id].OrderBy(s => s).SequenceEqual(missing), $"{p.Id}: {string.Join(",", missing)}");
         }
-        Assert.Equal(new[] { "first_week" },
-            all.Where(p => ProgramService.UnavailableTasks(p, ProgramCapabilities.IsAvailable).Count == 0).Select(p => p.Id));
+        // parity trunk: keyword triggers and rituals run here, so every built-in program is enrollable.
+        Assert.All(all, p => Assert.Empty(ProgramService.UnavailableTasks(p, ProgramCapabilities.IsAvailable)));
     }
 
     /// <summary>The QuestService call that raises each category.</summary>
@@ -57,6 +57,7 @@ public sealed class ProgramCapabilitiesTests
         [QuestCategory.Autonomy] = "TrackAutonomyMinutes",
         [QuestCategory.Lockdown] = "TrackLockdownCompleted",
         [QuestCategory.BlinkTrainer] = "TrackBlinkTrainerBlink",
+        [QuestCategory.KeywordTrigger] = "TrackKeywordTrigger",
     };
 
     [Fact]

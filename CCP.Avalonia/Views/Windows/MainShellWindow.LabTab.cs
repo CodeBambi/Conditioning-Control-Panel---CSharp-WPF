@@ -10,11 +10,21 @@
 //   RefreshDeviceSettingsLists genuinely is missing, and needs the camera/monitor enumeration
 //   below before it means anything.
 //
-// THE WEBCAM PILL IS DELIBERATELY LEFT AS A STUB. WebcamActivePill_Click is the camera's privacy
-// stop (GazeFocus.Stop, BlinkTrainer.Stop, Webcam.Stop, released together); half-porting it - a pill
-// that clears while the camera stays open - would lie about the most safety-relevant state this app
-// has. The MIC pill is wired (MainShellWindow.SheListening.cs UpdateMicPill/InitializeMicActivePill):
-// its click is DisarmVoiceMic, which on this head really closes the capture (StopVoiceInput).
+// UPDATE (wave A safety, platform#17): both pills and the 6-blink stop are now PORTED, in
+// MainShellWindow.SafetyPills.cs and MainShellWindow.BlinkStop.cs (DisarmVoiceMic and the tracker's
+// StopAsync exist on this head now). The note below is the history of why they waited:
+//
+//   MicActivePill_Click is WPF's DisarmVoiceMic - it clears wake-word and push-to-talk, cuts live
+//   capture, tears down the audio loop and the keyboard hook, and downgrades any open Voice Lock
+//   Card to a typed solve so the lock still holds. It is a PRIVACY STOP.
+//   WebcamActivePill_Click is the same affordance for the camera: GazeFocus.Stop, BlinkTrainer.Stop,
+//   Webcam.Stop, released together.
+//   Half-porting either one is worse than the stub. The restorable half is the part that hides the
+//   pill; the unrestorable half is the part that closes the device. A pill that vanishes on click
+//   while the capture device stays open is a control that LIES about the most safety-relevant state
+//   this app has. Neither pill can be shown at all on this head today (both are driven by
+//   App.Webcam/App.Speech state changes that never arrive), so the stub costs nothing and the
+//   half-port would cost the user's trust.
 //
 // The rest is genuinely the device: WebcamTrackingService and its debug counters, the calibration
 // and quick-recal flows, GazeSide/FocusGaze, the blink trainer's countdown,
@@ -99,17 +109,5 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
     public partial class MainShellWindow
     {
-        // WPF MainWindow.LabTab.cs MicActivePill_Click: the mic's privacy stop. Not Lockdown-gated, as WPF.
-        private void MicActivePill_Click(object? sender, global::Avalonia.Input.PointerPressedEventArgs e)
-        {
-            if (sender is global::Avalonia.Visual v && !e.GetCurrentPoint(v).Properties.IsLeftButtonPressed) return;   // WPF: left button
-            try { DisarmVoiceMic(); } catch (System.Exception ex) { Serilog.Log.Warning(ex, "MicActivePill_Click failed"); }
-        }
-
-        // REFUSED (see the header): the camera's panic stop (GazeFocus/BlinkTrainer/Webcam all
-        // released together). A pill that clears while the camera stays open is worse than one
-        // that does nothing.
-        private void WebcamActivePill_Click(object? sender, global::Avalonia.Input.PointerPressedEventArgs e) { }
-
     }
 }

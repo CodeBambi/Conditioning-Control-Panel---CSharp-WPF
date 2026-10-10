@@ -5,9 +5,11 @@
 // px throughout, as WPF's physical route did (GetWindowRect/SetWindowPos). The saved
 // AvatarTubeLeft/Top stay in WPF's DIPs, so a WPF-written file reads unchanged: px = dip * DesktopScaling.
 //
-// ponytail: skipped from WPF - make-room (moving main so she fits), the mirrored art on a right
-// dock, measured mod-art insets (stock 239/353 are used), Ctrl+scroll zoom (so AvatarTubeScale is
-// neither applied nor written) and the floating bob. Add each when a user misses it.
+// The mirrored art on a right dock and the Win32 owner pairing live in AvatarTubeWindow.Flip.cs.
+//
+// ponytail: skipped from WPF - make-room (moving main so she fits), measured mod-art insets (stock
+// 239/353 are used), Ctrl+scroll zoom and the floating bob. Add each when a user misses it.
+// The detached menu's Shrink / Grow / Dismiss are ported at the foot of this file.
 
 using System;
 using System.Linq;
@@ -27,6 +29,10 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
         private const double DockDaylight = 3;           // WPF Windowing.cs:1079
 
         private double _scaleFactor = 1.0;
+        // WPF Windowing.cs:106-108: the user's own size for the free tube, 50%..150% in 25% steps.
+        internal const double MinScale = 0.5, MaxScale = 1.5, ScaleStep = 0.25;
+        private double _currentScale = 1.0;
+        internal double CurrentScale => _currentScale;
         private bool _restoringPlacement;
         private bool _restorePending = true;
 
@@ -47,6 +53,17 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             else Log.Warning("AvatarTubeWindow: MenuItemDetach not found");
             if (this.FindControl<MenuItem>("MenuItemAttach") is { } attach) attach.Click += (_, _) => AttachFromMenu();
             else Log.Warning("AvatarTubeWindow: MenuItemAttach not found");
+            if (this.FindControl<MenuItem>("MenuItemShrink") is { } shrink) shrink.Click += (_, _) => StepScale(-ScaleStep);
+            if (this.FindControl<MenuItem>("MenuItemGrow") is { } grow) grow.Click += (_, _) => StepScale(+ScaleStep);
+            if (this.FindControl<MenuItem>("MenuItemDismiss") is { } dismiss) dismiss.Click += (_, _) => DismissFromMenu();
+            // WPF Window_PreviewMouseWheel (Windowing.cs:2393): Ctrl+scroll resizes the free tube.
+            AddHandler(PointerWheelChangedEvent, (_, e) =>
+            {
+                if (WheelZoom(e.KeyModifiers.HasFlag(global::Avalonia.Input.KeyModifiers.Control), e.Delta.Y)) e.Handled = true;
+            }, global::Avalonia.Interactivity.RoutingStrategies.Tunnel);
+            // WPF Windowing.cs:2716: the saved scale comes back with her (#669).
+            var saved = CoreSettings.Current.AvatarTubeScale;
+            if (!double.IsNaN(saved) && saved > 0) _currentScale = Math.Clamp(saved, MinScale, MaxScale);
             foreach (var c in DragSurfaces()) c.PointerPressed += OnDragPointerPressed;
             // The WM owns the drag, so the release may never reach us: the first pointer event
             // after it (release, or the next enter/move) saves where she ended up.
@@ -106,7 +123,10 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             RefreshTubeGlass();
             RefreshTubeLayout();
             ApplyModeChrome();
+            ApplyTubeSize();   // the user's scale applies to the free tube only; docked she is stock size
+            if (!attached) ApplyTubeArtFlip(false);   // WPF Detach: the free tube reads unmirrored
             UpdatePosition();
+            ApplyNativeOwner(attached);
             if (attached && _parentWindow != null) Platform.X11Overlay.RestackAbove(this, _parentWindow);
             if (!attached) Platform.X11Overlay.SetInputRect(this, null);
             Log.Information("Avatar tube {Mode}", attached ? "attached" : "detached");
@@ -116,7 +136,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
         }
 
         /// <summary>Topmost, drag cursors, frame hit-testing and the menu, per WPF's mode switch and
-        /// UpdateContextMenuForState. Shrink/Grow/Dismiss stay hidden: zoom and dismiss did not port.</summary>
+        /// UpdateContextMenuForState: Shrink, Grow and Dismiss belong to the free tube only.</summary>
         private void ApplyModeChrome()
         {
             Topmost = !_isAttached;
@@ -125,6 +145,10 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             _imgTubeFrame.IsHitTestVisible = !_isAttached;
             if (this.FindControl<MenuItem>("MenuItemDetach") is { } d) d.IsVisible = _isAttached;
             if (this.FindControl<MenuItem>("MenuItemAttach") is { } a) a.IsVisible = !_isAttached;
+            if (this.FindControl<MenuItem>("MenuItemShrink") is { } sh) sh.IsVisible = !_isAttached;
+            if (this.FindControl<MenuItem>("MenuItemGrow") is { } gr) gr.IsVisible = !_isAttached;
+            if (this.FindControl<MenuItem>("MenuItemDismiss") is { } di) di.IsVisible = !_isAttached;
+            UpdateResizeMenuState();
         }
 
         /// <summary>WPF starts a manual drag only on her visible parts; BeginMoveDrag hands it to the WM.</summary>
@@ -156,8 +180,94 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             if (screen == null) return;
             var wa = screen.WorkingArea;
             _scaleFactor = TubeWindowMath.FitScale(wa.Width / screen.Scaling, wa.Height / screen.Scaling);
-            Width = DesignWidth * _scaleFactor;
-            Height = DesignHeight * _scaleFactor;
+            ApplyTubeSize(force: true);
+        }
+
+        private double _appliedUserScale = 1.0;
+
+        /// <summary>The window is the art: stock fit when docked, times the user's scale when free.
+        /// A mode change with nothing to change leaves the fitted size alone.</summary>
+        private void ApplyTubeSize(bool force = false)
+        {
+            var user = _isAttached ? 1.0 : _currentScale;
+            if (!force && Math.Abs(user - _appliedUserScale) < 0.001) return;
+            _appliedUserScale = user;
+            Width = DesignWidth * _scaleFactor * user;
+            Height = DesignHeight * _scaleFactor * user;
+        }
+
+        /// <summary>WPF UpdateResizeMenuState (Windowing.cs:2513): the end stops grey out and say so.</summary>
+        private void UpdateResizeMenuState()
+        {
+            if (this.FindControl<MenuItem>("MenuItemShrink") is { } shrink)
+            {
+                shrink.IsEnabled = _currentScale > MinScale;
+                shrink.Header = global::ConditioningControlPanel.Localization.Loc.Get(shrink.IsEnabled ? "menu_shrink" : "menu_shrink_min");
+                shrink.Foreground = shrink.IsEnabled ? global::Avalonia.Media.Brushes.White : global::Avalonia.Media.Brushes.Gray;
+            }
+            if (this.FindControl<MenuItem>("MenuItemGrow") is { } grow)
+            {
+                grow.IsEnabled = _currentScale < MaxScale;
+                grow.Header = global::ConditioningControlPanel.Localization.Loc.Get(grow.IsEnabled ? "menu_grow" : "menu_grow_max");
+                grow.Foreground = grow.IsEnabled ? global::Avalonia.Media.Brushes.White : global::Avalonia.Media.Brushes.Gray;
+            }
+        }
+
+        /// <summary>WPF MenuItemShrink_Click / MenuItemGrow_Click (ChatInput.cs:1021, :1040): one step,
+        /// free tube only, saved (#669), and she is nudged back on screen if the new size left it.</summary>
+        internal void StepScale(double delta)
+        {
+            try
+            {
+                if (_isAttached) return;
+                var next = Math.Clamp(_currentScale + delta, MinScale, MaxScale);
+                if (Math.Abs(next - _currentScale) < 0.001) return;
+                _currentScale = next;
+                ApplyTubeSize();
+                UpdateResizeMenuState();
+                CoreSettings.Current.AvatarTubeScale = _currentScale;
+                CoreSettings.Save();
+                KeepOnScreenAfterResize();
+            }
+            catch (Exception ex) { Log.Warning(ex, "AvatarTubeWindow: resize from the menu failed"); }
+        }
+
+        /// <summary>WPF Window_PreviewMouseWheel: only detached and only with Ctrl held; up is bigger, down
+        /// smaller, one step a notch, clamped like the menu's Grow / Shrink. True when the wheel was taken.</summary>
+        internal bool WheelZoom(bool ctrl, double deltaY)
+        {
+            if (_isAttached || !ctrl || deltaY == 0) return false;
+            StepScale(deltaY > 0 ? +ScaleStep : -ScaleStep);
+            return true;
+        }
+
+        private void KeepOnScreenAfterResize()
+        {
+            var screen = Screens.ScreenFromWindow(this) ?? Screens.Primary;
+            if (screen == null) return;
+            var wa = screen.WorkingArea;
+            var size = TubePixelSize;
+            int x = Math.Max(wa.X, Math.Min(Position.X, wa.Right - size.Width));
+            int y = Math.Max(wa.Y, Math.Min(Position.Y, wa.Bottom - size.Height));
+            if (x != Position.X || y != Position.Y) Position = new PixelPoint(x, y);
+        }
+
+        /// <summary>WPF MenuItemDismiss_Click (ChatInput.cs:400): dismissing is a decision, so
+        /// AvatarEnabled is saved off (#888), she re-attaches and hides, and the Companion room's
+        /// switch re-reads. The shell's SetAvatarEnabled does the save, the hide and the sync.</summary>
+        internal void DismissFromMenu()
+        {
+            try
+            {
+                Log.Information("User dismissed avatar - hiding and reattaching");
+                CoreSettings.Current.AvatarEnabled = false;
+                CoreSettings.Save();
+                if (!_isAttached) SetAttached(true);
+                var shell = _parentWindow as Windows.MainShellWindow ?? Windows.MainShellWindow.Current;
+                if (shell != null) { shell.HideAvatarTube(); shell.SyncHero(); }
+                else Hide();
+            }
+            catch (Exception ex) { Log.Warning(ex, "AvatarTubeWindow: dismiss failed"); }
         }
 
         private PixelSize TubePixelSize => PixelSize.FromSize(new Size(Width, Height), DesktopScaling);
@@ -175,20 +285,54 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             var size = TubePixelSize;
             int rightInset = (int)Math.Round(Math.Max(0, (TubeArtRightPadding - SeamOverlapOverMain) * art - day));
             int leftInset = (int)Math.Round(Math.Max(0, TubeArtLeftPadding * art - day));
-            var plan = TubeDockPlacement.Place(ToBox(pr), size.Width, size.Height, leftInset, rightInset,
-                (int)Math.Round(VerticalOffset * art), ToBox(work));
+            // Docked right the art is mirrored about her centre (WPF Windowing.cs:866-871).
+            int mirroredLeftInset = (int)Math.Round(Math.Max(0, MirroredLeftInsetUnits() * art - day));
+            var plan = TubeDockPlacement.Place(ToBox(pr), size.Width, size.Height,
+                leftInset, rightInset, (int)Math.Round(VerticalOffset * art), ToBox(work), mirroredLeftInset);
+
+            // WPF sanity check: reject positions far off the virtual desktop (transitional garbage
+            // during minimise churn, e.g. Windows parks a minimised window at -32000,-32000).
+            var vs = VirtualDesktop();
+            if (plan.Left < vs.X - 2000 || plan.Left > vs.Right + 2000 || plan.Top < vs.Y - 1000 || plan.Top > vs.Bottom + 1000)
+            {
+                Log.Information("AvatarTube dock rejected off-desktop: tube=({L},{T}) main=({ML},{MT} {MW}x{MH}) desktop=({DL},{DT},{DR},{DB})",
+                    plan.Left, plan.Top, pr.X, pr.Y, pr.Width, pr.Height, vs.X, vs.Y, vs.Right, vs.Bottom);
+                return;
+            }
+
+            ApplyTubeArtFlip(plan.Side == DockSide.Right);
+            // Side or size changes only: a drag moves main every frame and must not flood the log.
+            string decision = $"{plan.Side}|{size}";
+            if (decision != _lastDockDecision)
+            {
+                _lastDockDecision = decision;
+                Log.Information("AvatarTube dock: side={Side} tube=({L},{T} {W}x{H}) main=({ML},{MT} {MW}x{MH}) work=({WL},{WT},{WR},{WB}) insets={IL}/{IR}/{IM}",
+                    plan.Side, plan.Left, plan.Top, size.Width, size.Height, pr.X, pr.Y, pr.Width, pr.Height,
+                    work.X, work.Y, work.Right, work.Bottom, leftInset, rightInset, mirroredLeftInset);
+            }
             Position = new PixelPoint(plan.Left, plan.Top);
             // WPF's transparent margin was click-through (layered window); an X11 window takes
-            // clicks on every pixel, so cut her input down to everything left of the seam or the
-            // shell's rail under that margin goes dead. The cut follows the side she docked to: on a
-            // right dock her LEFT margin is the one over the shell. Detach gives the whole window back.
+            // clicks on every pixel, so cut her input down to her side of the seam or the shell
+            // under that margin goes dead: left of it on a left dock, right of the mirrored art's
+            // left edge on a right dock; floating over the shell cuts both margins (audit #1847).
+            // Detach gives the whole window back.
             InputRect = plan.Side switch
             {
                 DockSide.Left => new PixelRect(0, 0, size.Width - rightInset, size.Height),
-                DockSide.Right => new PixelRect(leftInset, 0, size.Width - leftInset, size.Height),
-                _ => new PixelRect(leftInset, 0, Math.Max(0, size.Width - leftInset - rightInset), size.Height),   // floating over the shell: both margins
+                DockSide.Right => new PixelRect(mirroredLeftInset, 0, Math.Max(0, size.Width - mirroredLeftInset), size.Height),
+                _ => new PixelRect(leftInset, 0, Math.Max(0, size.Width - leftInset - rightInset), size.Height),
             };
             Platform.X11Overlay.SetInputRect(this, InputRect);
+        }
+
+        private string? _lastDockDecision;
+
+        /// <summary>The union of every screen's bounds (px); a huge box when there is no screen answer.</summary>
+        private PixelRect VirtualDesktop()
+        {
+            PixelRect? u = null;
+            foreach (var sc in Screens.All) u = u is { } r ? r.Union(sc.Bounds) : sc.Bounds;
+            return u ?? new PixelRect(-100000, -100000, 200000, 200000);
         }
 
         /// <summary>The attached tube's input region (window px) as last set by <see cref="UpdatePosition"/>.</summary>

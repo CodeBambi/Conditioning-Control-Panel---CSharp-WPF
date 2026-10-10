@@ -25,6 +25,7 @@ namespace CCP.Avalonia.Tests;
 /// <summary>The profile wardrobe on this head (WPF MainWindow.ProfileWardrobe + the two dialogs):
 /// real registry art on the hero, the charms placed by Core WardrobeStageGeometry, and the
 /// Customize/Wardrobe dialogs offering and arranging real items.</summary>
+[Collection(RunsAloneCollection.Name)]   // opens a shell: every Avalonia test shares one UI thread (X12)
 public sealed class ProfileWardrobeTests
 {
     private const string Deco = "bambi_silk_bow", Charm1 = "bambi_plush_bunny", Charm2 = "bambi_bubble_wand";
@@ -68,6 +69,8 @@ public sealed class ProfileWardrobeTests
                         Dispatcher.UIThread.RunJobs();
                     }
                     var page = shell.ProfilePage!;
+                    Assert.NotNull(page.FindControl<Image>("ImgStatXp")!.Source);          // The Record wears its badges
+                    Assert.NotNull(page.FindControl<Image>("ImgStatAchievements")!.Source);
                     var deco = page.ProfileHeroAvatar.FindControl<Image>("DecoLayer")!;
                     Assert.True(deco.IsVisible);
                     Assert.NotNull(deco.Source);
@@ -104,6 +107,28 @@ public sealed class ProfileWardrobeTests
                     // Per-slot validation: a charm id in the decoration slot is not worn.
                     shell.ApplyViewedProfileWardrobe(new ProfileCosmetics { AvatarDeco = Charm1 });
                     Assert.False(deco.IsVisible);
+
+                    // The card paint: a banner, an accent and a title land on the hero, and come off again.
+                    var banner = page.FindControl<Border>("ProfileHeroBanner")!;
+                    var title = page.FindControl<TextBlock>("TxtProfileEquippedTitle")!;
+                    foreach (var bannerId in CosmeticsPool.BannerIds)
+                    {
+                        shell.ApplyViewedProfileWardrobe(new ProfileCosmetics { BannerId = bannerId });
+                        Assert.True(banner.Background != null, $"banner {bannerId} painted nothing");
+                    }
+                    var accent = ProfileCosmetics.AccentSwatches[0];
+                    shell.ApplyViewedProfileWardrobe(new ProfileCosmetics { Accent = accent, TitleId = Achievement.All.Keys.First() });
+                    Assert.Null(banner.Background);
+                    Assert.True(title.IsVisible);
+                    var edge = Assert.IsType<SolidColorBrush>(page.ProfileHeroCard.BorderBrush);
+                    var want = Color.Parse(accent);
+                    Assert.Equal((want.R, want.G, want.B), (edge.Color.R, edge.Color.G, edge.Color.B));
+                    var glow = page.FindControl<Border>("ProfileHeroGlow")!;
+                    Assert.True(glow.IsVisible);
+                    Assert.Equal(1, glow.BoxShadow.Count);
+                    shell.ApplyViewedProfileWardrobe(null);
+                    Assert.False(title.IsVisible);
+                    Assert.False(glow.IsVisible);
                 }
                 finally { shell.Close(); }
             });

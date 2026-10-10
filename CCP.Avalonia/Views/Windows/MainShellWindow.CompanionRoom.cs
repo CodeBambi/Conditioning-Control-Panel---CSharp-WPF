@@ -22,18 +22,9 @@
 // STILL HEAD-SIDE, each with the exact symbol and where it lives today:
 //   CompanionRoom / SyncCompanionRoom - CompanionRoomRuntimeVm (path above). CompanionTabView on
 //                            this head publishes no Vm, deliberately.
-//   SetSlutMode / ActivatePersonalityPreset - PersonalityService.Shared, ExplicitContentGate and the
-//                            acknowledgement dialog are all reachable now (the tube's Personality
-//                            submenu uses them: AvatarTube/AvatarTubeWindow.ContentGates.cs). What is
-//                            missing is a CALLER: the room's Z4 chip row / slut-mode cell are inert
-//                            (see NO CALLER YET below). Port both WITH the gate when those cells land.
-//   SetCustomApiKey        - Services.Auth.SecureStringHelper.Protect
-//                            (ConditioningControlPanel/Services/Auth/SecureStringHelper.cs).
-//                            CompanionPromptSettings.OpenAiCompatibleApiKey holds a DPAPI blob,
-//                            so writing the typed key there on this head would put a BYO API key
-//                            in settings.json IN THE CLEAR. CoreSecrets is the seam that fixes
-//                            this (CoreSecrets.ApiKey), but nothing READS the key from it yet, so
-//                            half the pair is worse than neither. Blocked on purpose.
+// RESTORED since (rows-companion-room): SetSlutModeAsync / ActivatePersonalityPresetAsync with the
+//                            acknowledgement gate, called by Z4 (MakeHerYoursView's live viewmodel).
+//   SetCustomApiKey        - PORTED (ai#8): Platform/ApiKeyProtector.SaveCustomKey, called by EngineRoomVm.
 //   the awareness observer - App.WindowAwareness.Start/Stop
 //                            (ConditioningControlPanel/Services/Awareness/). Dropped from
 //                            SetAwarenessEnabled and EnsureAwarenessV2Consent below: there is no
@@ -57,6 +48,7 @@ using System.Linq;
 using Avalonia.LogicalTree;
 using ConditioningControlPanel.Avalonia.Views.Dialogs;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Services;
 using ConditioningControlPanel.Services.Awareness;
 using Serilog;
 
@@ -101,17 +93,76 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>
         /// Mute/unmute her voice - the old ChkMuteAvatar_Changed body.
         ///
-        /// <para>The setting is written and persisted; the live
-        /// <c>AvatarTubeWindow.SetMuteAvatar</c> call is dropped because that method is in the
-        /// tube's Speech.cs partial, which did not cross. Nothing on this head speaks yet, so the
-        /// stored value is the whole of the behaviour there is to have - and it is the value the
-        /// speech pipeline will read the moment it lands.</para>
+        /// <para>The tube reads the setting live (<c>AvatarTubeWindow.IsMuted</c>), so the next
+        /// line obeys it; the voice playing right now is cut and the tube's quick menu repainted,
+        /// the same as the tube's own Mute item (<c>OnMenuMute</c>).</para>
         /// </summary>
         internal void SetAvatarMuted(bool muted)
         {
             if (_roomLoading) return;
             CoreSettings.Current.AvatarMuted = muted;
             CoreSettings.Save();
+            try
+            {
+                var tube = AvatarTube.AvatarTubeWindow.Live;
+                if (muted) tube?.StopSpokenAudio();
+                tube?.UpdateQuickMenuState();
+            }
+            catch (Exception ex) { Log.Debug(ex, "SetAvatarMuted: tube refresh"); }
+        }
+
+        // =====================================================================================
+        //  personality (Z4) - WPF MainWindow.CompanionRoom.cs:121-178; async where WPF blocked.
+        // =====================================================================================
+
+        internal async System.Threading.Tasks.Task<bool> SetSlutModeAsync(bool enabled)
+        {
+            var s = CoreSettings.Current;
+            if (_roomLoading) return s.SlutModeEnabled;
+            if (s.SlutModeEnabled == enabled) return enabled;
+
+            if (enabled
+                && ExplicitContentGate.RequiresAcknowledgement(PersonalityService.Shared.GetActivePreset(), slutModeOn: true)
+                && !ExplicitContentGate.IsAlreadyAcknowledged(s.CompanionPrompt))
+            {
+                if (!await new ExplicitContentAcknowledgementDialog().ShowDialogSafe<bool>(this)) return s.SlutModeEnabled;
+                if (s.CompanionPrompt != null) ExplicitContentGate.MarkAcknowledged(s.CompanionPrompt);
+            }
+
+            s.SlutModeEnabled = enabled;
+            CoreSettings.Save();
+            return enabled;
+        }
+
+        internal async System.Threading.Tasks.Task<bool> ActivatePersonalityPresetAsync(string? presetId)
+        {
+            if (string.IsNullOrEmpty(presetId)) return false;
+            var preset = PersonalityService.Shared.GetPresetById(presetId);
+            if (preset == null) return false;
+
+            var s = CoreSettings.Current;
+            if (ExplicitContentGate.RequiresAcknowledgement(preset, s.SlutModeEnabled)
+                && !ExplicitContentGate.IsAlreadyAcknowledged(s.CompanionPrompt))
+            {
+                if (!await new ExplicitContentAcknowledgementDialog().ShowDialogSafe<bool>(this)) return false;
+                if (s.CompanionPrompt != null)
+                {
+                    ExplicitContentGate.MarkAcknowledged(s.CompanionPrompt);
+                    CoreSettings.Save();
+                }
+            }
+
+            if (!PersonalityService.Shared.SetActivePreset(presetId)) return false;
+            Log.Information("Companion room: personality preset switched to {Name}",
+                CoreMods.Service?.GetPersonalityDisplayName(preset.Name) ?? preset.Name);
+            return true;
+        }
+
+        /// <summary>WPF BtnCustomizeCompanion_Click (MainWindow.Patreon.cs:1298): Z4's trait/prompt/fork links.</summary>
+        internal async System.Threading.Tasks.Task OpenCompanionPromptEditorAsync()
+        {
+            CoreBark.NotifyUiAction("customize_companion");
+            await new CompanionPromptEditorDialog().ShowDialogSafe(this);
         }
 
         // =====================================================================================

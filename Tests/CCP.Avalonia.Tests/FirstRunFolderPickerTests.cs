@@ -24,7 +24,9 @@ namespace CCP.Avalonia.Tests;
 /// First-run wizard "Choose a content folder": the picker opens on the click itself, owned by the
 /// wizard (not deferred until the wizard closes, which a user read as "does nothing"), and the
 /// folder it returns is applied like the shell's picker and shown on the button.
+/// Runs alone: it binds a fake storage provider for the whole process while it yields.
 /// </summary>
+[Collection(RunsAloneCollection.Name)]
 public sealed class FirstRunFolderPickerTests
 {
     [Fact]
@@ -44,8 +46,14 @@ public sealed class FirstRunFolderPickerTests
         FirstRunWizard? wizard = null;
         try
         {
-            using var scope = BindStorageProvider(factory);
-            wizard = new FirstRunWizard();
+            // The fake is bound process-wide, so it must never be live across an await (another
+            // test's window would get it, WindowDropTests x8). The wizard caches its provider on
+            // first read, so read it inside the scope and drop the binding before anything waits.
+            using (BindStorageProvider(factory))
+            {
+                wizard = new FirstRunWizard();
+                _ = wizard.StorageProvider;
+            }
             wizard.Show();
             Dispatcher.UIThread.RunJobs();
 
@@ -119,8 +127,11 @@ public sealed class FirstRunFolderPickerTests
     private static IDisposable BindStorageProvider(IStorageProviderFactory factory)
     {
         var locatorType = typeof(AvaloniaObject).Assembly.GetType("Avalonia.AvaloniaLocator")!;
-        var locator = locatorType.GetProperty("CurrentMutable")!.GetValue(null)!;
-        var scope = (IDisposable)locator.GetType().GetMethod("EnterScope")!.Invoke(locator, null)!;
+        var mutable = locatorType.GetProperty("CurrentMutable")!;
+        var scope = (IDisposable)locatorType.GetMethod("EnterScope")!.Invoke(mutable.GetValue(null), null)!;
+        // Re-read AFTER EnterScope: the locator read before it is the process root, and a Bind there
+        // outlives the scope (every later window got this fake, WindowDropTests x8).
+        var locator = mutable.GetValue(null)!;
         var registration = locator.GetType().GetMethods()
             .Single(m => m.Name == "Bind" && m.IsGenericMethodDefinition && m.GetParameters().Length == 0)
             .MakeGenericMethod(typeof(IStorageProviderFactory)).Invoke(locator, null)!;

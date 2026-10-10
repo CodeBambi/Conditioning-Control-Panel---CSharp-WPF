@@ -207,7 +207,7 @@ public sealed class AchievementsTabFxTests
     });
 
     [Fact]
-    public Task LeaderboardNavShowsSeasonRecapReviewOnlyWithASnapshot() => AvaloniaTestDispatcher.RunAsync(() =>
+    public Task LeaderboardPillNeverShowsTheRetiredRecapButton_TheReViewHandlerStillWorks() => AvaloniaTestDispatcher.RunAsync(() =>
     {
         Setup();
         var recaps = Path.Combine(CorePaths.UserData, "season-recaps");
@@ -218,19 +218,29 @@ public sealed class AchievementsTabFxTests
             shell = new MainShellWindow();
             shell.Show();
             Dispatcher.UIThread.RunJobs();
-            var nav = shell.Named<Button>("BtnLeaderboard")!;
             var review = shell.Named<LeaderboardTabView>("LeaderboardTab")!.FindControl<Button>("BtnViewSeasonRecap")!;
 
-            nav.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            // 7.1.5 nav: Leaderboard is a Social pill (the rail's BtnLeaderboard row is retired).
+            shell.ShowTab("availablesubjects");
             Dispatcher.UIThread.RunJobs();
+            void Nav()
+            {
+                shell.NavStrip!.ChooseForTests("leaderboard");
+                Dispatcher.UIThread.RunJobs();
+            }
+
+            Nav();
+            Assert.Equal("leaderboard", shell.CurrentTab);
             Assert.False(review.IsVisible);                      // nothing to re-view
 
+            // Seasons are retired (owner, 2026-09-24; 7.1.5 LeaderboardTabView SeasonRecapHost is
+            // Collapsed for good): a snapshot on disk no longer reveals the re-view button.
             SeasonRecapStore.Save(new SeasonRecapSnapshot { SeasonKey = "2026-08" });
-            nav.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-            Dispatcher.UIThread.RunJobs();
-            Assert.True(review.IsVisible);
+            Nav();
+            Assert.False(review.IsVisible);
 
-            review.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            // The handler is still ported (7.1.5 keeps it for its callers): it opens the card.
+            shell.BtnViewSeasonRecap_Click(review, new RoutedEventArgs(Button.ClickEvent));
             Dispatcher.UIThread.RunJobs();
             Assert.NotNull(shell.LastSeasonRecap);
             Assert.True(shell.LastSeasonRecap!.IsVisible);

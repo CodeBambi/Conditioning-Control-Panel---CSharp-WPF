@@ -248,7 +248,7 @@
                                                            FontSize="11" FontStyle="Italic" Margin="0,8,0,0" TextWrapping="Wrap"/>
                                             </StackPanel>
 
-                                            <!-- Execution is intentionally unavailable in this browse-only layer. -->
+                                            <!-- Enroll (MainShellWindow.EnrollProgramAsync); disabled with its reason when refused. -->
                                             <Button Grid.Row="3" Margin="18,16,18,16"
                                                     HorizontalAlignment="Stretch"
                                                     HorizontalContentAlignment="Center"
@@ -335,9 +335,9 @@
                         </Border>
                     </StackPanel>
 
-                    <!-- Linux-only (CHECKPOINT A, docs/avalonia-decisions.md 2026-10-09): ProgramService is
-                         read-only here and no rollover runs, so the run/lapsed/graduated panels show the
-                         state as last saved. Shown with any of them; the lifecycle buttons stay hidden. -->
+                    <!-- Linux-only (docs/avalonia-decisions.md, programs 3a): shown with any run panel only
+                         while ProgramService.IsReadOnly (programs.json stamped by a newer build); the
+                         lifecycle buttons are greyed then. -->
                     <Border x:Name="RunReadOnlyNote" IsVisible="False"
                             Padding="14,10" CornerRadius="10" Margin="0,0,0,12"
                             Background="{DynamicResource SurfaceBgBrush}"
@@ -493,9 +493,8 @@
                                 </StackPanel>
 
                                 <!-- Pause / Resume + Withdraw. Withdraw is always here, always plain.
-                                     Hidden on this head until programs slice 3 (CHECKPOINT B): read-only. -->
-                                <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Top"
-                                            IsVisible="False">
+                                     Pause/Resume is hidden only while the service is read-only. -->
+                                <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Top">
                                     <Button x:Name="BtnProgramPauseResume"
                                             Theme="{StaticResource SecondaryButton}" MinWidth="90"
                                             HorizontalContentAlignment="Center"
@@ -939,9 +938,10 @@
                                         <Button x:Name="BtnStartTodaySession"
                                                 Grid.Row="0" Grid.Column="3" MinWidth="190"
                                                 HorizontalContentAlignment="Center"
-                                                Theme="{StaticResource PinkButton}" IsVisible="False"
+                                                Theme="{StaticResource PinkButton}"
+                                                ToolTip.ShowOnDisabled="True"
                                                 Click="BtnStartTodaySession_Click">
-                                            <TextBlock Text="{loc:Str btn_program_start_session}"/>
+                                            <TextBlock x:Name="TxtStartTodaySession" Text="{loc:Str btn_program_start_session}"/>
                                         </Button>
 
                                         <!-- Live progress bar (hidden unless the program's own session is in flight) -->
@@ -1265,15 +1265,16 @@
                                            Foreground="{DynamicResource TextMutedBrush}"
                                            FontSize="13" TextWrapping="Wrap" LineHeight="20"
                                            Margin="0,10,0,0" MaxWidth="620" HorizontalAlignment="Left"/>
-                                <!-- Restart / Withdraw: hidden until programs slice 3 (read-only head). -->
-                                <StackPanel Orientation="Horizontal" Margin="0,20,0,0" IsVisible="False">
+                                <!-- Restart / Withdraw. -->
+                                <StackPanel Orientation="Horizontal" Margin="0,20,0,0">
                                     <Button x:Name="BtnProgramRestart"
                                             Theme="{StaticResource PinkButton}" MinWidth="150"
                                             HorizontalContentAlignment="Center"
                                             Click="BtnProgramRestart_Click">
                                         <TextBlock Text="{loc:Str btn_program_restart}"/>
                                     </Button>
-                                    <Button Theme="{StaticResource SecondaryButton}" MinWidth="120"
+                                    <Button x:Name="BtnProgramLapsedWithdraw"
+                                            Theme="{StaticResource SecondaryButton}" MinWidth="120"
                                             HorizontalContentAlignment="Center"
                                             Margin="10,0,0,0" Click="BtnProgramWithdraw_Click">
                                         <TextBlock Text="{loc:Str btn_program_withdraw}"/>
@@ -1307,7 +1308,7 @@
                                 <TextBlock x:Name="TxtGraduatedStats"
                                            Foreground="{DynamicResource TextMutedBrush}"
                                            FontSize="12" Margin="0,6,0,0" TextWrapping="Wrap"/>
-                                <Button x:Name="BtnProgramDismissGraduated" IsVisible="False"
+                                <Button x:Name="BtnProgramDismissGraduated"
                                         Theme="{StaticResource PinkButton}" MinWidth="130"
                                         HorizontalAlignment="Left" HorizontalContentAlignment="Center"
                                         Margin="0,20,0,0"

@@ -101,7 +101,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private static VlcFrameSink? _sink;
 
         /// <summary>The global panic listener can stop the game right now (as MandatoryVideoOverlay). Tests swap it.</summary>
-        internal static Func<bool> PanicListenerLive = () => X11PanicKey.IsListening && X11PanicKey.BoundKeycode != 0;
+        internal static Func<bool> PanicListenerLive = () => PanicListeners.Live;
         internal static VlcFrameSink? Sink => _sink;
 
         // Multi-monitor support - static shared state

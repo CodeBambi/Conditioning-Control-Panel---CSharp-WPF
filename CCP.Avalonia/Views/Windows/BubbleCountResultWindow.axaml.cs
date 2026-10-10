@@ -239,7 +239,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             if (!int.TryParse((_txtAnswer.Text ?? "").Trim(), out int answer))
             {
-                ShowFeedbackOnAll("Please enter a number!", Colors.Orange);
+                ShowFeedbackOnAll("Please enter a number.", Colors.Orange);
                 _txtAnswer.Clear();
                 _txtAnswer.Focus();
                 return;

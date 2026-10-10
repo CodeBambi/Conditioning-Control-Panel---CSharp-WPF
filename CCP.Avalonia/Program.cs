@@ -93,7 +93,7 @@ namespace ConditioningControlPanel.Avalonia
             // success and changes nothing, so only the server's answer proves it works.
             // Run it inside a nested compositor - scripts/x11-overlay-probe.sh does that.
             if (Array.IndexOf(args, "--x11-probe") >= 0)
-                return X11OverlayProbe.Run();
+                return LinuxOnlyCheck("--x11-probe") ?? X11OverlayProbe.Run();
 
             // --overlay-check opens one click-through override-redirect overlay per screen and
             // reads map state, override_redirect, depth, input shape and geometry back from the
@@ -111,17 +111,28 @@ namespace ConditioningControlPanel.Avalonia
 
             // --notify-check: org.freedesktop.Notifications Notify -> id -> CloseNotification, live.
             if (Array.IndexOf(args, "--notify-check") >= 0)
-                return Platform.OsNotifications.CheckAsync().GetAwaiter().GetResult();
+                return LinuxOnlyCheck("--notify-check") ?? Platform.OsNotifications.CheckAsync().GetAwaiter().GetResult();
 
             // --portal-check: GlobalShortcuts CreateSession -> Response 0 -> Session.Close, live.
             if (Array.IndexOf(args, "--portal-check") >= 0)
-                return Platform.PortalPanicShortcut.CheckAsync().GetAwaiter().GetResult();
+                return LinuxOnlyCheck("--portal-check") ?? Platform.PortalPanicShortcut.CheckAsync().GetAwaiter().GetResult();
 
             // --panic-check [Key] presses the panic key through XTest against the real app on a temp
             // profile and fails unless one press stops bouncing text and a double press exits.
             var pc = Array.IndexOf(args, "--panic-check");
             if (pc >= 0)
-                return PanicCheck.Run(pc + 1 < args.Length ? args[pc + 1] : "Pause");
+                return LinuxOnlyCheck("--panic-check") ?? PanicCheck.Run(pc + 1 < args.Length ? args[pc + 1] : "Pause");
+            // --win-panic-check [Key]: the Windows twin; injects F24 into the WH_KEYBOARD_LL hook (sandbox only).
+            var wpc = Array.IndexOf(args, "--win-panic-check");
+            if (wpc >= 0)
+                return Win32PanicCheck.Run(wpc + 1 < args.Length && !args[wpc + 1].StartsWith("--") ? args[wpc + 1] : "F24");
+
+            // --fx-bench prints ms per frame for the ambient presets (headless Skia) and exits.
+
+            if (Array.IndexOf(args, "--fx-bench") >= 0)
+
+            { RenderProof.EnsureSetUp(); Console.WriteLine(Controls.Fx.FxBench.Format(Controls.Fx.FxBench.Run())); return 0; }
+
 
             // --audio-probe plays a clip through the REAL LibVLC output and ducks/unducks other
             // apps via CoreAudio, printing pactl's view of each step. Run with another stream
@@ -176,19 +187,22 @@ namespace ConditioningControlPanel.Avalonia
 
             // WPF's single-instance gate: a second launch hands its surface (or none) to the running app
             // and exits; the primary routes it (WPF RouteSurfaceHandoff / LauncherHost.OnBareRelaunch).
-            using var instance = Platform.SingleInstance.Claim(Platform.SingleInstance.SandboxSuffix(), payload =>
-                global::Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
-                {
-                    var w = (global::Avalonia.Application.Current?.ApplicationLifetime as
-                        global::Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.MainWindow;
-                    if (w is Views.Windows.MainShellWindow shell) Views.Windows.LauncherWindow.RouteHandoff(shell, payload);
-                    else w?.Activate();
-                }).GetTask(), Services.Launcher.LauncherHandoff.Encode(args));
+            // "Open with CCP" (WPF App.xaml.cs:1427): --play / --edit <file>. A second launch writes
+            // WPF's handoff file before it signals, so either head's primary can read it.
+            var (fileAction, filePath) = Services.Launcher.FileOpenHandoff.ParseArgs(args);
+            string? handoff = Services.Launcher.LauncherHandoff.Encode(args);
+            if (fileAction != null && filePath != null) handoff = Platform.WpfInstanceBridge.HandoffFileMarker;
+            using var instance = Platform.SingleInstance.Claim(Platform.SingleInstance.SandboxSuffix(), App.RouteSecondLaunch, handoff,
+                beforeAsking: fileAction != null && filePath != null
+                    ? () => Services.Launcher.FileOpenHandoff.Write(ConditioningControlPanel.CorePaths.UserData, fileAction, filePath)
+                    : null);
             if (instance is null)
             {
                 Serilog.Log.Information("Another instance is running; asked it to show its window");
                 return 0;
             }
+            // This launch is the primary: it opens the file itself once the shell is up (App.axaml.cs).
+            App.PendingFileOpen = fileAction != null && filePath != null ? (fileAction, filePath) : null;
 
             var app = BuildAvaloniaApp();
 #if DEBUG
@@ -207,9 +221,20 @@ namespace ConditioningControlPanel.Avalonia
                             as global::Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.Shutdown());
                 });
             App.SplashOnStartup = true;
+            // The real app only (never a headless check or a test): game pages get WPF's https://ccp.* origins.
+            Platform.WebAssetServer.VirtualHostsEnabled = true;
             app.StartWithClassicDesktopLifetime(args);
             App.StartupFailure?.Throw();   // a failed startup crashes non-zero, as it did before the splash
             return 0;
+        }
+
+        /// <summary>A self-check that talks to X11 or the session D-Bus: off Linux it says so and exits 2,
+        /// where it used to die on a missing libX11 / a null bus address. Null = run the check.</summary>
+        private static int? LinuxOnlyCheck(string flag)
+        {
+            if (OperatingSystem.IsLinux()) return null;
+            Console.Error.WriteLine($"{flag}: Linux only (X11 / session D-Bus). Not available on this OS.");
+            return 2;
         }
 
         public static AppBuilder BuildAvaloniaApp()
@@ -217,7 +242,17 @@ namespace ConditioningControlPanel.Avalonia
             var builder = AppBuilder.Configure<App>()
                 .UsePlatformDetect()      // Win32 on Windows, X11 on Linux (12.1.2 has no Wayland backend)
                 .WithInterFont()
-                .LogToTrace();
+                .LogToTrace()
+                // Home keeps ~85 MB of tile pictures on the GPU; Avalonia's default 28 MB Skia cache
+                // re-uploaded them every frame (Platform/RenderBudget.cs has the trace numbers).
+                .With(new SkiaOptions { MaxGpuResourceSizeBytes = Platform.RenderBudget.GpuResourceCacheBytes });
+            if (OperatingSystem.IsWindows())
+                builder = builder.With(Win32Options());
+            if (OperatingSystem.IsWindows()) Views.Games.GameWindow.FypGhostPlatform = new Platform.WindowsFypGhost();   // For You ghost mode (never in headless tests)
+            // The packed display face (Fredoka) on every OS; off Windows also the bundled stand-ins for
+            // the Windows faces the views name (Platform/AppFonts.cs).
+            if (Platform.AppFonts.Options() is { } fonts)
+                builder = builder.With(fonts);
             // Pinned, not detected: every desktop overlay is an X11 override-redirect window
             // (Platform/X11Overlay.cs), and under a future native Wayland backend those calls would
             // silently no-op. On a Wayland session this runs through XWayland.
@@ -226,6 +261,47 @@ namespace ConditioningControlPanel.Avalonia
             return OperatingSystem.IsLinux()
                 ? builder.UseX11().With(new X11PlatformOptions { WmClass = AppId })
                 : builder;
+        }
+
+        /// <summary>The Win32 presentation path. Avalonia's defaults (WinUI composition over ANGLE on
+        /// the primary adapter) unless CCP_WIN32_COMPOSITION / CCP_WIN32_RENDERING / CCP_GPU_ADAPTER
+        /// say otherwise (Platform/RenderBudget.cs); the adapter list is logged once either way, so a
+        /// log says which GPU drew the frames.</summary>
+        private static global::Avalonia.Win32PlatformOptions Win32Options()
+        {
+            var o = new global::Avalonia.Win32PlatformOptions();
+            var comp = Platform.RenderBudget.ParseModes<global::Avalonia.Win32CompositionMode>(
+                Environment.GetEnvironmentVariable("CCP_WIN32_COMPOSITION"), s => s switch
+                {
+                    "winui" => global::Avalonia.Win32CompositionMode.WinUIComposition,
+                    "dcomp" => global::Avalonia.Win32CompositionMode.DirectComposition,
+                    "swapchain" => global::Avalonia.Win32CompositionMode.LowLatencyDxgiSwapChain,
+                    "redirection" => global::Avalonia.Win32CompositionMode.RedirectionSurface,
+                    _ => null,
+                });
+            if (comp != null) o.CompositionMode = comp;
+            var rend = Platform.RenderBudget.ParseModes<global::Avalonia.Win32RenderingMode>(
+                Environment.GetEnvironmentVariable("CCP_WIN32_RENDERING"), s => s switch
+                {
+                    "angle" => global::Avalonia.Win32RenderingMode.AngleEgl,
+                    "wgl" => global::Avalonia.Win32RenderingMode.Wgl,
+                    "vulkan" => global::Avalonia.Win32RenderingMode.Vulkan,
+                    "software" => global::Avalonia.Win32RenderingMode.Software,
+                    _ => null,
+                });
+            if (rend != null) o.RenderingMode = rend;
+            if (comp != null || rend != null)
+                Serilog.Log.Information("Win32 presentation override: composition {C}, rendering {R}",
+                    comp == null ? "default" : string.Join(",", comp), rend == null ? "default" : string.Join(",", rend));
+            o.GraphicsAdapterSelectionCallback = adapters =>
+            {
+                var names = adapters.Select(a => a.Description).ToList();
+                int pick = Platform.RenderBudget.ChooseAdapter(names, Environment.GetEnvironmentVariable("CCP_GPU_ADAPTER"));
+                Serilog.Log.Information("GPU adapters: {List}; rendering on #{Pick} {Name}",
+                    string.Join(" | ", names.Select((n, i) => $"#{i} {n}")), pick, names.Count > pick ? names[pick] : "?");
+                return pick;
+            };
+            return o;
         }
     }
 

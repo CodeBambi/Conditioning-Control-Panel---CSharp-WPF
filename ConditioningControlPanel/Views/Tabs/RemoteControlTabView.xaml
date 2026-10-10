@@ -77,10 +77,9 @@
 
                             <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="18,0,12,0"
                                         ToolTip="{loc:Str desc_remote_control}">
-                                <TextBlock Text="{loc:Str tab_remote_control}" FontSize="17" FontWeight="Bold"
-                                           Foreground="{StaticResource TextLightBrush}"/>
+                                <TextBlock Style="{StaticResource Type.CardTitle}" Text="{loc:Str tab_remote_control}"/>
                                 <TextBlock Text="{loc:Str desc_remote_control}" FontSize="11.5"
-                                           Foreground="{StaticResource TextMutedBrush}" Margin="0,1,0,0"
+                                           Foreground="{StaticResource TextSecondaryBrush}" Margin="0,1,0,0"
                                            TextTrimming="CharacterEllipsis"/>
                             </StackPanel>
 
@@ -140,9 +139,7 @@
                                     <StackPanel Margin="16,14">
                                         <Image Width="26" Height="26" HorizontalAlignment="Left"
                                                Source="{Binding Source='✨', Converter={StaticResource EmojiToImageSource}}"/>
-                                        <TextBlock Text="{loc:Str label_remote_tier_light}"
-                                                   Foreground="{StaticResource TextLightBrush}"
-                                                   FontSize="16" FontWeight="Bold" Margin="0,6,0,4"/>
+                                        <TextBlock Style="{StaticResource Type.CardTitle}" Text="{loc:Str label_remote_tier_light}" Margin="0,6,0,4"/>
                                         <TextBlock Text="Visual triggers only"
                                                    Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12.5"
                                                    TextWrapping="Wrap"/>
@@ -162,9 +159,7 @@
                                     <StackPanel Margin="16,14">
                                         <Image Width="26" Height="26" HorizontalAlignment="Left"
                                                Source="{Binding Source='🎯', Converter={StaticResource EmojiToImageSource}}"/>
-                                        <TextBlock Text="{loc:Str label_remote_tier_standard}"
-                                                   Foreground="{StaticResource TextLightBrush}"
-                                                   FontSize="16" FontWeight="Bold" Margin="0,6,0,4"/>
+                                        <TextBlock Style="{StaticResource Type.CardTitle}" Text="{loc:Str label_remote_tier_standard}" Margin="0,6,0,4"/>
                                         <TextBlock Text="Light + audio + overlays"
                                                    Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12.5"
                                                    TextWrapping="Wrap"/>
@@ -184,9 +179,7 @@
                                     <StackPanel Margin="16,14">
                                         <Image Width="26" Height="26" HorizontalAlignment="Left"
                                                Source="{Binding Source='🔥', Converter={StaticResource EmojiToImageSource}}"/>
-                                        <TextBlock Text="{loc:Str label_remote_tier_full}"
-                                                   Foreground="{StaticResource TextLightBrush}"
-                                                   FontSize="16" FontWeight="Bold" Margin="0,6,0,4"/>
+                                        <TextBlock Style="{StaticResource Type.CardTitle}" Text="{loc:Str label_remote_tier_full}" Margin="0,6,0,4"/>
                                         <TextBlock Text="Everything including session control"
                                                    Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12.5"
                                                    TextWrapping="Wrap"/>

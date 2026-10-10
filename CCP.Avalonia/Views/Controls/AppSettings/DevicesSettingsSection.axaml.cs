@@ -44,6 +44,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             SliderWakePrecision.ValueChanged += SliderWakePrecision_ValueChanged;
             SliderCmdPrecision.ValueChanged += SliderCmdPrecision_ValueChanged;
             ChkHeadphones.IsCheckedChanged += ChkHeadphones_Changed;
+            WireVoiceModes();
+            BtnCameraShortcutDevices.Click += BtnCameraShortcutDevices_Click;
             ChkBlinkRecalWebcamBar.IsCheckedChanged += ChkBlinkRecalShortcut_Changed;
             ChkWebcamDriftCorrection.IsCheckedChanged += ChkWebcamDriftCorrection_Changed;
             ChkRestrictGazeToCalScreen.IsCheckedChanged += ChkRestrictGazeToCalScreen_Changed;
@@ -54,6 +56,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             BtnMicRefresh.Click += BtnMicRefresh_Click;
             BtnChatShortcutDevices.Click += BtnChatShortcut_Click;
             BtnPanicKey.Click += BtnPanicKey_Click;
+            BtnPauseKey.Click += BtnPauseKey_Click;
             BtnWebcamRevokeConsent.Click += BtnWebcamRevokeConsent_Click;
             BtnWebcamReviewPrivacy.Click += BtnWebcamReviewPrivacy_Click;
             BtnWebcamDebugStart.Click += BtnWebcamDebugStart_Click;
@@ -62,6 +65,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             BtnWebcamDebugTrackerTest.Click += BtnWebcamDebugTrackerTest_Click;
             CmbWebcamDevice.SelectionChanged += CmbWebcamDevice_SelectionChanged;
             BtnWebcamDeviceRefresh.Click += BtnWebcamDeviceRefresh_Click;
+            CmbWebcamMonitor.SelectionChanged += CmbWebcamMonitor_SelectionChanged;
+            ChkWebcamDebugCursor.IsCheckedChanged += ChkWebcamDebugCursor_Changed;
 
             SyncFromSettings();
             PopulateMicDevices();
@@ -78,6 +83,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             SyncFromSettings();
             PopulateMicDevices();
             PopulateWebcamDevices();   // WPF OnSectionShown -> RefreshDeviceSettingsLists
+            RefreshWebcamMonitorList();
+            SubscribeTracker();
             _lockdown = LockdownService.Current;
             if (_lockdown != null) { _lockdown.LockdownActivated += OnLockdownChanged; _lockdown.LockdownDeactivated += OnLockdownChanged; }
             ApplyLockdownHold();
@@ -95,6 +102,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
         {
             if (_lockdown != null) { _lockdown.LockdownActivated -= OnLockdownChanged; _lockdown.LockdownDeactivated -= OnLockdownChanged; _lockdown = null; }
             if (CoreSettings.Service is { } svc) svc.CurrentReplaced -= OnCurrentReplaced;
+            UnsubscribeTracker();
             base.OnDetachedFromVisualTree(e);
         }
 
@@ -143,6 +151,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
                     : $"⏸ {s.PauseKey}");
 
                 RefreshChatShortcutLabel();
+                RefreshCameraShortcutLabel();
             }
             catch (Exception ex)
             {
@@ -183,8 +192,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             if (_loading) return;
             CoreSettings.Current.SpeechHeadphonesMode = ChkHeadphones.IsChecked == true;
             CoreSettings.Save();
-            // ponytail: WPF also re-quotes the device on the She's Listening chip
-            // (MainWindow.RefreshSheListeningDeviceChips); no such host on this head.
+            ApplyVoiceLive(reopen: false);   // the She's Listening chip quotes the mode (WPF :291)
         }
 
         /// <summary>
@@ -227,10 +235,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             s.SpeechInputDeviceIndex = idx;
             s.SpeechInputDeviceName = name; // matched by name on reopen - robust to ordinal reshuffle (#441b)
             CoreSettings.Save();
-            // ponytail: WPF also cuts the open capture so the wake loop reopens on the new device
-            // (App.Speech.StopListening + App.Autonomy.RefreshVoiceInputModes) and re-quotes the
-            // device on the She's Listening chip. The seam carries capability only, and neither
-            // the autonomy service nor that chip exists on this head.
+            // Apply live: cut the current capture so the wake loop reopens on the new device (WPF :251).
+            ApplyVoiceLive(reopen: true);
         }
 
         private void BtnMicRefresh_Click(object? sender, RoutedEventArgs e) => PopulateMicDevices();
@@ -244,10 +250,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
         /// Platform/WebcamTracker). Privacy info, Start tracking and Revoke are live.
         ///
         /// Quick Recal and Tracker Test are live over the tracker's gaze feed.
-        /// The camera picker is live over <see cref="Platform.V4l2Cameras"/>.
-        /// <para>ponytail: the monitor combo and the debug cursor stay DISABLED with a
-        /// stated reason: calibration follows its own window's screen and the cursor overlay is not ported. The status pill stays
-        /// at its <c>rf_webcam_stopped</c> literal for the same reason (no OnTrackingStateChanged).</para>
+        /// The camera picker is live over <see cref="Platform.CameraList"/> (sysfs on Linux, DirectShow on Windows).
+        /// The tracking monitor, the debug cursor and the status pill live in DevicesSettingsSection.Tracker.cs.
         /// </summary>
         private void RefreshWebcamAvailability()
         {
@@ -260,14 +264,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             BtnWebcamDebugCalibrate.IsEnabled = has;
             CmbWebcamDevice.IsEnabled = has;
             BtnWebcamDeviceRefresh.IsEnabled = has;
-            foreach (var c in new Control[] { CmbWebcamMonitor, ChkWebcamDebugCursor })
-            {
-                c.IsEnabled = false;   // IsEnabled only - never IsChecked, which would fire the handler
-                ToolTip.SetShowOnDisabled(c, true);
-                ToolTip.SetTip(c, "Not available on this build yet (needs monitor selection or the gaze cursor overlay).");
-            }
+            CmbWebcamMonitor.IsEnabled = has;
+            ChkWebcamDebugCursor.IsEnabled = has;
             if (!has)
-                AppendWebcamDebugLog("No webcam tracking engine on this build — camera controls are unavailable.");
+                AppendWebcamDebugLog("No webcam tracking engine on this build - camera controls are unavailable.");
             RefreshWebcamStartLabel();
         }
 
@@ -277,14 +277,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
         /// Selection matches the saved /dev/videoN number, since V4L2 numbers are not contiguous.</summary>
         private int PopulateWebcamDevices()
         {
-            var devices = Platform.V4l2Cameras.Enumerate();
+            var devices = Platform.CameraList.Enumerate();
             _webcamDevicePopulating = true;
             try
             {
                 CmbWebcamDevice.Items.Clear();
                 if (devices.Count == 0)
                 {
-                    CmbWebcamDevice.Items.Add(new ComboBoxItem { Content = "(no cameras detected)", Tag = -1, IsEnabled = false });
+                    CmbWebcamDevice.Items.Add(new ComboBoxItem { Content = Loc.Get("webcam_no_cameras"), Tag = -1, IsEnabled = false });
                     CmbWebcamDevice.SelectedIndex = 0;
                     return 0;
                 }
@@ -324,7 +324,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             => BtnWebcamDebugStart.Content = Platform.WebcamTracker.Instance.IsRunning ? "Stop tracking" : "Start tracking";
 
         /// <summary>WPF BtnWebcamReviewPrivacy_Click: the consent dialog as review; Cancel changes nothing.</summary>
-        private async void BtnWebcamReviewPrivacy_Click(object? sender, RoutedEventArgs e)
+        internal async void BtnWebcamReviewPrivacy_Click(object? sender, RoutedEventArgs e)
         {
             try
             {
@@ -337,7 +337,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
 
         /// <summary>WPF BtnWebcamDebugStart_Click (MainWindow.LabTab.cs:495): stop if running; else
         /// consent when stale, then start off the UI thread and log the outcome.</summary>
-        private async void BtnWebcamDebugStart_Click(object? sender, RoutedEventArgs e)
+        internal async void BtnWebcamDebugStart_Click(object? sender, RoutedEventArgs e)
         {
             try
             {
@@ -352,7 +352,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
                 if (!Services.Webcam.WebcamConsent.IsCurrent(CoreSettings.Current))
                 {
                     if (TopLevel.GetTopLevel(this) is not Window owner) return;
-                    AppendWebcamDebugLog("Consent not given — opening consent dialog…");
+                    AppendWebcamDebugLog("Consent not given - opening consent dialog…");
                     await new WebcamConsentDialog().ShowDialogSafe(owner);
                     if (!Services.Webcam.WebcamConsent.IsCurrent(CoreSettings.Current)) { AppendWebcamDebugLog("Consent declined or dialog cancelled."); return; }
                     AppendWebcamDebugLog("Consent granted.");
@@ -362,7 +362,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
                 bool started = await tracker.StartAsync();
                 BtnWebcamDebugStart.IsEnabled = true;
                 RefreshWebcamStartLabel();
-                AppendWebcamDebugLog(started ? "Start() returned true — capture thread launching." : $"Start() returned false. {tracker.LastError}");
+                AppendWebcamDebugLog(started ? "Start() returned true - capture thread launching." : $"Start() returned false. {tracker.LastError}");
             }
             catch (Exception ex) { Log.Warning(ex, "Webcam debug start failed"); }
         }
@@ -372,7 +372,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
         {
             try
             {
-                await RunGazeWindowAsync(new WebcamGazeTrackerWindow(), "No calibration loaded — run Calibrate (16-point) first.",
+                await RunGazeWindowAsync(new WebcamGazeTrackerWindow(), "No calibration loaded - run Calibrate (16-point) first.",
                     "Opening tracker test window…", _ => "Tracker test closed.");
             }
             catch (Exception ex) { Log.Warning(ex, "Webcam tracker test failed"); }
@@ -380,7 +380,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
 
         /// <summary>WPF BtnWebcamDebugCalibrate_Click (MainWindow.LabTab.cs:754): consent when stale,
         /// start tracking if off (left running, as WPF), then the 16-point window.</summary>
-        private async void BtnWebcamDebugCalibrate_Click(object? sender, RoutedEventArgs e)
+        internal async void BtnWebcamDebugCalibrate_Click(object? sender, RoutedEventArgs e)
         {
             try
             {
@@ -388,7 +388,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
                 var tracker = Platform.WebcamTracker.Instance;
                 if (!Services.Webcam.WebcamConsent.IsCurrent(CoreSettings.Current))
                 {
-                    AppendWebcamDebugLog("Consent not given — opening consent dialog…");
+                    AppendWebcamDebugLog("Consent not given - opening consent dialog…");
                     await new WebcamConsentDialog().ShowDialogSafe(owner);
                     if (!Services.Webcam.WebcamConsent.IsCurrent(CoreSettings.Current)) { AppendWebcamDebugLog("Consent declined."); return; }
                 }
@@ -405,12 +405,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
         }
 
         /// <summary>WPF BtnWebcamDebugQuickRecal_Click (MainWindow.LabTab.cs:1153).</summary>
-        private async void BtnWebcamDebugQuickRecal_Click(object? sender, RoutedEventArgs e)
+        internal async void BtnWebcamDebugQuickRecal_Click(object? sender, RoutedEventArgs e)
         {
             try
             {
                 await RunGazeWindowAsync(new WebcamQuickRecalWindow(),
-                    "No calibration loaded — run Calibrate (16-point) first. Quick Recal only nudges an existing calibration.",
+                    "No calibration loaded - run Calibrate (16-point) first. Quick Recal only nudges an existing calibration.",
                     "Opening quick-recal window…", ok =>
                     {
                         var off = Platform.WebcamTracker.Instance.Calibration?.RuntimeOffset;
@@ -428,7 +428,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             var tracker = Platform.WebcamTracker.Instance;
             if (!Services.Webcam.WebcamConsent.IsCurrent(CoreSettings.Current))
             {
-                AppendWebcamDebugLog("Consent not given — opening consent dialog…");
+                AppendWebcamDebugLog("Consent not given - opening consent dialog…");
                 await new WebcamConsentDialog().ShowDialogSafe(owner);
                 if (!Services.Webcam.WebcamConsent.IsCurrent(CoreSettings.Current)) { AppendWebcamDebugLog("Consent declined."); return; }
             }
@@ -467,27 +467,22 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
         /// refused — it would keep three of the dialog's four promises and claim all four.</para>
         ///
         /// <para>WPF also refreshes three blink-trainer rows; here the Blink Trainer page re-reads
-        /// consent whenever it is shown, and the debug cursor does not exist on this head.</para>
+        /// consent whenever it is shown.</para>
         /// </summary>
-        private async void BtnWebcamRevokeConsent_Click(object? sender, RoutedEventArgs e)
+        internal async void BtnWebcamRevokeConsent_Click(object? sender, RoutedEventArgs e)
         {
             try
             {
                 if (!CoreWebcam.IsAvailable) return;
                 if (TopLevel.GetTopLevel(this) is not Window owner || !owner.IsVisible) return;
 
-                bool ok = await MessageDialog.ConfirmAsync(owner, "Revoke webcam consent",
-                    "Revoke webcam consent?\n\n" +
-                    "This will:\n" +
-                    "  • Stop webcam tracking immediately\n" +
-                    "  • Delete your calibration data\n" +
-                    "  • Disable Focus Gaze and any webcam triggers\n" +
-                    "  • Clear your consent record\n\n" +
-                    "You'll be re-prompted to consent and recalibrate the next time you enable a webcam feature.",
+                bool ok = await MessageDialog.ConfirmAsync(owner, Loc.Get("blink_trainer_consent_revoke_confirm_title"),
+                    Loc.Get("webcam_revoke_confirm_body"),
                     defaultToCancel: true);
                 if (!ok) return;
 
                 CoreWebcam.RevokeConsent();
+                ChkWebcamDebugCursor.IsChecked = false;   // WPF :1293
                 RefreshWebcamStartLabel();
                 AppendWebcamDebugLog("Consent revoked. Calibration deleted; webcam features disabled.");
             }
@@ -514,7 +509,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             // Performance section makes for the same reason.
             CoreSettings.Save();
             AppendWebcamDebugLog(v
-                ? "Auto drift correction enabled — clicks near your gaze will fine-tune calibration."
+                ? "Auto drift correction enabled - clicks near your gaze will fine-tune calibration."
                 : "Auto drift correction disabled.");
         }
 
@@ -540,12 +535,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
         //  voice modes
         // =====================================================================================
 
-        // ponytail: ChkSpeechWakeWord / ChkSpeechPushToTalk need App.Autonomy.RefreshVoiceInputModes
-        // (ConditioningControlPanel/Services/Autonomy/), still in the WPF head. TierGate is not the
-        // blocker any more - CCP.Core/Services/TierGate.cs - but the mic half is. They are
-        // seeded above and left without a write handler: a toggle that saved the flag but could
-        // neither charge the premium bar nor open the mic would be a lie in both directions.
-        // BtnSetPttKey likewise needs MainWindow's global-hook key capture.
+        // The toggles and the key capture live in DevicesSettingsSection.Voice.cs.
 
         private void TxtSpeechWakeWords_LostFocus(object? sender, RoutedEventArgs e)
         {
@@ -554,8 +544,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             CoreSettings.Current.SpeechWakeWords = string.IsNullOrWhiteSpace(text) ? "hey bambi" : text;
             if (string.IsNullOrWhiteSpace(text)) TxtSpeechWakeWords.Text = "hey bambi";
             CoreSettings.Save();
-            // ponytail: WPF also restarts the wake loop so new phrases take effect immediately
-            // (App.Autonomy.RefreshVoiceInputModes); no speech engine on this head.
+            ApplyVoiceLive(reopen: true);   // restart the loop so new phrases take effect at once (WPF)
         }
 
         // =====================================================================================
@@ -607,7 +596,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
                     "• You will have NO emergency escape option\n" +
                     "• The ONLY way to exit will be the Exit button\n" +
                     "• Combined with Strict Lock, this is VERY restrictive\n" +
-                    "• Make sure you know what you're doing!");
+                    "• Make sure you know what you're doing.");
 
                 if (!confirmed) { RevertNoPanic(); return; }
 
@@ -651,7 +640,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             if (_capturingPanicKey || TopLevel.GetTopLevel(this) is not { } top) return;
             _capturingPanicKey = true;
             MainShellWindow.CapturingPanicKey = true;
-            SetButtonLabel(BtnPanicKey, "Press any key...");
+            SetButtonLabel(BtnPanicKey, Loc.Get("rf_btn_press_a_key"));
             top.AddHandler(KeyDownEvent, OnCaptureKey, RoutingStrategies.Tunnel);
             // WPF's global hook always got the next key; an in-window capture can be abandoned by
             // clicking away, which would leave the panic key disabled for good. Losing the window cancels.
@@ -683,8 +672,55 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             }
         }
 
-        // ponytail: BtnPauseKey still only shows its binding - the pause key parks a video (the #735
-        // grace pause), and this head has no grace pause for it to reach yet.
+        /// <summary>True while the Pause key button waits for its key (WPF _isCapturingPauseKey); the
+        /// pause press path (Win32Input.OnPauseKeyDown) stays quiet meanwhile, as WPF's early return.</summary>
+        internal static bool CapturingPauseKey { get; private set; }
+
+        private void PaintPauseKey() => SetButtonLabel(BtnPauseKey, string.IsNullOrEmpty(CoreSettings.Current.PauseKey)
+            ? Loc.Get("btn_pause_key_unbound")
+            : $"⏸ {CoreSettings.Current.PauseKey}");
+
+        /// <summary>
+        /// WPF BtnPauseKey_Click (MainWindow.UiUpdates.cs:2427) + the capture branch of
+        /// OnGlobalKeyPressed (MainWindow.xaml.cs:943): "Press any key...", the next key becomes the
+        /// Pause key and Escape CLEARS it. Taken in-window like the panic capture; losing the window
+        /// cancels. Deviation, on purpose (hard rule 6): capture never mutes the panic listener, so
+        /// with panic on Escape that press also panics.
+        /// </summary>
+        private void BtnPauseKey_Click(object? sender, RoutedEventArgs e)
+        {
+            if (TopLevel.GetTopLevel(this) is not { } top) return;
+            CapturingPauseKey = true;
+            SetButtonLabel(BtnPauseKey, Loc.Get("rf_btn_press_a_key"));
+            top.AddHandler(KeyDownEvent, OnCaptureKey, RoutingStrategies.Tunnel);
+            if (top is Window window) window.Deactivated += OnCancel;
+
+            void Detach()
+            {
+                top.RemoveHandler(KeyDownEvent, OnCaptureKey);
+                if (top is Window w) w.Deactivated -= OnCancel;
+            }
+
+            void OnCancel(object? s, EventArgs a)
+            {
+                Detach();
+                CapturingPauseKey = false;
+                PaintPauseKey();
+            }
+
+            void OnCaptureKey(object? s, KeyEventArgs k)
+            {
+                Detach();
+                k.Handled = true;
+                CoreSettings.Current.PauseKey = k.Key == Key.Escape ? "" : k.Key.ToString();
+                CoreSettings.Save();
+                PaintPauseKey();
+                Log.Information("Pause key changed to: {Key}",
+                    string.IsNullOrEmpty(CoreSettings.Current.PauseKey) ? "(unbound)" : CoreSettings.Current.PauseKey);
+                // The hook's copy of this same press must not pause a video: clear a beat later.
+                DispatcherTimer.RunOnce(() => CapturingPauseKey = false, TimeSpan.FromMilliseconds(300));
+            }
+        }
 
         // =====================================================================================
         //  the chat shortcut (MainWindow.SessionIO.cs BtnChatShortcut_Click / RefreshChatShortcutLabel)
@@ -751,13 +787,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             }
         }
 
-        // ponytail: BtnCameraShortcutDevices stays inert, and NOT for the reason the old note gave.
-        // SerializeModifiers shipped with the tube, so the capture half would work - but the combo
-        // it stores drives MainWindow.ToggleWebcamFromHotkey (MainWindow.SessionIO.cs:1485), which
-        // toggles WebcamTrackingService. This head now has a tracker (Platform/WebcamTracker, and
-        // CoreWebcam.IsAvailable is seeded true), but no global hotkey listener calls it, so a rebind
-        // here would let the user configure a key that cannot fire - and the row's own label would then
-        // report a binding that does nothing. The label is left at its XAML literal for the same reason.
-        // Unblocks with a global-hotkey route to WebcamTracker (ToggleWebcamFromHotkey).
+        // =====================================================================================
+        //  the camera shortcut (WPF MainWindow.SessionIO.cs BtnCameraShortcut_Click :1485)
+        // =====================================================================================
+
+        private void RefreshCameraShortcutLabel() =>
+            TxtCameraShortcutLabelDevices.Text = MainShellWindow.FormatCameraShortcut();
+
+        internal async void BtnCameraShortcutDevices_Click(object? sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (TopLevel.GetTopLevel(this) is not Window owner) return;
+                if (await MainShellWindow.RebindCameraShortcutAsync(owner)) RefreshCameraShortcutLabel();
+            }
+            catch (Exception ex) { Log.Warning(ex, "Settings/Devices: camera shortcut rebind failed"); }
+        }
     }
 }

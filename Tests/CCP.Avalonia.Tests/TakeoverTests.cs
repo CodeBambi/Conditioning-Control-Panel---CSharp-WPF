@@ -122,8 +122,11 @@ public sealed class TakeoverTests
             {
                 // No surface on this head: never picked (WPF skips an unavailable action).
                 foreach (var a in new[] { AutonomyActionType.SpiralPulse, AutonomyActionType.BrainDrainPulse,
-                             AutonomyActionType.WebVideo, AutonomyActionType.WallpaperShuffle, AutonomyActionType.SpokenMantra })
+                             AutonomyActionType.WebVideo, AutonomyActionType.SpokenMantra })
                     Assert.False(shell.Autonomy.CanPerform(a), a.ToString());
+                // c1: the wallpaper action is live wherever the desktop can hand its wallpaper back (Windows, GNOME, KDE).
+                Assert.Equal(global::ConditioningControlPanel.Avalonia.Platform.WallpaperHead.Supported,
+                    shell.Autonomy.CanPerform(AutonomyActionType.WallpaperShuffle));
                 Assert.False(shell.Autonomy.CanPerform(AutonomyActionType.MindWipe));   // CoreMindWipe unseeded
                 Assert.False(shell.Autonomy.CanPerform(AutonomyActionType.PinkFilterPulse));   // no compositor headless
 
@@ -327,13 +330,15 @@ public sealed class TakeoverTests
             Assert.NotEqual("preset zero", text.Text);
             tube.StopThinkingAnimation();
 
+            // tube#T6: the thinking bubble is still up, so the preset QUEUES behind it (WPF Giggle).
             tube.Giggle("preset one");
             Dispatcher.UIThread.RunJobs();
-            Assert.Equal("preset one", text.Text);
+            Assert.Equal(1, tube.QueuedSpeechCount);
             Assert.Equal(history, tube.ChatHistory.Count);
 
-            tube.GigglePriority("ai reply", false, aiGenerated: true);
+            tube.GigglePriority("ai reply", false, aiGenerated: true);   // priority clears the queue
             Dispatcher.UIThread.RunJobs();
+            Assert.Equal(0, tube.QueuedSpeechCount);
             tube.Giggle("preset two");   // an AI bubble is up
             Dispatcher.UIThread.RunJobs();
             Assert.Equal("ai reply", text.Text);

@@ -11,6 +11,7 @@ using Avalonia.Styling;
 using ConditioningControlPanel.Avalonia.Controls;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Services;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
@@ -104,6 +105,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 }
                 if (owner == null) return;
 
+                // Game rows list only the games this head can start (WPF LauncherCatalogue.Available).
+                SettingsPaletteIndex.GameAvailableProvider ??= id => LauncherWindow.Destinations.ContainsKey(id);
+
                 var win = new SettingsPaletteWindow();
                 _instance = win;
                 win.Show(owner);
@@ -177,7 +181,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             // Click-away dismiss. Deliberately NOT an Escape close: it must not arm the panic
             // hand-off, because no Escape press happened.
-            if (_wasActivated) ClosePalette(fromEscape: false);
+            if (_wasActivated && !_pinMenuOpen) ClosePalette(fromEscape: false);
         }
 
         // =====================================================================================
@@ -285,7 +289,44 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             try
             {
+                // A Studio module: the rack's own door (selects the module, then shows the Studio).
+                if (!string.IsNullOrWhiteSpace(entry.RackKey))
+                {
+                    shell.OpenStudioModule(entry.RackKey!);
+                    return;
+                }
+
+                // A game: started the way the launcher tile starts it (its own sign-in ask).
+                if (!string.IsNullOrWhiteSpace(entry.GameId))
+                {
+                    // ponytail: WPF also stands a pending leash punishment between any game and its
+                    // window (LeashBlocksGames -> PresentLeashGateFromLauncher); here Play()
+                    // asks the same gate (Platform/LeashHead.cs seeds LeashBlocksGames).
+                    if (!LauncherWindow.LaunchGame(shell, entry.GameId!))
+                        Serilog.Log.Information("Palette: game {Id} is not hosted on this head", entry.GameId);
+                    return;
+                }
+
+                // A Library launcher (mods, catalogue, phrases, medialog): the dialog or window itself,
+                // the same verb as the Library strip's pill (WPF 7.1.5 palette, LauncherKey).
+                if (!string.IsNullOrWhiteSpace(entry.LauncherKey))
+                {
+                    if (!shell.OpenLibraryLauncher(entry.LauncherKey!))
+                        Serilog.Log.Debug("Palette: launcher {Key} has no handler", entry.LauncherKey);
+                    return;
+                }
+
+                // The CC Labs row opens the launcher itself (the title-bar button's verb; Lockdown vetoes on its own).
+                if (entry.OpensLauncher)
+                {
+                    LauncherWindow.BackToLauncher(shell);
+                    return;
+                }
+
                 if (!string.IsNullOrWhiteSpace(entry.TabKey)) shell.ShowTab(entry.TabKey);
+                // The Games row lands on its Play zone even when the wall was scrolled down.
+                if (!string.IsNullOrWhiteSpace(entry.PlayZone))
+                    shell.Named<Tabs.PlayTabView>("PlayTab")?.ScrollToZone(entry.PlayZone!);
                 if (!string.IsNullOrWhiteSpace(entry.SectionKey)) shell.AppSettingsPage?.FocusSection(entry.SectionKey);
                 if (entry.ElementNames.Length == 0) return;
 
@@ -352,8 +393,51 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _pulsePrevEffect = null;
         }
 
+        private bool _pinMenuOpen;
+
+        /// <summary>WPF Item_RightClick: right-click a destination row to pin it to (or unpin it
+        /// from) the Home favorites, the same menu the favorites chips carry.</summary>
+        private void Item_RightClick(Control item, PaletteRow row)
+        {
+            var id = row.Entry.Id;
+            if (!FavoritesRailRule.IsDestination(id) || Owner is not MainShellWindow owner) return;
+
+            var favs = CoreSettings.Current.RailFavorites;
+            bool pinned = FavoritesRailRule.IsPinned(favs, id);
+            bool full = !pinned && FavoritesRailRule.IsFull(favs);
+            var entry = new MenuItem
+            {
+                Header = pinned ? Loc.Get("rail_unpin")
+                       : full ? Loc.Get("rail_favorites_full")
+                       : Loc.Get("rail_pin"),
+                IsEnabled = !full,
+            };
+            entry.Click += (_, _) =>
+            {
+                try { owner.TogglePinned(id); }
+                catch (Exception ex) { Serilog.Log.Debug("Palette pin {Id}: {E}", id, ex.Message); }
+            };
+            var menu = new ContextMenu { Items = { entry } };
+            menu.Closed += (_, _) =>
+            {
+                _pinMenuOpen = false;
+                // Focus back to the search box so typing and Enter keep working.
+                try { if (IsVisible) { Activate(); _txtQuery.Focus(); } } catch { }
+            };
+            _pinMenuOpen = true;
+            menu.Open(item);
+        }
+
         private void Item_Click(object? sender, PointerReleasedEventArgs e)
         {
+            if (e.InitialPressMouseButton == MouseButton.Right
+                && (e.Source as Control)?.DataContext is PaletteRow pinRow && e.Source is Control src)
+            {
+                _listResults.SelectedItem = pinRow;
+                e.Handled = true;
+                Item_RightClick(src, pinRow);
+                return;
+            }
             if (e.InitialPressMouseButton != MouseButton.Left) return;
             if ((e.Source as Control)?.DataContext is not PaletteRow row) return;
 

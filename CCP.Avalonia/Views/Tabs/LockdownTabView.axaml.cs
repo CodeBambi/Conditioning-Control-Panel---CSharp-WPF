@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
@@ -79,8 +80,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             {
                 ld.LockdownActivated += () => Dispatcher.UIThread.Post(ShowLockdownState);
                 ld.LockdownDeactivated += () => Dispatcher.UIThread.Post(ShowLockdownState);
-                ld.CountdownTick += r => Dispatcher.UIThread.Post(() => TxtLockdownTimer.Text = Clock(r));
-                ld.TimerRestarted += _ => Dispatcher.UIThread.Post(() => TxtLockdownTimer.Text = Clock(ld.Remaining));
+                ld.CountdownTick += r => Dispatcher.UIThread.Post(() => { TxtLockdownTimer.Text = Clock(r); PaintPossessionReadout(); });
+                ld.TimerRestarted += _ => Dispatcher.UIThread.Post(() => { TxtLockdownTimer.Text = Clock(ld.Remaining); PaintPossessionReadout(); });
                 ShowLockdownState();
             }
         }
@@ -254,9 +255,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         // ==== the running lockdown (WPF MainWindow.Lab.cs) ================================
         // ponytail: ported: premium gate, double warning, Activate, panel swap, clock, the secret
-        // phrase, the Emergency Exit breath; the title-bar badge is MainShellWindow.Lockdown.cs.
-        // Not on this head: the blood-red theme and activation flash,
-        // the Possession haunt/readout, the Dose keeper, greying of the Strict/No-panic toggles and
+        // phrase, the Emergency Exit breath; the title-bar badge, blood-red theme and activation flash
+        // are MainShellWindow.Lockdown.cs; the Strict toggles grey themselves (HoldWhileLockdown).
+        // The Dose keeper is Core LockdownDoseKeeper, installed by MainShellWindow.LockdownDose.cs.
+        // The Possession readout is PaintPossessionReadout (director = Core PossessionDirector, head =
+        // MainShellWindow.Possession.cs). Not on this head:
         // the system-key hook (Linux has none, so the warning does not promise it).
 
         /// <summary>The head's live Lockdown (null in renders and tests that set none).</summary>
@@ -267,6 +270,28 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         private static string Clock(TimeSpan remaining) =>
             SessionClockLabel.LockdownClock(remaining, CoreSettings.Current.HideLockdownTimer);
+
+        /// <summary>WPF MainWindow.Lab.cs HookPossessionReadout / UpdatePossessionReadout / Unhook: a word
+        /// plus five pips, shown only while a lockdown runs with Possession on. Everything starts at
+        /// Settle. Painted from the lockdown's own tick and restart (the director moves the rung on the
+        /// same tick, ahead of this post), so there is no second subscription to leak.</summary>
+        internal void PaintPossessionReadout()
+        {
+            try
+            {
+                var on = Lockdown?.IsActive == true && CoreSettings.Current.LockdownPossessionEnabled;
+                TxtPossessionRung.IsVisible = on;
+                PossessionPips.IsVisible = on;
+                int index = on ? (int)(PossessionDirector.Current is { IsHaunting: true } d ? d.CurrentRung : PossessionRung.Settle) : -1;
+                TxtPossessionRung.Text = on ? Loc.GetF("lockdown_poss_readout_fmt", Loc.Get("lockdown_poss_rung_" + index)) : "";
+                for (int i = 0; i < PossessionPips.Children.Count; i++)
+                {
+                    if (PossessionPips.Children[i] is not Border pip) continue;
+                    pip.Background = new SolidColorBrush(i <= index ? Views.Windows.MainShellWindow.PossessionEmber : Views.Windows.MainShellWindow.PossessionEmberDim);
+                }
+            }
+            catch (Exception ex) { Log.Warning(ex, "Possession: failed to paint the rung readout"); }
+        }
 
         /// <summary>WPF OnLockdownActivated / OnLockdownDeactivated, the panel half: swap Setup and
         /// Active, seed the clock, reset the secret exit and the slab notice.</summary>
@@ -280,12 +305,26 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             TxtLockdownExit.IsVisible = false;
             TxtLockdownExit.Text = "";
             TxtEmergencyExitNotice.IsVisible = false;
-            // Readout is Possession's; with no director on this head it stays collapsed (WPF hides it
-            // too whenever Possession is off).
-            TxtPossessionRung.IsVisible = false;
-            PossessionPips.IsVisible = false;
+            PaintPossessionReadout();
             UpdateEmergencyExitPulse();
+            // WPF ApplyLockdownTheme / RestoreLockdownTheme (Lab.cs:1188/1211): the card goes crimson
+            // on #1A0A0A; the override is dropped on exit, which leaves the XAML gradients (the values
+            // WPF's restore writes).
+            if (active && _cardHolds.Count == 0)
+            {
+                if (LockdownCardBorder.SetValue(Border.BorderBrushProperty, (IBrush?)new SolidColorBrush(Color.Parse("#DC143C")),
+                        global::Avalonia.Data.BindingPriority.Animation) is { } a) _cardHolds.Add(a);
+                if (LockdownCardBorder.SetValue(Border.BackgroundProperty, (IBrush?)new SolidColorBrush(Color.Parse("#1A0A0A")),
+                        global::Avalonia.Data.BindingPriority.Animation) is { } b) _cardHolds.Add(b);
+            }
+            else if (!active)
+            {
+                foreach (var d in _cardHolds) d.Dispose();
+                _cardHolds.Clear();
+            }
         }
+
+        private readonly List<IDisposable> _cardHolds = new();
 
         /// <summary>WPF MainWindow.Lab.cs:51 BtnActivateLockdown_Click. The consent lists only what
         /// this head enforces.</summary>
@@ -302,17 +341,24 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             ld.Activate(TimeSpan.FromMinutes(minutes));
         }
 
-        /// <summary>WPF's consent text, minus the lines this head would be lying about (system keys,
-        /// Dose keeper, Possession: none run here) and with the Linux safety valve.</summary>
-        internal static string LockdownWarning(int minutes, Models.AppSettings cfg)
+        /// <summary>WPF's consent text, minus the lines this head would be lying about (Dose keeper,
+        /// Possession: none run here; system keys off Windows, where nothing blocks them) and with the
+        /// platform's safety valve.</summary>
+        internal static string LockdownWarning(int minutes, Models.AppSettings cfg) => LockdownWarning(minutes, cfg, OperatingSystem.IsWindows());
+
+        internal static string LockdownWarning(int minutes, Models.AppSettings cfg, bool windows)
         {
             var warn = new System.Text.StringBuilder();
             warn.Append("- You will be LOCKED IN for ").Append(minutes).Append(" minutes\n");
             if (cfg.LockdownForceStrictLock) warn.Append("- Strict Lock will be FORCED ON\n");
             if (cfg.LockdownDisablePanicKey) warn.Append("- Panic Key will be DISABLED\n");
+            // WPF MainWindow.Lab.cs:80; Platform/Win32PanicKey enforces it on Windows only.
+            if (windows && cfg.LockdownBlockSystemKeys) warn.Append("- Alt+F4, Alt+Tab, the Windows key and Ctrl+Esc will be BLOCKED\n");
             warn.Append("- You CANNOT close the application (minimizing still works)\n");
             warn.Append("- The only escape is waiting for the timer to expire\n");
-            warn.Append("  (or ending the app from a system monitor / terminal as a safety valve)");
+            warn.Append(windows
+                ? "  (or Ctrl+Alt+Del → Task Manager as a safety valve)"   // WPF's line verbatim
+                : "  (or ending the app from a system monitor / terminal as a safety valve)");
             return warn.ToString();
         }
 
@@ -428,11 +474,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// fire the EmergencyExit tripwire and Chaster's safety hold, then state the phrase steps
         /// and the time left. Never RestartTimer, never Deactivate, never open the phrase box.
         /// </summary>
+        /// <summary>hunt3 IC7, WPF EmergencyExitHostService.cs:134 / :548: EMI's <c>emergencyExitOpened</c> is
+        /// a hold for as long as the Emergency Exit games are up. This head has no games window (the
+        /// notice below is the whole surface), so the hold is armed and let go together.</summary>
+        internal static void FireEmergencyExitMoment()
+        {
+            ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("emergencyExitOpened");
+            ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.ReleaseHold("emergencyExitOpened");
+        }
+
         private void BtnEmergencyExit_Click(object? sender, RoutedEventArgs e)
         {
             if (Lockdown is not { IsActive: true } ld) return;
             try { ld.NotifyEscapeAttempt(EscapeKinds.EmergencyExit); } catch (Exception ex) { Log.Debug(ex, "EmergencyExit tripwire"); }
             try { Platform.ChasterHead.Service?.NoteSafetyExit(); } catch (Exception ex) { Log.Debug(ex, "EmergencyExit chaster hold"); }
+            FireEmergencyExitMoment();
             // The real time left even under HideLockdownTimer: this notice is the way out, it must not hide it.
             TxtEmergencyExitNotice.Text = Loc.GetF("lockdown_ee_phrase_steps_fmt", SessionClockLabel.LockdownClock(ld.Remaining, false));
             TxtEmergencyExitNotice.IsVisible = true;

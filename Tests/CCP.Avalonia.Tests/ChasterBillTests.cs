@@ -254,6 +254,7 @@ public sealed class ChasterBillTests
             Assert.StartsWith("NETTO ", receipt.StampText);
 
             Click(w, tab.FindControl<Border>("StatRun")!);
+            tab.FxFinish();   // the bill rolls back up (260 ms): step past it
             Assert.False(host.IsVisible);
         }
         finally { LocalizationManager.Instance.SetLanguage("en"); w.Close(); }

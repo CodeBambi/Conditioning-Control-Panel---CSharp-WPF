@@ -12,9 +12,9 @@
      Buttons keep Content: none of these strings contains an underscore, so Avalonia's
      access-key parsing has nothing to swallow. -->
 <Window xmlns="https://github.com/avaloniaui"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="ConditioningControlPanel.Avalonia.Views.Windows.LayeredAudioWindow"
-        Title="Audio Layers"
+        Title="{loc:Str title_audio_layers}"
         Width="480" Height="660"
         WindowStartupLocation="CenterOwner"
         Background="#0F0F1E"
@@ -32,13 +32,13 @@
         </Grid.RowDefinitions>
 
         <TextBlock Grid.Row="0"
-                   Text="🎧 Audio Layers"
+                   Text="{loc:Str btn_audio_layers}"
                    Foreground="{DynamicResource PinkBrush}"
                    FontSize="20"
                    FontWeight="SemiBold"/>
 
         <TextBlock Grid.Row="1"
-                   Text="Build your own looping soundscape — add several audio files and they all play together, each on its own volume. Everything mixes through one output so it stays light. Turn the master on to hear it now; it also plays automatically for audio-only sessions."
+                   Text="Build your own looping soundscape - add several audio files and they all play together, each on its own volume. Everything mixes through one output so it stays light. Turn the master on to hear it now; it also plays automatically for audio-only sessions."
                    Foreground="#A0A0B0"
                    FontSize="12"
                    TextWrapping="Wrap"
@@ -67,7 +67,7 @@
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <TextBlock Text="Master" Foreground="#B0B0C0" FontSize="12"
+                    <TextBlock Text="{loc:Str setting_master}" Foreground="#B0B0C0" FontSize="12"
                                VerticalAlignment="Center" Margin="0,0,8,0"/>
                     <Slider Grid.Column="1" x:Name="SliderMaster"
                             Minimum="0" Maximum="100" Value="70"
@@ -117,7 +117,7 @@
 
         <Button Grid.Row="5"
                 x:Name="BtnClose"
-                Content="Done"
+                Content="{loc:Str btn_done}"
                 Theme="{StaticResource OutlineButton}"
                 Padding="16,8"
                 HorizontalAlignment="Right"

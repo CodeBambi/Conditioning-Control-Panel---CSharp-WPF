@@ -9,6 +9,9 @@
     <RootNamespace>CCP.Avalonia.Tests</RootNamespace>
   </PropertyGroup>
 
+  <!-- The head's WinRT projection (Awareness lane): a plain Reference does not reach this host through the ProjectReference. -->
+  <Import Project="..\..\WinRtProjection.props" />
+
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.10.0" />
     <PackageReference Include="xunit.v3" Version="3.2.2" />

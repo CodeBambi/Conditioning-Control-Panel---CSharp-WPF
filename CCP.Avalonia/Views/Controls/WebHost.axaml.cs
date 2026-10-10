@@ -37,6 +37,27 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
     /// </summary>
     public partial class WebHost : UserControl
     {
+        /// <summary>
+        /// True when pages in this process may start audio / video without a click. WPF passes
+        /// <c>--autoplay-policy=no-user-gesture-required</c> to every WebView2 it creates (ChaosWebViewHost,
+        /// BackRoomHostService, BrowserService); this head hands the same switch to WebView2 in ONE place,
+        /// the environment options (<see cref="BrowserArguments"/>, read once per process so the string
+        /// stays constant per user-data folder). WebKitGTK has no such switch: false there, and a page
+        /// that asks (Arcademy <c>init.autoplayOk</c>) waits for its first click.
+        /// <c>CCP_WEBVIEW_AUTOPLAY=off</c> leaves the engine default (the switch is dropped, this reads false).
+        /// </summary>
+        public static bool AutoplayWithoutGesture { get; } = AutoplayFor(OperatingSystem.IsWindows(), ReadAutoplayEnv());
+
+        private static string? ReadAutoplayEnv()
+        {
+            try { return Environment.GetEnvironmentVariable("CCP_WEBVIEW_AUTOPLAY"); }
+            catch { return null; }
+        }
+
+        /// <summary>The rule behind <see cref="AutoplayWithoutGesture"/>: WebView2 only, unless switched off.</summary>
+        internal static bool AutoplayFor(bool windows, string? env) =>
+            windows && !string.Equals(env?.Trim(), "off", StringComparison.OrdinalIgnoreCase);
+
         /// <summary>Page to load. Mirrors <see cref="NativeWebView.SourceProperty"/>.</summary>
         public static readonly StyledProperty<Uri?> SourceProperty =
             AvaloniaProperty.Register<WebHost, Uri?>(nameof(Source));
@@ -80,6 +101,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
         internal void OnNavigationCompleted(Uri? url)
         {
             if (url is null) return;
+            url = FromEngine(url);
             CurrentUrl = url;
             NavigationCompleted?.Invoke(url);
         }
@@ -89,6 +111,29 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
         /// JSON-stringifies objects). The stand-in for WPF's <c>CoreWebView2.WebMessageReceived</c>.
         /// </summary>
         public event Action<string>? WebMessage;
+
+        /// <summary>
+        /// One extra request header for a url, or null (the usual answer). The stand-in for WPF's
+        /// <c>AddWebResourceRequestedFilter</c> + <c>Request.Headers.SetHeader</c> (JustDropHostService.AttachAuthHeader):
+        /// the caller's rule decides, per request, whether its credential rides along. Never logged.
+        /// </summary>
+        public Func<Uri, (string Name, string Value)?>? RequestHeader { get; set; }
+
+        /// <summary>Requests <see cref="RequestHeader"/> stamped (tests, logs; never the value).</summary>
+        internal int StampedRequests { get; private set; }
+
+        private void StampRequestHeader(WebResourceRequestedEventArgs e)
+        {
+            var rule = RequestHeader;
+            if (rule is null) return;
+            try
+            {
+                var uri = e.Request?.Uri;
+                if (uri is null || rule(uri) is not { } header) return;
+                if (e.Request!.Headers.TrySet(header.Name, header.Value)) StampedRequests++;
+            }
+            catch (Exception ex) { Log.Debug("WebHost: request header not set: {Error}", ex.Message); }
+        }
 
         /// <summary>The seam the engine's WebMessageReceived routes through (headless tests drive it).</summary>
         internal void OnWebMessage(string? body)
@@ -147,6 +192,47 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
         private readonly TextBlock _txtReason, _txtSource;
         private readonly NativeWebView? _web;
 
+        /// <summary>WebView2's browser switches (WPF GoonHostService.cs:284, ChaosWebViewHost): media starts
+        /// without a click, and a game behind another window keeps its timers (a live shared match clock).
+        /// ONE constant for every WebHost: they share a user-data folder, and WebView2 refuses a second
+        /// environment on a folder whose running browser was started with different switches.
+        /// ponytail: WebKitGTK has no such switch here; autoplay there needs the page's own gesture.</summary>
+        internal const string WindowsBrowserArguments = AutoplaySwitch + " " + NoThrottlingSwitches;
+        private const string AutoplaySwitch = "--autoplay-policy=no-user-gesture-required";
+        // CalculateNativeWinOcclusion off (WPF ChaosWebViewHost passes it to every host): the For You
+        // ghost parks its window off the virtual desktop, and Chromium would call it occluded, stop
+        // rendering and freeze the mirror on a still frame.
+        private const string NoThrottlingSwitches = "--disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-features=CalculateNativeWinOcclusion";
+
+        /// <summary>What a WebView2 environment gets: the whole constant, or (CCP_WEBVIEW_AUTOPLAY=off)
+        /// the same without the autoplay switch, so <see cref="AutoplayWithoutGesture"/> stays the truth.</summary>
+        internal static string BrowserArgumentsFor(bool autoplay) => autoplay ? WindowsBrowserArguments : NoThrottlingSwitches;
+
+        /// <summary>The one string this process hands every WebView2 environment.</summary>
+        internal static string BrowserArguments { get; } = BrowserArgumentsFor(AutoplayWithoutGesture);
+
+        /// <summary>The WebView2 profile folder NAME under UserData (Platform/WebProfiles: WPF's own
+        /// names, so sign-ins survive the upgrade). Set it before the control is shown: the engine
+        /// asks once, when the native view first attaches. Windows only; WebKitGTK ignores it.</summary>
+        public string Profile { get; set; } = Platform.WebProfiles.Browser;
+
+        private void OnEnvironmentRequested(object? sender, WebViewEnvironmentRequestedEventArgs e)
+        {
+            if (e is not WindowsWebView2EnvironmentRequestedEventArgs win) return;
+            win.AdditionalBrowserArguments = string.IsNullOrWhiteSpace(win.AdditionalBrowserArguments)
+                ? BrowserArguments
+                : win.AdditionalBrowserArguments + " " + BrowserArguments;
+            // In UserData, never beside the exe (the default): an update or a mirrored deploy of the
+            // install folder would wipe the profile, and Program Files is not writable.
+            try
+            {
+                var folder = Platform.WebProfiles.FolderFor(Profile);
+                System.IO.Directory.CreateDirectory(folder);
+                win.UserDataFolder = folder;
+            }
+            catch (Exception ex) { Serilog.Log.Warning(ex, "WebHost: profile folder {Profile} unavailable; engine default", Profile); }
+        }
+
         public WebHost()
         {
             AvaloniaXamlLoader.Load(this);
@@ -162,12 +248,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
                 try
                 {
                     _web = new NativeWebView();
+                    _web.EnvironmentRequested += OnEnvironmentRequested;
+                    _web.AdapterCreated += (_, e) => OnAdapterCreated(CoreWebView2Of(e));
+                    _web.AdapterDestroyed += (_, _) => OnAdapterDestroyed();
                     // Subscribed once, here, rather than when a caller sets AllowNavigation: the
                     // gate has to be live for the FIRST navigation too, and a caller that assigns
                     // the predicate and the Source in that order would otherwise race the engine.
                     _web.NavigationStarted += OnNavigationStarted;
                     _web.NavigationCompleted += (_, e) => OnNavigationCompleted(e.Request ?? _web?.Source);
                     _web.WebMessageReceived += (_, e) => OnWebMessage(e.Body);
+                    _web.WebResourceRequested += (_, e) => StampRequestHeader(e);   // k9: RequestHeader below
                     _webSlot.Children.Add(_web);
                 }
                 catch (Exception ex)
@@ -198,11 +288,129 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
             ApplySource();
         }
 
+        // ---- the app's own pages: WPF's https://ccp.* origins ---------------------------------
+
+        /// <summary>Where this view stands with the app's virtual hosts (Platform/WebView2Hosts).</summary>
+        internal enum AppHostState
+        {
+            /// <summary>No engine yet: an app page is held until the adapter exists.</summary>
+            Waiting,
+            /// <summary>The hosts are on this web view: <c>https://ccp.game</c> loads as under WPF.</summary>
+            Installed,
+            /// <summary>No virtual hosts here (WebKitGTK, or the install failed): app pages load from
+            /// the loopback server, and callers still see the url they asked for.</summary>
+            Loopback,
+        }
+
+        internal AppHostState AppHosts { get; private set; } = AppHostState.Waiting;
+
+        /// <summary>The server whose pages this view carries; null = <see cref="Platform.WebAssetServer.Shared"/>
+        /// (looked up only when a url looks like an app page, so a plain browser never starts it).</summary>
+        internal Platform.WebAssetServer? AppServer { get; set; }
+
+        /// <summary>Test seam: puts the hosts on a live ICoreWebView2 (null = it cannot be done).</summary>
+        internal Func<IntPtr, Platform.WebAssetServer, IDisposable?> InstallHosts { get; set; } =
+            (core, server) => Platform.WebView2Hosts.TryInstall(core, server);
+
+        private IDisposable? _hosts;
+        private Uri? _held;
+
+        private static IntPtr CoreWebView2Of(WebViewAdapterEventArgs e)
+        {
+            try { return e.TryGetPlatformHandle() is IWindowsWebView2PlatformHandle win ? win.CoreWebView2 : IntPtr.Zero; }
+            catch (Exception ex) { Log.Debug("WebHost: no platform handle: {Error}", ex.Message); return IntPtr.Zero; }
+        }
+
+        private Platform.WebAssetServer? ServerFor(Uri? url)
+        {
+            if (url is not { IsAbsoluteUri: true } || url.Scheme != Uri.UriSchemeHttps
+                || !url.Host.StartsWith("ccp.", StringComparison.Ordinal)) return null;
+            var server = AppServer ?? Platform.WebAssetServer.Shared;
+            return server.IsVirtual(url) ? server : null;
+        }
+
+        /// <summary>
+        /// The engine exists. A WebView2 gets the virtual hosts when the server wants them; if that
+        /// fails the server is demoted (every later url is loopback) and this view translates. Then
+        /// the page that was waiting loads. <paramref name="coreWebView2"/> is zero off WebView2.
+        /// </summary>
+        internal void OnAdapterCreated(IntPtr coreWebView2)
+        {
+            var server = AppServer ?? (Platform.WebAssetServer.VirtualHostsEnabled ? Platform.WebAssetServer.Shared : null);
+            if (server is { VirtualHosts: true })
+            {
+                try { _hosts = coreWebView2 == IntPtr.Zero ? null : InstallHosts(coreWebView2, server); }
+                catch (Exception ex) { _hosts = null; Log.Warning("WebHost: virtual hosts failed: {Error}", ex.Message); }
+                if (_hosts is null) server.DemoteToLoopback();
+            }
+            AppHosts = _hosts is null ? AppHostState.Loopback : AppHostState.Installed;
+            var held = _held;
+            _held = null;
+            if (held is not null) ToEngine(held, explicitNavigate: true);
+        }
+
+        private void OnAdapterDestroyed()
+        {
+            try { _hosts?.Dispose(); } catch (Exception ex) { Log.Debug("WebHost: hosts dispose: {Error}", ex.Message); }
+            _hosts = null;
+            AppHosts = AppHostState.Waiting;
+        }
+
+        /// <summary>
+        /// What the engine is given for a url a caller asked for: the url itself, an app page's
+        /// loopback twin when this view has no virtual hosts, or null while the engine does not exist
+        /// yet (an app page must not start loading before its hosts are in place, or
+        /// <c>https://ccp.game</c> would be asked of the real network).
+        /// </summary>
+        internal Uri? EngineUrl(Uri url)
+        {
+            var server = ServerFor(url);
+            if (server is null) return url;
+            switch (AppHosts)
+            {
+                case AppHostState.Installed: return url;
+                case AppHostState.Loopback: _translated = true; return server.ToLoopback(url);
+                default: return null;
+            }
+        }
+
+        /// <summary>The url a caller sees for one the engine reports: a translated app page reads as
+        /// the <c>https://ccp.*</c> url the caller asked for, so its same-origin guard holds on both transports.</summary>
+        internal Uri FromEngine(Uri url)
+        {
+            if (AppHosts != AppHostState.Loopback || !_translated) return url;
+            var server = AppServer ?? Platform.WebAssetServer.Shared;
+            return server.IsLoopback(url) ? server.ToVirtual(url) : url;
+        }
+
+        private bool _translated;
+
+        /// <summary>May the engine load this? A sandbox loads no real site; an app page is no site
+        /// (it never leaves the machine) but only where the hosts stand in front of it.</summary>
+        private bool Permitted(Uri? url) =>
+            ServerFor(url) is not null ? AppHosts == AppHostState.Installed : ConditioningControlPanel.Services.SandboxNet.Allows(url);
+
+        private void ToEngine(Uri url, bool explicitNavigate)
+        {
+            if (_web is null) return;
+            var engine = EngineUrl(url);
+            if (engine is null) { _held = url; return; }
+            if (!Permitted(engine)) { if (!explicitNavigate) _web.Source = null!; return; }
+            try
+            {
+                if (explicitNavigate) _web.Navigate(engine);
+                else _web.Source = engine;
+            }
+            catch (Exception ex) { Log.Debug("WebHost: Navigate failed: {Error}", ex.Message); }
+        }
+
         private void OnNavigationStarted(object? sender, WebViewNavigationStartingEventArgs e)
         {
             var target = e.Request;
-            // A CCP_USERDATA_DIR sandbox never loads a real site, whatever the caller's gate says.
-            if (!ConditioningControlPanel.Services.SandboxNet.Allows(target)) { e.Cancel = true; return; }
+            // A CCP_USERDATA_DIR sandbox never loads a real site, whatever the caller's gate says; and
+            // an app url never reaches a web view whose hosts are not installed.
+            if (!Permitted(target)) { e.Cancel = true; return; }
+            if (target is not null) target = FromEngine(target);
             var gate = AllowNavigation;
             if (gate is null) return;
             // No URL to judge: refuse. A navigation the gate cannot see is exactly the one a
@@ -225,10 +433,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
             try { Source = url; } finally { _explicitNavigate = false; }
             NavigationRequests++;
             // A sandbox never loads a real site (as ApplySource): the panel may name it, the engine never gets it.
-            if (!ConditioningControlPanel.Services.SandboxNet.Allows(url)) { RefusedNavigations++; return; }
-            if (_web is null) return;
-            try { _web.Navigate(url); }
-            catch (Exception ex) { Log.Debug("WebHost: Navigate failed: {Error}", ex.Message); }
+            // An app page is not a site: it is served from this machine on either transport.
+            if (ServerFor(url) is null && !ConditioningControlPanel.Services.SandboxNet.Allows(url)) { RefusedNavigations++; return; }
+            ToEngine(url, explicitNavigate: true);
         }
 
         /// <summary>The URL as the fallback panel names it: WebAssetServer's ccp_t token never reaches the screen.</summary>
@@ -262,7 +469,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
             // A sandbox never loads a real site (see OnNavigationStarted); the panel may still name it.
             if (_web is not null)
             {
-                if (!_explicitNavigate) _web.Source = ConditioningControlPanel.Services.SandboxNet.Allows(src) ? src! : null!;
+                if (_explicitNavigate) return;
+                _held = null;
+                if (src is null) _web.Source = null!;
+                else ToEngine(src, explicitNavigate: false);
                 return;
             }
             // No engine: the panel at least names the page that was meant to load.

@@ -29,13 +29,40 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         public bool IsQuizOpen => Dispatcher.UIThread.Invoke(PopQuizWindow.IsAnyOpen);
         public bool IsLockCardOpen => Dispatcher.UIThread.Invoke(LockCardWindow.IsAnyOpen);
-        public bool IsInteractionBusy => false;
+        /// <summary>WPF InteractionQueue.IsBusy: another fullscreen interaction holds the slot. On this head
+        /// those are a mandatory video and the bubble count game (the lock card has its own check above).</summary>
+        public bool IsInteractionBusy => Dispatcher.UIThread.Invoke(OtherInteractionUp);
+
+        /// <summary>Test seam for the two probes.</summary>
+        internal static Func<bool> OtherInteractionUp = () => CoreEngine.Video?.IsPlaying == true || BubbleCountWindow.IsAnyOpen();
+
+        private DispatcherTimer? _busyWatch;
 
         public bool Defer(Action replay)
         {
             _deferred = () => Dispatcher.UIThread.Post(replay);
+            // A lock card replays on AllClosed. A video or a bubble count has no such signal here, so the
+            // queue is watched: the quiz takes its turn within a second of the slot coming free.
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (_busyWatch != null) return;
+                _busyWatch = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+                _busyWatch.Tick += (_, _) => BusyWatchTick();
+                _busyWatch.Start();
+            });
             return true;
         }
+
+        internal void BusyWatchTick()
+        {
+            if (_deferred == null) { _busyWatch?.Stop(); _busyWatch = null; return; }
+            if (OtherInteractionUp() || LockCardWindow.IsAnyOpen()) return;
+            _busyWatch?.Stop();
+            _busyWatch = null;
+            var r = _deferred; _deferred = null; r?.Invoke();
+        }
+
+        internal bool HasDeferred => _deferred != null;
 
         public void DropDeferred() => _deferred = null;
 
@@ -51,7 +78,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     mods?.GetQuizPraiseHeardQuestionOverride());
                 var question = pool[_random.Next(pool.Length)];
                 new PopQuizWindow(question, isTest).Show();
-                // ponytail: WPF also calls SeasonRecapService.TrackFeature(PopQuiz); that service is head-side.
+                if (!isTest) global::ConditioningControlPanel.Services.SeasonFeatureTracker.TrackFeature(global::ConditioningControlPanel.Models.SeasonFeatureKeys.PopQuiz);   // WPF PopQuizService:260
                 Log.Information("Pop Quiz shown: {Question}", question.QuestionText);
             }
             catch (Exception ex)

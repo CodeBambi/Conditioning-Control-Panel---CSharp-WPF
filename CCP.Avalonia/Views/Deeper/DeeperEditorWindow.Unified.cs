@@ -33,8 +33,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
     ///   Cursors.Hand / SizeAll / SizeWE       -> new Cursor(StandardCursorType.*)
     ///   Panel.SetZIndex(v, n)                 -> v.ZIndex = n
     ///   Visibility                            -> IsVisible
-    ///   TutorialEventBus.Emit                 -> a named no-op; Core carries no event bus by
-    ///                                            design, see EmitTutorialEvent at the foot
+    ///   TutorialEventBus.Emit                 -> CoreTutorialEvents.Emit (EmitTutorialEvent at the foot)
     ///   App.Logger                            -> Serilog.Log
     /// </summary>
     public partial class DeeperEditorWindow
@@ -1097,6 +1096,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         /// as an enum and the subscription hooks a real control on a real head - so a seam to emit
         /// into would have to be added to Core first, not merely used.</para>
         /// </summary>
-        private static void EmitTutorialEvent(string name) { _ = name; }
+        private static void EmitTutorialEvent(string name) => CoreTutorialEvents.Emit(name);
     }
 }

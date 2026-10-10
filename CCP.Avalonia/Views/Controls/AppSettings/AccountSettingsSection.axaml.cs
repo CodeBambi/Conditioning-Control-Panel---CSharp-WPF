@@ -57,26 +57,26 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             // their own constructor (see GeneralSettingsSection), and Settings is a page you arrive
             // at rather than sit on. The language hook is the one addition: the two TextBlocks are
             // driven from code, so nothing else would re-render them after a language change.
-            Refresh();
-            // Repaint on whatever moves a card (WPF: Loaded/IsVisibleChanged, TierChanged via
-            // UpdatePatreonUI, Chaster ProfileChanged). Subscribed only while attached (P41).
-            EventHandler changed = (_, _) => Post();
-            EventHandler<PatreonTier> tier = (_, _) => Post();
+            RefreshTierBadge();
+            RefreshProviderRows();
+            var presence = this.FindControl<CheckBox>("ChkFriendsPresence")!;
+            presence.IsCheckedChanged += ChkFriendsPresence_Changed;
+            RefreshFriendsPresence();
+            EventHandler changed = (_, _) => global::Avalonia.Threading.Dispatcher.UIThread.Post(() => { RefreshTierBadge(); RefreshProviderRows(); });
+            RefreshChaster();
+            // Chaster row (Mich, rows-login-phone): repaint on profile/link/lock changes while attached (P41).
             Action chasterChanged = () => global::Avalonia.Threading.Dispatcher.UIThread.Post(RefreshChaster);
             ChasterService? chaster = null;
             AttachedToVisualTree += (_, _) =>
             {
                 LocalizationManager.Instance.LanguageChanged += changed;
-                if (AccountSeed.Patreon is { } p) p.TierChanged += tier;
-                if (AccountSeed.SubscribeStar is { } ss) ss.TierChanged += tier;
                 if ((chaster = ChasterHead.Service) is { } c) { c.ProfileChanged += chasterChanged; c.LinkChanged += chasterChanged; c.LockChanged += chasterChanged; }
-                Refresh();
+                RefreshTierBadge();
+                RefreshChaster();
             };
             DetachedFromVisualTree += (_, _) =>
             {
                 LocalizationManager.Instance.LanguageChanged -= changed;
-                if (AccountSeed.Patreon is { } p) p.TierChanged -= tier;
-                if (AccountSeed.SubscribeStar is { } ss) ss.TierChanged -= tier;
                 if (chaster is { } c) { c.ProfileChanged -= chasterChanged; c.LinkChanged -= chasterChanged; c.LockChanged -= chasterChanged; }
                 chaster = null;
             };
@@ -86,9 +86,58 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
         /// Host seam: the Settings door repaints the tier card every time it opens, so a login that
         /// happened behind another door is never shown stale.
         /// </summary>
-        public void OnSectionShown() => Refresh();
+        public void OnSectionShown()
+        {
+            RefreshTierBadge();
+            RefreshProviderRows();
+            RefreshFriendsPresence();
+            RefreshChaster();
+            _ = UpdateBackupStatusAsync();
+            PlansView.RefreshVault();   // the plates can move between visits (sign-in, tier change)
+            // Throttled inside (30 s): the invites card lives on this copy (WPF RefreshVaultCore).
+            _ = PlansView.FindControl<Controls.Invites.InvitePanel>("InvitesHost")?.RefreshAsync();
+        }
 
-        private void Post() => global::Avalonia.Threading.Dispatcher.UIThread.Post(Refresh);
+        private bool _refreshingPresence;
+
+        /// <summary>WPF FriendsPresenceSetting.Read: the friends service's live answer when it is up,
+        /// else the saved setting.</summary>
+        internal void RefreshFriendsPresence()
+        {
+            var chk = this.FindControl<CheckBox>("ChkFriendsPresence");
+            if (chk == null) return;
+            _refreshingPresence = true;
+            try
+            {
+                var svc = global::ConditioningControlPanel.Avalonia.Platform.FriendsHead.Service;
+                chk.IsChecked = svc?.Available == true ? svc.PresenceShared
+                    : CoreSettings.Current?.FriendsPresenceShared == true;
+            }
+            catch (Exception ex) { Log.Debug("friends presence row: {E}", ex.Message); }
+            finally { _refreshingPresence = false; }
+        }
+
+        /// <summary>WPF FriendsPresenceSetting.Write: through the service when it is up (it saves),
+        /// else straight to settings; answering here counts as answering the once-only ask.</summary>
+        private void ChkFriendsPresence_Changed(object? sender, RoutedEventArgs e)
+        {
+            if (_refreshingPresence || sender is not CheckBox chk) return;
+            bool on = chk.IsChecked == true;
+            try
+            {
+                var svc = global::ConditioningControlPanel.Avalonia.Platform.FriendsHead.Service;
+                if (svc?.Available == true) svc.PresenceShared = on;
+                else if (CoreSettings.Current is { } s) { s.FriendsPresenceShared = on; CoreSettings.Save(); }
+                PresenceAsk.MarkAsked();
+            }
+            catch (Exception ex) { Log.Debug("friends presence write: {E}", ex.Message); }
+        }
+
+        /// <summary>The Account &amp; Plans copy of the vault (header, plates, invites).</summary>
+        internal Tabs.ExclusivesTabView Plans => PlansView;
+
+        /// <summary>Starts or parks the plans room (AppSettingsTabView.SyncPlansMotion).</summary>
+        internal void SetPlansMotion(bool on) => PlansView.SetMotion(on);
 
         /// <summary>Repaints the account/tier card from the account seam. Never throws.</summary>
         internal void RefreshTierBadge()
@@ -140,230 +189,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
 
         private void OpenUrl(string url) => _ = Platform.ExternalOpener.OpenAsync(TopLevel.GetTopLevel(this), url);
 
+        // Live (social#2): the flows are in AccountSettingsSection.Providers.cs.
+        private void BtnPatreonLogin_Click(object? sender, RoutedEventArgs e) => _ = ProviderLoginAsync("patreon");
+        private void BtnSubscribeStarLogin_Click(object? sender, RoutedEventArgs e) => _ = ProviderLoginAsync("substar");
+        private void BtnDiscordLogin_Click(object? sender, RoutedEventArgs e) => _ = ProviderLoginAsync("discord");
+        private void BtnLinkPatreon_Click(object? sender, RoutedEventArgs e) => _ = LinkProviderAsync("patreon", "BtnLinkPatreon");
+        private void BtnLinkDiscord_Click(object? sender, RoutedEventArgs e) => _ = LinkProviderAsync("discord", "BtnLinkDiscord");
+
         private Window? Owner => TopLevel.GetTopLevel(this) as Window;
-        private MainShellWindow? Shell => TopLevel.GetTopLevel(this) as MainShellWindow;
-
-        private T Find<T>(string name) where T : Control => this.FindControl<T>(name)!;
-
-        /// <summary>Every card on the section, as WPF's OnSectionShown and the auth choke points
-        /// (UpdatePatreonUI/UpdateDiscordUI/UpdateSubscribeStarUI/UpdateAccountLinkingUI) repaint it.</summary>
-        public void Refresh()
-        {
-            RefreshTierBadge();
-            try { RefreshProviders(); RefreshLinking(); }
-            catch (Exception ex) { Log.Debug("AccountSettingsSection.RefreshProviders failed: {E}", ex.Message); }
-            RefreshChaster();
-            RefreshFriendsPresence();
-        }
-
-        private static string Tier(PatreonTier tier, bool whitelisted, bool active) => tier switch
-        {
-            PatreonTier.Level2 => Loc.Get("label_patreon_tier_level2"),
-            PatreonTier.Level1 => Loc.Get("label_patreon_tier_level1"),
-            _ when whitelisted => Loc.Get("label_patreon_tier_whitelisted"),
-            _ => Loc.Get(active ? "label_patreon_tier_patron" : "label_patreon_tier_connected"),
-        };
-
-        /// <summary>WPF MainWindow.Patreon.cs:284 UpdatePatreonUI, :578 UpdateDiscordUI and
-        /// MainWindow.SubscribeStar.cs:57 UpdateSubscribeStarUI - the AppSettingsTab halves. WPF's
-        /// hardcoded English ("Welcome, X!", "Connected as X", "Link Patreon") goes through Loc here.</summary>
-        private void RefreshProviders()
-        {
-            var s = CoreSettings.Current;
-            var hasUnifiedId = !string.IsNullOrEmpty(s.UnifiedId);
-
-            void Sub(ProviderSubscription? sub, string card, string connectedKey, bool offerLink)
-            {
-                var status = Find<TextBlock>($"Txt{card}Status");
-                var tier = Find<TextBlock>($"Txt{card}Tier");
-                var label = Find<TextBlock>($"TxtBtn{card}Login");
-                if (sub?.IsAuthenticated == true)
-                {
-                    var name = s.UserDisplayName ?? sub.DisplayName;
-                    status.Text = string.IsNullOrEmpty(name) ? Loc.Get(connectedKey) : Loc.GetF("label_welcome", name);
-                    tier.Text = Tier(sub.CurrentTier, sub.IsWhitelisted, sub.IsActive);
-                    label.Text = Loc.Get("btn_logout");
-                }
-                else
-                {
-                    status.Text = Loc.Get("label_not_connected");
-                    tier.Text = Loc.Get("label_login_to_unlock_exclusive_features");
-                    label.Text = Loc.Get(offerLink && hasUnifiedId ? "btn_link_patreon" : "btn_login");
-                }
-            }
-            Sub(AccountSeed.Patreon, "Patreon", "account_connected_to_patreon", offerLink: true);
-            Sub(AccountSeed.SubscribeStar, "SubscribeStar", "account_connected_to_substar", offerLink: false);
-
-            var discord = AccountSeed.Discord;
-            if (discord?.IsAuthenticated == true)
-            {
-                Find<TextBlock>("TxtDiscordStatus").Text = Loc.GetF("account_connected_as", s.UserDisplayName ?? discord.DisplayName ?? "");
-                Find<TextBlock>("TxtDiscordInfo").Text = $"@{discord.Username}";
-                Find<TextBlock>("TxtBtnDiscordLogin").Text = Loc.Get("btn_logout");
-            }
-            else
-            {
-                Find<TextBlock>("TxtDiscordStatus").Text = Loc.Get("label_not_connected");
-                Find<TextBlock>("TxtDiscordInfo").Text = Loc.Get("label_link_discord_for_community_features");
-                Find<TextBlock>("TxtBtnDiscordLogin").Text = Loc.Get(hasUnifiedId ? "btn_link_discord" : "btn_login");
-            }
-        }
-
-        private static readonly IBrush PatreonRedBrush = new SolidColorBrush(Color.FromRgb(0xFF, 0x42, 0x4D));
-
-        /// <summary>WPF MainWindow.Patreon.cs UpdateAccountLinkingUI: the linking row, its Reconnect
-        /// state (PatreonReconnectRule owns the decision) and the cloud-identity sections.</summary>
-        private void RefreshLinking()
-        {
-            var s = CoreSettings.Current;
-            var patreon = AccountSeed.Patreon;
-            var hasUnifiedId = !string.IsNullOrEmpty(s.UnifiedId);
-            var hasLinkedDiscord = s.HasLinkedDiscord || AccountSeed.Discord?.IsAuthenticated == true;
-            var row = PatreonReconnectRule.Decide(
-                hasUnifiedId: hasUnifiedId,
-                linkedServerSide: s.HasLinkedPatreon,
-                desktopAuthenticated: patreon?.IsAuthenticated == true && !patreon.GrantLooksDead,
-                hasPremiumNow: CoreAccount.HasPremiumAccess,
-                whitelisted: patreon?.IsWhitelisted == true);
-
-            Find<Border>("AccountLinkingSection").IsVisible = hasUnifiedId && (row.ShowsButton || !hasLinkedDiscord);
-            var link = Find<Button>("BtnLinkPatreon");
-            link.IsVisible = row.ShowsButton;
-            if (link.IsEnabled)
-                Find<TextBlock>("TxtBtnLinkPatreon").Text = Loc.Get(row.Action == PatreonLinkAction.Reconnect ? "btn_reconnect_patreon" : "btn_link_patreon");
-            link.Background = row.Filled ? PatreonRedBrush : Brushes.Transparent;
-            link.Foreground = row.Filled ? Brushes.White : PatreonRedBrush;
-            link.BorderBrush = PatreonRedBrush;
-            link.BorderThickness = new Thickness(row.Filled ? 0 : 1);
-            Find<TextBlock>("TxtPatreonReconnectHint").IsVisible = row.ShowsHint;
-            var linkDiscord = Find<Button>("BtnLinkDiscord");
-            linkDiscord.IsVisible = hasUnifiedId && !hasLinkedDiscord;
-            // WPF BtnLinkDiscord_Click finally: the label comes back after a failed/cancelled link.
-            if (linkDiscord.IsEnabled) Find<TextBlock>("TxtBtnLinkDiscord").Text = Loc.Get("btn_link_discord");
-            // ponytail: CloudSettingsBackupSection stays hidden and BtnExportData collapsed until
-            // ProfileSync's backup/restore/export calls reach this head (MainShellWindow.CloudBackup.cs).
-            Find<Border>("DataPrivacySection").IsVisible = hasUnifiedId;
-        }
-
-        // ---- provider buttons (WPF MainWindow.Patreon.cs:455/526, MainWindow.SubscribeStar.cs:92) ----
-
-        /// <summary>Signed in: sign this provider out (the whole account when none is left). Signed
-        /// out with a cloud identity: link it. Otherwise: the unified login dialog.</summary>
-        private async Task ProviderClickAsync(string provider, Button button, string labelName)
-        {
-            bool authed = provider switch
-            {
-                "discord" => AccountSeed.Discord?.IsAuthenticated == true,
-                "substar" => AccountSeed.SubscribeStar?.IsAuthenticated == true,
-                _ => AccountSeed.Patreon?.IsAuthenticated == true,
-            };
-            if (authed)
-            {
-                if (provider == "patreon") AccountSeed.Sync?.StopHeartbeat(); // WPF MainWindow.Patreon.cs:462
-                AccountSeed.LogoutProvider(provider);
-                var anyLeft = AccountSeed.Patreon?.IsAuthenticated == true || AccountSeed.Discord?.IsAuthenticated == true
-                              || AccountSeed.SubscribeStar?.IsAuthenticated == true;
-                if (!anyLeft) { if (Shell is { } mw) await mw.LogoutAsync(); else await AccountSeed.Logout(); }
-                else
-                {
-                    if (provider == "patreon" && AccountSeed.Patreon is { } p) p.UnifiedUserId = null;
-                    if (provider == "discord" && AccountSeed.Discord is { } d) d.UnifiedUserId = null;
-                    Shell?.UpdateQuickLoginUI(accountChanged: true);
-                }
-            }
-            else if (provider != "substar" && !string.IsNullOrEmpty(CoreSettings.Current.UnifiedId))
-                await LinkAsync(provider, button, labelName);
-            else if (Shell is { } mw)
-                await mw.OpenUnifiedLoginDialog();
-            Refresh();
-        }
-
-        private async void BtnPatreonLogin_Click(object? sender, RoutedEventArgs e) => await Guard(ProviderClickAsync("patreon", Find<Button>("BtnPatreonLogin"), "TxtBtnPatreonLogin"));
-        private async void BtnSubscribeStarLogin_Click(object? sender, RoutedEventArgs e) => await Guard(ProviderClickAsync("substar", Find<Button>("BtnSubscribeStarLogin"), "TxtBtnSubscribeStarLogin"));
-        private async void BtnDiscordLogin_Click(object? sender, RoutedEventArgs e) => await Guard(ProviderClickAsync("discord", Find<Button>("BtnDiscordLogin"), "TxtBtnDiscordLogin"));
-        private async void BtnLinkPatreon_Click(object? sender, RoutedEventArgs e) => await Guard(LinkAsync("patreon", Find<Button>("BtnLinkPatreon"), "TxtBtnLinkPatreon"));
-        private async void BtnLinkDiscord_Click(object? sender, RoutedEventArgs e) => await Guard(LinkAsync("discord", Find<Button>("BtnLinkDiscord"), "TxtBtnLinkDiscord"));
-
-        private static async Task Guard(Task work)
-        {
-            try { await work; }
-            catch (Exception ex) { Log.Warning(ex, "Account settings action failed"); }
-        }
-
-        /// <summary>Tests only: the dialog every link outcome is told through (WPF MessageBox.Show).</summary>
-        internal static Func<Window?, string, string, Task> Tell = async (owner, title, body) =>
-        {
-            if (owner != null) await MessageDialog.ShowAsync(owner, title, body);
-        };
-
-        /// <summary>WPF BtnLinkPatreon_Click/BtnLinkDiscord_Click + AccountService.LinkProviderV2Async:
-        /// the provider's OAuth, then the V2 link call. A sandbox never opens a real provider page.</summary>
-        internal async Task LinkAsync(string provider, Button button, string labelName)
-        {
-            if (string.IsNullOrEmpty(CoreSettings.Current.UnifiedId))
-            {
-                await Tell(Owner, Loc.Get("account_not_logged_in_title"), Loc.Get("account_login_first"));
-                return;
-            }
-            button.IsEnabled = false;
-            Find<TextBlock>(labelName).Text = Loc.Get("login_connecting");
-            var top = TopLevel.GetTopLevel(this);
-            Action<string> open = url =>
-            {
-                if (Platform.ExternalOpener.Allowed(url))
-                    global::Avalonia.Threading.Dispatcher.UIThread.Post(() => _ = Platform.ExternalOpener.OpenAsync(top, url));
-            };
-            try
-            {
-                string? token;
-                if (provider == "discord")
-                {
-                    if (AccountSeed.Discord is not { } d) return;
-                    await d.SignInAsync(open);
-                    token = d.GetAccessToken();
-                }
-                else
-                {
-                    if (AccountSeed.Patreon is not { } p) return;
-                    await p.SignInAsync(open);
-                    token = p.GetAccessToken();
-                }
-                if (string.IsNullOrEmpty(token)) return;
-
-                var s = CoreSettings.Current;
-                var result = await AccountSeed.NewV2().LinkProviderAsync(s.UnifiedId!, provider, token);
-                var alreadyLinked = !result.Success && ProviderLinkResponseRules.IsAlreadyLinkedToThisAccount(result.Error);
-                if (!result.Success && !alreadyLinked)
-                {
-                    Log.Warning("Failed to link {Provider}: {Error}", provider, result.Error);
-                    await Tell(Owner, Loc.Get("account_link_failed_title"), result.Error ?? Loc.GetF("account_link_failed_generic", provider));
-                    return;
-                }
-                if (provider == "discord") s.HasLinkedDiscord = true; else s.HasLinkedPatreon = true;
-                if (!string.IsNullOrEmpty(result.AuthToken)) s.AuthToken = result.AuthToken;
-                CoreSettings.Save();
-                if (alreadyLinked && provider == "patreon")
-                {
-                    // A patron repairing a dead grant: its own word, no dialog (WPF AccountService).
-                    App.Notifications.Show(Loc.Get("account_patreon_reconnected"), Helpers.NotificationType.Success, TimeSpan.FromSeconds(6));
-                    _ = AccountSeed.Patreon?.ValidateSubscriptionAsync(forceRefresh: true);
-                }
-                else
-                    await Tell(Owner, Loc.Get("account_linked_title"), Loc.GetF("account_linked_success", provider));
-                Shell?.UpdateQuickLoginUI();
-            }
-            catch (OperationCanceledException) { }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "Failed to link {Provider}", provider);
-                await Tell(Owner, Loc.Get("account_link_failed_title"), Loc.GetF("account_link_failed_generic", provider) + "\n\n" + ex.Message);
-            }
-            finally
-            {
-                button.IsEnabled = true;
-                Refresh();
-            }
-        }
 
         // ---- Chaster (WPF AccountSettingsSection.xaml.cs RefreshChaster) ----
 
@@ -417,49 +250,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             finally { RefreshChaster(); }
         }
 
-        // ---- friends presence (WPF FriendsPresenceSetting.Read/Write) ----
 
-        private bool _refreshingPresence;
+        // Cloud settings backup: AccountSettingsSection.CloudBackup.cs.
 
-        internal void RefreshFriendsPresence()
-        {
-            _refreshingPresence = true;
-            try
-            {
-                var svc = FriendsHead.Service;
-                bool shared;
-                // WPF FriendsPresenceSetting.Read: a throwing service falls back to the saved setting.
-                try { shared = svc != null ? svc.PresenceShared : CoreSettings.Current.FriendsPresenceShared; }
-                catch { shared = CoreSettings.Current.FriendsPresenceShared; }
-                Find<CheckBox>("ChkFriendsPresence").IsChecked = shared;
-            }
-            finally { _refreshingPresence = false; }
-        }
-
-        private void ChkFriendsPresence_Changed(object? sender, RoutedEventArgs e)
-        {
-            if (_refreshingPresence) return;
-            var on = Find<CheckBox>("ChkFriendsPresence").IsChecked == true;
-            var done = false;
-            try { if (FriendsHead.Service is { } svc) { svc.PresenceShared = on; done = true; } }
-            catch (Exception ex) { Log.Debug("[Friends] presence write failed: {E}", ex.Message); }
-            if (!done)
-            {
-                CoreSettings.Current.FriendsPresenceShared = on;
-                CoreSettings.Save();
-            }
-            PresenceAsk.MarkAsked();
-        }
-
-        // ponytail: cloud settings backup - ProfileSyncService.BackupSettingsAsync /
-        // GetSettingsBackupInfoAsync / RestoreSettingsFromCloudAsync, all still in the WPF head.
-        // CloudSettingsBackupSection stays hidden until they land (MainShellWindow.CloudBackup.cs).
-        private void BtnBackupSettingsNow_Click(object? sender, RoutedEventArgs e) { }
-        private void BtnRestoreSettings_Click(object? sender, RoutedEventArgs e) { }
-
-        // ponytail: GDPR export - ProfileSyncService.ExportDataAsync plus a save-file picker; the
-        // button stays collapsed until that transport reaches Core.
-        private void BtnExportData_Click(object? sender, RoutedEventArgs e) { }
+        // Live (social#4): AccountSettingsSection.Providers.cs ExportDataAsync.
+        private void BtnExportData_Click(object? sender, RoutedEventArgs e) => _ = ExportDataAsync();
 
         // Live: WPF used Process.Start with UseShellExecute, Avalonia's Launcher is the
         // cross-platform equivalent. Same two URLs MainWindow.CloudBackup.cs and

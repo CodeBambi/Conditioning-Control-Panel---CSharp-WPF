@@ -43,6 +43,15 @@ namespace ConditioningControlPanel
     /// </summary>
     public partial class MainWindow
     {
+        /// <summary>Nav strip zone pills (Sessions / Eyes / Games) land here: the Play wall
+        /// scrolls to the zone header and glows it once (PlayTabView.ScrollToZone).</summary>
+        partial void ScrollPlayZone(string zone)
+        {
+            if (PlayTab == null) { App.Logger?.Debug("ScrollPlayZone({Zone}): no Play view", zone); return; }
+            try { PlayTab.ScrollToZone(zone); }
+            catch (Exception ex) { App.Logger?.Debug("ScrollPlayZone({Zone}): {E}", zone, ex.Message); }
+        }
+
         internal void LaunchPlayBreakoutDemo() => Services.BackRoom.BreakoutHostService.LaunchDemo();
         internal void LaunchPlayBreakout() => Services.BackRoom.BreakoutHostService.LaunchFull();
         // Same rule as the launcher tile: every game but the Breakout demo needs an account.
@@ -52,6 +61,29 @@ namespace ConditioningControlPanel
         {
             if (Services.Launcher.LauncherCatalogue.NeedsAccount) { OpenUnifiedLoginDialog(); return; }
             Services.GoonGame.GoonHostService.Launch();
+        }
+
+        // ---- Games rehomed from the retired Premium page (nav rework 2026-10-06) ---------
+        // For these five the Premium page was the panel's only door. Each runs the call that page
+        // (MainWindow.Exclusives.cs OpenExclusiveFeature) and the launcher already use, so the
+        // card never decides access itself.
+
+        internal void LaunchPlayBackRoom() => BtnStartBackRoom_Click(this, new RoutedEventArgs());
+
+        /// <summary>Down the Rabbit Hole, the Arcademy and Racing Thoughts: the launcher's own entry,
+        /// so its gate, refusal and account rule are the ones that answer.</summary>
+        internal void LaunchPlayLauncherGame(string id) => LaunchExclusiveGame(id);
+
+        /// <summary>The Web App left the rail foot for a card here. Same two lines the rail door ran
+        /// (DoorWebApp_Click): open through the four-strategy launcher, retire the banner beat.</summary>
+        internal void OpenPlayWebApp()
+        {
+            try
+            {
+                Helpers.BrowserLauncher.OpenUrlOrPrompt(WebAppUrl, "open the CC Labs web app");
+                RetireWebBannerBeat();
+            }
+            catch (Exception ex) { App.Logger?.Warning(ex, "OpenPlayWebApp failed"); }
         }
 
         // ---- tuning ----------------------------------------------------------------------
@@ -95,6 +127,8 @@ namespace ConditioningControlPanel
                 // band, the click's refusal and the card title are one string in every language -
                 // a Japanese user no longer reads a Japanese refusal about an English subject.
                 SetLockbandVisible(tab.PlayLockBreakout, !Services.BackRoom.BreakoutAccess.FullAllowed);
+                SetLockband(tab.PlayLockDtrh, TierGate.RequiresLab(Loc.Get("launcher_game_dtrh_title"), "dtrh"));
+                SetLockband(tab.PlayLockArcademy, TierGate.RequiresLab(Loc.Get("launcher_game_arcademy_title")));
                 SetLockband(tab.PlayLockGaze, TierGate.RequiresLab(Loc.Get("label_gaze_minigame")));
                 SetLockband(tab.PlayLockFocusGaze, TierGate.RequiresLab(Loc.Get("label_focus_gaze")));
                 SetLockband(tab.PlayLockRemote, TierGate.RequiresPremium(Loc.Get("tab_remote_control"), "remote"));
@@ -147,6 +181,7 @@ namespace ConditioningControlPanel
 
             SetFreeStamp(tab.PlayBadgeRemote, "remote", owned: premium);
             SetFreeStamp(tab.PlayBadgeFyp, "fyp", owned: premium);
+            SetFreeStamp(tab.PlayBadgeDtrh, "dtrh", owned: App.Patreon?.HasLabAccess == true);
             // The descent's stamp ("dtrh", a promo-Saturday override) left with its card; the
             // launcher tile's Locked state reads the same TierGate verdict.
         }

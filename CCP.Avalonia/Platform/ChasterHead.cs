@@ -33,15 +33,13 @@ internal static class ChasterHead
             return new ChasterOptions(s.ChasterTabEnabled, s.ChasterLockId, new HashSet<string>(s.ChasterPrices ?? new List<string>(), StringComparer.Ordinal),
                 TabLimits.FromMinutes(LimitChange.Effective(s.ChasterDayLimit, DateTime.UtcNow),
                     LimitChange.Effective(s.ChasterBacklogLimit, DateTime.UtcNow)),
-                // ponytail: RemoteOpen is always false - Remote Control's service is not on this head yet.
-                RemoteOpen: false,
+                // WPF ChasterService.App.cs:38: a Remote session open (or just ended) caps what an add may book.
+                RemoteOpen: RemoteOpenNow(),
                 PanicArmed: s.PanicKeyEnabled,
                 RelockPastEnd: s.ChasterRelockPastEnd,
                 Paused: s.ChasterPaused,
                 PriceOverrides: new Dictionary<string, int>(s.ChasterPriceOverrides ?? new Dictionary<string, int>(), StringComparer.Ordinal));
         };
-        // ponytail: no MinutesOn (the feature day log is not on this head); optional on the service,
-        // read as "nobody can tell".
         var target = Target(userDataDir, overrideUrl);
         inner ??= new HttpClientHandler();
         return new ChasterService(
@@ -56,13 +54,19 @@ internal static class ChasterHead
                 FriendsHead.Identity, ChasterClient.ProxyBase),
             RafflePostDays = () => CoreSettings.Current.ChasterRafflePostDays,
             LadderShowName = () => CoreSettings.Current.ChasterLadderShowName,
+            MinutesOn = MinutesFromDayLog,
         };
     }
 
+    /// <summary>WPF ChasterService.App.cs:62, the idle-day row's eyes: conditioning minutes the feature day
+    /// log booked on a day. A day with no entry had none; no log at all means nobody can tell (null).</summary>
+    internal static int? MinutesFromDayLog(string dayKey) =>
+        global::ConditioningControlPanel.Services.FeatureDayLogService.Current?.MinutesOn(dayKey);
+
     /// <summary>WPF ChasterHooks.Attach, for the events this head raises: quests (and the dailies
     /// board) and level-ups. Every call is inert until the tab is on and the row is priced.
-    /// ponytail: no program_done / program_skipped (ProgramService is load-only on this head until programs slice 3)
-    /// and no RemoteOpen; hook them here when those services arrive. Escape: Lockdown tripwires that
+    /// program_done / program_skipped ride <see cref="AttachPrograms"/> (the program service starts later).
+    /// Escape: Lockdown tripwires that
     /// EscapeKinds.CostsChaster (WPF ChasterHooks.cs:73).</summary>
     /// Returns the detach (the static LevelUp outlives any one service); a second Attach of the same service is a no-op,
     /// as WPF's _attached guard makes it.
@@ -93,6 +97,32 @@ internal static class ChasterHead
     }
 
     private static readonly HashSet<ChasterService> Attached = new();
+
+    /// <summary>WPF ChasterHooks.Attach :68-72: a finished program day pays back, a missed one costs.
+    /// Reads <see cref="Service"/> at event time, so the order the two services start in does not
+    /// matter. Returns the detach.</summary>
+    internal static Action AttachPrograms(Services.Program.ProgramService programs)
+    {
+        EventHandler<Services.Program.ProgramDayEventArgs> done = (_, _) => Safe(() => Service?.Note("program_done"));
+        EventHandler<Services.Program.ProgramDayEventArgs> missed = (_, _) => Safe(() => Service?.Note("program_skipped"));
+        programs.DayCompleted += done;
+        programs.DayMissed += missed;
+        return () => { programs.DayCompleted -= done; programs.DayMissed -= missed; };
+    }
+
+    /// <summary>WPF AchievementService.TrackLockCardCompletion :763: every typo on the card costs,
+    /// the finished card pays a little back. Inert unless those rows are switched on.</summary>
+    internal static void NoteLockCard(int errors) => Safe(() => { Service?.Note("typo", errors); Service?.Note("lockcard"); });
+
+    /// <summary>WPF App.RemoteControl.IsActive / LastEndedUtc. Tests swap it (RunsAlone).</summary>
+    internal static Func<(bool Active, DateTime? EndedUtc)> RemoteState = () =>
+        Views.Tabs.RemoteControlTabView.Relay is { IsValueCreated: true, Value: { } relay } ? (relay.IsActive, relay.LastEndedUtc) : (false, null);
+
+    internal static bool RemoteOpenNow()
+    {
+        try { var (active, ended) = RemoteState(); return ChasterService.RemoteCounts(active, ended, DateTime.UtcNow); }
+        catch { return false; }
+    }
 
     private static int OpenDailies(QuestService quests) => quests.Progress?.DailyQuests?.Count(q => q != null && !q.IsCompleted) ?? 0;
 

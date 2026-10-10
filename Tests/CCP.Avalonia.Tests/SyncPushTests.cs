@@ -23,7 +23,9 @@ namespace CCP.Avalonia.Tests;
 /// </summary>
 public sealed partial class AccountSeedTests
 {
-    private static readonly string[] Allowed = { "unified_id", "xp", "level", "descent_epoch", "achievements" };
+    // descent_auto: this head takes the migration offer silently. The two consent flags the profile read returns ride
+    // every sync once the load adopted them (lane z1).
+    private static readonly string[] Allowed = { "unified_id", "xp", "level", "descent_epoch", "descent_auto", "achievements", "allow_discord_dm", "show_online_status", "total_conditioning_minutes" };
 
     /// <summary>Records every request with its body; profile GET answers <see cref="Profile"/> (500 when null).</summary>
     private sealed class SyncWire : HttpMessageHandler
@@ -136,7 +138,7 @@ public sealed partial class AccountSeedTests
 
         var body = Assert.Single(wire.Syncs);
         Assert.All(body.Properties(), p => Assert.Contains(p.Name, Allowed));
-        foreach (var k in new[] { "stats", "allow_discord_dm", "public_share_avatar", "web_xp_claim_ack", "install_date",
+        foreach (var k in new[] { "stats", "share_profile_picture", "public_share_avatar", "goon_share_avatar", "goon_share_dm", "web_xp_claim_ack", "install_date",
                      "reset_weekly_quest", "reset_daily_quest", "force_streak_override", "force_skills_reset", "cosmetics" })
             Assert.Null(body[k]);
         Assert.Equal("u1", (string?)body["unified_id"]);
@@ -329,14 +331,25 @@ public sealed partial class AccountSeedTests
     });
 
     [Fact]
-    public void ProgressionBank_IgnoresPassiveSources_WithNoIdleTracker() => WithFreshInstall(() =>
+    public void ProgressionBank_IgnoresPassiveSources_OnlyWhileIdle() => WithFreshInstall(() =>
     {
         var s = CoreSettings.Current;
         CoreAccount.UnifiedUserId = "u1";
-        foreach (var src in new[] { "Flash", "Subliminal", "BouncingText" }) ProgressionBank.Add(50, src);
-        Assert.Equal(0, s.PlayerXP);
-        ProgressionBank.Add(50, "Session");
-        Assert.Equal(50, s.PlayerXP);
+        var probe = ActivityIdle.IdleSecondsProvider;
+        try
+        {
+            // WPF ProgressionService.cs:70-78: AFK (3 min without input) drops the passive sources.
+            ActivityIdle.IdleSecondsProvider = () => ActivityIdle.IdleThresholdSeconds;
+            foreach (var src in new[] { "Flash", "Subliminal", "BouncingText" }) ProgressionBank.Add(50, src);
+            Assert.Equal(0, s.PlayerXP);
+            ProgressionBank.Add(50, "Session");
+            Assert.Equal(50, s.PlayerXP);
+            // Active: they bank like any other source.
+            ActivityIdle.IdleSecondsProvider = () => 0;
+            ProgressionBank.Add(10, "Flash");
+            Assert.Equal(60, s.PlayerXP);
+        }
+        finally { ActivityIdle.IdleSecondsProvider = probe; }
         return Task.CompletedTask;
     });
 

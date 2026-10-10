@@ -54,11 +54,45 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             SwatchHighlightOrange, SwatchHighlightViolet, SwatchHighlightWhite,
         };
 
+        /// <summary>The four switches that only mean something with a screen read behind them
+        /// (OCR, skip the app's own windows, the word highlight, highlight in captures). This head
+        /// has no OCR engine, so nothing reads them: each is greyed and says so. Typed keywords DO
+        /// work (Platform/KeywordTriggerHead reads the master on every key).</summary>
+        internal CheckBox[] ScreenReadOnlyToggles => new[]
+        {
+            ChkAwarenessOcr, ChkAwarenessIgnoreOwnUi, ChkAwarenessHighlight, ChkAwarenessHighlightVisibleInCapture,
+        };
+
+        private void MarkScreenReadRows()
+        {
+            // Windows reads the screen (Platform/ScreenOcrService over Windows.Media.Ocr): the rows are
+            // live. Linux has no reader in the tree, so they stay greyed with the reason.
+            if (Platform.ScreenOcrService.ReasonUnavailable is null) return;
+            foreach (var box in ScreenReadOnlyToggles)
+            {
+                box.IsEnabled = false;
+                if (box.Parent is not Grid row) continue;
+                var note = new TextBlock
+                {
+                    Text = ConditioningControlPanel.Localization.Loc.Get("exclusives_not_on_this_build"),
+                    FontSize = 10.5, FontStyle = global::Avalonia.Media.FontStyle.Italic,
+                    HorizontalAlignment = global::Avalonia.Layout.HorizontalAlignment.Right,
+                    VerticalAlignment = global::Avalonia.Layout.VerticalAlignment.Center,
+                    Margin = new global::Avalonia.Thickness(8, 0, 10, 0),
+                    Tag = "ScreenReadNote",
+                };
+                note[!TextBlock.ForegroundProperty] = note.GetResourceObservable("TextMutedBrush").ToBinding();
+                Grid.SetColumn(note, 0);
+                row.Children.Add(note);
+            }
+        }
+
         public AwarenessTabView()
         {
             // InitializeComponent, not AvaloniaXamlLoader.Load: only the generated one assigns the
             // x:Name fields this code-behind reads.
             InitializeComponent();
+            MarkScreenReadRows();
 
             // WPF's Slider.ValueChanged forwards to MainWindow, which writes the setting AND the
             // label. Wired here rather than in XAML so the seed below can move the sliders before
@@ -91,11 +125,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 if (ex.Name == "KeywordTriggersExpander")
                     ex.SetCurrentValue(Expander.IsExpandedProperty, false);
 
+            HookLiveFeed();
             SyncAwarenessTabUi();
 
             // Tabs are shown and hidden rather than rebuilt, so re-read on every show: the master
             // switch is [JsonIgnore] session state and the app list can be edited elsewhere.
             AttachedToVisualTree += (_, _) => SyncAwarenessTabUi();
+            // Owner, 2026-10-10: a panic press switches keyword triggers off. While this tab is in the tree
+            // its switches follow at once (off the tree, the attach above repaints them).
+            Action onPanicOff = OnKeywordTriggersSwitchedOffByPanic;
+            AttachedToVisualTree += (_, _) => Views.Windows.PanicSurfaces.KeywordTriggersSwitchedOff += onPanicOff;
+            DetachedFromVisualTree += (_, _) => Views.Windows.PanicSurfaces.KeywordTriggersSwitchedOff -= onPanicOff;
             PropertyChanged += (_, e) =>
             {
                 if (e.Property == IsVisibleProperty && IsVisible) SyncAwarenessTabUi();
@@ -158,6 +198,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 _isLoading = false;
             }
 
+            // WPF SyncAwarenessTabUI's tail: the pulse feed and the seen-app chips are rebuilt on
+            // every open (both grow while the user is on other tabs).
+            RefreshAwarenessPulseFeed();
+            RefreshAwarenessSeenAppChips();
+
             // Assign only on a real difference: Avalonia raises IsCheckedChanged on a programmatic
             // set too, and every handler below is a live editor.
             static void Set(CheckBox box, bool value)
@@ -166,16 +211,34 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             }
         }
 
+        /// <summary>A panic press switched keyword triggers off (PanicSurfaces.SwitchOffKeywordTriggers):
+        /// repaint the switches from the settings, never write.</summary>
+        private void OnKeywordTriggersSwitchedOffByPanic()
+        {
+            SyncAwarenessTabUi();
+            KeywordPanel?.SyncFromSettings();
+        }
+
+        /// <summary>"Switched off by a panic press." Shown while a switch the panic turned off is still
+        /// off: the master (this run) or the saved screen read. Turning that switch back on clears it.</summary>
+        internal void RefreshPanicNotice()
+        {
+            var s = CoreSettings.Current;
+            var master = Views.Windows.PanicSurfaces.KeywordMasterOffByPanic && !s.KeywordTriggersEnabled;
+            var screen = s.KeywordTriggersOffByPanic && !s.ScreenOcrEnabled;
+            TxtAwarenessPanicNotice.IsVisible = master || screen;
+        }
+
         /// <summary>The dot and the Live/Off label beside the master switch.</summary>
         private void UpdateStatusIndicator(bool on)
         {
+            RefreshPanicNotice();
             var pink = this.FindResource("PinkBrush") as IBrush;
             AwarenessStatusDot.Fill = on ? pink ?? Brushes.HotPink : OffDot;
             TxtAwarenessStatus.Text = on ? "Live" : "Off";
             TxtAwarenessStatus.Foreground = on ? pink ?? Brushes.HotPink : OffLabel;
 
-            // ponytail: WPF also breathes the dot while the engine is genuinely live
-            // (SetAwarenessStatusPulse). Cosmetic, and it belongs with the engine seam.
+            PulseStatusDot(on);   // WPF SetAwarenessStatusPulse: the dot breathes while live
         }
 
         // ------------------------------------------------------------------ live editors
@@ -204,9 +267,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 }
 
                 CoreSettings.Current.KeywordTriggersEnabled = on;
+                if (on) Views.Windows.PanicSurfaces.KeywordMasterOffByPanic = false;   // the user turned it back on
 
-                // ponytail: this is where WPF starts/stops App.KeywordTriggers, the keyboard hook
-                // and App.ScreenOcr. All three are Win32 on that head; nothing arms here.
+                // WPF :416-427: the master starts and stops the sources. Typed keys ride the panic
+                // key's hook on Windows (it reads this flag on every key); the screen reader's timer
+                // and the X11 key listener exist only while it is on.
+                Platform.KeywordTriggerHead.SyncSources();
 
                 _isLoading = true;
                 try { if ((ChkAwarenessKeyboard.IsChecked ?? false) != on) ChkAwarenessKeyboard.IsChecked = on; }
@@ -232,8 +298,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             if (ChkAwarenessKeyboard.IsChecked == true && ChkAwarenessMaster.IsChecked != true)
                 ChkAwarenessMaster.IsChecked = true;   // deliberately outside the guard: routes through the master handler
 
-            // ponytail: turning it OFF drops the keyboard hook on WPF when nothing else needs it
-            // (the panic key, OCR). The hook is Win32 and head-side.
+            // No hook to drop: typed keywords ride the panic key's hook, which stays up. This box mirrors the master.
         }
 
         private void ChkAwarenessOcr_Changed(object? sender, RoutedEventArgs e)
@@ -251,8 +316,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                     ConditioningControlPanel.Localization.Loc.Get("msg_screen_ocr_patreon_only"));
                 return;
             }
-            // ponytail: WPF starts/stops App.ScreenOcr here; no OCR engine on this head.
+            // The user turned the screen read back on after a panic switched it off: the notice has done its job.
+            if (!_isLoading && ChkAwarenessOcr.IsChecked == true) CoreSettings.Current.KeywordTriggersOffByPanic = false;
             WriteFlag(v => CoreSettings.Current.ScreenOcrEnabled = v, ChkAwarenessOcr, "ScreenOcrEnabled");
+            if (!_isLoading) RefreshPanicNotice();
+            // WPF :462-468: start when on (and the master is on), stop when off.
+            if (!_isLoading) Platform.ScreenOcrService.Sync();
             if (!_isLoading) KeywordPanel?.SyncFromSettings();   // WPF :475 SyncKeywordRescuePanelUi
         }
 
@@ -278,9 +347,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         private void ChkAwarenessHighlightVisibleInCapture_Changed(object? sender, RoutedEventArgs e)
         {
-            // ponytail: WPF then flips display affinity on the live overlay windows
-            // (App.KeywordHighlight.RefreshCaptureVisibility) - WDA_EXCLUDEFROMCAPTURE, Win32,
-            // head-side. The setting is stored either way, so a later head reads the right value.
+            // WPF then flips display affinity on its live overlay windows (RefreshCaptureVisibility).
+            // The port's highlight windows live for one fire (Overlays/KeywordHighlightOverlay), so the
+            // next fire reads the new value: nothing to refresh.
             WriteFlag(v => CoreSettings.Current.OcrHighlightVisibleInCapture = v,
                       ChkAwarenessHighlightVisibleInCapture, "OcrHighlightVisibleInCapture");
         }
@@ -327,9 +396,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 Log.Warning(ex, "Awareness tab: failed to write KeywordTriggerAppScope");
             }
 
-            // ponytail: WPF also rebuilds the "recently focused" chips from
-            // KeywordTriggerService.GetRecentForegroundApps(). That ring is fed by a foreground-
-            // window poll (Win32) and lives with the service, so the chip row stays empty here.
+            RefreshAwarenessSeenAppChips();   // WPF RefreshAwarenessAppScopeUi's tail
         }
 
         private void TxtAwarenessAppList_LostFocus(object? sender, RoutedEventArgs e) => CommitAppList();
@@ -341,12 +408,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         private void CommitAppList()
         {
-            // ponytail: BLOCKED on KeywordTriggerService.ParseAppList, which canonicalises the box
-            // (split on , ; newline, strip a trailing ".exe", de-duplicate case-insensitively).
-            // That is a pure static with no platform dependency and belongs in Core, but the
-            // service is not this layer's file and copying the parse here would give the two heads
-            // two definitions of what "chrome.exe" means. The box is seeded and readable; commit
-            // lands with the service.
+            // WPF MainWindow.Awareness.cs:683: Core's ParseAppList canonicalises the box (split on
+            // , ; newline, strip ".exe", de-duplicate case-insensitively); unchanged = no write.
+            var settings = CoreSettings.Current;
+            if (_isLoading || settings == null) return;
+            var parsed = ConditioningControlPanel.Services.KeywordTriggers.KeywordTriggerEngine.ParseAppList(TxtAwarenessAppList.Text);
+            var existing = settings.KeywordTriggerApps ?? new System.Collections.Generic.List<string>();
+            if (System.Linq.Enumerable.SequenceEqual(parsed, existing, StringComparer.OrdinalIgnoreCase)) return;
+            settings.KeywordTriggerApps = parsed;
+            CoreSettings.Save();
+            Log.Information("Awareness app scope list set to {Count} app(s) ({Mode})", parsed.Count, settings.KeywordTriggerAppScope);
+            RefreshAwarenessSeenAppChips();   // a typed app drops out of the offered chips
         }
 
         // ------------------------------------------------------------------ highlight colour
@@ -393,8 +465,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 Log.Warning(ex, "Awareness tab: failed to write KeywordHighlightColor");
             }
 
-            // ponytail: WPF then repaints the live highlight overlay through App.KeywordHighlight -
-            // click-through layered windows, head-side.
+            // The next highlight reads the colour when it is drawn (Overlays/KeywordHighlightOverlay).
         }
 
         /// <summary>
@@ -420,9 +491,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         /// <summary>
         /// WPF: MainWindow.Settings.cs:660 -&gt; StartAwarenessTutorial(). A tour finished (not
-        /// skipped) pops the Puppy preset's editor (MainWindow.Settings.cs:689). This head does NOT
-        /// seed CoreTutorial.StartAction today, so no tour appears yet - the seam's documented no-op.
+        /// skipped) pops the Puppy preset's editor (MainWindow.Settings.cs:689). Tours/TutorialHead.Seed
+        /// seeds CoreTutorial.StartAction, so the tour runs here too.
         /// </summary>
+        /// <summary>The ? panel's Awareness row: the same tour with the same one-shot.</summary>
+        internal void StartTutorialFromHelp() => BtnAwarenessTutorial_Click(this, new RoutedEventArgs());
+
         private void BtnAwarenessTutorial_Click(object? sender, RoutedEventArgs e)
         {
             CoreTutorial.Start("Awareness");

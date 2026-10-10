@@ -31,6 +31,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
 
         partial void OnTearDownCore()
         {
+            TearDownAsk();
+            StopWeightShift();
+            _stretchDue = DateTime.MaxValue;
             try { _ring?.CloseRing(); }
             catch (Exception ex) { Log.Debug(ex, "[EmiDesk] ring tear-down failed"); }
         }
@@ -59,8 +62,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
             ring.SetWidgetGeometry(BodyPx(), AnchorPx());
             ring.OpenRing();
             if (!ring.IsOpen) return;
-            try { EmiState.NoteRingOpen(); }
-            catch (Exception ex) { Log.Debug(ex, "[EmiDesk] ring-open bookkeeping failed"); }
+            FireDeskEvent("ringOpen");   // WPF Ring.cs:106
+            EmiDeskService.Instance.NoteRingOpened();   // counts the open (EmiState.NoteRingOpen) and may teach the pin
         }
 
         public void CloseRing()
@@ -115,6 +118,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         {
             try { EmiTargets.Find(card.Id)?.Open(); }
             catch (Exception ex) { Log.Warning(ex, "[EmiDesk] ring card {Target} failed to open", card.Id); }
+            // WPF EmiTargets.cs:456-463: the pick is a moment too (the door itself is EmiTargets, read only here).
+            try
+            {
+                if (card.Locked) { FireDeskEvent("lockedCardTapped", new { target = card.Id }); return; }
+                FireDeskEvent(string.Equals(card.Id, "arcademy", StringComparison.Ordinal) ? "arcademyFromRing" : "ringPick",
+                    new { target = card.Id, pickIsTop = EmiSuggester.TopSlotIs(card.Id) });
+            }
+            catch (Exception ex) { Log.Debug(ex, "[EmiDesk] ring pick moment failed"); }
         }
 
         /// <summary>WPF OnRingClosed: three dismissals in a row is her cue that the fan is not landing.</summary>
@@ -128,9 +139,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                     if (st.RingIgnoreStreak == 0) return;
                     st.RingIgnoreStreak = 0;
                 }
-                else if (++st.RingIgnoreStreak >= 3)
+                else
                 {
-                    st.RingIgnoreStreak = 0;   // ponytail: WPF fires suggestionIgnored3x here
+                    EmiDeskService.Instance.Fire("ringDismissed");   // WPF Ring.cs:287
+                    if (++st.RingIgnoreStreak >= 3)
+                    {
+                        st.RingIgnoreStreak = 0;
+                        EmiDeskService.Instance.Fire("suggestionIgnored3x");   // WPF Ring.cs:293
+                    }
                 }
                 EmiState.SaveSoon();
             }

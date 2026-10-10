@@ -167,7 +167,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 if (pass.State == IntakePassState.NeedsLogin)
                 {
                     if (owner != null)
-                        await Dialogs.MessageDialog.ShowAsync(owner, "Login Required",
+                        await Dialogs.MessageDialog.ShowAsync(owner, Loc.Get("title_login_required"),
                             Loc.Get("msg_you_need_to_be_logged_in_to_use_the_ai_quiz"));
                 }
                 else
@@ -182,25 +182,29 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             if (!CoreAi.IsAvailable)
             {
                 if (owner != null)
-                    await Dialogs.MessageDialog.ShowAsync(owner, "Login Required",
+                    await Dialogs.MessageDialog.ShowAsync(owner, Loc.Get("title_login_required"),
                         Loc.Get("msg_you_need_to_be_logged_in_to_use_the_ai_quiz"));
                 return;
             }
 
-            // ponytail: WPF ducks (minimises) the main window unless this is a first-ever run; not ported.
-            OpenIntake(owner as Windows.MainShellWindow);
+            // WPF Lab.cs:195: a first-ever run does not duck the control panel (it reads as a crash).
+            OpenIntake(owner, duckMain: IntakePunchCardState.ReadEverCompletedIntake(CorePaths.UserData));
         }
 
-        /// <summary>WPF IntakeHostService.Launch: one live run at a time, focused if already open.</summary>
-        internal static Windows.IntakeHostWindow OpenIntake(Windows.MainShellWindow? shell)
+        /// <summary>WPF IntakeHostService.Launch: one live run at a time, focused if already open;
+        /// built in the remembered window mode unless this is a recovery relaunch.</summary>
+        internal static Windows.IntakeHostWindow OpenIntake(Window? owner, bool duckMain, bool recovery = false)
         {
-            var lifetime = Application.Current?.ApplicationLifetime as global::Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime;
-            if (lifetime?.Windows.OfType<Windows.IntakeHostWindow>().FirstOrDefault() is { } live)
+            var shell = owner as Windows.MainShellWindow;
+            // The window registry, not lifetime.Windows (null under tests); a closing window has already left it.
+            if (Windows.IntakeHostWindow.Snapshot().FirstOrDefault() is { } live)
             {
                 live.Activate();
                 return live;
             }
-            var intake = new Windows.IntakeHostWindow();
+            var intake = new Windows.IntakeHostWindow { DuckTarget = duckMain ? owner : null };
+            if (!recovery && CoreSettings.Current.IntakeFullscreen) intake.WindowState = WindowState.FullScreen;
+            intake.Relaunch = () => OpenIntake(owner, duckMain, recovery: true);
             intake.Drafted += (session, path) => OnSessionDrafted(shell, session, path);
             intake.Load(Platform.WebAssetServer.Shared);
             intake.Show();
@@ -241,7 +245,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             if (!CoreAi.IsAvailable)
             {
                 if (TopLevel.GetTopLevel(this) is Window owner)
-                    await Dialogs.MessageDialog.ShowAsync(owner, "Login Required",
+                    await Dialogs.MessageDialog.ShowAsync(owner, Loc.Get("title_login_required"),
                         Loc.Get("msg_you_need_to_be_logged_in_to_use_the_ai_quiz"));
                 return;
             }

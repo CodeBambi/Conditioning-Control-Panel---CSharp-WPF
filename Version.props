@@ -1,10 +1,14 @@
 <Project>
-  <!-- The app version, ONE place for every head and for Core. Imported by
-       ConditioningControlPanel.csproj, CCP.Avalonia.csproj and CCP.Core.csproj, so the Avalonia
+  <!-- The version of the Avalonia head and of Core (the WPF head reads Version.Wpf.props). Imported by
+       CCP.Avalonia.csproj and CCP.Core.csproj, so the Avalonia
        head stops reporting 1.0.0 and Core stops saying 6.9.0 while the app ships 6.10.3 -
        CoreReleaseContent.AppVersion and every mod's MinAppVersion check then agree on every head.
        A release bumps this and UpdateService.AppVersion (see ConditioningControlPanel/CLAUDE.md). -->
   <PropertyGroup>
-    <Version>7.0.5</Version>
+    <Version>7.2.0</Version>
+    <!-- A build that is NOT a release wears a label (title bar, installer file name, the About
+         line): 7.2.0-parity. The number above stays plain digits because the updater, the mod
+         MinAppVersion check and the Linux tarball name parse it. A release empties the label. -->
+    <CcpVersionLabel>parity</CcpVersionLabel>
   </PropertyGroup>
 </Project>

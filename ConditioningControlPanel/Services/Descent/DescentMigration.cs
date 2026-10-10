@@ -15,31 +15,7 @@ namespace ConditioningControlPanel.Services.Descent
     // with nothing to re-release.
     // ============================================================================
 
-    /// <summary>
-    /// The server's offer, parsed off a /v2/user/sync response. Its mere existence is the whole
-    /// trigger — there is no local condition that can conjure one.
-    /// </summary>
-    public sealed class DescentMigrationOffer
-    {
-        /// <summary>Lifetime XP the SERVER holds for this account. Display; the relevel prices
-        /// <see cref="RestoreBasisXp"/>.</summary>
-        public double TotalXpEarned { get; init; }
-
-        /// <summary>Server-side devotion days — the backfill ESTIMATE since 2026-08-16, i.e. the
-        /// count that will actually survive the ceremony. Display only.</summary>
-        public int DevotionDays { get; init; }
-
-        /// <summary>
-        /// THE NUMBER OPTION A IS DERIVED FROM: <c>total_xp_earned + 300 × devotion estimate</c>,
-        /// computed by the SERVER (the veteran credit, owner ruling 2026-08-16 — recorded XP alone
-        /// priced a historic account at level 17). Sent on the wire as <c>restore_basis_xp</c>
-        /// precisely so this client never duplicates the arithmetic: the server clamps our claimed
-        /// level to ±1 of its own answer, and a locally-recomputed credit with a stale constant
-        /// would fight that clamp forever. 0 = an older server that did not send it, and the
-        /// relevel falls back to <see cref="TotalXpEarned"/> — the exact pre-credit behaviour.
-        /// </summary>
-        public double RestoreBasisXp { get; init; }
-    }
+    // DescentMigrationOffer (the server offer, three figures) lives once in CCP.Core, same namespace.
 
     /// <summary>
     /// The re-derived ledger a choice produces. Pure output of <see cref="DescentMigration.Resolve"/>

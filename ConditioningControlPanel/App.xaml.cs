@@ -287,6 +287,8 @@ namespace ConditioningControlPanel
 
             Services.Deeper.EnhancementResolver.LibraryMatchProvider = (path, type) => EnhancementLibrary?.FindMatch(path, type);
             Services.SettingsPaletteIndex.JustDropDoorAvailableProvider = () => Services.JustDrop.JustDropService.DoorAvailable;
+            Services.SettingsPaletteIndex.GameAvailableProvider = id => Services.Launcher.LauncherCatalogue.Find(id)?.Available == true;
+            Services.Companion.ConversationDelivery.QuestsOpenProvider = () => Quests?.HasUnfinishedQuest();
             // Mod art. ResolveUri already walks event skin -> active mod -> embedded and hands
             // back a file:// URI for the first two and a pack:// one for the third, so "is there
             // an override" is "did it come back as a file", answered in ONE pass of the chain.
@@ -306,6 +308,8 @@ namespace ConditioningControlPanel
             // The settings model now lives in Core; Core code reads the live instance through
             // this. Settings is created later in OnStartup; the delegate reads it lazily.
             CoreSettings.ServiceProvider = () => Settings;
+            // Lobby, PvP stakes and the board picture read the app through these (Services/CoreSeams.cs).
+            Services.CoreSeams.Wire();
             // The mod service's side effects on a switch, and what it asks the head.
             CoreModsHooks.ModSwitched = newCompanionName => Brain?.OnModSwitched(newCompanionName);
             CoreModsHooks.ReloadBarkRules = () => Bark?.ReloadRules();
@@ -2993,7 +2997,7 @@ namespace ConditioningControlPanel
                 if (_friendsService != null)
                 {
                     var friends = _friendsService;
-                    _leashService = Services.Leash.LeashService.CreateForApp(() => friends.Kick());
+                    _leashService = Services.Leash.LeashServiceApp.CreateForApp(() => friends.Kick());
                     Leash = _leashService;
                     friends.LeashReportProvider = _leashService.BuildReportJson;
                     friends.LeashActive = () => _leashService?.Active == true;
@@ -3006,6 +3010,7 @@ namespace ConditioningControlPanel
                     };
 
                     _leashTaskHost = new Services.Leash.AppLeashTaskHost();
+                    Services.Leash.LeashTaskRunner.TimerFactory ??= () => new Services.Friends.FriendsServiceApp.Timer();
                     LeashRunner = new Services.Leash.LeashTaskRunner(_leashTaskHost);
                     LeashRunner.AssignmentWatched += aid => _leashService?.NoteAssignmentWatched(aid);
                     Controls.Leash.LeashLocator.Service = () => App.Leash;
@@ -3105,7 +3110,7 @@ namespace ConditioningControlPanel
             // facade — the browser client via GoonHostService, the dev cockpit via GoonTestPanel —
             // so an always-constructed idle singleton owned nothing and was never read.)
             AvailableSubjects = new AvailableSubjectsService();
-            Lobby = new Services.Lobby.LobbyService();
+            Lobby = Services.Lobby.LobbyServiceApp.Create();
             CompanionPhrases = new CompanionPhraseService();
             Catalogue = new CatalogueService();
             CatalogueLookup = new CatalogueLookupService();

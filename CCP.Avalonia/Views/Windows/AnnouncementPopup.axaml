@@ -24,7 +24,7 @@
      because code assigns it (actionText / dismissText) - their template's plain ContentPresenter
      has RecognizesAccessKey false, so an underscore in a caller's label survives. -->
 <Window xmlns="https://github.com/avaloniaui"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="ConditioningControlPanel.Avalonia.Views.Windows.AnnouncementPopup"
         Title="Announcement"
         Width="440" SizeToContent="Height" MaxHeight="600"
@@ -204,7 +204,7 @@
                             Margin="0,0,0,8"/>
 
                     <!-- Got it Button -->
-                    <Button x:Name="BtnDismiss" Content="Got it!"
+                    <Button x:Name="BtnDismiss" Content="{loc:Str btn_got_it}"
                             Theme="{StaticResource AnnouncementPillButton}"
                             HorizontalAlignment="Center"
                             Width="120" Height="36"

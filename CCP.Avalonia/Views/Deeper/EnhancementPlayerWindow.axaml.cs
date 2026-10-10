@@ -101,13 +101,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
     /// <para><b>What is stubbed, and why.</b> Three families, each marked <c>ponytail:</c> at the
     /// call site:</para>
     /// <list type="bullet">
-    ///   <item><b>Services.</b> EnhancementAudioPlayer (NAudio), EnhancementLibrary, WebcamTracking
-    ///         and the editor jump still live in the WPF head, so every handler that reached them is
-    ///         a stub. EnhancementHostService and DeeperFetcher no longer block anything: the host's
-    ///         load path is EnhancementSerializer + EnhancementValidator, both public in Core, and
-    ///         App.DeeperFetcher IS Core's <c>EnhancementFetcher</c>. Both are wired below. What
-    ///         does NOT come with them is the host's OTHER half — <c>Bind</c>, the rule engine and
-    ///         the playback time source — so a loaded enhancement's rules never fire here.</item>
+    ///   <item><b>Services.</b> EnhancementLibrary and the editor jump are not here yet, so the
+    ///         handlers that reached them are stubs. The host, the rule engine and the time source
+    ///         ARE here: Core's EnhancementHostService + EnhancementEngine, bound in the Engine
+    ///         partial, with audio on the shared LibVLC transport (DeeperLocalAudio) and the eye
+    ///         tracking button on Platform/WebcamTracker. Still missing: the waveform peaks
+    ///         (NAudio decode) and the library tier of auto-discovery.</item>
     ///   <item><b>WebView2.</b> The WPF pane hosted a <c>wv2:WebView2</c> driven through
     ///         <c>CoreWebView2</c>. <see cref="Controls.WebHost"/> covers more of that than the
     ///         first pass assumed: NavigationStarted carries a settable Cancel (so the allowlist
@@ -221,6 +220,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             // SystemDecorations="None" plus a hand-drawn bar, which would cost this resizable
             // window its native move/resize/maximize for a colour. Left native and untinted.
             Closed += (_, _) => { try { (Owner as Window)?.Activate(); } catch { } };
+            Closed += (_, _) => { try { _waveCts?.Cancel(); } catch { } };   // the peak decode stops with the window
 
             _statusPill = this.FindControl<Border>("StatusPill")!;
             _statusPillText = this.FindControl<TextBlock>("StatusPillText")!;
@@ -266,6 +266,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             _sliderVolume = this.FindControl<Slider>("SliderVolume")!;
             _eventScroll = this.FindControl<ScrollViewer>("EventScroll")!;
             _videoBrowser = this.FindControl<Controls.WebHost>("VideoBrowser")!;
+            // Page zoom, Ctrl+wheel and HTML5 fullscreen: DeeperPageBridge. Released with the window.
+            _pageBridge = new DeeperPageBridge(_videoBrowser, this);
+            _pageBridge.FullscreenChanged += _ => OnVideoFullscreenChanged();
+            Closed += (_, _) => _pageBridge.Dispose();
             _lstEvents = this.FindControl<ItemsControl>("LstEvents")!;
             _pillAll = this.FindControl<ToggleButton>("PillFilterAll")!;
             _pillActions = this.FindControl<ToggleButton>("PillFilterActions")!;
@@ -326,6 +330,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             _uiTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
             _uiTimer.Tick += UiTimer_Tick;
             _uiTimer.Start();
+            HookEngine();
             Closing += (_, _) => Window_Closing();
 
             if (enhancement != null)
@@ -548,6 +553,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             // whatever page is still up cannot follow a link or a redirect out of it.
             _videoBrowser.AllowNavigation = _ => false;
             _videoNavigated = false;
+            _host.Unload();   // UnbindEngine first: every band, haptic and one-shot stops
             UpdateHostUi(null, null);
         }
 
@@ -650,14 +656,41 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
 
         private void LoadAudio(string path)
         {
-            // ponytail: needs EnhancementAudioPlayer (NAudio) + AudioWaveformCache, wired when they
-            // move to Core. The WPF path stopped playback, decoded peaks, called Play, then set
-            // TxtTotal / the play glyph / deeper_player_status_playing. Only the UI half runs here.
+            // WPF stopped playback, decoded peaks, called Play, then set TxtTotal / the play glyph /
+            // deeper_player_status_playing. The transport is the editor's (DeeperLocalAudio, the
+            // process's shared LibVLC); OpenAudioAsync plays it once it is open.
+            // The peaks come from DeeperWaveform (LibVLC transcode off the UI thread, cached per file).
             _txtAudioPath.Text = path;
             _txtStatus.Text = Loc.Get("deeper_player_status_loading_audio");
             ShowMediaPaneFor(MediaTypes.Audio);
             _peaks = null;
             _waveformPath.Data = null;
+            OpenAudioAsync(path);
+            _ = LoadWaveformAsync(path);
+        }
+
+        private System.Threading.CancellationTokenSource? _waveCts;
+
+        /// <summary>Tests: the peaks the strip is drawn from (null until decoded).</summary>
+        internal float[]? WaveformPeaks => _peaks;
+
+        /// <summary>WPF LoadWaveformAsync (:665). Decoded on a worker; a newer load or the window closing
+        /// cancels it, and a result for a file that is no longer the loaded one is dropped.</summary>
+        private async Task LoadWaveformAsync(string path)
+        {
+            try { _waveCts?.Cancel(); } catch { }
+            var cts = _waveCts = new System.Threading.CancellationTokenSource();
+            try
+            {
+                var data = await DeeperWaveform.LoadAsync(path, cts.Token);
+                if (cts.IsCancellationRequested || !ReferenceEquals(_waveCts, cts)) return;
+                if (!string.Equals(_txtAudioPath.Text, path, StringComparison.Ordinal)) return;
+                _peaks = data?.Peaks;
+                // Drawn once per load or resize into a cached bitmap, never per frame.
+                _waveformPath.CacheMode ??= new BitmapCache();
+                RenderWaveform();
+            }
+            catch (Exception ex) { Log.Debug("EnhancementPlayer: waveform decode failed: {Error}", ex.Message); }
         }
 
         /// <summary>
@@ -765,17 +798,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         /// glyph, the status line, the pill and the playhead all describe something that is
         /// actually happening.
         ///
-        /// Audio deliberately does NOT flip the state. Before this layer the media pickers could
-        /// not load anything, so the "nothing to play" branch caught every press; now they can, and
-        /// a press with no audio engine would have shown ⏸, the LIVE pill and "Playing" over
-        /// silence. There is no NAudio here, so the honest answer is to refuse and say so in the
-        /// event log rather than to draw a transport that is running.
-        ///
-        /// ponytail: needs EnhancementAudioPlayer for the audio play/pause/resume/replay ladder,
-        /// and MaybePromptForWebcamBeforePlay for the consent gate — which is a second reason not
-        /// to make Play do more than this: skipping a consent prompt is worse than not playing.
-        /// Note that even in video mode the enhancement's RULES do not fire: that needs
-        /// EnhancementHostService.Bind and the engine, both still in the WPF head.
+        /// Audio plays on the Engine partial's transport (play / pause / resume). The rules fire in
+        /// both modes: the tick binds Core's engine to this window's clock while media runs.
         /// </summary>
         private async void BtnPlayPause_Click()
         {
@@ -785,9 +809,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
                 return;
             }
 
-            if (!_isVideoMode || !_videoNavigated)
+            if (!_isVideoMode)
             {
-                IngestErrorLine("playback engine unavailable on this platform: audio is not played here");
+                // WPF play / pause / resume ladder on the audio transport.
+                if (_audio == null) { _txtStatus.Text = Loc.Get("deeper_player_status_pick_first"); return; }
+                if (_isPlaying) AudioPause(); else AudioPlay();
+                return;
+            }
+            if (!_videoNavigated)
+            {
+                _txtStatus.Text = Loc.Get("deeper_player_status_pick_first");
                 return;
             }
 
@@ -810,6 +841,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         {
             if (_isVideoMode && _videoNavigated)
                 _ = _videoBrowser.InvokeScriptAsync(DeeperPreview.Invoke("l.pause(); l.currentTime=0;"));
+            // WPF Stop: the engine goes with the media, so no band or toy outlives the press.
+            _host.UnbindEngine();
+            if (!_isVideoMode && _audio != null) { _audio.Pause(); _audio.PositionSeconds = 0; }
             _isPlaying = false;
             _currentSec = 0;
             _txtPlayPauseGlyph.Text = "▶";
@@ -819,37 +853,20 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             UpdateStatusPill();
         }
 
-        private void BtnEyeTracking_Click()
-        {
-            // ponytail: needs WebcamTrackingService (start/stop, IsConsentCurrent), which is
-            // head-only at ConditioningControlPanel/Services/Webcam/WebcamTrackingService.cs.
-            // Left whole rather than half-restored ON PURPOSE: the portable half of this button is
-            // the label and the pill, and a button that reads "eye tracking: on" with no camera
-            // open is worse than a button that does nothing. Restore the consent gate and the
-            // camera together or not at all.
-            //
-            // ONE HALF OF THE OLD REASON IS NOW WRONG and is corrected rather than deleted, because
-            // it is the kind of claim that gets copied: "the first-time consent prompt this head
-            // has no MessageBox for". Views/Dialogs/MessageDialog exists and ConfirmAsync is
-            // exactly that prompt. The prompt is not the blocker; the tracker is. Note also that
-            // the gate must be AWAITED - a straight transcription of the WPF prompt flips the
-            // toggle before the answer lands, which turns a consent gate into a no-op.
-            // Keys the WPF prompts use: deeper_player_eye_tracking_unavailable / _first_time /
-            // _confirm_start / _start_failed_fmt.
-            Log.Debug("EnhancementPlayer(Avalonia): eye tracking toggle is a stub");
-        }
+        /// <summary>WPF BtnEyeTracking_Click (:861) on the port tracker (Platform/WebcamTracker):
+        /// stop when running; first time, point at the Webcam Setup card; else one awaited
+        /// confirmation, then the camera. The body is ToggleEyeTrackingAsync (Engine partial).</summary>
+        private void BtnEyeTracking_Click() => _ = ToggleEyeTrackingAsync();
 
-        private void AdjustVideoZoom(double delta)
-        {
-            // ponytail: needs a browser zoom factor. NativeWebView genuinely has none — this is one
-            // of the three CoreWebView2 members with no counterpart (the others are
-            // AddScriptToExecuteOnDocumentCreatedAsync and ContainsFullScreenElementChanged), and
-            // it is NOT a missing script channel: InvokeScript works. CSS `zoom` through that
-            // channel was the obvious substitute and is not one — it is per-document, so it is lost
-            // on the next navigation, and it does not scale a fullscreened video at all. So the
-            // ±10% clamp to [0.25, 5.0] and the Ctrl+MouseWheel bridge stay lost here.
-            Log.Debug("EnhancementPlayer(Avalonia): browser zoom {Delta:+0.00;-0.00} is a stub", delta);
-        }
+        /// <summary>WPF AdjustVideoZoom (:832): +/-10 % clamped to [0.25, 5.0]. NativeWebView has no zoom factor, so the
+        /// bridge sets a CSS zoom on the document and puts it back after every navigation. A fullscreened video
+        /// is not scaled by it.</summary>
+        private void AdjustVideoZoom(double delta) => _pageBridge.Adjust(delta);
+
+        private readonly DeeperPageBridge _pageBridge;
+
+        /// <summary>Tests: the page bridge (zoom factor, fullscreen state).</summary>
+        internal DeeperPageBridge PageBridge => _pageBridge;
 
         /// <summary>
         /// Toggles the page's own picture-in-picture, the same way the WPF handler's injected JS
@@ -881,11 +898,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         private void SliderVolume_PropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
         {
             if (e.Property != RangeBase.ValueProperty) return;
-            // ponytail: needs EnhancementAudioPlayer.Volume, wired when it moves to Core — both
-            // directions: the write on drag, and UpdateVolumeFromPlayer's read-back on open, which
-            // is why the WPF handler carried a _suppressVolumeSync re-entrancy flag. Not routed to
-            // the video's volume instead: this panel is hidden in video mode (ShowMediaPaneFor), so
-            // a viewer never sees it while a video is what is playing.
+            // WPF EnhancementAudioPlayer.Volume (0..1). The panel is hidden in video mode.
+            if (_audio != null) _audio.Volume = _sliderVolume.Value / 100.0;
+            // The write on drag is the line above. Left from WPF: UpdateVolumeFromPlayer's read-back on
+            // open (and its _suppressVolumeSync flag). Not routed to the video's volume: this panel is
+            // hidden in video mode (ShowMediaPaneFor), so a viewer never sees it while a video plays.
         }
 
         // ====================================================================================
@@ -897,6 +914,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             if (_miniScrubbing) return;
 
             if (_isVideoMode) _ = PollVideoTimeAsync();
+            EngineTick();
 
             _txtCurrent.Text = FormatTime(_currentSec);
             if (_durationSec > 0) _txtTotal.Text = FormatTime(_durationSec);
@@ -1019,8 +1037,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             var w = _waveformCanvas.Bounds.Width;
             if (w <= 0 || _durationSec <= 0) return;
             var frac = Math.Clamp(e.GetPosition(_waveformCanvas).X / w, 0, 1);
-            // ponytail: needs EnhancementAudioPlayer.Seek, wired when it moves to Core.
             _currentSec = frac * _durationSec;
+            AudioSeek(_currentSec);
             UpdatePlayhead(frac);
         }
 
@@ -1146,13 +1164,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             _audioFileRow.IsVisible = !isVideo;
             _audioPane.IsVisible = !isVideo;
             _videoPane.IsVisible = isVideo;
-            // The WPF cluster bound its Visibility to VideoPane's. Pinned HIDDEN here, and not
-            // because of the mode: AdjustVideoZoom only logs, since NativeWebView has no zoom
-            // factor and CSS zoom through the script channel is not a substitute. Two enabled
-            // buttons that do nothing is a toolbar lying about what it offers. Put `isVideo` back
-            // the moment zoom is real. Same call and same reason in DeeperEditorWindow.axaml's
-            // PreviewZoomCluster.
-            _browserZoomCluster.IsVisible = false;
+            _browserZoomCluster.IsVisible = isVideo;   // WPF bound the cluster to VideoPane's visibility
             _volumePanel.IsVisible = !isVideo;
             _btnPictureInPicture.IsVisible = isVideo;
         }
@@ -1179,9 +1191,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         /// ShowInTaskbar = false — no Win32, no WindowInteropHelper, no Forms.Screen.FromHandle,
         /// and no OverlayService z-order re-assert (that service is the WPF head's).
         /// </summary>
+        /// Now: the page reports its own fullscreenchange through DeeperPageBridge and the bridge has already
+        /// put THIS window full screen (or back). No second window, no reparent: the page fills the video pane
+        /// of a full-screen player, not the bare monitor.
         private void OnVideoFullscreenChanged()
         {
-            Log.Debug("EnhancementPlayer(Avalonia): browser fullscreen is a stub");
+            Log.Debug("EnhancementPlayer: page fullscreen {On}", _pageBridge.PageFullscreen);
         }
 
         // ====================================================================================
@@ -1610,13 +1625,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             UpdateMiniPlayheadX();
             // Video seeks for real; the next poll reads the page's clock back, so a seek the engine
             // clamps or refuses corrects itself rather than leaving the playhead somewhere the video
-            // is not. ponytail: audio still needs EnhancementAudioPlayer.Seek, so in audio mode the
+            // is not. Audio seeks the transport (AudioSeek); before that, in audio mode the
             // playhead moves and nothing else does.
             if (_isVideoMode && _videoNavigated)
             {
                 _ = _videoBrowser.InvokeScriptAsync(DeeperPreview.Invoke(
                     "l.currentTime=" + _currentSec.ToString("0.###", CultureInfo.InvariantCulture) + ";"));
             }
+            else if (!_isVideoMode) AudioSeek(_currentSec);
         }
 
         private static double ComputeMiniTotalSeconds(Enhancement enh)
@@ -1679,6 +1695,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             // Stop the tick timer first so no UI work is queued onto a dying window — and because
             // --render-all opens and closes every view in one process, a timer left running would
             // accumulate one live 100ms tick per view.
+            CreditDeeperMinutes(false);   // the last partial minute of play (permanent_resident)
             try { _uiTimer?.Stop(); } catch { }
             try { if (_uiTimer != null) _uiTimer.Tick -= UiTimer_Tick; } catch { }
             _uiTimer = null;
@@ -1687,10 +1704,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             _pollDisabled = true;
             try { _fetcher?.Dispose(); } catch { }
             _fetcher = null;
-            // ponytail: the WPF teardown also unsubscribed the player/webcam singletons, stopped a
-            // webcam this session had started, disposed the video time source and force-closed the
-            // borderless fullscreen host. Those are the head services' and WebView2's; none of them
-            // exist here. The web view itself is disposed with the visual tree.
+            // Engine, audio and the tracker subscription: every started effect stops with the window.
+            CloseEngine();
+            // A camera this player started is handed back in CloseEngine (HandBackEyeTracking).
+            // ponytail: the WPF teardown also disposed the video time source and force-closed the
+            // borderless fullscreen host. Those are WebView2's; neither exists here. The web view
+            // itself is disposed with the visual tree.
         }
 
         // ====================================================================================

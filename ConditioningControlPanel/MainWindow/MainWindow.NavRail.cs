@@ -3,451 +3,538 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Controls.Primitives;
 using System.Windows.Data;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
 using System.Windows.Shapes;
-using System.Windows.Threading;
+using ConditioningControlPanel.Controls.Depth;
+using ConditioningControlPanel.Controls.NavRail;
+using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
 using ConditioningControlPanel.Services.UI;
 
 namespace ConditioningControlPanel
 {
     /// <summary>
-    /// The nav rail's collapsed/expanded behaviour (owner ask, 2026-08-11: "the sidebar takes too
-    /// much space, can we collapse the names and keep only the icons? on hover we can bring it up
-    /// and uncollapse it - keep it there for 1 sec before collapsing it back, or on any click
-    /// elsewhere").
+    /// THE SECTION RAIL (nav rework, 2026-10-06). Replaces the icon strip + hover flyout +
+    /// click-to-open doors with an always-labelled rail of seven sections and a Settings gear,
+    /// inside the 96px canvas column (the column already reserved 96px for the old 56px strip +
+    /// its 40px gutter, so the page did not shrink). No flyout, no hold latch, no watchdog, no
+    /// airspace juggling: the rail never overlays the page any more, so every one of those
+    /// existed for a problem that is gone.
     ///
-    /// <para><b>2026-08-13:</b> the "1 sec" half of that is gone - see
-    /// <see cref="NavRailCollapseAnimMs"/>. The rail now starts shutting on the frame the pointer
-    /// leaves it; only the click-elsewhere and hover-to-open halves are unchanged.</para>
+    /// <para>What stayed, because it is the identity the owner kept: the medallion art (mods
+    /// re-art it through <see cref="ApplyDoorArt"/>, nav/door_*.png), the hue halo, ChromeFx's
+    /// hover nudge (the icon Viewbox is a direct child of each row's Grid), the possession
+    /// reroute seam and the mod-aware labels.</para>
     ///
-    /// <para><b>Why the expanded rail OVERLAYS the page instead of widening the layout.</b> The
-    /// whole UI lives in a <c>Viewbox Stretch="Fill"</c> over a fixed <c>DesignCanvas</c>, and the
-    /// content column is deliberately pinned at the width every tab was authored against (Phase 1
-    /// grew the canvas rather than shrinking that column, because the layouts clip silently
-    /// otherwise - fx-inventory §12.8). If the rail widened the canvas on hover, the Viewbox would
-    /// re-scale EVERY tab by 176/56 on each mouse-over: the whole app would visibly breathe. So the
-    /// rail is sized for the collapsed 56px in the grid and spans both columns, painting over the
-    /// page when it opens. Nothing below it ever relayouts.</para>
-    ///
-    /// <para><b>Why the page still is not buried.</b> Overlaying is mandatory, but it does not have
-    /// to be free of charge to the page. Canvas column 0 reserves 96px - the 56px rail plus a 40px
-    /// permanent gutter of bare canvas that the left-aligned rail Border refuses to fill - so the
-    /// flyout spends its first 40px on dead space before it touches a pixel of live UI.
-    /// <see cref="NavRailExpandedWidth"/> carries the arithmetic and the label floor.</para>
-    ///
-    /// <para><b>2026-08-12, the medallion rail</b> (UI-polish-2 CONTRACT, "Nav rail interaction
-    /// spec"). Shut, the rail is a column of 44px hue tiles spread evenly down its height; open,
-    /// each tile grows to 56px with its 44px art and its name rises into place beside it, row
-    /// after row. Everything that moves is animated from this file - <see cref="ApplyNavDoorRows"/>
-    /// next to the width tween that drives it - because a stagger is per row and a Style cannot
-    /// hold seven different BeginTimes. MainWindow.xaml owns the shape and the hues; this file
-    /// owns the motion; ChromeFx keeps owning which door is active.</para>
-    ///
-    /// <para>Collapsing also shuts the accordion. Seven door icons read as a rail; seven door icons
-    /// with four unlabelled child icons wedged among them reads as noise, and the child rows are
-    /// exactly the ones whose meaning lives in the label. <see cref="_expandedDoor"/> is left
-    /// untouched, so opening the rail restores the door the user was in.</para>
+    /// <para>This file paints; <see cref="NavRailRules"/> decides (pure, tested).</para>
     /// </summary>
     public partial class MainWindow
     {
-        /// <summary>Icon-only width. Also the width the rail rows centre their icons in - the
-        /// door rows with a 56px first grid column, the entry rows with a 21+14+21 padding
-        /// (MainWindow.xaml) - so it cannot move without re-centring both. DesignCanvas column 0
-        /// is WIDER than this on purpose (see below); what must stay in step is that the column
-        /// is never NARROWER, or the page slides under the collapsed rail.</summary>
-        private const double NavRailCollapsedWidth = 56;
-
-        /// <summary>
-        /// Open width. History: 190 (the width the rail rows were authored against) -> 176 when
-        /// the owner flagged that the flyout buried the left edge of the page it opens over, half
-        /// the fix being canvas column 0 growing to 96 so the first 40px of the flyout land on a
-        /// permanent empty gutter (MainWindow.xaml, DesignCanvas) -> 236 on 2026-08-12, which is
-        /// the number the UI-polish-2 CONTRACT froze for the medallion rail. True overlay over
-        /// live UI is back up to 236-96 = 140px, bought deliberately: the door rows carry a 16px
-        /// ExtraBold name in a 56px medallion column now, and 176 could not hold one.
-        ///
-        /// <para>The floor is still set by the longest ENTRY label in the nine shipped languages,
-        /// not by the doors: an entry row spends 21 (left padding) + 14 (icon) + 6 (icon margin)
-        /// + 8 (right padding) = 49px before its text starts, and the worst string is es
-        /// "Entrenador de Parpadeo" at 122px (fr and ru sit at 120) - 171px. The door labels get
-        /// a Viewbox with StretchDirection=DownOnly instead, so a long locale shrinks the name
-        /// rather than running into the Border's ClipToBounds: the labels live in a horizontal
-        /// layout that measures at infinite width, where TextTrimming cannot save a row - it just
-        /// gets cut with no ellipsis.</para>
-        /// </summary>
-        private const double NavRailExpandedWidth = 236;
-
-        /// <summary>Width tween, and the tween every medallion part rides (CONTRACT: 190ms
-        /// QuadOut). The door labels get their own, longer, staggered pair below.</summary>
-        private const int NavRailAnimMs = 190;
-
-        /// <summary>
-        /// The way OUT, 2026-08-13 (owner: the rail "stays open way too long after you move off
-        /// it"). Opening is a reveal and keeps its 190ms; closing is the rail getting out of the
-        /// way, so it runs a little quicker.
-        ///
-        /// <para><b>What actually changed is that there is no longer a WAIT in front of it.</b>
-        /// Until now MouseLeave started a 1000ms DispatcherTimer and the collapse happened on its
-        /// Tick, so the rail sat over the page for a full second after the pointer had gone. The
-        /// timer is deleted, not shortened: MouseLeave collapses on the spot and this constant is
-        /// the whole of the delay the user can perceive.</para>
-        ///
-        /// <para><b>Why that does not flicker.</b> The leave is measured on <c>NavSidebar</c>,
-        /// the rail container, and WPF raises MouseLeave only when the pointer leaves an
-        /// element's entire subtree - crossing from a door to its accordion entries, or between
-        /// two doors, never fires it. A pointer wobbling across the rail's edge alternates
-        /// MouseLeave/MouseEnter, and <see cref="SetNavRailExpanded"/> early-outs whenever the
-        /// state asked for is the state it is already in, so each real crossing starts at most one
-        /// tween and a re-entry mid-collapse simply re-targets the same Width clock.</para>
-        /// </summary>
-        private const int NavRailCollapseAnimMs = 150;
-
-        // ===================== medallion door rows (CONTRACT, 2026-08-12) =====================
-        // Sizes are animated between these two states; MainWindow.xaml authors the COLLAPSED
-        // value on every element, so a rail whose Loaded hook never ran still renders correctly
-        // shut. Nothing here changes the row PITCH: door rows are a fixed 64px tall in both
-        // states (see the NavDoorButton style), only what sits inside them grows.
-
-        /// <summary>The rounded (r12) tile behind the door art. Open was 56 - the full collapsed
-        /// strip, flush with the window's left edge - until the 3px accent window frame landed
-        /// (2026-08-13, GlassWindowEdge in MainWindow.xaml): a 56px tile sat underneath the frame
-        /// and read as crowding it. 50 keeps the tile centred on the frozen 56px strip (moving
-        /// the centre sideways on expand is a jitter nobody asked for) with 3px clear each side,
-        /// so its left edge meets the frame's inner edge instead of disappearing under it. It
-        /// still reads as the "64px medallion zone", because the door name starts at 64 either
-        /// way.</summary>
-        // Owner polish: keep the full-size medallion visible even with the rail collapsed.
-        private const double NavDoorTileCollapsed = 50;
-        private const double NavDoorTileExpanded = 50;
-
-        /// <summary>The art itself - a Viewbox over the native 64px medallion, so its rounded
-        /// clip scales with it and its RenderTransform stays free for ChromeFx's hover nudge.
-        ///
-        /// <para>2026-08-13, two same-day owner passes converged here ("the images seem too small,
-        /// get rid or reduce the grey outline in favour of bigger images" / "make those images
-        /// bigger even when in small mode, and reduce by about half that grey outline"). Both lead
-        /// with BIGGER, so the art fills the frozen tile to a 2px inset per side - 44 shut -> 40,
-        /// 50 open (the tile shrank 56 -> 50 the same day for the GlassWindowEdge accent frame,
-        /// see the tile note above) -> 46 - and the plate's idle 1px grey hairline went
-        /// Transparent in MainWindow.xaml, so the only ring left is the hue one
-        /// RefreshNavDoorActive paints on the door you are in. Row pitch, tile size, hit target
-        /// and rail width are all untouched; the art is 64px native, so 46 DIP stays under
-        /// upscale. If the ring should read thicker (the "about half" reading: 36/45, ~4px of
-        /// plate), these two constants are the whole knob - NavRailFlyoutTests pins the
-        /// tile-relative inset, not the absolutes.</para></summary>
-        private const double NavDoorIconCollapsed = 46;
-        private const double NavDoorIconExpanded = 46;
-
-        /// <summary>Radial hue halo behind the tile. 64 shut is exactly the 56px strip plus the
-        /// 4px each side where the gradient has already reached zero alpha, so the rail's
-        /// ClipToBounds cuts nothing visible; 84 open does get clipped at the window's left edge,
-        /// which is the one edge a glow is allowed to run off.</summary>
-        private const double NavDoorGlowCollapsed = 64;
-        private const double NavDoorGlowExpanded = 84;
-
-        /// <summary>Halo opacity. Idle rows show a hint once the rail is open, the active row
-        /// wears it properly, and a shut rail shows none on the idle rows at all (six haloes in
-        /// a 56px strip is soup, not a rail).</summary>
-        private const double NavDoorGlowActive = 0.50;
-        private const double NavDoorGlowOpen = 0.20;
-        private const int NavDoorGlowFadeMs = 160;
-
-        /// <summary>CONTRACT: "inactive tiles Opacity .85". On the TILE, deliberately not on the
-        /// Button - StartNavDoorHeaderPulse animates Button.Opacity and then writes a local 1.0
-        /// when it ends, which would outrank any setter of ours for the rest of the session.</summary>
-        private const double NavDoorTileIdleOpacity = 0.85;
-
-        /// <summary>Big door name: rises this far, one row after another.</summary>
-        private const double NavDoorLabelRise = 14;
-        private const int NavDoorLabelFadeMs = 220;
-        private const int NavDoorLabelSlideMs = 260;
-        private const int NavDoorLabelStaggerMs = 30;
-
-        // Door-name fx (owner, 2026-08-13: the names got "bigger and centered and animated -
-        // something mod themed, try some cool fx"). Two layers, both built per row in
-        // BuildNavDoorLabelFx (a Style-set Effect/Transform is ONE shared instance across the
-        // rows - the same trap the label slide already dodges) and both running ONLY while the
-        // rail is open: the labels sit at Opacity 0 shut, and a Forever clock under an
-        // invisible layer is pure heat.
-        //   - a DropShadowEffect halo on the name in the mod's FxGlow colour, breathing;
-        //   - a white gloss band (an overlay TextBlock's OpacityMask) sweeping each name,
-        //     one row after another, so the rail glints top to bottom.
-        // Reduced motion: static halo at the mid opacity, no sweep - the mod colour still
-        // reads, nothing loops.
-        private const double NavDoorLabelGlowLo = 0.20;
-        private const double NavDoorLabelGlowHi = 0.70;
-        private const double NavDoorLabelGlowStatic = 0.45;
-        private const int NavDoorLabelGlowBreathMs = 1900;
-        private const int NavDoorLabelShimmerSweepMs = 1100;
-        private const int NavDoorLabelShimmerPeriodMs = 3600;
-        private const int NavDoorLabelFxStaggerMs = 140;
-
-        /// <summary>Marks the label host grid in MainWindow.xaml (set by the NavDoorLabelHost
-        /// style). Two jobs: it is how <see cref="CacheNavDoorRows"/> finds the host, and how
-        /// <see cref="CacheNavRailParts"/> knows to leave the door names OUT of the global label
-        /// fade - they are driven per row, with a stagger, and two clocks on one Opacity is a
-        /// race whose winner is whichever call happened to be last.</summary>
-        private const string NavDoorLabelHostTag = "navdoorlabel";
-
-        /// <summary>Marks a rail TextBlock that must stay visible while the rail is SHUT (today:
-        /// the search pill's lens glyph, which is the whole pill in the collapsed state).
-        /// <see cref="CacheNavRailParts"/> leaves tagged text out of the global label fade
-        /// entirely - not per-row driven like <see cref="NavDoorLabelHostTag"/>, just never
-        /// touched.</summary>
-        private const string NavRailStaticTextTag = "navrailstatic";
-
-        private bool _navRailExpanded;
-        private bool _navRailReady;
-
-        /// <summary>Outstanding <see cref="HoldNavRailOpen(object)"/> claims. While anything is
-        /// holding, the rail ignores every collapse trigger - the pointer leaving and the
-        /// click-elsewhere - because the caller is showing the user something IN the rail and a
-        /// rail that shuts underneath a spotlight is worse than no spotlight at all. A SET, not a
-        /// counter: a tutorial step and the palette can be up at once and the first one to finish
-        /// must not release the other's hold, but a caller whose release never arrives must not be
-        /// able to pin the rail open for the rest of the session either. See
-        /// <see cref="NavRailHoldLatch"/> for the v6.9.5 bug that bought the set.</summary>
-        private readonly NavRailHoldLatch _navRailHolds = new();
-
-        /// <summary>
-        /// The rail's own context menus (the Favorites pin menu, MainWindow.FavoritesRail.cs),
-        /// registered at attach time so the watchdog can ask each one whether it is REALLY open.
-        ///
-        /// <para>Read straight off <c>ContextMenu.IsOpen</c> and never off bookkeeping of our own:
-        /// a counter incremented on Opened and decremented on Closed is the same shape of promise
-        /// that produced the stuck rail in the first place, and a menu that skipped its Closed
-        /// would then switch the watchdog off forever - the one state the watchdog exists to
-        /// survive.</para>
-        /// </summary>
-        private readonly List<ContextMenu> _navRailPopups = new();
-
-        /// <summary>
-        /// THE SAFETY NET. Nothing in the rail's normal wiring is allowed to be the last word on
-        /// whether it may collapse: every edge (MouseLeave, the click-elsewhere) can be missed,
-        /// and every latch (<see cref="_navRailHolds"/>) depends on somebody remembering to let
-        /// go. This timer re-reads the truth from the OS cursor several times a second while the
-        /// rail is out, and a rail that has been open, unattended and popup-free for
-        /// <see cref="NavRailWatchdogGraceMs"/> is force-collapsed with its latches dropped.
-        ///
-        /// <para>It runs ONLY while the flyout is out (started and stopped from
-        /// <see cref="SetNavRailExpanded"/>), so the shut rail - which is the rail almost always -
-        /// costs nothing at all.</para>
-        /// </summary>
-        private DispatcherTimer? _navRailWatchdog;
-
-        /// <summary>When the cursor was first seen off the flyout, or MinValue while it is on it.
-        /// UTC, because this is a duration and the user's clock can move under it.</summary>
-        private DateTime _navRailPointerAwaySince = DateTime.MinValue;
-
-        /// <summary>Watchdog tick. Four reads a second of a cursor position and a rectangle, and
-        /// only while the rail is open.</summary>
-        private const int NavRailWatchdogTickMs = 250;
-
-        /// <summary>How long the cursor has to be demonstrably off the flyout before the rail is
-        /// declared stuck. Long enough that it can never race a real hover (the pointer travels
-        /// off and back across the rail's edge in tens of milliseconds) and short enough that a
-        /// user who has noticed the rail is covering their dashboard does not have to wait for
-        /// it - the reports describe people clicking around trying to make it go away.</summary>
-        private const int NavRailWatchdogGraceMs = 1500;
-
-        /// <summary>Slack around the flyout's screen rect, so a cursor resting on the 3px accent
-        /// window frame or one device pixel outside a scaled edge does not read as "away".</summary>
-        private const double NavRailWatchdogSlackPx = 24;
-
-        /// <summary>Every label in the rail, cached once. Faded rather than collapsed: a
-        /// Visibility flip would re-measure the door panels mid-tween and fight the accordion's
-        /// own Height animation.</summary>
-        private readonly List<TextBlock> _navRailLabels = new();
-
-        /// <summary>Rail buttons, so icons can centre themselves when the labels are gone.</summary>
-        private readonly List<ButtonBase> _navRailButtons = new();
-
-        /// <summary>The door rows in rail order (tab doors + launcher doors) - the stagger index
-        /// IS this order.</summary>
-        private readonly List<NavDoorRow> _navDoorRows = new();
-
-        /// <summary>Door names, excluded from <see cref="_navRailLabels"/>. See
-        /// <see cref="NavDoorLabelHostTag"/>.</summary>
-        private readonly HashSet<TextBlock> _navDoorLabelTexts = new();
-
-        /// <summary>
-        /// One door row's animatable parts, resolved once. The parts live in the Button's
-        /// CONTENT (MainWindow.xaml authors them per door, because the art and the loc key are
-        /// per door) except <see cref="ActiveBar"/>, which is the shared template's
-        /// <c>NavActiveBar</c> - the part ChromeFx's ApplyNavActiveGlow drives BY NAME.
-        /// </summary>
-        private sealed class NavDoorRow
+        /// <summary>One section row's parts, found once by type inside the row's Grid.</summary>
+        private sealed class NavSectionRow
         {
-            internal Ellipse Glow = null!;
-            internal Border Tile = null!;
-            internal Viewbox Icon = null!;
-            internal FrameworkElement LabelHost = null!;
-            internal TranslateTransform LabelSlide = null!;
+            internal string Section = "";
+            internal Button Button = null!;
+            internal Ellipse? Glow;
+            internal Border? Tile;
+            /// <summary>The ring drawn OVER the art (Tag "navring", polish wave 9). Null on a row
+            /// authored without it: the ring then paints on <see cref="Tile"/> as before.</summary>
+            internal Border? Ring;
+            /// <summary>The hue wash over the art (Tag "navtint", polish wave 9).</summary>
+            internal Border? Tint;
+            internal Border? Badge;
+            internal TextBlock? BadgeText;
             internal TextBlock? Label;
-
-            /// <summary>Mod-glow halo behind the name. Per row: the breath is staggered, and
-            /// re-tinted from ApplyDoorArt on every mod switch.</summary>
-            internal DropShadowEffect? LabelGlow;
-
-            /// <summary>The gloss band's ride: TranslateTransform on the overlay TextBlock's
-            /// OpacityMask brush, swept -1 -> 1 across the name.</summary>
-            internal TranslateTransform? ShimmerSweep;
-
-            /// <summary>The door's hue, read straight back off the Button's BorderBrush - the
-            /// one place MainWindow.xaml states it, and already what NavActiveBar paints.</summary>
-            internal Brush Hue = Brushes.Transparent;
-
-            internal FrameworkElement? ActiveBar;
+            internal SolidColorBrush? Hue;
+            /// <summary>The coin's own parts (polish wave 10): contact disc, dish, socket shade, lip.</summary>
+            internal NavCoinParts? Coin;
+            /// <summary>The row's content Grid (coin + label): the one element that travels and leans.</summary>
+            internal FrameworkElement? Face;
+            internal TranslateTransform Lift = new();
+            internal RotateTransform Tilt = new();
             internal bool Active;
+            internal bool Painted;
+            internal bool Hovered;
+            internal bool Pressed;
         }
 
         /// <summary>
-        /// Called once from the Loaded handler, after templates are applied - the label/button
-        /// caches are a visual-tree walk and find nothing before that.
+        /// A rail medallion as a COIN (nav polish wave 10, depth; the law is DepthRules). Built once
+        /// per row by <see cref="BuildNavCoin"/> and inserted around the authored tile:
+        /// <list type="bullet">
+        /// <item>Disc: the contact shadow on the sheet, an Ellipse UNDER the tile, tinted by the
+        ///   row's hue (DepthRules.ShadowColor), pushed down by DepthRules.ShadowFor.</item>
+        /// <item>Dish: DepthCoinDish over the tile, under the art.</item>
+        /// <item>Socket: DepthPressedShade over the art, shown while the coin is lit or pressed.</item>
+        /// <item>Rim: the 1 px lip just inside the hue ring: DepthCoinRim raised, DepthPressedBevel
+        ///   seated. The wave 9 ring stays above it and keeps its job.</item>
+        /// </list>
         /// </summary>
+        internal sealed class NavCoinParts
+        {
+            internal Ellipse Disc = null!;
+            internal TranslateTransform DiscShift = new();
+            internal Border Dish = null!;
+            internal Border Socket = null!;
+            internal Border Rim = null!;
+            /// <summary>Polish wave 11: the dark hairline that cuts the coin out of the rail.</summary>
+            internal Border Outer = null!;
+            /// <summary>Polish wave 11: the shadow ring where the art meets the dish.</summary>
+            internal Border Inner = null!;
+            /// <summary>Polish wave 11: the small crisp specular crescent at the top-left.</summary>
+            internal Path Specular = null!;
+        }
+
+        private readonly List<NavSectionRow> _navSectionRows = new();
+        private bool _navRailReady;
+
+        // Polish wave 9: the lit halo reads louder (0.35 -> 0.55); idle stays 0, chrome never idles lit.
+        private const double NavGlowActive = 0.55;
+        private const string NavRingTag = "navring";
+        private const string NavTintTag = "navtint";
+        private const int NavGlowFadeMs = 160;
+        private const string NavSectionLabelTag = "navsectionlabel";
+        private const string NavBadgeTag = "navbadge";
+
+        /// <summary>Every rail button, top to bottom, gear last. Null-free.</summary>
+        private IEnumerable<Button> NavSectionButtons => new[]
+        {
+            DoorHome, DoorStudio, DoorCompanion, DoorPlay, DoorSocial, DoorYou, DoorLibrary, DoorSettings,
+        }.Where(b => b != null);
+
         private void InitializeNavRail()
         {
             try
             {
                 if (_navRailReady || NavSidebar == null) return;
 
-                // Doors first: it seeds _navDoorLabelTexts, which the walk below reads.
-                CacheNavDoorRows();
+                CacheNavSectionRows();
                 HookNavDoorRerouteSeam();
-                CacheNavRailParts(NavSidebar);
-
-                // The medallion art is mod-aware from the first frame; MainWindow.xaml's literal
-                // pack Sources are the fallback, not the answer. Repaints on ModChanged too - see
-                // the subscription block in MainWindow.xaml.cs.
                 ApplyDoorArt();
+                ApplyModToNavRailLabels();
+                RegisterSectionShortcuts();
 
-                // LAYER A: the gold stars on the sold rows, and the four subscriptions that take
-                // them away again. Authored Collapsed, so a rail that never got here shows none
-                // rather than all - see the style in MainWindow.xaml.
-                RefreshNavPremiumTags();
+                NavBadges.Changed += OnNavBadgeChanged;
+                Closed += (_, __) => NavBadges.Changed -= OnNavBadgeChanged;
+                foreach (var row in _navSectionRows) PaintNavBadge(row, NavBadges.Get(row.Section));
 
-                NavSidebar.MouseEnter += (_, __) => SetNavRailExpanded(true);
-
-                // The same intent, LEVEL-triggered - see the dead-zone note on
-                // SyncNavRailToPointer. MouseEnter is an edge, and an edge can be missed;
-                // MouseMove is re-hit-tested from scratch on every WM_MOUSEMOVE, so the pointer
-                // being on the rail is enough to open it however the enter got lost.
-                // SetNavRailExpanded early-outs on the state it is already in, so this is one
-                // bool compare per move for as long as the rail is out.
-                NavSidebar.MouseMove += (_, __) => SetNavRailExpanded(true);
-
-                // No timer, by owner call (NavRailCollapseAnimMs): leaving the rail IS the
-                // collapse trigger. NavSidebar is the whole rail, so this does not fire while the
-                // pointer is travelling between doors or down into an open accordion.
-                NavSidebar.MouseLeave += (_, __) =>
-                {
-                    if (_navRailHolds.Held) return;
-                    SetNavRailExpanded(false);
-                };
-
-                // "or on any click elsewhere". Preview, so it lands even when the click is
-                // handled by whatever it hit. A click INSIDE the rail is a navigation and keeps
-                // the rail open - MouseLeave takes over the moment the pointer goes.
-                PreviewMouseDown += (_, __) =>
-                {
-                    if (NavSidebar.IsMouseOver) return;
-                    if (_navRailHolds.Held) return;
-                    SetNavRailExpanded(false);
-                };
-
-                // The other half of the level trigger: a rail that is out while the pointer is
-                // demonstrably somewhere else shuts, whatever happened to its MouseLeave. Guarded
-                // on _navRailExpanded first so the normal case is one field read per move.
-                PreviewMouseMove += (_, __) =>
-                {
-                    if (!_navRailExpanded) return;
-                    if (_navRailHolds.Held) return;
-                    if (NavSidebar.IsMouseOver) return;
-                    SetNavRailExpanded(false);
-                };
-
-                // THE SAFETY NET. Everything above is an EDGE or a latch, and v6.9.5 proved both
-                // can fail: an unpaired hold left the rail pinned over the dashboard until the app
-                // was restarted, and every level trigger in this file bails out on a hold before
-                // it reads anything. So one clock re-reads the OS cursor while the flyout is out
-                // and collapses a rail nobody is near, latches and all - see NavRailWatchdogTick.
-                _navRailWatchdog = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
-                {
-                    Interval = TimeSpan.FromMilliseconds(NavRailWatchdogTickMs),
-                };
-                _navRailWatchdog.Tick += (_, __) => NavRailWatchdogTick();
-                Closed += (_, __) => _navRailWatchdog?.Stop();
-
-                // Alt-Tab, a modal from another app, the screen locking: the pointer can be
-                // anywhere and this window will get no leave for it. Losing activation is the one
-                // unambiguous "nobody is using the rail" signal there is, so it is the watchdog's
-                // grace window collapsed to zero. A rail popup that is genuinely up survives it -
-                // ForceCollapseNavRail checks.
-                Deactivated += (_, __) => ForceCollapseNavRail("window deactivated");
-
-                // A rail that is not on screen cannot be hovered, so it cannot be holding a hover
-                // state worth keeping. Covers a tab/shell swap that takes the rail out of the
-                // tree while a popup had it pinned.
-                NavSidebar.IsVisibleChanged += (_, __) =>
-                {
-                    if (NavSidebar?.IsVisible == false) ForceCollapseNavRail("rail hidden");
-                };
+                if (NavRailShadow != null) NavRailShadow.Width = DepthRules.RailShadowPx;
 
                 _navRailReady = true;
-                SetNavRailExpanded(false, animate: false);
+                RefreshSectionRail(_activeTabKey);
             }
             catch (Exception ex)
             {
-                // A rail that fails to initialise stays exactly as MainWindow.xaml authored it:
-                // 56px wide, 44px tiles, no door names and no hover flyout. Degraded, not
-                // broken - every door still navigates and still has its tooltip.
-                App.Logger?.Warning(ex, "InitializeNavRail failed; rail stays as authored (shut, icon-only)");
+                // A rail that fails here stays as authored: labelled rows that navigate, no
+                // badges, no lit row. Degraded, never empty.
+                App.Logger?.Warning(ex, "InitializeNavRail failed; rail stays as authored");
             }
+        }
+
+        private void CacheNavSectionRows()
+        {
+            _navSectionRows.Clear();
+            foreach (var btn in NavSectionButtons)
+            {
+                if (btn.Tag is not string tag) continue;
+                var row = new NavSectionRow
+                {
+                    Section = NavRailRules.SectionForDoorTag(tag),
+                    Button = btn,
+                };
+                // Polish wave 2: the hue comes from the ONE table (NavStripRules.Accent), never
+                // from per-button XAML. The template's fill and bar read Background/BorderBrush.
+                var hue = NavStripRules.Accent(row.Section);
+                row.Hue = NavFrozen(hue);
+                btn.Background = NavFrozen(NavRailRules.WithAlpha(hue, NavRailRules.FillAlpha));
+                btn.BorderBrush = row.Hue;
+                if (btn.Content is Panel grid)
+                {
+                    foreach (var child in grid.Children.OfType<FrameworkElement>())
+                    {
+                        switch (child)
+                        {
+                            case Ellipse e: row.Glow = e; break;
+                            case Border b when (b.Tag as string) == NavBadgeTag:
+                                row.Badge = b; row.BadgeText = b.Child as TextBlock; break;
+                            case Border b when (b.Tag as string) == NavRingTag: row.Ring = b; break;
+                            case Border b when (b.Tag as string) == NavTintTag: row.Tint = b; break;
+                            case Border b: row.Tile ??= b; break;
+                            case TextBlock t when (t.Tag as string) == NavSectionLabelTag: row.Label = t; break;
+                        }
+                    }
+                }
+                if (row.Glow != null) row.Glow.Fill = BuildNavDoorGlow(row.Hue);
+                if (row.Label != null)
+                {
+                    // A quiet, static halo in the mod's glow colour (no breathing loop: chrome
+                    // never idles in motion). The label itself stays full-contrast TextLight.
+                    row.Label.Effect = new DropShadowEffect
+                    {
+                        Color = FxTheme.GlowColor, BlurRadius = 6, ShadowDepth = 0, Opacity = 0.45,
+                    };
+                }
+                if (row.Tile != null)
+                    row.Tile.Background = NavFrozen(NavRailRules.WithAlpha(hue, NavRailRules.TileTintAlpha));
+                PaintNavTint(row);
+                if (btn.Content is Panel face && row.Tile != null && row.Hue != null)
+                {
+                    row.Face = face;
+                    row.Coin = BuildNavCoin(face, row.Tile, row.Hue.Color);
+                    face.RenderTransformOrigin = new Point(0.5, 0.4);
+                    face.RenderTransform = new TransformGroup { Children = { row.Tilt, row.Lift } };
+                }
+                HookNavPress(row);
+                var captured = row;
+                btn.MouseEnter += (_, __) =>
+                {
+                    captured.Hovered = true;
+                    PaintNavRing(captured, hover: true);
+                    PaintNavCoin(captured);
+                };
+                btn.MouseLeave += (_, __) =>
+                {
+                    captured.Hovered = false;
+                    captured.Pressed = false;
+                    PaintNavRing(captured, hover: false);
+                    SettleNavTilt(captured);
+                    PaintNavCoin(captured);
+                };
+                btn.MouseMove += (_, e) => TiltNavCoin(captured, e);
+                PaintNavRing(row, hover: false);
+                PaintNavCoin(row);
+                btn.ToolTipOpening += (_, __) => btn.ToolTip = BuildNavRowToolTip(captured);
+                _navSectionRows.Add(row);
+            }
+        }
+
+        /// <summary>Press (polish wave 10): the coin travels DepthRules.PressTravelPx down in PressMs
+        /// and drops its shadow; release springs it to wherever the state now puts it (lit = the
+        /// socket, else hover lift) over ReleaseMs, passing the target by ReleaseOvershootPx. The
+        /// release listens with handledEventsToo, AFTER the Button raised Click, so a press that
+        /// navigates springs straight into its socket.</summary>
+        private static void HookNavPress(NavSectionRow row)
+        {
+            var btn = row.Button;
+            btn.PreviewMouseLeftButtonDown += (_, __) =>
+            {
+                row.Pressed = true;
+                SettleNavTilt(row);
+                PaintNavCoin(row);
+            };
+            btn.AddHandler(UIElement.MouseLeftButtonUpEvent, new MouseButtonEventHandler((_, __) =>
+            {
+                if (!row.Pressed) return;
+                row.Pressed = false;
+                row.Hovered = btn.IsMouseOver;
+                PaintNavCoin(row, spring: true);
+            }), handledEventsToo: true);
+        }
+
+        // ============================== the coin (polish wave 10) ==============================
+
+        /// <summary>Builds the coin's parts around an authored row: the disc goes under the tile,
+        /// the dish right over it (under the art), the socket shade and the lip over the art and
+        /// the hue wash but under the ring. Brushes come from Resources/Theme/Depth.xaml by
+        /// resource reference; only the disc is painted here, from the row's hue.</summary>
+        internal static NavCoinParts BuildNavCoin(Panel face, Border tile, Color hue)
+        {
+            var coin = new NavCoinParts();
+            int row = Grid.GetRow(tile);
+
+            coin.Disc = new Ellipse
+            {
+                Width = NavRailRules.CoinDiscWidth,
+                Height = NavRailRules.CoinDiscHeight,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Bottom,
+                // Centred on the tile's foot; the shift pushes it down by the shadow length.
+                Margin = new Thickness(0, 0, 0, -NavRailRules.CoinDiscHeight / 2),
+                Fill = BuildNavCoinDisc(hue),
+                RenderTransform = coin.DiscShift,
+                IsHitTestVisible = false,
+            };
+            coin.Dish = new Border
+            {
+                Width = tile.Width,
+                Height = tile.Height,
+                CornerRadius = tile.CornerRadius,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                IsHitTestVisible = false,
+            };
+            coin.Dish.SetResourceReference(Border.BackgroundProperty, "DepthCoinDish");
+            coin.Socket = new Border
+            {
+                Width = NavRailRules.CoinRimSize,
+                Height = NavRailRules.CoinRimSize,
+                CornerRadius = new CornerRadius(NavRailRules.CoinRimRadius),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                Opacity = 0,
+                IsHitTestVisible = false,
+            };
+            // Polish wave 11: a deeper socket than the shared pressed shade (owner: more 3d).
+            coin.Socket.SetResourceReference(Border.BackgroundProperty, "DepthCoinSocket");
+            coin.Rim = new Border
+            {
+                Width = NavRailRules.CoinRimSize,
+                Height = NavRailRules.CoinRimSize,
+                CornerRadius = new CornerRadius(NavRailRules.CoinRimRadius),
+                BorderThickness = new Thickness(1),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                IsHitTestVisible = false,
+            };
+            coin.Rim.SetResourceReference(Border.BorderBrushProperty, "DepthCoinRim");
+            coin.Outer = new Border
+            {
+                Width = NavRailRules.CoinOuterSize,
+                Height = NavRailRules.CoinOuterSize,
+                CornerRadius = new CornerRadius(NavRailRules.CoinOuterRadius),
+                BorderThickness = new Thickness(1),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                IsHitTestVisible = false,
+            };
+            coin.Outer.SetResourceReference(Border.BorderBrushProperty, "DepthCoinOuterRim");
+            coin.Inner = new Border
+            {
+                Width = NavRailRules.CoinInnerSize,
+                Height = NavRailRules.CoinInnerSize,
+                CornerRadius = new CornerRadius(NavRailRules.CoinInnerRadius),
+                BorderThickness = new Thickness(NavRailRules.CoinInnerThickness),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                IsHitTestVisible = false,
+            };
+            coin.Inner.SetResourceReference(Border.BorderBrushProperty, "DepthCoinInnerShadow");
+            coin.Specular = new Path
+            {
+                Data = BuildNavCoinCrescent(),
+                Width = NavRailRules.CoinRimSize,
+                Height = NavRailRules.CoinRimSize,
+                Stretch = Stretch.None,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                IsHitTestVisible = false,
+            };
+            coin.Specular.SetResourceReference(Shape.FillProperty, "DepthCoinSpecular");
+            coin.DiscShift.X = NavRailRules.CoinDiscRightPx;
+            foreach (var part in new FrameworkElement[] { coin.Disc, coin.Dish, coin.Socket, coin.Rim, coin.Outer, coin.Inner, coin.Specular })
+                Grid.SetRow(part, row);
+
+            var kids = face.Children;
+            kids.Insert(kids.IndexOf(tile), coin.Disc);
+            kids.Insert(kids.IndexOf(tile) + 1, coin.Dish);
+            // Over the art and its hue wash, under the ring (the art itself when a row has no wash).
+            int over = -1;
+            for (int i = 0; i < kids.Count; i++)
+                if (kids[i] is Border b && (b.Tag as string) == NavTintTag) over = i;
+            if (over < 0)
+                for (int i = 0; i < kids.Count; i++)
+                    if (kids[i] is Viewbox) over = i;
+            int at = over < 0 ? kids.IndexOf(coin.Dish) + 1 : over + 1;
+            kids.Insert(at, coin.Socket);
+            kids.Insert(at + 1, coin.Rim);
+            kids.Insert(at + 2, coin.Inner);
+            // The outer hairline under everything but the contact shadow; the crescent is the glass
+            // on top of the face (over the ring, under the badge).
+            kids.Insert(kids.IndexOf(coin.Disc) + 1, coin.Outer);
+            int ringAt = -1;
+            for (int i = 0; i < kids.Count; i++)
+                if (kids[i] is Border b && (b.Tag as string) == NavRingTag) ringAt = i;
+            kids.Insert(ringAt < 0 ? kids.IndexOf(coin.Inner) + 1 : ringAt + 1, coin.Specular);
+            return coin;
+        }
+
+        /// <summary>The specular crescent (polish wave 11): the sliver between the coin face and the
+        /// face nudged down-right, kept only near the top-left corner. Its inner edge is crisp, its
+        /// fill (DepthCoinSpecular) fades past the corner, so it reads as a glint, not a veil.</summary>
+        internal static Geometry BuildNavCoinCrescent()
+        {
+            double s = NavRailRules.CoinRimSize, r = NavRailRules.CoinRimRadius;
+            var face = new RectangleGeometry(new Rect(0, 0, s, s), r, r);
+            var nudged = new RectangleGeometry(new Rect(NavRailRules.SpecularOffsetX, NavRailRules.SpecularOffsetY, s, s), r, r);
+            var sliver = new CombinedGeometry(GeometryCombineMode.Exclude, face, nudged);
+            var corner = new EllipseGeometry(new Point(r * 0.8, r * 0.8), s * 0.48, s * 0.48);
+            var g = new CombinedGeometry(GeometryCombineMode.Intersect, sliver, corner);
+            g.Freeze();
+            return g;
+        }
+
+        /// <summary>The contact disc: the DepthDropDisc shape in the row's own shadow colour.</summary>
+        internal static Brush BuildNavCoinDisc(Color hue)
+        {
+            var b = new RadialGradientBrush
+            {
+                Center = new Point(0.5, 0.5), GradientOrigin = new Point(0.5, 0.5), RadiusX = 0.5, RadiusY = 0.5,
+            };
+            foreach (var (c, o) in NavRailRules.CoinDiscStops(hue)) b.GradientStops.Add(new GradientStop(c, o));
+            b.Freeze();
+            return b;
+        }
+
+        /// <summary>Paints a coin for its row's state, eased by DepthRules (Motion Off = instant).</summary>
+        private static void PaintNavCoin(NavSectionRow row, bool spring = false)
+        {
+            if (row.Coin == null) return;
+            try
+            {
+                int full = row.Pressed ? DepthRules.PressMs : spring ? DepthRules.ReleaseMs : DepthRules.HoverMs;
+                ApplyNavCoinState(row.Coin, row.Lift, row.Pressed, row.Active, row.Hovered,
+                    DepthRules.Ms(full, MotionFx.Level), spring);
+            }
+            catch (Exception ex) { App.Logger?.Debug("PaintNavCoin: {E}", ex.Message); }
+        }
+
+        /// <summary>
+        /// The coin law in one place. Light swaps at once (a lit coin wears the pressed lip and the
+        /// socket shade, an idle one the raised lip); motion eases: the face travels to
+        /// <see cref="NavRailRules.CoinTravel"/>, the disc to <see cref="NavRailRules.CoinShadow"/>
+        /// and fades out when the coin sits down. <paramref name="ms"/> 0 = set, no animation.
+        /// </summary>
+        internal static void ApplyNavCoinState(NavCoinParts coin, TranslateTransform lift,
+            bool pressed, bool active, bool hovered, int ms, bool spring)
+        {
+            bool seated = pressed || active;
+            coin.Rim.SetResourceReference(Border.BorderBrushProperty, seated ? "DepthPressedBevel" : "DepthCoinRim");
+            coin.Socket.Opacity = seated ? 1 : 0;
+
+            double travel = NavRailRules.CoinTravel(pressed, active, hovered);
+            double shadow = NavRailRules.CoinShadow(pressed, active, hovered);
+            double discTo = shadow > 0 ? 1 : 0;
+
+            if (ms <= 0)
+            {
+                lift.BeginAnimation(TranslateTransform.YProperty, null);
+                coin.DiscShift.BeginAnimation(TranslateTransform.YProperty, null);
+                coin.Disc.BeginAnimation(UIElement.OpacityProperty, null);
+                lift.Y = travel;
+                if (shadow > 0) coin.DiscShift.Y = shadow;
+                coin.Disc.Opacity = discTo;
+                return;
+            }
+
+            var span = TimeSpan.FromMilliseconds(ms);
+            var ease = new QuadraticEase { EasingMode = EasingMode.EaseOut };
+            double from = lift.Y;
+            if (spring && Math.Abs(from - travel) > 0.01)
+            {
+                var k = new DoubleAnimationUsingKeyFrames { Duration = span };
+                k.KeyFrames.Add(new EasingDoubleKeyFrame(NavRailRules.CoinOvershoot(from, travel),
+                    KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(ms * 0.6)), ease));
+                k.KeyFrames.Add(new EasingDoubleKeyFrame(travel, KeyTime.FromTimeSpan(span),
+                    new QuadraticEase { EasingMode = EasingMode.EaseInOut }));
+                lift.BeginAnimation(TranslateTransform.YProperty, k);
+            }
+            else
+            {
+                lift.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(travel, span) { EasingFunction = ease });
+            }
+            if (shadow > 0)
+                coin.DiscShift.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(shadow, span) { EasingFunction = ease });
+            coin.Disc.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(discTo, span));
+        }
+
+        /// <summary>Hover lean toward the pointer (the launcher tile recipe), idle coins only and
+        /// only where DepthRules.TiltAllowed says so. A lit coin sits in its socket and stays level.</summary>
+        private static void TiltNavCoin(NavSectionRow row, MouseEventArgs e)
+        {
+            try
+            {
+                if (row.Face == null || row.Tile == null) return;
+                if (row.Pressed || !NavRailRules.CoinTilts(row.Active, MotionFx.Level, PerformanceProfile.CurrentTier))
+                {
+                    SettleNavTilt(row);
+                    return;
+                }
+                double w = row.Tile.ActualWidth, h = row.Tile.ActualHeight;
+                if (w <= 0 || h <= 0) return;
+                var at = e.GetPosition(row.Tile);
+                double angle = NavRailRules.CoinTilt(at.X / w * 2 - 1, at.Y / h * 2 - 1);
+                int ms = DepthRules.Ms(NavRailRules.CoinTiltMs, MotionFx.Level);
+                if (ms <= 0) { row.Tilt.BeginAnimation(RotateTransform.AngleProperty, null); row.Tilt.Angle = angle; return; }
+                row.Tilt.BeginAnimation(RotateTransform.AngleProperty, new DoubleAnimation(angle, TimeSpan.FromMilliseconds(ms)));
+            }
+            catch (Exception ex) { App.Logger?.Debug("TiltNavCoin: {E}", ex.Message); }
+        }
+
+        private static void SettleNavTilt(NavSectionRow row)
+        {
+            int ms = DepthRules.Ms(DepthRules.HoverMs, MotionFx.Level);
+            if (ms <= 0 || (row.Tilt.Angle == 0 && !row.Tilt.HasAnimatedProperties))
+            {
+                row.Tilt.BeginAnimation(RotateTransform.AngleProperty, null);
+                row.Tilt.Angle = 0;
+                return;
+            }
+            row.Tilt.BeginAnimation(RotateTransform.AngleProperty, new DoubleAnimation(0, TimeSpan.FromMilliseconds(ms))
+            { EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut } });
+        }
+
+        /// <summary>
+        /// The rail's shadow on the page (NavRailShadow, DepthRules.RailShadowPx wide), tinted by
+        /// the section hue. The integrator calls this from PaintSectionWash; until then the
+        /// Rectangle wears the neutral DepthRailShadow theme brush.
+        /// </summary>
+        internal void PaintDepthRail(Color hue)
+        {
+            try
+            {
+                if (NavRailShadow == null) return;
+                var g = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(1, 0) };
+                foreach (var (c, o) in NavRailRules.RailShadowStops(hue)) g.GradientStops.Add(new GradientStop(c, o));
+                g.Freeze();
+                NavRailShadow.Fill = g;
+            }
+            catch (Exception ex) { App.Logger?.Debug("PaintDepthRail: {E}", ex.Message); }
+        }
+
+        /// <summary>The section name, the open count when a badge is up, and a greyed "Ctrl+2".
+        /// Built on open so a language or mod switch never leaves a stale tooltip.</summary>
+        private static object BuildNavRowToolTip(NavSectionRow row)
+        {
+            var panel = new StackPanel();
+            var name = row.Label?.Text ?? row.Section;
+            if (!string.IsNullOrEmpty(name))
+                name = name.Substring(0, 1) + (name.Length > 1 ? name.Substring(1).ToLowerInvariant() : "");
+            panel.Children.Add(new TextBlock { Text = name, FontWeight = FontWeights.SemiBold });
+            int count = NavBadges.Get(row.Section);
+            if (count > 0)
+                panel.Children.Add(new TextBlock { Text = Loc.GetF("nav_badge_open", count) });
+            int n = NavRailRules.ShortcutNumber(row.Section);
+            if (n > 0)
+                panel.Children.Add(new TextBlock { Text = "Ctrl+" + n, Opacity = 0.6, FontSize = 11 });
+            return panel;
         }
 
         // ============================== the reroute seam ==============================
 
         /// <summary>
         /// A single consultation point on the door-press path, for anything that wants to send a
-        /// click somewhere other than where it was aimed. Given the key of the door that was pressed
-        /// (its <c>Tag</c>, the same identity NavDoor_Click matches on), it returns the door or tab
-        /// key to open INSTEAD, or null to let the press through untouched.
-        ///
-        /// <para>Deliberately owner-agnostic and deliberately a bare delegate: the rail knows nothing
-        /// about who set it or why, and a hook that is null (the normal case, always) costs one null
-        /// check per press. Today Possession's "misroute" haunt is the only writer, and it clears
-        /// itself the moment it fires - whoever sets this owns clearing it, because a hook that
-        /// outlives its owner is a rail that misroutes forever.</para>
+        /// click somewhere other than where it was aimed. Given the pressed row's Tag it returns
+        /// the section or tab key to open INSTEAD, or null to let the press through. Possession's
+        /// "misroute" haunt is the only writer, and it clears itself the moment it fires.
         /// </summary>
         internal static Func<string, string?>? PossessionReroute;
 
-        /// <summary>Arm the seam on every door header, once, from InitializeNavRail.</summary>
         private void HookNavDoorRerouteSeam()
         {
             try
             {
-                foreach (var door in NavDoorMap.Select(d => d.Door).Concat(NavLauncherDoors))
-                {
-                    var btn = NavDoorParts(door).Header;
-                    if (btn == null) continue;
+                foreach (var btn in NavSectionButtons)
                     btn.PreviewMouseLeftButtonDown += NavDoor_PossessionReroute;
-                }
             }
             catch (Exception ex) { App.Logger?.Warning(ex, "HookNavDoorRerouteSeam failed; doors route normally"); }
         }
 
-        /// <summary>
-        /// Preview, so handling it stops the Button ever raising Click: the door the user pressed
-        /// simply does not open, and we open the other one in its place. A returned key is matched
-        /// against NavDoorMap first (a door opens its default tab, exactly as NavDoor_Click would),
-        /// and treated as a tab key otherwise.
-        /// </summary>
-        private void NavDoor_PossessionReroute(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        private void NavDoor_PossessionReroute(object sender, MouseButtonEventArgs e)
         {
             var hook = PossessionReroute;
             if (hook == null) return;
@@ -463,48 +550,277 @@ namespace ConditioningControlPanel
             if (string.IsNullOrWhiteSpace(to)) return;
 
             e.Handled = true;
-            foreach (var d in NavDoorMap)
-            {
-                if (!string.Equals(d.Door, to, StringComparison.Ordinal)) continue;
-                ShowTab(d.DefaultTab);
-                return;
-            }
+            var section = NavRailRules.SectionForDoorTag(to!);
+            if (NavSections.Find(section) != null) { OpenNavSection(section); return; }
             ShowTab(to!);
         }
 
-        /// <summary>
-        /// The rail's search pill (MainWindow.xaml, above NavRailScroll). Same call as the Ctrl+K
-        /// InputBinding in MainWindow.xaml.cs - the pill exists to ADVERTISE that shortcut, so the
-        /// two must stay one code path. Toggle, not Show: a second press/click closing the palette
-        /// is the behaviour the keyboard already has.
-        /// </summary>
+        /// <summary>The rail's search pill. Same call as the Ctrl+K InputBinding.</summary>
         private void BtnNavSearch_Click(object sender, RoutedEventArgs e)
         {
             try { SettingsPaletteWindow.Toggle(this); }
             catch (Exception ex) { App.Logger?.Warning(ex, "BtnNavSearch_Click: palette toggle failed"); }
         }
 
+        // ============================== navigation ==============================
+
+        /// <summary>A row press: the section's last tab, else its default tab.</summary>
+        private void NavDoor_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Button btn || btn.Tag is not string tag) return;
+            OpenNavSection(NavRailRules.SectionForDoorTag(tag));
+        }
+
+        /// <summary>Opens a section the way its rail row does; logs and stays on an unknown key.</summary>
+        internal void OpenNavSection(string section)
+        {
+            var tab = NavRailRules.TargetTab(section, App.Settings?.Current?.NavLastTabBySection);
+            if (tab == null)
+            {
+                App.Logger?.Warning("OpenNavSection: no section {Section}", section);
+                return;
+            }
+            ShowTab(tab);
+        }
+
+        /// <summary>Ctrl+1..7 jump to the rail's sections. Window InputBindings: they only fire
+        /// while this window has keyboard focus, so a game window (its own HWND) never sees them,
+        /// and the panic key is a global hook that no binding here can swallow.</summary>
+        private void RegisterSectionShortcuts()
+        {
+            var keys = new[] { Key.D1, Key.D2, Key.D3, Key.D4, Key.D5, Key.D6, Key.D7 };
+            var rails = NavRailRules.RailSections;
+            for (int i = 0; i < rails.Count && i < keys.Length; i++)
+            {
+                var section = rails[i].Key;
+                var cmd = new RoutedCommand("NavSection_" + section, typeof(MainWindow));
+                CommandBindings.Add(new CommandBinding(cmd, (_, __) => OpenNavSection(section)));
+                InputBindings.Add(new KeyBinding(cmd, keys[i], ModifierKeys.Control));
+            }
+        }
+
         /// <summary>
-        /// Decode cap for a door medallion. The art is authored at 64px native and the tile never
-        /// exceeds 56 DIP, so 128 is 2x headroom for a high-DPI display - and it is the reason
-        /// this goes through the DECODED resolver: a mod is free to ship a 2048px door_play.png,
-        /// and ResolveImage would hand back every pixel of it for a 44px tile.
+        /// Lights the row that owns <paramref name="tabKey"/>: filled tile, 4px bar in the
+        /// section hue, full-opacity tile, hue ring, halo. Called from ShowTab (through
+        /// ExpandDoorForTab) on every navigation, so the lit row follows deep links, the palette
+        /// and the strip. A key no section owns leaves the current row lit.
         /// </summary>
+        internal void RefreshSectionRail(string? tabKey)
+        {
+            if (!_navRailReady) return;
+            var section = NavSections.SectionForTab(CanonicalTabKey(tabKey ?? ""));
+            if (section == null) return;
+            foreach (var row in _navSectionRows)
+            {
+                bool on = row.Section == section;
+                if (row.Painted && on == row.Active) continue;
+                row.Active = on;
+                row.Painted = true;
+                PaintNavRowActive(row);
+            }
+            // 7.1.5: being on the section is seeing its count; the badge dims (NavBadges.IsFresh).
+            try { NavBadges.MarkSeen(section); } catch { }
+        }
+
+        private static void PaintNavRowActive(NavSectionRow row)
+        {
+            try
+            {
+                var btn = row.Button;
+                btn.ApplyTemplate();
+                if (btn.Template?.FindName("NavActiveBar", btn) is FrameworkElement bar)
+                {
+                    bar.BeginAnimation(UIElement.OpacityProperty, null);
+                    bar.Opacity = 1;
+                    bar.Visibility = row.Active ? Visibility.Visible : Visibility.Collapsed;
+                }
+                if (btn.Template?.FindName("NavActiveFill", btn) is FrameworkElement fill)
+                    fill.Opacity = row.Active ? 1 : 0;
+                PaintNavSpur(row);
+                PaintNavTint(row);
+
+                // A pale medallion carries a shade (x:Name "Shade" + door name) so it idles at its
+                // neighbours' weight; lit, it shows its art in full.
+                if (btn.FindName("Shade" + btn.Name) is UIElement shade)
+                    shade.Opacity = row.Active ? 0 : 1;
+
+                PaintNavRing(row, hover: btn.IsMouseOver);
+                if (row.Label != null)
+                {
+                    if (row.Active && row.Hue != null) row.Label.Foreground = row.Hue;
+                    else row.Label.ClearValue(TextBlock.ForegroundProperty);
+                }
+                if (row.Glow != null)
+                {
+                    double to = row.Active ? NavGlowActive : 0;
+                    int ms = NavRailRules.Ms(NavGlowFadeMs, MotionFx.Level);
+                    if (ms <= 0)
+                    {
+                        row.Glow.BeginAnimation(UIElement.OpacityProperty, null);
+                        row.Glow.Opacity = to;
+                    }
+                    else
+                    {
+                        row.Glow.BeginAnimation(UIElement.OpacityProperty,
+                            new DoubleAnimation(to, TimeSpan.FromMilliseconds(ms)));
+                    }
+                }
+                // The lit coin sits down in its socket (polish wave 10); a press in flight wins.
+                if (row.Active) SettleNavTilt(row);
+                PaintNavCoin(row);
+            }
+            catch (Exception ex) { App.Logger?.Debug("PaintNavRowActive: {E}", ex.Message); }
+        }
+
+        /// <summary>The medallion ring (polish wave 9, re-lit in wave 11): the section hue made vivid
+        /// (NavRailRules.Vivid), a diagonal bevel lit from the top-left at 80% (hover 95%), 3 px;
+        /// lit = the bevel flipped (a socket lip), solid, 3.5 px. Painted on the "navring" Border
+        /// that sits over the art, so a thicker ring eats no picture; a row without one falls back
+        /// to the tile's own border. Values live in NavRailRules so a test can pin them.</summary>
+        private static void PaintNavRing(NavSectionRow row, bool hover)
+        {
+            if (row.Hue == null) return;
+            PaintNavRingParts(row.Tile, row.Ring, row.Hue.Color, row.Active, hover);
+        }
+
+        /// <summary>The ring painter on bare parts, so a render test paints exactly what the rail does.</summary>
+        internal static void PaintNavRingParts(Border? tile, Border? ring, Color hue, bool active, bool hover)
+        {
+            var target = ring ?? tile;
+            if (target == null) return;
+            if (tile != null) tile.Opacity = 1.0;
+            // Polish wave 11: a vivid hue lit from the top-left (raised) or flipped (lit = socket).
+            var g = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(1, 1) };
+            foreach (var (c, o) in NavRailRules.RingStops(hue, active, hover)) g.GradientStops.Add(new GradientStop(c, o));
+            g.Freeze();
+            target.BorderBrush = g;
+            target.BorderThickness = new Thickness(NavRailRules.RingThickness(active));
+        }
+
+        /// <summary>The hue wash over the medallion art: a touch louder on the lit row.</summary>
+        private static void PaintNavTint(NavSectionRow row)
+        {
+            if (row.Hue == null) return;
+            PaintNavTintPart(row.Tint, row.Hue.Color, row.Active);
+        }
+
+        internal static void PaintNavTintPart(Border? tint, Color hue, bool active)
+        {
+            if (tint == null) return;
+            tint.Background = NavFrozen(NavRailRules.WithAlpha(hue, NavRailRules.ArtTintAlpha(active)));
+        }
+
+        /// <summary>
+        /// The spur (template part NavEdgeSpur): a short hue tab from the window edge into the lit
+        /// medallion's ring, so the rail selection and the window edge read as one line. Built from
+        /// the row's hue (the edge at 90%, the ring end at 60%), faded in over the halo's timing
+        /// (160 ms, Reduced 80, Off instant). Hidden on every other row.
+        /// </summary>
+        private static void PaintNavSpur(NavSectionRow row)
+        {
+            var btn = row.Button;
+            if (btn.Template?.FindName("NavEdgeSpur", btn) is not Border spur) return;
+            spur.BeginAnimation(UIElement.OpacityProperty, null);
+            if (!row.Active || row.Hue == null)
+            {
+                spur.Opacity = 0;
+                spur.Visibility = Visibility.Collapsed;
+                return;
+            }
+            var c = row.Hue.Color;
+            var g = new LinearGradientBrush { StartPoint = new Point(0, 0.5), EndPoint = new Point(1, 0.5) };
+            g.GradientStops.Add(new GradientStop(NavRailRules.WithAlpha(c, NavRailRules.SpurEdgeAlpha), 0));
+            g.GradientStops.Add(new GradientStop(NavRailRules.WithAlpha(c, NavRailRules.SpurRingAlpha), 1));
+            g.Freeze();
+            spur.Background = g;
+            spur.Visibility = Visibility.Visible;
+            int ms = NavRailRules.Ms(NavGlowFadeMs, MotionFx.Level);
+            if (ms <= 0) { spur.Opacity = 1; return; }
+            spur.Opacity = 0;
+            spur.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(ms)));
+        }
+
+        private static SolidColorBrush NavFrozen(Color c)
+        {
+            var b = new SolidColorBrush(c);
+            b.Freeze();
+            return b;
+        }
+
+        /// <summary>The medallion's halo: the row's hue fading to transparent. Frozen.</summary>
+        private static Brush? BuildNavDoorGlow(SolidColorBrush? hue)
+        {
+            if (hue == null) return null;
+            var c = hue.Color;
+            var b = new RadialGradientBrush
+            {
+                GradientOrigin = new Point(0.5, 0.5),
+                Center = new Point(0.5, 0.5),
+                RadiusX = 0.5,
+                RadiusY = 0.5,
+            };
+            b.GradientStops.Add(new GradientStop(Color.FromArgb(0xFF, c.R, c.G, c.B), 0.0));
+            b.GradientStops.Add(new GradientStop(Color.FromArgb(0x80, c.R, c.G, c.B), 0.60));
+            b.GradientStops.Add(new GradientStop(Color.FromArgb(0x00, c.R, c.G, c.B), 1.0));
+            b.Freeze();
+            return b;
+        }
+
+        // ============================== badges ==============================
+
+        private void OnNavBadgeChanged(string section, int count)
+        {
+            try
+            {
+                if (!Dispatcher.CheckAccess())
+                {
+                    Dispatcher.BeginInvoke(new Action(() => OnNavBadgeChanged(section, count)));
+                    return;
+                }
+                foreach (var row in _navSectionRows)
+                {
+                    if (row.Section != section) continue;
+                    // A count that rises while the player is looking at its section is seen.
+                    if (row.Active && LobbyBadgeWanted(IsVisible, WindowState)) NavBadges.MarkSeen(section);
+                    PaintNavBadge(row, count);
+                }
+            }
+            catch (Exception ex) { App.Logger?.Debug("OnNavBadgeChanged: {E}", ex.Message); }
+        }
+
+        /// <summary>
+        /// 7.1.5 (tier-2: a red "7" read as seven unread messages): the pill wears the SECTION hue
+        /// (never the mod accent, which is pink-red on most mods) with contrast-picked ink, and once
+        /// the player has seen the count it dims and drops its shadow. It brightens again only when
+        /// the count rises past what they saw (<see cref="NavBadges.IsFresh(int, int)"/>).
+        /// </summary>
+        private static void PaintNavBadge(NavSectionRow row, int count)
+        {
+            if (row.Badge == null) return;
+            var text = NavRailRules.BadgeText(count);
+            if (row.BadgeText != null) row.BadgeText.Text = text ?? "";
+            row.Badge.Visibility = text == null ? Visibility.Collapsed : Visibility.Visible;
+            if (text == null) return;
+            var hue = NavStripRules.Accent(row.Section);
+            row.Badge.Background = NavFrozen(hue);
+            if (row.BadgeText != null) row.BadgeText.Foreground = NavFrozen(NavStripRules.ActiveTextOn(hue));
+            bool fresh = NavBadges.IsFresh(count, NavBadges.Seen(row.Section));
+            row.Badge.Opacity = NavRailRules.BadgeOpacity(fresh);
+            if (fresh) row.Badge.ClearValue(UIElement.EffectProperty);
+            else row.Badge.Effect = null;
+        }
+
+        // ============================== art and labels ==============================
+
+        /// <summary>Decode cap for a medallion: 64px native art in a 40px icon, 2x headroom.</summary>
         private const int NavDoorArtDecodeWidth = 128;
 
         /// <summary>
-        /// Points the door medallions at the active mod's art. The paths are the mod
-        /// compatibility surface (nav/door_*.png) and are never renamed; a mod that ships none of
-        /// them resolves straight back to the embedded copies, which is byte-identical to what
-        /// MainWindow.xaml already authored.
-        ///
-        /// <para><b>A null resolve leaves the existing Source alone.</b> An empty nav rail is the
-        /// worst failure this file can produce (missing nav art has crashed this app before), and
-        /// the authored pack URI is always a valid fallback - so "could not resolve" means "keep
-        /// what is on screen", never "blank it".</para>
-        ///
-        /// <para>Safe to call before <see cref="InitializeNavRail"/> has cached anything: it only
-        /// touches x:Named Images, which exist from InitializeComponent onward.</para>
+        /// Points the medallions at the active mod's art. The paths are the mod compatibility
+        /// surface (nav/door_*.png) and are never renamed. A null resolve leaves the authored
+        /// Source alone: an empty rail is the worst failure this file can produce. Social has no
+        /// embedded door art yet (it wears the Lobby's picture as a placeholder), so a mod may
+        /// ship nav/door_social.png and nothing changes when it does not.
         /// </summary>
         private void ApplyDoorArt()
         {
@@ -516,9 +832,9 @@ namespace ConditioningControlPanel
                     (ImgDoorStudio,    "nav/door_studio.png"),
                     (ImgDoorCompanion, "nav/door_companion.png"),
                     (ImgDoorPlay,      "nav/door_play.png"),
+                    (ImgDoorSocial,    "nav/door_social.png"),
                     (ImgDoorYou,       "nav/door_you.png"),
                     (ImgDoorLibrary,   "nav/door_library.png"),
-                    (ImgDoorWebApp,    "nav/door_webapp.png"),
                     (ImgDoorSettings,  "nav/door_settings.png"),
                 };
 
@@ -527,15 +843,15 @@ namespace ConditioningControlPanel
                     if (img == null) continue;
                     var art = ModResourceResolver.ResolveImageDecoded(path, NavDoorArtDecodeWidth);
                     if (art != null) img.Source = art;
+                    // Social's shade only tones down the embedded placeholder; a mod's own art
+                    // is drawn the way its author made it.
+                    if (ReferenceEquals(img, ImgDoorSocial) && ShadeDoorSocial != null)
+                        ShadeDoorSocial.Visibility = art != null ? Visibility.Collapsed : Visibility.Visible;
                 }
 
-                // This is also the rail's ModChanged repaint hook (MainWindow.xaml.cs), so the
-                // name halos re-tint with the art. Before InitializeNavRail has cached the rows
-                // the list is empty and this is a no-op, which keeps the "safe to call early"
-                // promise above.
                 var glow = FxTheme.GlowColor;
-                foreach (var row in _navDoorRows)
-                    if (row.LabelGlow != null) row.LabelGlow.Color = glow;
+                foreach (var row in _navSectionRows)
+                    if (row.Label?.Effect is DropShadowEffect fx) fx.Color = glow;
             }
             catch (Exception ex)
             {
@@ -544,12 +860,10 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Puts the active mod's wording on the rail's labels (ticket 2026-09-24: with Circe on,
-        /// the header and dashboard were renamed and the side rail was not). Every rail label is
-        /// a <c>{loc:Str key}</c> binding; the first pass swaps each one for the same binding
-        /// through <see cref="Localization.ModAwareLocText.Converter"/>, so a language switch
-        /// still updates it live, and every pass re-reads the targets so a mod switch lands.
-        /// Called from ApplyModFeatureNames, the app's one ModChanged / LanguageChanged repaint.
+        /// Puts the active mod's wording on the rail's labels: every {loc:Str key} binding in the
+        /// rail is swapped for the same binding through ModAwareLocText, so a language switch still
+        /// updates it live and a mod switch lands. Section names additionally go through
+        /// <see cref="NavCapsConverter"/> (small ExtraBold caps). Called from ApplyModFeatureNames.
         /// </summary>
         private void ApplyModToNavRailLabels()
         {
@@ -566,18 +880,20 @@ namespace ConditioningControlPanel
                 if (b != null && ReferenceEquals(b.Source, Localization.LocalizationManager.Instance)
                     && b.Path?.Path is string path && path.Length > 2 && path[0] == '[' && path[^1] == ']')
                 {
-                    if (b.Converter is Localization.ModAwareLocText.Converter)
+                    if (b.Converter is Localization.ModAwareLocText.Converter or NavCapsConverter)
                     {
                         be!.UpdateTarget();
                     }
                     else if (b.Converter == null)
                     {
                         var key = path.Substring(1, path.Length - 2);
+                        IValueConverter conv = new Localization.ModAwareLocText.Converter(key);
+                        if ((tb.Tag as string) == NavSectionLabelTag) conv = new NavCapsConverter(conv);
                         BindingOperations.SetBinding(tb, TextBlock.TextProperty, new Binding(path)
                         {
                             Source = Localization.LocalizationManager.Instance,
                             Mode = BindingMode.OneWay,
-                            Converter = new Localization.ModAwareLocText.Converter(key),
+                            Converter = conv,
                         });
                     }
                 }
@@ -587,812 +903,53 @@ namespace ConditioningControlPanel
                 if (child is DependencyObject d) ApplyModToNavRailLabels(d);
         }
 
-        private void CacheNavRailParts(DependencyObject root)
-        {
-            int count = VisualTreeHelper.GetChildrenCount(root);
-            for (int i = 0; i < count; i++)
-            {
-                var child = VisualTreeHelper.GetChild(root, i);
-                // The big door names are driven per row with a stagger (SetNavRailExpanded), so
-                // they must NOT also be in the global label fade - see NavDoorLabelHostTag.
-                if (child is TextBlock door && _navDoorLabelTexts.Contains(door)) continue;
-                // Static rail chrome (the search pill's lens) is the shut rail's face - fading
-                // it with the labels would blank the pill. See NavRailStaticTextTag.
-                if (child is TextBlock st && (st.Tag as string) == NavRailStaticTextTag) continue;
-                if (child is TextBlock tb) _navRailLabels.Add(tb);
-                else if (child is ButtonBase b) _navRailButtons.Add(b);
-                CacheNavRailParts(child);
-            }
-        }
+        // ============================== kept entry points ==============================
+        // The flyout is gone, so nothing holds the rail open and nothing re-syncs it to the
+        // pointer. These stay as no-ops because other files (FriendsRailChip, the favourites
+        // context menu, WindowChrome, the DoorShooter dev tool) still call them; remove them
+        // with those calls.
 
+        /// <summary>No-op: the rail no longer opens on hover.</summary>
+        internal void SyncNavRailToPointer() { }
+
+        /// <summary>No-op: there is no flyout to hold open.</summary>
+        internal void HoldNavRailOpen(object owner) { }
+
+        /// <summary>No-op: there is no flyout to hold open.</summary>
+        internal void HoldNavRailOpen() { }
+
+        /// <summary>No-op: there is no flyout to release.</summary>
+        internal void ReleaseNavRailOpen(object owner) { }
+
+        /// <summary>No-op: there is no flyout to release.</summary>
+        internal void ReleaseNavRailOpen() { }
+
+        /// <summary>No-op: a rail popup no longer has a flyout to keep open.</summary>
+        internal void RegisterNavRailPopup(ContextMenu menu) { }
         /// <summary>
-        /// Resolves the medallion rows (NavDoorMap's tab doors plus the NavLauncherDoors). The
-        /// parts are found BY TYPE among the door
-        /// Button's direct content children (glow = the Ellipse, tile = the Border, icon = the
-        /// Viewbox, label host = the one tagged <see cref="NavDoorLabelHostTag"/>), which is the
-        /// same shape ChromeFx's NudgeNavIcon relies on - it takes the first Image-or-Viewbox
-        /// among those same children as the icon to nudge. Keep both contracts in mind before
-        /// adding a fifth child to a door in MainWindow.xaml.
-        ///
-        /// <para>A door whose content does not match is skipped rather than fixed up: the rail
-        /// then renders that row exactly as MainWindow.xaml authored it (collapsed sizes, no
-        /// name), which is legible, instead of throwing on the Loaded path.</para>
+        /// Is the roster feature behind a tab key locked for this account right now? The roster's
+        /// own probe (ExclusiveFeature.GateState) plus the daily rotation; a key with no roster row
+        /// is not sold, so it answers false. Fails to false: a locked row that shows open costs a
+        /// TierGate card the user was going to see anyway, an open row that shows locked lies about
+        /// what somebody paid for. Read by the favourites chips and (next) the tab strip's badges.
         /// </summary>
-        private void CacheNavDoorRows()
-        {
-            // Tab doors from the map, then the launcher doors (v6.8.0: the Web App door) - a
-            // launcher is a full medallion row minus a destination, and leaving it out of this
-            // walk is how it would end up frozen at its authored collapsed size while every
-            // row around it grows.
-            var doorKeys = NavDoorMap.Select(d => d.Door).Concat(NavLauncherDoors);
-            foreach (var door in doorKeys)
-            {
-                var btn = NavDoorParts(door).Header;
-                if (btn?.Content is not Panel content) continue;
-
-                var kids = content.Children.OfType<FrameworkElement>().ToList();
-                var glow = kids.OfType<Ellipse>().FirstOrDefault();
-                var tile = kids.OfType<Border>().FirstOrDefault();
-                // The label's own Viewbox is nested inside the host, so this is the icon's.
-                var icon = kids.OfType<Viewbox>().FirstOrDefault();
-                var host = kids.FirstOrDefault(k => (k.Tag as string) == NavDoorLabelHostTag);
-                if (glow == null || tile == null || icon == null || host is not Panel hostPanel)
-                {
-                    App.Logger?.Debug("CacheNavDoorRows: door {Door} has no medallion content", door);
-                    continue;
-                }
-
-                // Built here, not in XAML: a RenderTransform declared in a Style setter is one
-                // shared (and frozen) instance across all seven rows, which is the one thing a
-                // per-row stagger cannot survive.
-                var slide = new TranslateTransform(0, NavDoorLabelRise);
-                hostPanel.RenderTransform = slide;
-
-                var row = new NavDoorRow
-                {
-                    Glow = glow,
-                    Tile = tile,
-                    Icon = icon,
-                    LabelHost = hostPanel,
-                    LabelSlide = slide,
-                    Label = hostPanel.Children.OfType<Viewbox>().FirstOrDefault()?.Child as TextBlock,
-                    Hue = btn.BorderBrush ?? Brushes.Transparent,
-                };
-                if (row.Label != null)
-                {
-                    _navDoorLabelTexts.Add(row.Label);
-                    BuildNavDoorLabelFx(row, hostPanel);
-                }
-                glow.Fill = BuildNavDoorGlow(btn.BorderBrush as SolidColorBrush);
-
-                // The active bar is a template part; ChromeFx flips its Visibility and nothing
-                // else, so that flip is the only signal this file has for "you are here". Watch
-                // it rather than duplicating ChromeFx's notion of the active tab.
-                btn.ApplyTemplate();
-                row.ActiveBar = btn.Template?.FindName("NavActiveBar", btn) as FrameworkElement;
-                if (row.ActiveBar != null)
-                    row.ActiveBar.IsVisibleChanged += (_, __) => RefreshNavDoorActive(row);
-
-                _navDoorRows.Add(row);
-                RefreshNavDoorActive(row);
-            }
-        }
-
-        /// <summary>
-        /// Builds one door name's two fx layers onto its label host: the mod-glow halo goes
-        /// straight onto the label as its Effect, and the gloss is a SECOND Viewbox+TextBlock
-        /// stacked over the first, carrying a sweeping band as its OpacityMask. The overlay
-        /// clones the label's style and mirrors its Text with a binding: same font and string
-        /// mean the same measure, so the two DownOnly Viewboxes scale identically and the
-        /// gloss lands exactly on the glyphs, in every locale, at every flyout width. It joins
-        /// _navDoorLabelTexts so CacheNavRailParts (which walks AFTER this) leaves it out of
-        /// the global label fade - its visibility is the host's Opacity, same as the name's.
-        /// Appended last, so the "first Viewbox in the host is the label's" lookup above stays
-        /// true; and it lives INSIDE the host, so ChromeFx's NudgeNavIcon (first Viewbox among
-        /// the button content's direct children) never mistakes it for the icon.
-        /// </summary>
-        private void BuildNavDoorLabelFx(NavDoorRow row, Panel host)
+        internal static bool IsNavEntryLocked(string exclusiveKey)
         {
             try
             {
-                var label = row.Label!;
-                row.LabelGlow = new DropShadowEffect
-                {
-                    Color = FxTheme.GlowColor,
-                    BlurRadius = 16,
-                    ShadowDepth = 0,
-                    Opacity = 0,
-                };
-                label.Effect = row.LabelGlow;
-
-                row.ShimmerSweep = new TranslateTransform(-1, 0);
-                var band = new LinearGradientBrush
-                {
-                    StartPoint = new Point(0, 0.5),
-                    EndPoint = new Point(1, 0.5),
-                    RelativeTransform = row.ShimmerSweep,
-                };
-                band.GradientStops.Add(new GradientStop(Color.FromArgb(0x00, 0xFF, 0xFF, 0xFF), 0.35));
-                band.GradientStops.Add(new GradientStop(Color.FromArgb(0xB4, 0xFF, 0xFF, 0xFF), 0.50));
-                band.GradientStops.Add(new GradientStop(Color.FromArgb(0x00, 0xFF, 0xFF, 0xFF), 0.65));
-
-                var gloss = new TextBlock
-                {
-                    Style = label.Style,
-                    Foreground = Brushes.White,
-                    OpacityMask = band,
-                    IsHitTestVisible = false,
-                };
-                gloss.SetBinding(TextBlock.TextProperty, new Binding("Text") { Source = label });
-                _navDoorLabelTexts.Add(gloss);
-
-                host.Children.Add(new Viewbox
-                {
-                    Stretch = Stretch.Uniform,
-                    StretchDirection = StretchDirection.DownOnly,
-                    HorizontalAlignment = HorizontalAlignment.Center,
-                    VerticalAlignment = VerticalAlignment.Center,
-                    IsHitTestVisible = false,
-                    Child = gloss,
-                });
+                var feature = ExclusiveFeature.All.FirstOrDefault(
+                    f => string.Equals(f.Key, exclusiveKey, StringComparison.Ordinal));
+                if (feature == null) return false;
+                if (feature.GateState() != ExclusiveGateState.Locked) return false;
+                if (feature.DailyFreeKey != null &&
+                    App.DailyFree?.IsFreeToday(feature.DailyFreeKey) == true) return false;
+                return true;
             }
             catch (Exception ex)
             {
-                // The name renders fine without either layer; a row whose fx failed to build
-                // is just a quieter row.
-                App.Logger?.Debug("BuildNavDoorLabelFx: {E}", ex.Message);
-            }
-        }
-
-        /// <summary>Starts one row's open-rail name fx: the breathing halo, and the gloss
-        /// sweep once the name has finished rising. Both stagger by row so the rail ripples
-        /// instead of pulsing in lockstep. Reduced motion: static halo, no clocks.</summary>
-        private static void StartNavDoorLabelFx(NavDoorRow row, int index)
-        {
-            if (row.LabelGlow == null) return;
-
-            if (!MotionFx.AllowTransitions)
-            {
-                row.LabelGlow.BeginAnimation(DropShadowEffect.OpacityProperty, null);
-                row.LabelGlow.Opacity = NavDoorLabelGlowStatic;
-                return;
-            }
-
-            var begin = TimeSpan.FromMilliseconds(index * NavDoorLabelFxStaggerMs);
-            row.LabelGlow.BeginAnimation(DropShadowEffect.OpacityProperty,
-                new DoubleAnimation(NavDoorLabelGlowLo, NavDoorLabelGlowHi,
-                    TimeSpan.FromMilliseconds(NavDoorLabelGlowBreathMs))
-                {
-                    BeginTime = begin,
-                    AutoReverse = true,
-                    RepeatBehavior = RepeatBehavior.Forever,
-                    EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
-                });
-
-            if (row.ShimmerSweep == null) return;
-            var sweep = new DoubleAnimationUsingKeyFrames
-            {
-                BeginTime = begin + TimeSpan.FromMilliseconds(NavDoorLabelSlideMs),
-                RepeatBehavior = RepeatBehavior.Forever,
-            };
-            sweep.KeyFrames.Add(new DiscreteDoubleKeyFrame(-1,
-                KeyTime.FromTimeSpan(TimeSpan.Zero)));
-            sweep.KeyFrames.Add(new LinearDoubleKeyFrame(1,
-                KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(NavDoorLabelShimmerSweepMs))));
-            // The rest of the period is the band parked offscreen: sweep, breathe, sweep again.
-            sweep.KeyFrames.Add(new DiscreteDoubleKeyFrame(-1,
-                KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(NavDoorLabelShimmerPeriodMs))));
-            row.ShimmerSweep.BeginAnimation(TranslateTransform.XProperty, sweep);
-        }
-
-        /// <summary>Kills both name-fx clocks and parks the layers dark. Runs on every
-        /// collapse, BEFORE the labels finish fading: two Forever clocks per row under an
-        /// Opacity-0 host would be the exact idle heat the dashboard's motion contract
-        /// exists to prevent.</summary>
-        private static void StopNavDoorLabelFx(NavDoorRow row)
-        {
-            if (row.LabelGlow != null)
-            {
-                row.LabelGlow.BeginAnimation(DropShadowEffect.OpacityProperty, null);
-                row.LabelGlow.Opacity = 0;
-            }
-            if (row.ShimmerSweep != null)
-            {
-                row.ShimmerSweep.BeginAnimation(TranslateTransform.XProperty, null);
-                row.ShimmerSweep.X = -1;
-            }
-        }
-
-        /// <summary>The medallion's halo: the door's hue fading to fully transparent, so the
-        /// ellipse can overhang the 56px strip without a visible edge. Frozen - one brush per
-        /// door for the life of the window.</summary>
-        private static Brush? BuildNavDoorGlow(SolidColorBrush? hue)
-        {
-            if (hue == null) return null;
-            var c = hue.Color;
-            var b = new RadialGradientBrush
-            {
-                GradientOrigin = new Point(0.5, 0.5),
-                Center = new Point(0.5, 0.5),
-                RadiusX = 0.5,
-                RadiusY = 0.5,
-            };
-            b.GradientStops.Add(new GradientStop(Color.FromArgb(0xC0, c.R, c.G, c.B), 0.0));
-            b.GradientStops.Add(new GradientStop(Color.FromArgb(0x60, c.R, c.G, c.B), 0.42));
-            b.GradientStops.Add(new GradientStop(Color.FromArgb(0x00, c.R, c.G, c.B), 1.0));
-            b.Freeze();
-            return b;
-        }
-
-        /// <summary>
-        /// Repaints one row's "you are here" state from the active bar ChromeFx owns: hue ring
-        /// on the tile, hue on the name, full opacity instead of .85, and a stronger halo.
-        /// ClearValue rather than writing the idle colours back, so the label's own
-        /// DynamicResource (TextLight) stays live for mod repaints.
-        ///
-        /// <para>The tile's ring is the ONLY ring on a door row since 2026-08-13 - the permanent
-        /// grey hairline is authored Transparent now and the art fills the tile to within 2px -
-        /// so this is what tells the user which door they are in at a glance. Idle rows clear
-        /// back to no ring at all (ClearValue on a locally-set Transparent brush leaves null,
-        /// which paints nothing - same result, one less brush).</para>
-        /// </summary>
-        private void RefreshNavDoorActive(NavDoorRow row)
-        {
-            try
-            {
-                row.Active = row.ActiveBar?.Visibility == Visibility.Visible;
-                row.Tile.Opacity = row.Active ? 1.0 : NavDoorTileIdleOpacity;
-
-                if (row.Active)
-                {
-                    row.Tile.BorderBrush = row.Hue;
-                    if (row.Label != null) row.Label.Foreground = row.Hue;
-                }
-                else
-                {
-                    row.Tile.ClearValue(Border.BorderBrushProperty);
-                    row.Label?.ClearValue(TextBlock.ForegroundProperty);
-                }
-
-                SetNavDoorGlow(row, MotionFx.AllowTransitions);
-            }
-            catch (Exception ex) { App.Logger?.Debug("RefreshNavDoorActive: {E}", ex.Message); }
-        }
-
-        private void SetNavDoorGlow(NavDoorRow row, bool animate)
-        {
-            double to = row.Active ? NavDoorGlowActive : (_navRailExpanded ? NavDoorGlowOpen : 0);
-            if (!animate)
-            {
-                row.Glow.BeginAnimation(UIElement.OpacityProperty, null);
-                row.Glow.Opacity = to;
-                return;
-            }
-            row.Glow.BeginAnimation(UIElement.OpacityProperty,
-                new DoubleAnimation(to, TimeSpan.FromMilliseconds(NavDoorGlowFadeMs)));
-        }
-
-        /// <summary>
-        /// The medallion half of the flyout: tiles and art grow, haloes come up, and the door
-        /// names rise 14px into place one after the other, 30ms apart, so the rail unfolds
-        /// instead of popping. Collapsing runs the same animations backwards at half speed with
-        /// no stagger - the names have to be gone BEFORE the width tween takes their room away,
-        /// or they paint over the page for a frame.
-        /// </summary>
-        private void ApplyNavDoorRows(bool expand, bool animate)
-        {
-            int ms = expand ? NavRailAnimMs : NavRailCollapseAnimMs;
-            double tileTo = expand ? NavDoorTileExpanded : NavDoorTileCollapsed;
-            double iconTo = expand ? NavDoorIconExpanded : NavDoorIconCollapsed;
-            double glowTo = expand ? NavDoorGlowExpanded : NavDoorGlowCollapsed;
-            double labelTo = expand ? 1 : 0;
-            double riseTo = expand ? 0 : NavDoorLabelRise;
-
-            for (int i = 0; i < _navDoorRows.Count; i++)
-            {
-                var row = _navDoorRows[i];
-                SetNavRailSize(row.Tile, tileTo, animate, ms);
-                SetNavRailSize(row.Icon, iconTo, animate, ms);
-                SetNavRailSize(row.Glow, glowTo, animate, ms);
-                SetNavDoorGlow(row, animate);
-
-                // The name fx follow the open state, not the animate flag: an expand that was
-                // snapped (reduced motion) still deserves its static halo, and Start gates its
-                // own clocks on MotionFx.
-                if (expand) StartNavDoorLabelFx(row, i);
-                else StopNavDoorLabelFx(row);
-
-                if (!animate)
-                {
-                    row.LabelHost.BeginAnimation(UIElement.OpacityProperty, null);
-                    row.LabelHost.Opacity = labelTo;
-                    row.LabelSlide.BeginAnimation(TranslateTransform.YProperty, null);
-                    row.LabelSlide.Y = riseTo;
-                    continue;
-                }
-
-                var begin = TimeSpan.FromMilliseconds(expand ? i * NavDoorLabelStaggerMs : 0);
-                var ease = new QuadraticEase { EasingMode = EasingMode.EaseOut };
-
-                row.LabelHost.BeginAnimation(UIElement.OpacityProperty,
-                    new DoubleAnimation(labelTo, TimeSpan.FromMilliseconds(
-                        expand ? NavDoorLabelFadeMs : ms / 2))
-                    { BeginTime = begin, EasingFunction = ease });
-
-                row.LabelSlide.BeginAnimation(TranslateTransform.YProperty,
-                    new DoubleAnimation(riseTo, TimeSpan.FromMilliseconds(
-                        expand ? NavDoorLabelSlideMs : ms / 2))
-                    { BeginTime = begin, EasingFunction = ease });
-            }
-        }
-
-        /// <summary>Square-grows one part. Width and Height take the same clock on purpose: two
-        /// halves of one tween drifting apart is how a tile ends up a rectangle mid-flight.</summary>
-        private static void SetNavRailSize(FrameworkElement el, double to, bool animate, int ms)
-        {
-            if (!animate)
-            {
-                el.BeginAnimation(FrameworkElement.WidthProperty, null);
-                el.BeginAnimation(FrameworkElement.HeightProperty, null);
-                el.Width = to;
-                el.Height = to;
-                return;
-            }
-
-            var size = new DoubleAnimation(to, TimeSpan.FromMilliseconds(ms))
-            {
-                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
-            };
-            el.BeginAnimation(FrameworkElement.WidthProperty, size);
-            el.BeginAnimation(FrameworkElement.HeightProperty, size);
-        }
-
-        private void SetNavRailExpanded(bool expand, bool animate = true)
-        {
-            if (NavSidebar == null) return;
-            if (_navRailExpanded == expand && _navRailReady && animate) return;
-            _navRailExpanded = expand;
-
-            double to = expand ? NavRailExpandedWidth : NavRailCollapsedWidth;
-            int ms = expand ? NavRailAnimMs : NavRailCollapseAnimMs;
-            animate &= MotionFx.AllowTransitions;
-
-            if (animate)
-            {
-                var width = new DoubleAnimation(to, TimeSpan.FromMilliseconds(ms))
-                {
-                    EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
-                };
-                NavSidebar.BeginAnimation(FrameworkElement.WidthProperty, width);
-
-                // Labels trail the width slightly on the way out and lead it on the way in, so
-                // text never paints outside the rail's clip.
-                var fade = new DoubleAnimation(expand ? 1 : 0, TimeSpan.FromMilliseconds(
-                    expand ? ms : ms / 2));
-                foreach (var label in _navRailLabels)
-                    label.BeginAnimation(UIElement.OpacityProperty, fade);
-                // LAYER A: the premium pills ride the same clock. They are PLATES, not text, so
-                // the label sweep above does not reach them - and the nearest one starts only
-                // ~63px in (after ja "認識", the shortest premium label shipped), which the 56px
-                // strip's ClipToBounds covers by 7px and one shorter translation would not.
-                foreach (var tag in NavPremiumTagElements)
-                    tag.BeginAnimation(UIElement.OpacityProperty, fade);
-            }
-            else
-            {
-                NavSidebar.BeginAnimation(FrameworkElement.WidthProperty, null);
-                NavSidebar.Width = to;
-                foreach (var label in _navRailLabels)
-                {
-                    label.BeginAnimation(UIElement.OpacityProperty, null);
-                    label.Opacity = expand ? 1 : 0;
-                }
-                foreach (var tag in NavPremiumTagElements)
-                {
-                    tag.BeginAnimation(UIElement.OpacityProperty, null);
-                    tag.Opacity = expand ? 1 : 0;
-                }
-            }
-
-            // Icons centre themselves once the label is gone. Inert for the rail's own two
-            // templates as it stands - both hard-set the ContentPresenter's alignment (doors
-            // Stretch, entries Left) and centre their icons with a fixed 56px column and a 21px
-            // padding respectively - but it is left standing for any rail button that does honour
-            // it, and it costs one property write per button.
-            foreach (var b in _navRailButtons)
-                b.HorizontalContentAlignment = expand ? HorizontalAlignment.Left : HorizontalAlignment.Center;
-
-            // The scrollbar is only allowed out while the rail is. Shut, it is ~17px of chrome
-            // laid over the right third of a 44px medallion (MainWindow.xaml authors Hidden and
-            // carries the arithmetic); open, 236px has room for it and an overflowing rail should
-            // say so. Flipped on both paths, animated or not - it is a Visibility, not a tween.
-            if (NavRailScroll != null)
-                NavRailScroll.VerticalScrollBarVisibility =
-                    expand ? ScrollBarVisibility.Auto : ScrollBarVisibility.Hidden;
-
-            ApplyNavDoorRows(expand, animate);
-            ApplyNavRailDoorState(animate);
-            ApplyNavRailAirspace(expand);
-
-            // The watchdog only runs while there is something to watch. Started here rather than
-            // in the hold, because the state it guards against is "expanded and unattended" -
-            // which a missed MouseLeave reaches with no hold in sight.
-            if (_navRailWatchdog != null)
-            {
-                _navRailPointerAwaySince = DateTime.MinValue;
-                if (expand) _navRailWatchdog.Start();
-                else _navRailWatchdog.Stop();
-            }
-        }
-
-        // ============================ the stuck-rail watchdog ============================
-
-        /// <summary>
-        /// Registers one of the rail's own context menus, so the watchdog can tell "a pin menu is
-        /// open over the rail" (leave it alone) from "a pin menu forgot to let go" (collapse).
-        /// Called once per menu, from MainWindow.FavoritesRail.cs.
-        /// </summary>
-        internal void RegisterNavRailPopup(ContextMenu menu)
-        {
-            if (menu != null && !_navRailPopups.Contains(menu)) _navRailPopups.Add(menu);
-        }
-
-        /// <summary>True while one of the rail's registered menus is genuinely on screen. Asked of
-        /// the menu, not of a counter - see <see cref="_navRailPopups"/>.</summary>
-        private bool AnyNavRailPopupOpen()
-        {
-            for (int i = 0; i < _navRailPopups.Count; i++)
-                if (_navRailPopups[i].IsOpen) return true;
-            return false;
-        }
-
-        /// <summary>
-        /// Is the cursor outside the flyout, measured in SCREEN pixels from the OS?
-        ///
-        /// <para><b>Why not <c>IsMouseOver</c>.</b> WPF reports <c>IsMouseOver == true</c> for an
-        /// element whose own popup is under the pointer, and a ContextMenu is a logical child of
-        /// the control it hangs off - so while the pin menu is up (and for the frame it closes on)
-        /// NavSidebar claims the pointer is on it no matter where the pointer actually is. That is
-        /// precisely the lie the old <c>ReleaseNavRailOpen</c> believed. The cursor position and
-        /// the rail's screen rect are facts neither capture nor popups can colour.</para>
-        ///
-        /// <para>Measured at the FULL <see cref="NavRailExpandedWidth"/>, not the animated width,
-        /// so a cursor resting inside the flyout during its collapse tween still reads as "on it".
-        /// Returns false - "not away", i.e. do nothing - whenever it cannot tell, because the
-        /// watchdog must never collapse the rail on a measurement it does not have.</para>
-        /// </summary>
-        private bool NavRailPointerIsAway()
-        {
-            if (NavSidebar == null || !NavSidebar.IsVisible) return true;
-            if (WindowState == WindowState.Minimized) return true;
-
-            try
-            {
-                if (NavSidebar.ActualHeight <= 0) return false;
-                var topLeft = NavSidebar.PointToScreen(new Point(0, 0));
-                var bottomRight = NavSidebar.PointToScreen(
-                    new Point(NavRailExpandedWidth, NavSidebar.ActualHeight));
-
-                var rail = new Rect(topLeft, bottomRight);
-                rail.Inflate(NavRailWatchdogSlackPx, NavRailWatchdogSlackPx);
-
-                var cursor = System.Windows.Forms.Control.MousePosition;
-                return !rail.Contains(new Point(cursor.X, cursor.Y));
-            }
-            catch (Exception ex)
-            {
-                // Not connected to a PresentationSource yet, or mid-teardown. Unknown is not away.
-                Diag.Swallowed(ex, "nav rail watchdog could not measure the flyout");
+                App.Logger?.Debug("IsNavEntryLocked({Key}): {E}", exclusiveKey, ex.Message);
                 return false;
             }
         }
-
-        /// <summary>
-        /// One watchdog beat: is this rail open, unattended and popup-free, and has it been for
-        /// the whole grace window? The decision itself is
-        /// <see cref="NavRailWatchdogRule.ShouldForceCollapse"/> so it can be tested without a
-        /// window; this method only supplies the four facts and keeps the clock.
-        /// </summary>
-        private void NavRailWatchdogTick()
-        {
-            try
-            {
-                if (!_navRailExpanded || !_navRailReady || NavSidebar == null)
-                {
-                    _navRailWatchdog?.Stop();
-                    _navRailPointerAwaySince = DateTime.MinValue;
-                    return;
-                }
-
-                bool popup = AnyNavRailPopupOpen();
-                bool away = !popup && NavRailPointerIsAway();
-
-                if (!away)
-                {
-                    _navRailPointerAwaySince = DateTime.MinValue;
-                    return;
-                }
-                if (_navRailPointerAwaySince == DateTime.MinValue)
-                {
-                    _navRailPointerAwaySince = DateTime.UtcNow;
-                    return;
-                }
-
-                if (!NavRailWatchdogRule.ShouldForceCollapse(
-                        _navRailReady, _navRailExpanded, popup, away,
-                        DateTime.UtcNow - _navRailPointerAwaySince,
-                        TimeSpan.FromMilliseconds(NavRailWatchdogGraceMs)))
-                    return;
-
-                ForceCollapseNavRail("pointer away");
-            }
-            catch (Exception ex) { App.Logger?.Debug("NavRailWatchdogTick: {E}", ex.Message); }
-        }
-
-        /// <summary>
-        /// Drops every hold and shuts the rail, whatever it thought it was doing. The one path in
-        /// this file that does not ask permission.
-        ///
-        /// <para>A rail popup that is really open is the single veto: the pin menu holds the rail
-        /// precisely so it is not yanked out from under the menu it belongs to, and that hold is
-        /// legitimate for exactly as long as the menu is on screen.</para>
-        ///
-        /// <para>Dropped holds are logged at Warning WITH THE COUNT and nothing else - counts and
-        /// a fixed reason string, no content, per the logging policy - because a hold that had to
-        /// be taken away is a caller that never released, and that line is what makes the next one
-        /// of these findable in a bug report instead of another "it worked after a restart".</para>
-        /// </summary>
-        private void ForceCollapseNavRail(string reason)
-        {
-            try
-            {
-                if (!_navRailReady || NavSidebar == null) return;
-                if (AnyNavRailPopupOpen()) return;
-
-                int dropped = _navRailHolds.Clear();
-                _navRailPointerAwaySince = DateTime.MinValue;
-                if (dropped > 0)
-                {
-                    App.Logger?.Warning(
-                        "[NavRail] dropped {Count} stuck hold(s) ({Reason}); the flyout was pinned open",
-                        dropped, reason);
-                }
-
-                if (_navRailExpanded) SetNavRailExpanded(false);
-                else _navRailWatchdog?.Stop();
-            }
-            catch (Exception ex) { App.Logger?.Debug("ForceCollapseNavRail: {E}", ex.Message); }
-        }
-
-        // ================================================================================
-        //  #956 / #962 - the flyout vs a native browser HWND
-        // ================================================================================
-
-        /// <summary>Browsers this flyout is currently holding down, and what they were before.
-        /// Restored from THIS list rather than re-walked, so a tab switch mid-hover can never
-        /// leave one hidden.</summary>
-        private readonly List<(FrameworkElement Element, Visibility Was)> _navRailAirspaceHeld = new();
-
-        /// <summary>One Information line per run, then Debug - see the log call in
-        /// <see cref="ApplyNavRailAirspace"/> for why the first one has to clear Serilog's floor.</summary>
-        private bool _navRailAirspaceLogged;
-
-        /// <summary>
-        /// The nav rail is <c>Panel.ZIndex=60</c> over a <c>ColumnSpan=2</c> footprint - it does
-        /// not push the page aside, it flies over it. WPF z-order means nothing to a WebView2:
-        /// it is a native child HWND and it paints over every WPF element in the same window
-        /// whatever the z-order says. On the Spiral Room, whose embed is full-bleed, that put the
-        /// entire expanded rail BEHIND the browser - the reports read "the spiral renders on top
-        /// of the side menu" (#956) and "the lateral bar is hidden behind the black background"
-        /// (#962), which is one bug seen from two angles.
-        ///
-        /// <para>So the browser yields for as long as the flyout is out. This is the same
-        /// mitigation <c>Controls/SpiralRailHost.cs</c> already makes for the rail-docked
-        /// mini ("shown ONLY while the rail is wide enough... torn down whenever the rail
-        /// collapses"), applied from the other side. <see cref="Visibility.Hidden"/> rather than
-        /// Collapsed: the browser keeps its layout rectangle, so nothing reflows and no page
-        /// state is lost - only the HWND leaves the screen, uncovering the WPF content behind it
-        /// (for the Spiral Room that is the tab's own <c>#0A0514</c> ground).</para>
-        ///
-        /// <para>Only browsers that actually INTERSECT the flyout are touched, so hovering the
-        /// rail on a page whose browser card is indented past 236px costs nothing and shows
-        /// nothing. The proper fix is to re-host the flyout in its own top-level window - the
-        /// dodge <c>Windows/SettingsPaletteWindow.xaml.cs</c> already takes for exactly this
-        /// fight - which is a much larger change than a hover state should carry.</para>
-        /// </summary>
-        private void ApplyNavRailAirspace(bool expand)
-        {
-            try
-            {
-                if (!expand)
-                {
-                    foreach (var (element, was) in _navRailAirspaceHeld)
-                    {
-                        try { element.Visibility = was; } catch { }
-                    }
-                    _navRailAirspaceHeld.Clear();
-                    return;
-                }
-
-                if (_navRailAirspaceHeld.Count > 0) return;   // already held for this expansion
-                if (NavSidebar == null || !NavSidebar.IsVisible) return;
-
-                // Measured at the FULL expanded width, not the animated one: the width tween is
-                // still running when this is called, and a browser that will be covered a
-                // heartbeat from now has to get out of the way now, not flicker halfway through.
-                var origin = NavSidebar.TranslatePoint(new Point(0, 0), this);
-                var flyout = new Rect(origin.X, origin.Y,
-                                      NavRailExpandedWidth, NavSidebar.ActualHeight);
-                if (flyout.Width <= 0 || flyout.Height <= 0) return;
-
-                HoldOverlappingBrowsers(this, flyout);
-
-                if (_navRailAirspaceHeld.Count == 0) return;
-
-                // ONCE AT INFORMATION, THEN QUIET. Serilog's floor is Information (App.xaml.cs), so
-                // a Debug line here can never reach a user's bug report - and this is the breadcrumb
-                // that separates "the rail is behind the page" from "the rail did not open at all",
-                // which is precisely the confusion #956 and #962 arrived as. But the rail expands on
-                // every hover, and on a full-bleed page that is dozens of lines a session, so only
-                // the first hold of a run earns the floor. After that the fact is already in the log.
-                if (!_navRailAirspaceLogged)
-                {
-                    _navRailAirspaceLogged = true;
-                    App.Logger?.Information(
-                        "Nav rail flyout: yielded {Count} browser HWND(s) to uncover the rail (#956). " +
-                        "Further holds this run are logged at Debug.", _navRailAirspaceHeld.Count);
-                }
-                else
-                {
-                    App.Logger?.Debug("Nav rail flyout: yielded {Count} browser HWND(s) (#956)",
-                        _navRailAirspaceHeld.Count);
-                }
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Debug("ApplyNavRailAirspace: {E}", ex.Message);
-            }
-        }
-
-        /// <summary>Walks for visible WebView2s overlapping <paramref name="flyout"/> (window
-        /// coordinates) and hides them, remembering what each one was.</summary>
-        private void HoldOverlappingBrowsers(DependencyObject root, Rect flyout)
-        {
-            int count = VisualTreeHelper.GetChildrenCount(root);
-            for (int i = 0; i < count; i++)
-            {
-                var child = VisualTreeHelper.GetChild(root, i);
-
-                if (child is Microsoft.Web.WebView2.Wpf.WebView2 browser)
-                {
-                    // A hidden browser has no airspace to yield, and it has no descendants worth
-                    // walking either.
-                    if (!browser.IsVisible || browser.ActualWidth <= 0 || browser.ActualHeight <= 0) continue;
-                    try
-                    {
-                        var at = browser.TranslatePoint(new Point(0, 0), this);
-                        var rect = new Rect(at.X, at.Y, browser.ActualWidth, browser.ActualHeight);
-                        if (!rect.IntersectsWith(flyout)) continue;
-
-                        _navRailAirspaceHeld.Add((browser, browser.Visibility));
-                        browser.Visibility = Visibility.Hidden;
-                    }
-                    catch { /* not connected to this window's tree - nothing to hide */ }
-                    continue;
-                }
-
-                HoldOverlappingBrowsers(child, flyout);
-            }
-        }
-
-        /// <summary>
-        /// Shuts every door panel while the rail is collapsed and restores
-        /// <see cref="_expandedDoor"/> when it opens. Deliberately does NOT write
-        /// <see cref="_expandedDoor"/>: the accordion's own state is what the user chose, and
-        /// hovering the rail must not silently re-home them.
-        /// </summary>
-        private void ApplyNavRailDoorState(bool animate)
-        {
-            foreach (var d in NavDoorMap)
-            {
-                var parts = NavDoorParts(d.Door);
-                if (parts.Panel == null) continue;   // pinned Settings door has no panel
-
-                SetDoorPanelExpanded(d.Door, parts.Panel, parts.Entries,
-                                     IsDoorPanelOpenFor(d.Door), animate);
-            }
-        }
-
-        /// <summary>
-        /// Re-seats the flyout on the pointer, ignoring every edge that may have been missed.
-        ///
-        /// <para><b>The dead zone (Discord, v6.8.6).</b> "After clicking in the side panel and
-        /// minimising the app, hover does not re-open the menu until the mouse crosses a line and
-        /// comes back." Until now the rail's ONLY way in was <c>NavSidebar.MouseEnter</c> and its
-        /// only ways out were <c>MouseLeave</c> and the click-elsewhere - three edges, and nothing
-        /// anywhere that re-reads the truth. A minimise taken with the pointer over the rail
-        /// delivers neither a leave nor a click to this window, so the rail comes back from the
-        /// taskbar still believing the pointer is on it: the next real MouseEnter is not raised
-        /// (WPF thinks it never left), and the rail sits inert until the pointer crosses out of
-        /// its subtree far enough to force a leave and then comes back in - which is precisely the
-        /// line the reporter drew on their screenshot.</para>
-        ///
-        /// <para>So the window's state changes now ask this instead, and it answers from
-        /// <c>IsMouseOver</c> rather than from anything remembered. Snapped, not tweened: nobody
-        /// is watching a rail animate while the window is coming back from the taskbar. A hold is
-        /// still a hold - a tutorial spotlight survives a minimise.</para>
-        /// </summary>
-        internal void SyncNavRailToPointer()
-        {
-            try
-            {
-                if (!_navRailReady || NavSidebar == null) return;
-                if (_navRailHolds.Held) return;
-
-                bool over = WindowState != WindowState.Minimized && NavSidebar.IsMouseOver;
-                SetNavRailExpanded(over, animate: false);
-            }
-            catch (Exception ex) { App.Logger?.Debug("SyncNavRailToPointer: {E}", ex.Message); }
-        }
-
-        /// <summary>
-        /// Opens the rail and holds it, for code-driven navigation that needs the user to SEE
-        /// where they landed (the tutorial's spotlights, the Ctrl+K palette). Without this the
-        /// spotlight would point at a 56px icon strip with the target row shut inside it.
-        ///
-        /// <para>The hold is a real suspension: while anything is holding, MouseLeave and the
-        /// click-elsewhere both bail out instead of collapsing. Every caller MUST pair this with
-        /// <see cref="ReleaseNavRailOpen(object)"/> - but since v6.9.5 a caller that does not is
-        /// no longer fatal: the claim is keyed on <paramref name="owner"/>, so repeats collapse
-        /// into one claim, and the watchdog takes back anything still standing over an unattended
-        /// rail.</para>
-        ///
-        /// <param name="owner">Whoever is showing the user something in the rail - the object
-        /// whose lifetime the hold belongs to (today: the ContextMenu). Two claims from the same
-        /// owner are one claim.</param>
-        /// </summary>
-        internal void HoldNavRailOpen(object owner)
-        {
-            try
-            {
-                if (!_navRailHolds.Take(owner)) return;
-                SetNavRailExpanded(true);
-            }
-            catch (Exception ex) { App.Logger?.Debug("HoldNavRailOpen: {E}", ex.Message); }
-        }
-
-        /// <summary>Unkeyed hold, for callers that have no natural owner object (the offscreen
-        /// door shooter). Backed by one shared token, so it is idempotent too.</summary>
-        internal void HoldNavRailOpen() => HoldNavRailOpen(NavRailAnonymousHoldOwner);
-
-        /// <summary>The token behind the unkeyed <see cref="HoldNavRailOpen()"/>.</summary>
-        private static readonly object NavRailAnonymousHoldOwner = new();
-
-        /// <summary>
-        /// Drops <paramref name="owner"/>'s claim. The last one out hands the rail back to the
-        /// pointer: a spotlight usually ends with a click on the row it was pointing at, so a
-        /// release with the cursor still ON the rail leaves it open and lets the normal MouseLeave
-        /// shut it. Anywhere else, the hold was the only thing keeping it up - collapse now,
-        /// because with the delay timer gone there is nothing else that ever would.
-        ///
-        /// <para><b>The pointer test is the OS cursor, not <c>IsMouseOver</c>.</b> A ContextMenu
-        /// is a logical child of the control it hangs off, so WPF answers <c>IsMouseOver == true</c>
-        /// on NavSidebar for as long as that menu has the pointer - including the frame the menu
-        /// closes on. The pin menu therefore released its hold and then declined to collapse,
-        /// handing the rail to a MouseLeave that WPF had no reason to raise because as far as it
-        /// was concerned the pointer had never left. See <see cref="NavRailPointerIsAway"/>.</para>
-        /// </summary>
-        internal void ReleaseNavRailOpen(object owner)
-        {
-            try
-            {
-                if (!_navRailHolds.Release(owner)) return;   // not the last claim (or not a holder)
-                if (NavRailPointerIsAway()) SetNavRailExpanded(false);
-            }
-            catch (Exception ex) { App.Logger?.Debug("ReleaseNavRailOpen: {E}", ex.Message); }
-        }
-
-        /// <summary>Unkeyed release, the pair of <see cref="HoldNavRailOpen()"/>.</summary>
-        internal void ReleaseNavRailOpen() => ReleaseNavRailOpen(NavRailAnonymousHoldOwner);
     }
 }

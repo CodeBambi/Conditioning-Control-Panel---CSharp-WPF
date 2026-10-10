@@ -5,6 +5,7 @@ using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.LogicalTree;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using CCP.Avalonia.Testing;
 using ConditioningControlPanel;
 using ConditioningControlPanel.Avalonia.Views.Controls.AppSettings;
@@ -14,14 +15,15 @@ using Xunit;
 namespace CCP.Avalonia.Tests;
 
 /// <summary>
-/// Settings ▸ General ▸ Deeper master switch, through the shell: WPF hides the rail's Deeper door
-/// on load and on toggle, and falls back to Settings when Deeper was the open tab
-/// (MainWindow.Settings.cs:119, MainWindow.DeeperTab.cs:127).
+/// Settings ▸ General ▸ Deeper master switch, through the shell: WPF 7.1.5 falls back to Settings
+/// when Deeper was the open tab (MainWindow.DeeperTab.cs:127). The rail's Deeper door left in the
+/// nav rework; Deeper is a Play pill now and the switch hides no door (7.1.5 has no reader of
+/// EnableDeeper in the nav), so the pill stays on Play either way.
 /// </summary>
 public sealed class GeneralDeeperSwitchTests
 {
     [Fact]
-    public async Task DeeperSwitchHidesTheRailDoorAndLeavesTheDeeperTab()
+    public async Task DeeperSwitchLeavesTheDeeperTabAndThePlayPillStays()
     {
         await AvaloniaTestDispatcher.RunAsync(() =>
         {
@@ -36,27 +38,26 @@ public sealed class GeneralDeeperSwitchTests
             try
             {
                 s.EnableDeeper = false;
-                w = new MainShellWindow();   // startup: the door follows the stored switch
+                w = new MainShellWindow();
                 w.Show();
                 Dispatcher.UIThread.RunJobs();
-                var door = w.Named<Button>("BtnDeeper")!;
-                Assert.False(door.IsVisible, "Deeper door shown at startup with Deeper disabled");
+                Assert.Null(w.Named<Button>("BtnDeeper"));   // the rail door is gone (nav rework)
 
                 var general = w.GetLogicalDescendants().OfType<GeneralSettingsSection>().First();
                 var box = general.FindControl<CheckBox>("ChkEnableDeeper")!;
                 box.IsChecked = true;   // the user turns Deeper on
                 Dispatcher.UIThread.RunJobs();
-                Assert.True(door.IsVisible);
+                Assert.True(s.EnableDeeper);
 
                 w.ShowTab("deeper");
                 Dispatcher.UIThread.RunJobs();
                 var deeperTab = w.Named<Control>("DeeperTab")!;
                 Assert.True(deeperTab.IsVisible);
+                Assert.Contains(w.GetVisualDescendants().OfType<Button>(), b => b.Name == "NavPill_deeper");
 
                 box.IsChecked = false;   // ... and off again while Deeper is open
                 Dispatcher.UIThread.RunJobs();
                 Assert.False(s.EnableDeeper);
-                Assert.False(door.IsVisible, "Deeper door kept after the switch went off");
                 Assert.False(deeperTab.IsVisible, "Deeper tab stayed open after the switch went off");
                 Assert.Equal("settings", w.CurrentTab);   // WPF ShowTab("settings"), the same key
             }

@@ -9,16 +9,13 @@
 // (UpdateQuickLoginUI) and tier changes (App RepaintVeils). XP / level-up / achievement events
 // pulse and glow the bubble (WPF OnBubble*).
 //
-// ponytail: still missing vs WPF - the equipped preset bust (CosmeticsCatalog is WPF-only, row
-// shell-profile-cosmetics), the tier badge's hover blow-up (MainWindow.ProfileBubbleTierFx.cs),
-// the level-up spark burst (FireBurstAt, shell-event-fx), the flash wobble and subliminal shimmer
-// (no FlashDisplayed / SubliminalDisplayed event on this head), the spiral row (shell-profile-spiral,
-// no DescentService here) and BrowserLauncher's copy-the-link prompt when the browser cannot open.
-// PlaceProfileBubblePopup is dropped: Placement="BottomEdgeAlignedRight" is the same result.
+// THE MENU IS PAINTED IN FULL (wave A, shell#18 / social#21): name, tier badge, achievement count and
+// the Log out / Sign in row are painted by RefreshProfileMenu in MainShellWindow.AccountChip.cs.
 //
 // Controls are reached with Named<T>(name): the window loads with AvaloniaXamlLoader.Load.
 
 using System;
+using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -120,12 +117,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             try
             {
                 RefreshProfileMenu();
+                RefreshProfileMenuSpiral();   // WPF RefreshProfileMenu paints the spiral row on the way in
                 UpdateLevelDisplay();   // the rail's "Level"/"XP" words follow a language switch
                 SubscribeProfileBubbleWatchers();
                 // Subscribed per open and dropped again inside the handler, so this never
                 // accumulates - Avalonia's Popup.Closed is a plain event with no dedupe.
                 popup.Closed += OnProfileBubblePopupClosed;
                 popup.IsOpen = true;
+                ShowProfileTierBig();
             }
             catch (Exception ex) { Log.Debug("OpenProfileBubbleMenu: {E}", ex.Message); }
         }
@@ -141,45 +140,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _profileBubbleOpenTimer?.Stop();
             _profileBubbleCloseTimer?.Stop();
             UnsubscribeProfileBubbleWatchers();
+            HideProfileTierBig();
             var popup = sender as Popup ?? ProfileBubblePopupHost;
             if (popup != null) popup.Closed -= OnProfileBubblePopupClosed;
-        }
-
-        /// <summary>WPF RefreshProfileMenu: name + tier emoji, achievements recap and the account
-        /// caption. The Level/XP rail is UpdateLevelDisplay's (OpenProfileBubbleMenu calls it).</summary>
-        private void RefreshProfileMenu()
-        {
-            if (Named<TextBlock>("ProfileMenuName") is not { } nameText) return;
-            try
-            {
-                var loggedIn = CoreAccount.IsLoggedIn;
-                var name = CoreAccount.DisplayName;
-                nameText.Text = loggedIn
-                    ? (string.IsNullOrWhiteSpace(name) ? Loc.Get("account_chip_signed_in") : name)
-                    : Loc.Get("account_chip_sign_in");
-
-                if (Named<TextBlock>("ProfileMenuBadge") is { } badge)
-                {
-                    // Same tier truth (and same emoji) as the account chip.
-                    badge.Text = CoreAccount.HasLabAccess ? "🧪" : CoreAccount.HasPremiumAccess ? "🔒" : "";
-                    badge.IsVisible = badge.Text.Length > 0;
-                }
-
-                if (Named<TextBlock>("ProfileMenuBadges") is { } badges)
-                {
-                    // The reachable pair, not the raw catalogue: 100% must be a place the user can get to.
-                    badges.IsVisible = App.Achievements != null;
-                    if (App.Achievements is { } engine)
-                    {
-                        var (got, reachable) = engine.GetReachableCounts();
-                        badges.Text = string.Format(Loc.Get("profile_bubble_achievements"), got, reachable);
-                    }
-                }
-
-                if (Named<Button>("ProfileMenuAccountBtn") is { } account)
-                    account.Content = loggedIn ? Loc.Get("btn_logout") : Loc.Get("account_chip_sign_in");
-            }
-            catch (Exception ex) { Log.Debug("RefreshProfileMenu: {E}", ex.Message); }
         }
 
         // ----- window-level watchers, live only while the menu is open --------------
@@ -292,22 +255,20 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             ToolTip.SetTip(btn, Loc.Get(signedIn ? "profile_btn_share_tip" : "profile_btn_share_tip_locked"));
         }
 
-        /// <summary>WPF ProfileMenuAccount_Click: signed in runs the quick logout; signed out opens
-        /// Settings at Account (the account chip's door).</summary>
-        private void ProfileMenuAccount_Click(object? sender, RoutedEventArgs e)
-        {
-            CloseProfileBubbleMenu();
-            if (CoreAccount.IsLoggedIn) Logout();
-            else OpenAppSettingsSection("account");
-        }
-
         // ----- the bubble face ---------------------------------------------------------
 
-        private static readonly IBrush ProfileBubbleNeutralBrush = new ImmutableSolidColorBrush(Color.FromRgb(0x3D, 0x3D, 0x60));
         private static readonly Color ProfileBubbleGold = Color.FromRgb(0xFF, 0xD7, 0x00);
         private string? _profileBubbleAvatarUrl;
         private IBrush? _profileBubblePhotoBrush;
         private DateTime _profileBubbleLastXpPulse;
+        private DateTime _profileBubbleLastWobble;
+        private DateTime _profileBubbleLastShimmer;
+
+        /// <summary>True while the face is the equipped preset bust (tests).</summary>
+        internal bool ProfileBubbleShowsBust { get; private set; }
+        /// <summary>Wobbles and shimmers started (tests).</summary>
+        internal int ProfileBubbleWobbles { get; private set; }
+        internal int ProfileBubbleShimmers { get; private set; }
 
         /// <summary>WPF InitializeProfileBubble's service half: the reaction events (static or app-lived,
         /// so they come off when the window closes, P41) and the first paint.</summary>
@@ -320,8 +281,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             ProgressionBank.Awarded += awarded;
             ProgressionBank.LevelUp += levelUp;
             if (engine != null) engine.Unlocked += unlocked;
+            // WPF App.Flash.FlashDisplayed / App.Subliminal.SubliminalDisplayed: Core raises both moments here.
+            Action flash = () => Dispatcher.UIThread.Post(OnBubbleFlashDisplayed);
+            Action subliminal = () => Dispatcher.UIThread.Post(OnBubbleSubliminalDisplayed);
+            CoreTubeEvents.FlashAboutToDisplay += flash;
+            CoreTubeEvents.SubliminalDisplayed += subliminal;
             Closed += (_, _) =>
             {
+                CoreTubeEvents.FlashAboutToDisplay -= flash;
+                CoreTubeEvents.SubliminalDisplayed -= subliminal;
                 ProgressionBank.Awarded -= awarded;
                 ProgressionBank.LevelUp -= levelUp;
                 if (engine != null) engine.Unlocked -= unlocked;
@@ -342,6 +310,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 fill.Fill = loggedIn ? Tabs.LeaderboardRow.BuildAvatarBrush(name) : ProfileBubbleNeutralBrush;
                 initials.IsVisible = true;
 
+                // The equipped preset bust (Own It cosmetic) beats initials (WPF CosmeticsCatalog.GetAvatarImage).
+                var bust = Helpers.ModArt.AvatarPreset(CoreSettings.Current.ProfileCosmetics?.AvatarId);
+                ProfileBubbleShowsBust = bust != null;
+                if (bust != null)
+                {
+                    fill.Fill = new ImageBrush(bust) { Stretch = Stretch.UniformToFill };
+                    initials.IsVisible = false;
+                }
+
                 string? url = null;
                 if (CoreSettings.Current.ShareProfilePicture && AccountSeed.Discord?.IsAuthenticated == true)
                     url = AccountSeed.Discord.GetAvatarUrl(128);
@@ -354,16 +331,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 if (ProfileBubblePopupHost?.IsOpen == true) RefreshProfileMenu();
             }
             catch (Exception ex) { Log.Debug("RefreshProfileBubble: {E}", ex.Message); }
-        }
-
-        /// <summary>Basic / Prime badge on the rim, from the canonical gates.</summary>
-        private void RefreshProfileBubbleTierBadge()
-        {
-            if (Named<Image>("ProfileBubbleTierBadge") is not { } img) return;
-            var tier = CoreAccount.HasLabAccess ? 2 : CoreAccount.HasPremiumAccess ? 1 : 0;
-            var art = tier > 0 ? TierBadge.TierArt(tier) : null;
-            img.Source = art;
-            img.IsVisible = art != null;
         }
 
         private void PaintBubblePhoto(IBrush brush)
@@ -400,10 +367,53 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             PulseProfileBubble(1.10, 260);
         }
 
+        /// <summary>WPF OnBubbleFlashDisplayed: a flash pop wobbles the bubble, at most once per 2.5 s.</summary>
+        internal void OnBubbleFlashDisplayed()
+        {
+            if ((DateTime.UtcNow - _profileBubbleLastWobble).TotalMilliseconds < 2500) return;
+            _profileBubbleLastWobble = DateTime.UtcNow;
+            WobbleProfileBubble();
+        }
+
+        /// <summary>WPF OnBubbleSubliminalDisplayed: a subliminal dims the bubble once, at most once per 4 s.</summary>
+        internal void OnBubbleSubliminalDisplayed()
+        {
+            if ((DateTime.UtcNow - _profileBubbleLastShimmer).TotalMilliseconds < 4000) return;
+            _profileBubbleLastShimmer = DateTime.UtcNow;
+            ShimmerProfileBubble();
+        }
+
+        /// <summary>WPF WobbleProfileBubble: -12, 9, -5, 0 degrees at 90 / 220 / 340 / 480 ms, back to rest.</summary>
+        private void WobbleProfileBubble()
+        {
+            if (!AmbientFxCanvas.Env.AllowTransitions || Named<Grid>("ProfileBubbleVisual") is not { } visual) return;
+            var tilt = (visual.RenderTransform as TransformGroup)?.Children.OfType<RotateTransform>().FirstOrDefault();
+            if (tilt == null) return;
+            ProfileBubbleWobbles++;
+            Helpers.TransformTween.Run(tilt, TimeSpan.FromMilliseconds(480), new (double, AvaloniaProperty, double)[]
+            {
+                (0, RotateTransform.AngleProperty, 0), (90 / 480.0, RotateTransform.AngleProperty, -12),
+                (220 / 480.0, RotateTransform.AngleProperty, 9), (340 / 480.0, RotateTransform.AngleProperty, -5),
+                (1, RotateTransform.AngleProperty, 0),
+            });
+        }
+
+        /// <summary>WPF ShimmerProfileBubble: opacity 1 to 0.55 and back, 300 ms each way, sine.</summary>
+        private void ShimmerProfileBubble()
+        {
+            if (!AmbientFxCanvas.Env.AllowTransitions || Named<Grid>("ProfileBubbleVisual") is not { } visual) return;
+            ProfileBubbleShimmers++;
+            Helpers.TransformTween.Run(visual, TimeSpan.FromMilliseconds(600), new (double, AvaloniaProperty, double)[]
+            {
+                (0, OpacityProperty, 1.0), (0.5, OpacityProperty, 0.55), (1, OpacityProperty, 1.0),
+            }, new SineEaseInOut());
+        }
+
         private void OnBubbleLevelUp()
         {
             PulseProfileBubble(1.35, 560);
             FlashProfileBubbleGlow();
+            BurstProfileBubble();   // WPF FireBurstAt(BtnProfileBubble, count: 45), MainShellWindow.LevelUpFx.cs
             if (ProfileBubblePopupHost?.IsOpen == true) RefreshProfileMenu();
         }
 

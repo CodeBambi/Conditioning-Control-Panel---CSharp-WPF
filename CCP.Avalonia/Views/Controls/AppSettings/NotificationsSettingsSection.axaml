@@ -51,6 +51,19 @@
                     <TextBlock Text="{loc:Str set2_suppress_perk_notifications_hint}"
                                Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                TextWrapping="Wrap" Margin="0,2,0,0"/>
+
+                    <!-- WPF 7.1.5 third row: the header banner's pool beat. Live-edited, because the
+                         banner's pool tick reads the setting at the moment it draws. -->
+                    <Grid MinHeight="34" Margin="0,10,0,0" ColumnDefinitions="*,Auto"
+                          ToolTip.Tip="{loc:Str tooltip_banner_pool_enabled}">
+                        <TextBlock Grid.Column="0" Theme="{StaticResource SettingLabel}"
+                                   Foreground="{StaticResource SectionHueNotificationsBrush}"
+                                   Text="{loc:Str banner_pool_enabled}"
+                                   Margin="0,0,14,0" TextTrimming="CharacterEllipsis"/>
+                        <CheckBox Grid.Column="1" x:Name="ChkBannerPool"
+                                  Theme="{StaticResource ToggleStyle}" IsChecked="True"
+                                  VerticalAlignment="Center"/>
+                    </Grid>
                 </StackPanel>
             </Grid>
         </Border>

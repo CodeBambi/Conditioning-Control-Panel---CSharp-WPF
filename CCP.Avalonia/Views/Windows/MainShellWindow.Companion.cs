@@ -161,6 +161,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             var tube = _avatarTubeWindow;
             if (tube == null) return;
+            Log.Information("AvatarTube: shell state {State}", WindowState);
             if (WindowState == WindowState.Minimized) { HideAvatarTube(); return; }
             if (WindowState == WindowState.Maximized && !tube.IsDetached)
             {
@@ -182,7 +183,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (_avatarTubeWindow == null) return;
             if (_avatarTubeWindow.IsDetached && CoreSettings.Current.AvatarEnabled) return;   // dismiss still hides
             _avatarTubeWindow.StopPoseAnimation();
-            _avatarTubeWindow.RunOnAvatar(() => _avatarTubeWindow?.Hide());
+            _avatarTubeWindow.HideSafe(!CoreSettings.Current.AvatarEnabled ? "dismissed"
+                : WindowState == WindowState.Minimized ? "main minimised"
+                : !IsVisible ? "main hidden" : "shell request");
         }
 
         /// <summary>

@@ -34,7 +34,8 @@ export function extOf(url) {
 export function isLocalUrl(url) {
   const s = String(url || '');
   if (!s) return false;
-  if (/^https?:\/\//i.test(s)) return /^https?:\/\/ccp\.[a-z]+\//i.test(s);
+  // ...or the same hosts as the cross-platform desktop head serves them: loopback paths (http://127.0.0.1:<port>/ccp.assets/...).
+  if (/^https?:\/\//i.test(s)) return /^https?:\/\/ccp\.[a-z]+\//i.test(s) || /^http:\/\/127\.0\.0\.1:\d+\/ccp\.[a-z]+\//i.test(s);
   if (/^(data|blob):/i.test(s)) return true;
   return true;                    // relative -> our own document origin
 }

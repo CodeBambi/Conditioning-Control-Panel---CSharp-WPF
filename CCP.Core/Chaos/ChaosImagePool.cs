@@ -45,8 +45,32 @@ internal static class ChaosImagePool
                     .Where(f => Extensions.Contains(Path.GetExtension(f).ToLowerInvariant()))
                     .ToList()
                 : new List<string>();
+            // WPF GetMediaFiles: the asset browser's unticked folders never reach any pool.
+            _files = ConditioningControlPanel.Services.AssetFolderExclusion.Enabled(_files, CorePaths.EffectiveAssets ?? "", CoreSettings.Current);
         }
         catch { _files = new List<string>(); }
         return _files;
     }
+
+    /// <summary>WPF ClearFileCache: the next call re-lists the folder (asset selection changed).</summary>
+    public static void Invalidate() { _stamp = DateTime.MinValue; _dir = null; }
+
+    /// <summary>
+    /// WPF FlashService.GetChaosImagePaths: up to <paramref name="count"/> DISTINCT pictures from the
+    /// same pool the flashes deal from (disk walk shared with the flashes, online clips when on).
+    /// The head seeds <see cref="PathsProvider"/>; unseeded falls back to a random pick of
+    /// <see cref="GetFiles"/>.
+    /// </summary>
+    public static List<string> GetChaosImagePaths(int count)
+    {
+        if (count <= 0) return new List<string>();
+        var p = PathsProvider;
+        if (p != null) { try { return p(count); } catch { } }
+        var files = GetFiles();
+        var rng = new Random();
+        return files.OrderBy(_ => rng.Next()).Take(count).ToList();
+    }
+
+    /// <summary>The head's flash pool (Avalonia FlashOverlay.GetChaosImagePaths).</summary>
+    public static volatile Func<int, List<string>>? PathsProvider;
 }

@@ -24,8 +24,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// user's asset library under its <see cref="WebAssetServer.AssetsPrefix"/> (WPF's ccp.assets).
     ///
     /// loom-save, intake-save-image, need-remote, the speech bridge and the audio-web pack request
-    /// are in IntakeHostWindow.Bridge.cs.
-    /// ponytail: not ported yet - heartbeat watchdog/relaunch, fullscreen-set, duck/restore main,
+    /// are in IntakeHostWindow.Bridge.cs; window mode, duck and the heartbeat watchdog in
+    /// IntakeHostWindow.Lifecycle.cs.
+    /// ponytail: not ported yet - relaunch on a web-process crash (WebHost raises no process-failed),
     /// the bubble sprite / subliminal pool in init, serving ccp.content (the pack is requested but
     /// WebAssetServer has no content root), the EmiDesk intakeRunning hold (this head's
     /// EmiDeskService has no Fire/ReleaseHold director), the punch card. Next slices in
@@ -52,8 +53,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             Content = Web;
             Web.WebMessage += OnPageMessage;
             // WPF DisposeAll: a closed window never leaves the mic open.
-            Opened += (_, _) => { lock (OpenWindows) OpenWindows.Add(this); };
-            Closed += (_, _) => { _closed = true; lock (OpenWindows) OpenWindows.Remove(this); StopSpeechBridge("closed", notifyPage: false); };
+            Opened += (_, _) => { lock (OpenWindows) OpenWindows.Add(this); StartLifecycle(); };
+            Closed += (_, _) =>
+            {
+                _closed = true;
+                lock (OpenWindows) OpenWindows.Remove(this);
+                StopSpeechBridge("closed", notifyPage: false);
+                EndLifecycle();
+            };
             // The page never leaves the served origin; anything else is refused before the engine loads it.
             Web.AllowNavigation = url => PageUrl != null && SameOrigin(url, PageUrl);
         }
@@ -63,12 +70,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             RequestAudioPack(App.ReleaseContent);   // WPF Launch: kicked, never awaited
             PageUrl = new Uri(server.Url("intake/index.html"));
-            AssetsBase = $"{PageUrl.GetLeftPart(UriPartial.Authority)}/{WebAssetServer.AssetsPrefix}";
+            _server = server;
             Web.Navigate(PageUrl);
         }
 
         /// <summary>Where the media manifest points (WPF https://ccp.assets/).</summary>
-        internal string AssetsBase { get; private set; } = "";
+        // Read when the manifest is built (the page is up by then), never at Load: a web view that
+        // cannot carry the virtual hosts moves the whole server to loopback urls first.
+        internal string AssetsBase => _server?.AssetUrl("") ?? "";
+        private WebAssetServer? _server;
 
         internal static bool SameOrigin(Uri a, Uri b) =>
             a.IsAbsoluteUri && b.IsAbsoluteUri && a.Scheme == b.Scheme && a.Authority == b.Authority;
@@ -92,7 +102,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             switch ((string?)o["type"])
             {
                 case "ready":   // WPF ChaosWebViewHost "ready" -> IntakeHostService.OnPageReady
-                    Run.Beat();
+                    _pageReady = true;
+                    Run.Beat(Now);
                     SendInit();
                     break;
                 case "log":
@@ -100,7 +111,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     break;
                 case "heartbeat":
                 case "pong":
-                    Run.Beat();
+                    Run.Beat(Now);
+                    break;
+                case "fullscreen-set":   // pause menu / Options / F11: C# owns the borderless toggle
+                    ApplyFullscreen((bool?)o["on"] ?? false);
                     break;
                 case "quiz-result":
                     OnQuizResult(o);

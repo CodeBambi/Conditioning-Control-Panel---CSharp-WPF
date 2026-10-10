@@ -31,8 +31,6 @@
 //     the handler (_allPresets, the "save as preset" offer, FlashSaveAbsorb) is preset machinery
 //     that is stubbed in MainShellWindow.Presets.cs.
 //   - LoadSettings / UpdateSliderTexts: same reason - each Settings section seeds itself.
-//   - The pack migration inside BtnPickAssetsFolder_Click: Services/PackEncryptionService.cs and
-//     Services/ContentPacks are not on this head, so no .packs folder is discovered to move.
 //   - The post-change rescan (App.Flash/Video/BubbleCount/ContentPacks RefreshImagesPath etc. and
 //     RefreshAssetTree): those four services and the assets tree are not on this head.
 //   - Services/Auth/SecurityHelper.IsPersonalFolderRoot: the #1053 refusal. Not in Core, so the
@@ -120,21 +118,51 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 // Desktop or a drive root.
                 if (IsPersonalFolderRoot(selected))
                 {
-                    await MessageDialog.ShowAsync(owner, "Pick a folder of your own",
-                        "That folder is one of your system's own - your Desktop, Documents, " +
-                        "Pictures, Downloads, your home folder or a whole drive." +
-                        Environment.NewLine + Environment.NewLine +
-                        "The app both reads and writes here, so pick or make a folder that holds " +
-                        "nothing but your assets.");
+                    await MessageDialog.ShowAsync(owner, Loc.Get("assets_folder_personal_title"),
+                        Loc.Get("assets_folder_personal_body"));
                     return null;
+                }
+
+                // WPF: offer to move the installed packs from the old folder (and any stranded in the
+                // default one) before the switch; No leaves them where they are.
+                var oldAssets = CorePaths.EffectiveAssets;
+                var defaultAssets = Path.Combine(CorePaths.UserData, "assets");
+                var toMove = ConditioningControlPanel.Services.PackFolderMover.Find(oldAssets, defaultAssets, selected);
+                var movePacks = false;
+                if (toMove.Count > 0)
+                {
+                    long total = 0;
+                    foreach (var c in toMove) total += c.Bytes;
+                    movePacks = await MessageDialog.ConfirmAsync(owner, Loc.Get("title_move_downloaded_packs"),
+                        Loc.GetF("msg_move_packs_confirm", toMove.Count, ConditioningControlPanel.Services.PackFolderMover.FormatSize(total),
+                            string.Join("\n• ", toMove.ConvertAll(c => c.PackName)),
+                            total > 500_000_000 ? Loc.Get("msg_may_take_a_moment") : ""));
                 }
 
                 Directory.CreateDirectory(Path.Combine(selected, "images"));
                 Directory.CreateDirectory(Path.Combine(selected, "videos"));
 
+                if (movePacks)
+                {
+                    try
+                    {
+                        // Decrypts under the old .temp belong to the old folder; drop them first.
+                        ConditioningControlPanel.Services.ContentPackStore.Current?.CleanupTempFiles();
+                        ConditioningControlPanel.Services.PackFolderMover.Move(toMove, selected, CoreSettings.Current);
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Error(ex, "Failed to move packs to new location");
+                        await MessageDialog.ShowAsync(owner, Loc.Get("label_warning"), Loc.GetF("msg_could_not_move_packs_0", ex.Message));
+                    }
+                }
+
                 CoreSettings.Current.CustomAssetsPath = selected;
                 CoreSettings.Save();
                 Log.Information("Custom assets path set to: {Path}", selected);
+                // WPF App.ContentPacks?.RefreshPacksPath(): the packs live under <assets>/.packs.
+                try { ConditioningControlPanel.Services.ContentPackStore.Current?.Rescan(); }
+                catch (Exception ex) { Log.Debug("Pack rescan after assets move failed: {E}", ex.Message); }
 
                 await MessageDialog.ShowAsync(owner, Loc.Get("title_assets_folder_set"),
                     Loc.GetF("msg_custom_assets_folder_set_0", selected));
@@ -238,31 +266,50 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (browser != null) browser.IsVisible = !open;
         }
 
-        // Every row of the ? panel: close the panel, then start a tour. The close half is real;
-        // the tour half is one call into App.Tutorial, which is not on this head. Named per row so
-        // the day TutorialService lands, each is one line rather than a rediscovery of which
-        // TutorialType a row meant.
-        //   WhatMoved => UpgradeTour   GettingStarted => GettingStarted   Settings => Settings
+        // Every row of the ? panel: close the panel, then start a tour. Both halves are real:
+        // the tour half is CoreTutorial.Start, seeded by Tours/TutorialHead. Named per row so each
+        // stays one line and the TutorialType a row means is written down once.
+        //   (What moved opens the card: MainShellWindow.WhatMoved.cs)   GettingStarted => GettingStarted   Settings => Settings
         //   Presets => Presets         Progression => Progression         Achievements => Achievements
         //   Companion => Companion     Patreon => Patreon                 Avatar => Avatar
         //   Awareness => Awareness (plus the one-shot "open the Puppy preset editor when the tour
         //   finishes naturally" hook in MainWindow.Settings.cs:670)
         //   StartTutorial (the panel's big button) => FullTour
-        private void BtnStartTutorial_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => CloseTutorialOverlay();
-        private void BtnTutorialWhatMoved_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => CloseTutorialOverlay();
-        private void BtnTutorialGettingStarted_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => CloseTutorialOverlay();
-        private void BtnTutorialSettings_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => CloseTutorialOverlay();
-        private void BtnTutorialPresets_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => CloseTutorialOverlay();
-        private void BtnTutorialProgression_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => CloseTutorialOverlay();
-        private void BtnTutorialAchievements_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => CloseTutorialOverlay();
-        private void BtnTutorialCompanion_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => CloseTutorialOverlay();
-        private void BtnTutorialPatreon_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => CloseTutorialOverlay();
-        private void BtnTutorialAvatar_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => CloseTutorialOverlay();
-        private void BtnTutorialAwareness_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => CloseTutorialOverlay();
+        private void BtnStartTutorial_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => StartGuide("FullTour");
+        private void BtnTutorialGettingStarted_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => StartGuide("GettingStarted");
+        private void BtnTutorialSettings_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => StartGuide("Settings");
+        private void BtnTutorialPresets_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => StartGuide("Presets");
+        private void BtnTutorialProgression_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => StartGuide("Progression");
+        private void BtnTutorialAchievements_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => StartGuide("Achievements");
+        private void BtnTutorialCompanion_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => StartGuide("Companion");
+        private void BtnTutorialPatreon_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => StartGuide("Patreon");
+        private void BtnTutorialAvatar_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => StartGuide("Avatar");
 
-        /// <summary>ponytail: closes the panel, then WPF opens Windows/ModCreatorWindow.xaml with
-        /// startWithTutorial:true. That window is not ported.</summary>
-        private void BtnTutorialModding_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => CloseTutorialOverlay();
+        /// <summary>WPF StartAwarenessTutorial (MainWindow.Settings.cs:670): the tour, and the Puppy
+        /// preset's editor when it is walked to the end. The tab's own Tutorial button carries that
+        /// one-shot, so the ? row goes through it.</summary>
+        private void BtnTutorialAwareness_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            CloseTutorialOverlay();
+            if (Named<Tabs.AwarenessTabView>("AwarenessTab") is { } tab) tab.StartTutorialFromHelp();
+            else CoreTutorial.Start("Awareness");
+        }
+
+        /// <summary>WPF BtnTutorialModding_Click: the Mod Creator, opened on its own tour.</summary>
+        private void BtnTutorialModding_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            CloseTutorialOverlay();
+            try { new ModCreatorWindow(startWithTutorial: true).Show(this); }
+            catch (Exception ex) { Serilog.Log.Warning(ex, "Help: could not open the Mod Creator tour"); }
+        }
+
+        /// <summary>WPF: collapse the ? panel, then MainWindow.StartTutorial(type). Tour names are the
+        /// WPF TutorialType names (CoreTutorial.Start).</summary>
+        internal void StartGuide(string tourName)
+        {
+            CloseTutorialOverlay();
+            CoreTutorial.Start(tourName);
+        }
 
         /// <summary>Close the help panel first, then open the owned report dialog, matching WPF.</summary>
         private void BtnTutorialReportBug_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
@@ -293,9 +340,62 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             }
         }
 
-        /// <summary>ponytail: see the "Still blocked" note at the top of this file - restoring
-        /// SaveSettings() here would make the shell a second writer of settings each Settings
-        /// section already owns and saves.</summary>
-        private void BtnSave_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) { }
+        /// <summary>WPF BtnSave_Click (MainWindow.Settings.cs:377): the tick + ripple, then the write.
+        /// Every editor on this head already writes Current as it changes, so the save here is the
+        /// flush to disk and nothing is read back from controls (no second writer). The WPF
+        /// "keep these as a preset?" offer is not ported: the name prompt lives in the Presets tab.</summary>
+        internal void BtnSave_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            FlashSaveAbsorb();
+            try { CoreSettings.Save(); SaveClicks++; }
+            catch (Exception ex) { Log.Warning(ex, "BtnSave_Click: save failed"); }
+        }
+
+        /// <summary>Test seam: saves the bottom bar has flushed.</summary>
+        internal int SaveClicks { get; private set; }
+        internal int SaveAbsorbRuns { get; private set; }
+
+        /// <summary>WPF FlashSaveAbsorb (MainWindow.HeroFx.cs:702): a tick that draws itself, holds
+        /// 1.6 s and fades, and one ring off the button's edge. Decoration only, wrapped end to end.</summary>
+        internal void FlashSaveAbsorb()
+        {
+            try
+            {
+                if (!global::ConditioningControlPanel.Avalonia.Controls.AmbientFxCanvas.Env.AllowTransitions) return;
+                var quadOut = new global::Avalonia.Animation.Easings.QuadraticEaseOut();
+                if (Named<global::Avalonia.Controls.Shapes.Path>("SaveTick") is { } tick)
+                {
+                    var dash = global::Avalonia.Controls.Shapes.Shape.StrokeDashOffsetProperty;
+                    _saveTickDraw?.Stop();
+                    _saveTickDraw = Helpers.TransformTween.Run(tick, TimeSpan.FromMilliseconds(400),
+                        new (double, global::Avalonia.AvaloniaProperty, double)[] { (0, dash, 9), (1, dash, 0) }, quadOut);
+                    const double hold = 1600, fade = 260;
+                    _saveTickLife?.Stop();
+                    _saveTickLife = Helpers.TransformTween.Run(tick, TimeSpan.FromMilliseconds(hold + fade),
+                        new (double, global::Avalonia.AvaloniaProperty, double)[]
+                        {
+                            (0, OpacityProperty, 1), (hold / (hold + fade), OpacityProperty, 1), (1, OpacityProperty, 0),
+                        });
+                }
+                if (Named<global::Avalonia.Controls.Border>("SaveRipple") is { RenderTransform: global::Avalonia.Media.ScaleTransform rig } ripple)
+                {
+                    double width = Named<global::Avalonia.Controls.Grid>("SaveAbsorbHost")?.Bounds.Width ?? 0;
+                    static double Grow(double size) => size <= 1 ? 1.0 : (size + 14.0) / size;
+                    var span = TimeSpan.FromMilliseconds(520);
+                    _saveRippleFade?.Stop();
+                    _saveRippleFade = Helpers.TransformTween.Run(ripple, span,
+                        new (double, global::Avalonia.AvaloniaProperty, double)[] { (0, OpacityProperty, 0.75), (1, OpacityProperty, 0) }, quadOut);
+                    var sx = global::Avalonia.Media.ScaleTransform.ScaleXProperty;
+                    var sy = global::Avalonia.Media.ScaleTransform.ScaleYProperty;
+                    _saveRippleGrow?.Stop();
+                    _saveRippleGrow = Helpers.TransformTween.Run(rig, span,
+                        new (double, global::Avalonia.AvaloniaProperty, double)[] { (0, sx, 1), (1, sx, Grow(width)), (0, sy, 1), (1, sy, Grow(50)) }, quadOut);
+                }
+                SaveAbsorbRuns++;
+            }
+            catch (Exception ex) { Log.Debug("FlashSaveAbsorb: {E}", ex.Message); }
+        }
+
+        private global::Avalonia.Threading.DispatcherTimer? _saveTickDraw, _saveTickLife, _saveRippleFade, _saveRippleGrow;
     }
 }

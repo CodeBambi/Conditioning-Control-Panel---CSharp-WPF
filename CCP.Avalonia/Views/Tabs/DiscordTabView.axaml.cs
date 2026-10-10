@@ -74,7 +74,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         // ------------------------------------------------------------------
         // The card (read-only): WPF MainWindow.Browser.cs BtnViewMyProfile_Click, SearchAndDisplayProfile,
         // DisplayOwnProfile, DisplayProfileEntry and RefreshProfileViewerAsync, on the tab itself.
-        // ponytail: no avatar picture (no Discord avatar URL or remote image load on this head), no Patreon
+        // The picture: yours from Discord when ShareProfilePicture is on, a looked-up player's from the
+        // server's avatar_url (Helpers/AvatarPhotos). ponytail: no Patreon
         // badge/banner art, no edit-name/delete/Discord-DM buttons (writes, unit 7), no cosmetics, no staff
         // flag for your own card (no Discord service): each stays hidden rather than drawn wrong.
         // ------------------------------------------------------------------
@@ -118,8 +119,39 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             var entry = await FindOnBoardAsync(name);
             if (req != _cardRequest) return;
             if (entry != null) { DisplayProfileEntry(entry); return; }
+            // The board is the month's top 200 (all WPF searches). Anyone else, a friend included, is asked
+            // for by name: /user/lookup answers an exact display name and honours their sharing choices.
+            if (!CoreSettings.Current.OfflineMode && await LookupAsRowAsync(name.Trim()) is { } found)
+            {
+                if (req != _cardRequest) return;
+                DisplayProfileEntry(found);
+                return;
+            }
+            if (req != _cardRequest) return;
             NoProfileSelected.IsVisible = true;
             ProfileCardWrapper.IsVisible = false;
+        }
+
+        /// <summary>Test seam: the by-name lookup behind a search that missed the board.</summary>
+        internal static Func<string, Task<UserLookupResult?>> LookupByName { get; set; } =
+            name => LeaderboardTabView.NewClient().LookupUserAsync(name);
+
+        private static async Task<LeaderboardRow?> LookupAsRowAsync(string name)
+        {
+            try
+            {
+                var u = await LookupByName(name);
+                if (u == null || string.IsNullOrWhiteSpace(u.DisplayName)) return null;
+                // Only the player asked for: a reply naming someone else is not a match.
+                if (!string.Equals(u.DisplayName!.Trim(), name, StringComparison.OrdinalIgnoreCase)) return null;
+                return new LeaderboardRow
+                {
+                    DisplayName = u.DisplayName!, Level = u.Level, Xp = u.Xp, BubblesPopped = u.BubblesPopped, GifsSpawned = u.GifsSpawned,
+                    VideoMinutes = u.VideoMinutes, LockCardsCompleted = u.LockCardsCompleted, AchievementsCount = u.AchievementsCount,
+                    IsOnline = u.IsOnline, IsPatreon = u.IsPatreon, PatreonTier = u.PatreonTier, DiscordId = u.DiscordId,
+                };
+            }
+            catch (Exception ex) { Log.Debug("profile lookup by name failed: {E}", ex.Message); return null; }
         }
 
         /// <summary>WPF searches LeaderboardService's cached board. This tab keeps its own monthly board for 60 s (one
@@ -163,9 +195,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             var s = CoreSettings.Current;
             var progress = App.Achievements?.Progress;
             ShowCard(s.IsSeason0Og);
-            ApplyIdentityBadges(false, null, CoreAccount.IsWhitelisted);
-            TxtProfileViewerName.Text = s.UserDisplayName ?? "You";
+            ApplyOwnIdentityBadges();
+            TxtProfileViewerName.Text = OwnCardName();
             ShowOwnActions(true);
+            ShowOwnDiscordDm();
+            RefreshProfileChrome();
             SetOnline(true, Loc.Get("label_online"));
             TxtProfileViewerLevel.Text = s.PlayerLevel.ToString();
             // WPF Browser.cs:1963-1981: the server rank, else your row by unified id, else by display name.
@@ -185,6 +219,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             TxtProfileViewerAchievements.Text = $"{unlocked} / {total}";
             Host?.SetProfileViewingSelf(true);
             Host?.ApplyOwnProfileWardrobe();
+            ApplyOwnPatreonPlates();
+            ShowProfilePhoto(TxtProfileViewerName.Text ?? "", Helpers.AvatarPhotos.OwnUrl(256));   // WPF Browser.cs:1909
             SetXpMeter(s.PlayerLevel, s.PlayerXP);
             Host?.UpdateProfileShowcase(unlocked, total, progress?.UnlockedAchievements);
             ShowAchievements(progress?.UnlockedAchievements, Loc.Get("label_no_achievements_yet"));
@@ -196,9 +232,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             var s = CoreSettings.Current;
             ShowCard(entry.IsSeason0Og);
             var isOwn = string.Equals(entry.DisplayName, s.UserDisplayName, StringComparison.OrdinalIgnoreCase);
-            ApplyIdentityBadges(false, null, isOwn && CoreAccount.IsWhitelisted);
+            if (isOwn) ApplyOwnIdentityBadges();
+            else ApplyIdentityBadges(false, null, false);
+            // WPF Browser.cs:2247: your own row reads the local tier, anyone else's the board row.
+            if (isOwn) ApplyOwnPatreonPlates();
+            else ApplyPatreonPlates(entry.PatreonTier, entry.IsPatreon && entry.PatreonTier >= 1);
             TxtProfileViewerName.Text = entry.DisplayName;
             ShowOwnActions(isOwn);
+            ShowDiscordDm(entry.HasDiscord ? entry.DiscordId : null, entry.DisplayName);
+            RefreshProfileChrome();
             SetOnline(entry.IsOnline, entry.IsOnline ? "Online" : "Offline"); // WPF's literals
             TxtProfileViewerLevel.Text = entry.Level.ToString();
             TxtProfileViewerRank.Text = TrainerCardText.Rank(entry.Rank);
@@ -211,6 +253,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             ShowAchievements(null, $"{entry.AchievementsCount} achievements unlocked");
             // entry.Xp is lifetime; the meter wants progress inside the level.
             Host?.SetProfileViewingSelf(isOwn);
+            ShowProfilePhoto(entry.DisplayName, isOwn ? Helpers.AvatarPhotos.OwnUrl(256) : null);
             // WPF Browser.cs:2290: the board row carries no cosmetics - yours from settings, theirs stripped until the lookup.
             if (isOwn) Host?.ApplyOwnProfileWardrobe();
             else Host?.ApplyViewedProfileWardrobe(null);
@@ -228,7 +271,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             SetOnline(lookup.IsOnline, lookup.IsOnline ? "Online" : "Offline");
             if (string.Equals(name, CoreSettings.Current.UserDisplayName, StringComparison.OrdinalIgnoreCase))
             {
-                ApplyIdentityBadges(false, null, CoreAccount.IsWhitelisted);
+                ApplyOwnIdentityBadges();
                 Host?.ApplyOwnProfileWardrobe();
             }
             else
@@ -236,12 +279,41 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 ApplyIdentityBadges(lookup.IsStaff, lookup.StaffRole, lookup.IsWhitelisted);
                 Host?.ApplyViewedProfileWardrobe(lookup.Cosmetics);   // WPF Browser.cs:2437
             }
+            // WPF Browser.cs:2437: the server's picture; your own card falls back to your Discord one.
+            var photo = lookup.AvatarUrl;
+            if (string.IsNullOrEmpty(photo) && string.Equals(name, CoreSettings.Current.UserDisplayName, StringComparison.OrdinalIgnoreCase))
+                photo = Helpers.AvatarPhotos.OwnUrl(256);
+            ShowProfilePhoto(name, photo);
             if (lookup.Achievements is { Count: > 0 }) ShowAchievements(lookup.Achievements, "");
             else if (lookup.AchievementsCount > 0) ShowAchievements(null, $"{lookup.AchievementsCount} achievements unlocked");
         }
 
+        /// <summary>The hero disc's picture (WPF ProfileViewerAvatar.ImageSource): cleared at once, then
+        /// filled when the load lands, if the same player is still on the card.</summary>
+        private void ShowProfilePhoto(string name, string? url)
+        {
+            ProfileHeroAvatar.AvatarImage = null;
+            // The preset bust shares this slot: it may take it only once the load has come back empty.
+            var none = string.IsNullOrEmpty(url);
+            Host?.SetProfilePictureLoad(none ? Views.Windows.ProfilePictureLoad.None : Views.Windows.ProfilePictureLoad.Pending);
+            if (none) return;
+            _ = PaintProfilePhotoAsync(name, url!);
+        }
+
+        private async Task PaintProfilePhotoAsync(string name, string url)
+        {
+            var bmp = await Helpers.AvatarPhotos.LoadAsync(url, 256);
+            global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                if (TxtProfileViewerName.Text != name) return;
+                if (bmp != null) ProfileHeroAvatar.AvatarImage = bmp;
+                Host?.SetProfilePictureLoad(bmp != null ? Views.Windows.ProfilePictureLoad.Loaded : Views.Windows.ProfilePictureLoad.None);
+            });
+        }
+
         private void ShowCard(bool og)
         {
+            RefreshProfileStatBadges();
             ProfileCardWrapper.IsVisible = true;
             NoProfileSelected.IsVisible = false;
             OgBorderContainer.IsVisible = og;
@@ -255,6 +327,68 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             TxtProfileViewerOnline.Foreground = brush;
             ProfileHeroAvatar.PresenceDot.Fill = brush;
         }
+
+        /// <summary>WPF Browser.cs:1951: the unified name, then the Discord custom name, then the Patreon name, then "You".</summary>
+        internal static string OwnCardName() => CoreSettings.Current.UserDisplayName
+            ?? Platform.AccountSeed.Discord?.CustomDisplayName ?? Platform.AccountSeed.Patreon?.DisplayName ?? "You";
+
+        /// <summary>WPF Browser.cs:1899 / :2254: your own card wears your Discord staff role and the whitelist plate.</summary>
+        private void ApplyOwnIdentityBadges()
+        {
+            var discord = Platform.AccountSeed.Discord;
+            ApplyIdentityBadges(discord?.IsStaff == true, discord?.StaffRole, CoreAccount.IsWhitelisted);
+        }
+
+        /// <summary>WPF Browser.cs:2060: the settings tier (a Discord sign-in with a linked Patreon has one too);
+        /// a whitelisted account with tier 0 still gets the tier plate and the banner.</summary>
+        private void ApplyOwnPatreonPlates()
+        {
+            var tier = CoreSettings.Current.PatreonTier;
+            ApplyPatreonPlates(tier, tier >= 1 || CoreAccount.IsWhitelisted);
+        }
+
+        /// <summary>WPF Browser.cs:2063-2115 and :2264-2315: the tier badge by the level plates, the tier plate by the
+        /// name, and the tier art (Prime subject at tier 3, Pink filter below). A picture that will not load hides its plate.</summary>
+        internal void ApplyPatreonPlates(int tier, bool hasPatreon)
+        {
+            var badge = hasPatreon && tier > 0 ? PatreonBadgeArt(tier) : null;
+            ProfilePatreonBadge.Source = badge;
+            ProfilePatreonBadge.IsVisible = badge != null;
+
+            var plate = hasPatreon ? PatreonBadgeArt(tier > 0 ? tier : 1) : null;
+            ProfilePatreonTierBadge.Source = plate;
+            ProfilePatreonTierBadge.IsVisible = plate != null;
+
+            var art = hasPatreon ? PatreonArt(tier >= 3 ? "prime subject.webp" : "Pink filter.webp") : null;
+            ImgPatreonTierBanner.Source = art;
+            ProfilePatreonTierBanner.IsVisible = art != null;
+        }
+
+        /// <summary>WPF LoadPatreonBadgeImage: tiers 1 to 3, anything else draws tier 1.</summary>
+        internal static string PatreonBadgeFile(int tier) => tier is 2 or 3 ? $"Patreon tier{tier}.png" : "Patreon tier1.png";
+
+        private static global::Avalonia.Media.Imaging.Bitmap? PatreonBadgeArt(int tier) => PatreonArt(PatreonBadgeFile(tier));
+
+        /// <summary>Tier livery is commerce chrome a mod must not restyle (as Controls/TierBadge), so it reads the
+        /// shipped copy and never a mod override. Decoded once per file.</summary>
+        private static global::Avalonia.Media.Imaging.Bitmap? PatreonArt(string file)
+        {
+            if (PatreonArtCache.TryGetValue(file, out var cached)) return cached;
+            global::Avalonia.Media.Imaging.Bitmap? bmp = null;
+            try
+            {
+                var uri = new Uri($"avares://CCP.Avalonia/Resources/{Uri.EscapeDataString(file)}");
+                if (global::Avalonia.Platform.AssetLoader.Exists(uri))
+                {
+                    using var stream = global::Avalonia.Platform.AssetLoader.Open(uri);
+                    bmp = new global::Avalonia.Media.Imaging.Bitmap(stream);
+                }
+            }
+            catch (Exception ex) { Log.Warning("Patreon art {File} would not load: {E}", file, ex.Message); }
+            return PatreonArtCache[file] = bmp;
+        }
+
+        private static readonly Dictionary<string, global::Avalonia.Media.Imaging.Bitmap?> PatreonArtCache = new();
 
         /// <summary>WPF ApplyProfileIdentityBadges: the staff pill's border encodes the role.</summary>
         private void ApplyIdentityBadges(bool isStaff, string? staffRole, bool isWhitelisted)
@@ -279,11 +413,26 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             WhitelistBadge.IsVisible = isWhitelisted;
         }
 
-        /// <summary>WPF LoadProfileAchievementImages. No achievement art on this head, so each tile draws as its plate.</summary>
+        /// <summary>WPF RefreshProfileStatBadges: The Record's six plates each wear an achievement badge
+        /// (mod override first). Painted with every card, so a mod switch is picked up on the next one.</summary>
+        internal void RefreshProfileStatBadges()
+        {
+            foreach (var (file, name) in new[]
+                     {
+                         ("lv_10.png", "ImgStatXp"), ("pop_the_Thought.png", "ImgStatBubbles"), ("10_hours_pink.png", "ImgStatVideos"),
+                         ("retinal_burn.png", "ImgStatGifs"), ("total_lockdown.png", "ImgStatLockCards"), ("spiral_eyes.png", "ImgStatAchievements"),
+                     })
+                if (this.FindControl<Image>(name) is { } image && Helpers.ModArt.TryLoad($"achievements/{file}", 68) is { } art)
+                    image.Source = art;
+        }
+
+        /// <summary>WPF LoadProfileAchievementImages: each badge with its art (mod override first); a missing
+        /// picture leaves the bare plate.</summary>
         private void ShowAchievements(IEnumerable<string>? ids, string emptyText)
         {
             var tiles = ids?.Select(id => Achievement.All.Values.FirstOrDefault(a => a.Id == id)).OfType<Achievement>()
-                .Select(a => new ProfileAchievementTile(a.Id, CoreMods.MakeModAware(a.Name))).ToList();
+                .Select(a => new ProfileAchievementTile(a.Id, CoreMods.MakeModAware(a.Name),
+                    Helpers.ModArt.TryLoad($"achievements/{a.ImageName}", 116))).ToList();
             var any = tiles is { Count: > 0 };
             ProfileAchievementGrid.ItemsSource = any ? tiles : null;
             TxtNoAchievements.Text = emptyText;
@@ -343,14 +492,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             BtnChangeDisplayName.IsVisible = show;
             BtnDeleteProfile.IsVisible = show;
         }
-        private void BtnProfileDiscord_Click(object? sender, RoutedEventArgs e) { }
+        private void BtnProfileDiscord_Click(object? sender, RoutedEventArgs e) => OpenDiscordDm(sender);
 
         private void BtnProfileSearch_Click(object? sender, RoutedEventArgs e) => _ = SearchAsync(TxtProfileSearch.Text);
         private void BtnViewMyProfile_Click(object? sender, RoutedEventArgs e) => _ = ViewMyProfileAsync();
 
         /// <summary>The link-notice button reuses the Privacy panel's login/link flow verbatim on
         /// WPF — that handler drives BtnDiscordTabLogin on the long-lived panel instance.</summary>
-        private void BtnDiscordTabLogin_Click(object? sender, RoutedEventArgs e) { }
+        private void BtnDiscordTabLogin_Click(object? sender, RoutedEventArgs e) => _ = DiscordTabLoginAsync(sender);
 
         /// <summary>Opens the relocated sharing controls, exactly as the WPF handler does
         /// (<c>mw.OpenProfilePrivacyDialog()</c>). The dialog borrows <see cref="PrivacyPanel"/>,
@@ -364,8 +513,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         /// <summary>The hero's Share Profile CTA. Same door as the header account menu's
         /// "Public profile" row — MainWindow owns the URL and the launcher.</summary>
-        private void BtnProfileShare_Click(object? sender, RoutedEventArgs e) =>
-            (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.OpenPublicProfilePage();
+        private void BtnProfileShare_Click(object? sender, RoutedEventArgs e) => OpenPublicProfilePage();
 
         private void TxtProfileSearch_KeyDown(object? sender, KeyEventArgs e)
         {
@@ -374,13 +522,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         /// <summary>The Trainer Card's spiral plate. Opens the expanded map window — the same door
         /// the nav rail's miniature uses (MainWindow.ProfileSpiral.cs).</summary>
-        private void ProfileSpiralPlate_Click(object? sender, PointerReleasedEventArgs e) { }
+        private void ProfileSpiralPlate_Click(object? sender, PointerReleasedEventArgs e) => Host?.OpenSpiralMapFromProfile();
 
         /// <summary>Left-click on a badge pins or unpins it (own card only). The tile is reached
         /// through the sender's DataContext exactly as the WPF handler reads it.</summary>
         private void ProfileAchievementTile_Click(object? sender, PointerReleasedEventArgs e)
         {
-            if (sender is Control { DataContext: ProfileAchievementTile }) { /* mw.ToggleOwnAchievementPin(tile.Id) */ }
+            if (sender is Control { DataContext: ProfileAchievementTile tile }) Host?.ToggleOwnAchievementPin(tile.Id);
         }
     }
 

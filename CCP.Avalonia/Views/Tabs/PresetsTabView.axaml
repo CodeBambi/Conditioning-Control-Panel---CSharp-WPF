@@ -512,10 +512,8 @@
                 </Border>
 
                 <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                    <TextBlock Text="{loc:Str sd_page_title}" Foreground="{DynamicResource TextLightBrush}"
-                               FontSize="16.5" FontWeight="Bold"/>
-                    <TextBlock Text="{loc:Str sd_page_sub}" Foreground="{DynamicResource TextMutedBrush}"
-                               FontSize="11.5" Margin="0,3,0,0" TextWrapping="Wrap"/>
+                    <TextBlock Theme="{StaticResource Type.PageTitle}" Text="{loc:Str sd_page_title}"/>
+                    <TextBlock Theme="{StaticResource Type.PageSubtitle}" Text="{loc:Str sd_page_sub}" Margin="0,3,0,0" TextWrapping="Wrap"/>
                 </StackPanel>
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
@@ -826,29 +824,29 @@
                             <TextBlock x:Name="TxtDetailFlashLabel"
                                        Theme="{StaticResource SdDetailLabel}" Text="{loc:Str section_flash_images}"/>
                             <TextBlock x:Name="TxtDetailFlash"
-                                       Theme="{StaticResource SdDetailValue}" Text="—"/>
+                                       Theme="{StaticResource SdDetailValue}" Text="-"/>
 
                             <TextBlock x:Name="TxtDetailVideoLabel"
                                        Theme="{StaticResource SdDetailLabel}" Text="{loc:Str label_mandatory_videos}"/>
                             <TextBlock x:Name="TxtDetailVideo"
-                                       Theme="{StaticResource SdDetailValue}" Text="—"/>
+                                       Theme="{StaticResource SdDetailValue}" Text="-"/>
 
                             <TextBlock x:Name="TxtDetailSubLabel"
                                        Theme="{StaticResource SdDetailLabel}" Text="{loc:Str section_subliminals_2}"/>
                             <TextBlock x:Name="TxtDetailSubliminal"
-                                       Theme="{StaticResource SdDetailValue}" Text="—"/>
+                                       Theme="{StaticResource SdDetailValue}" Text="-"/>
 
                             <TextBlock Theme="{StaticResource SdDetailLabel}" Text="{loc:Str section_audio}"/>
                             <TextBlock x:Name="TxtDetailAudio"
-                                       Theme="{StaticResource SdDetailValue}" Text="—"/>
+                                       Theme="{StaticResource SdDetailValue}" Text="-"/>
 
                             <TextBlock Theme="{StaticResource SdDetailLabel}" Text="{loc:Str label_overlays}"/>
                             <TextBlock x:Name="TxtDetailOverlays"
-                                       Theme="{StaticResource SdDetailValue}" Text="—"/>
+                                       Theme="{StaticResource SdDetailValue}" Text="-"/>
 
                             <TextBlock Theme="{StaticResource SdDetailLabel}" Text="{loc:Str label_advanced}"/>
                             <TextBlock x:Name="TxtDetailAdvanced"
-                                       Theme="{StaticResource SdDetailValue}" Text="—"/>
+                                       Theme="{StaticResource SdDetailValue}" Text="-"/>
                         </StackPanel>
                     </ScrollViewer>
 
@@ -1018,28 +1016,28 @@
                                 <TextBlock x:Name="TxtSessionFlashLabel"
                                            Theme="{StaticResource SdDetailLabel}" Text="{loc:Str section_flash_images}"/>
                                 <TextBlock x:Name="TxtSessionFlash"
-                                           Theme="{StaticResource SdDetailValue}" Text="—"/>
+                                           Theme="{StaticResource SdDetailValue}" Text="-"/>
 
                                 <TextBlock x:Name="TxtSessionSubLabel"
                                            Theme="{StaticResource SdDetailLabel}" Text="{loc:Str section_subliminals_2}"/>
                                 <TextBlock x:Name="TxtSessionSubliminal"
-                                           Theme="{StaticResource SdDetailValue}" Text="—"/>
+                                           Theme="{StaticResource SdDetailValue}" Text="-"/>
 
                                 <TextBlock Theme="{StaticResource SdDetailLabel}" Text="{loc:Str section_audio}"/>
                                 <TextBlock x:Name="TxtSessionAudio"
-                                           Theme="{StaticResource SdDetailValue}" Text="—"/>
+                                           Theme="{StaticResource SdDetailValue}" Text="-"/>
 
                                 <TextBlock Theme="{StaticResource SdDetailLabel}" Text="{loc:Str label_overlays}"/>
                                 <TextBlock x:Name="TxtSessionOverlays"
-                                           Theme="{StaticResource SdDetailValue}" Text="—"/>
+                                           Theme="{StaticResource SdDetailValue}" Text="-"/>
 
                                 <TextBlock Theme="{StaticResource SdDetailLabel}" Text="{loc:Str label_extras}"/>
                                 <TextBlock x:Name="TxtSessionExtras"
-                                           Theme="{StaticResource SdDetailValue}" Text="—"/>
+                                           Theme="{StaticResource SdDetailValue}" Text="-"/>
 
                                 <TextBlock Theme="{StaticResource SdDetailLabel}" Text="{loc:Str label_timeline}"/>
                                 <TextBlock x:Name="TxtSessionTimeline"
-                                           Theme="{StaticResource SdDetailValue}" Text="—"/>
+                                           Theme="{StaticResource SdDetailValue}" Text="-"/>
                             </StackPanel>
                         </StackPanel>
                     </ScrollViewer>

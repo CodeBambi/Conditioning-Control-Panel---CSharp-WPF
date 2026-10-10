@@ -39,7 +39,10 @@
          hero's viewmodel, so there is one title and not two.
          ================================================================ -->
 
-    <Grid>
+    <!-- WPF 7.1.5: v2 is on for everyone (owner, 2026-09-24). The code-behind collapses the room
+         and adds the ConversationPage (Companion > Chat) to PageHost; the room stays in the tree,
+         hidden, as the owner of the zones the Companion section pages adopt. -->
+    <Grid x:Name="PageHost">
         <cmp:CompanionRoomView x:Name="Room"
                                AutomationProperties.AutomationId="CompanionTabRoom"/>
 

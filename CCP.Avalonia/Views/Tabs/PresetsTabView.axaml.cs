@@ -85,7 +85,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             AddHandler(DragDrop.DropEvent, Tab_Drop);
             _startSessionLabel = BtnStartSession.Content;
             BtnStartSession.Click += (_, _) =>
+            {
+                // WPF MainWindow.Presets.cs:1586: the corner GIF picks ride the session as it starts. Never
+                // while one runs: the button is Stop then, and the live edits have their own path.
+                if (App.Sessions?.IsRunning != true) ApplyCornerGifPicks(_selectedSession);
                 (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.BtnStartSession_Click(_selectedSession);
+            };
+            WireCornerGifOption();
             TxtDetailTitle.Text = Loc.Get("label_select_a_preset");
             TxtDetailSubtitle.Text = Loc.Get("label_click_on_a_preset_or_session_to_see_details");
             TxtSessionDuration.Text = Loc.Get("label_30_minutes");
@@ -99,11 +105,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             base.OnAttachedToVisualTree(e);
             LocalizationManager.Instance.LanguageChanged += OnLanguageChanged;
             RefreshLocalizedDetails();
+            HookTakeaway();   // PresetsTabView.Takeaway.cs
+            RefreshTakeawayShelf();
         }
 
         protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
         {
             LocalizationManager.Instance.LanguageChanged -= OnLanguageChanged;
+            UnhookTakeaway();
             base.OnDetachedFromVisualTree(e);
         }
 
@@ -371,17 +380,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             TxtDetailTitle.Text = CoreMods.MakeModAware(preset.Name);
             TxtDetailSubtitle.Text = CoreMods.MakeModAware(preset.Description);
             TxtDetailFlash.Text = preset.FlashEnabled
-                ? $"Enabled | {preset.FlashFrequency}/hr | ×{preset.SimultaneousImages} | Opacity: {preset.FlashOpacity}%"
-                : "Disabled";
+                ? Loc.GetF("preset_detail_flash", preset.FlashFrequency, preset.SimultaneousImages, preset.FlashOpacity)
+                : Loc.Get("preset_detail_disabled");
             TxtDetailVideo.Text = preset.MandatoryVideosEnabled
-                ? $"Enabled | {preset.VideosPerHour}/hr | Strict: {(preset.StrictLockEnabled ? "Yes" : "No")}"
-                : "Disabled";
+                ? Loc.GetF("preset_detail_video", preset.VideosPerHour, (preset.StrictLockEnabled ? Loc.Get("btn_yes") : Loc.Get("btn_no")))
+                : Loc.Get("preset_detail_disabled");
             TxtDetailSubliminal.Text = preset.SubliminalEnabled
-                ? $"Enabled | {preset.SubliminalFrequency}/min | Opacity: {preset.SubliminalOpacity}%"
-                : "Disabled";
-            TxtDetailAudio.Text = $"Whispers: {(preset.SubAudioEnabled ? $"Yes ({preset.SubAudioVolume}%)" : "No")} | Master: {preset.MasterVolume}%";
-            TxtDetailOverlays.Text = $"Spiral: {(preset.SpiralEnabled ? "Yes" : "No")} | Pink: {(preset.PinkFilterEnabled ? "Yes" : "No")}";
-            TxtDetailAdvanced.Text = $"Bubbles: {(preset.BubblesEnabled ? "Yes" : "No")} | Lock Card: {(preset.LockCardEnabled ? "Yes" : "No")}";
+                ? Loc.GetF("preset_detail_subliminal", preset.SubliminalFrequency, preset.SubliminalOpacity)
+                : Loc.Get("preset_detail_disabled");
+            TxtDetailAudio.Text = Loc.GetF("preset_detail_audio", preset.SubAudioEnabled ? Loc.GetF("preset_detail_yes_pct", preset.SubAudioVolume) : Loc.Get("btn_no"), preset.MasterVolume);
+            TxtDetailOverlays.Text = Loc.GetF("preset_detail_overlays", (preset.SpiralEnabled ? Loc.Get("btn_yes") : Loc.Get("btn_no")), (preset.PinkFilterEnabled ? Loc.Get("btn_yes") : Loc.Get("btn_no")));
+            TxtDetailAdvanced.Text = Loc.GetF("preset_detail_advanced", (preset.BubblesEnabled ? Loc.Get("btn_yes") : Loc.Get("btn_no")), (preset.LockCardEnabled ? Loc.Get("btn_yes") : Loc.Get("btn_no")));
 
             BtnLoadPreset.IsEnabled = true;
             BtnSaveOverPreset.IsEnabled = !preset.IsDefault;
@@ -1039,10 +1048,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             BtnExportSession.IsEnabled = true;   // WPF SessionIO.cs:973
             SessionSpoilerPanel.IsVisible = false;
             SetRevealLabel("btn_reveal_details");
-            // ponytail: WPF shows it when session.HasCornerGifOption. The standalone overlay exists
-            // (CornerGifOverlay) but SessionRunner has no session-scoped corner GIF (WPF SessionEngine's
-            // start/end minute, admission and handback), so the option would promise a picture that never appears.
-            CornerGifOptionPanel.IsVisible = false;
+            ShowCornerGifOption(session);   // WPF MainWindow.Presets.cs:527 (PresetsTabView.CornerGif.cs)
 
             // WPF MainWindow.SessionIO.cs:927-972 (SelectSession).
             TxtDetailTitle.Text = $"{(string.IsNullOrWhiteSpace(session.Icon) ? "🎬" : session.Icon)} {SessionName(session)}";
@@ -1050,7 +1056,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             TxtSessionDuration.Text = Loc.GetF("label_0_minutes", session.DurationMinutes);
             var multiplier = SessionXp.Multiplier(CoreSettings.Current?.PlayerLevel ?? 1);
             var xp = Loc.GetF("rack_xp", (int)Math.Round(session.BonusXP * multiplier));
-            TxtSessionXP.Text = multiplier > 1.0 ? $"{xp} ({multiplier:F1}x)" : xp;
+            TxtSessionXP.Text = multiplier > 1.0 ? $"{xp} ({multiplier.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)}x)" : xp;
             TxtSessionXP.Foreground = new SolidColorBrush(session.Difficulty switch
             {
                 SessionDifficulty.Medium => Color.FromRgb(255, 215, 0),
@@ -1363,6 +1369,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             TxtTakeawayCount.Text = "";
             TakeawayShelf.IsVisible = false;
             TxtTakeawayEmpty.IsVisible = true;
+            RefreshTakeawayShelf();   // the drawer answers later; signed out it is the same empty state
         }
 
         // ---- shared shapes (MakeRackPill / MakeRackMeta) ---------------------------

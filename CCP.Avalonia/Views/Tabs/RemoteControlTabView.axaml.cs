@@ -61,8 +61,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             RefreshTierCardHighlight();
         }
 
-        /// <summary>The one relay client (WPF App.RemoteControl). Commands run through Core's gate and table.</summary>
-        internal static readonly Lazy<RemoteRelay> Relay = new(() => new RemoteRelay(
+        /// <summary>The one relay client (WPF App.RemoteControl). Commands run through Core's gate and table.
+        /// Tests swap in a fake-relay client before opening the shell.</summary>
+        internal static Lazy<RemoteRelay> Relay = new(() => new RemoteRelay(
             () => CoreSettings.Current.AuthToken, () => CoreAccount.UnifiedUserId, CoreReleaseContent.AppVersion,
             RemoteCommands.Execute, RemoteCommands.StopEffects));
 
@@ -80,34 +81,34 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         private string SelectedTier => CmbRemoteTier.SelectedIndex switch { 1 => "standard", 2 => "full", _ => "light" };
 
-        /// <summary>WPF ShowRemoteControlWaiver, minus "Disable panic button": on this head a controller cannot
-        /// (RemoteCommandGate), so the waiver does not ask the subject to agree to it.</summary>
+        /// <summary>WPF 7.1.5 ShowRemoteControlWaiver, word for word: no strict lock or panic-off line on any tier
+        /// (the server refuses both since Remote v2), and the panic sentence says so.</summary>
         internal static string Waiver(string tier)
         {
             var a = new System.Text.StringBuilder();
-            a.AppendLine("  - Trigger flash images (from YOUR image folder)");
-            a.AppendLine("  - Trigger subliminal messages (from YOUR subliminal pool)");
-            a.AppendLine("  - Toggle overlays (pink filter, spiral)");
-            a.AppendLine("  - Start/stop bubbles");
+            void Line(string key) => a.AppendLine("  - " + Loc.Get(key));
+            Line("remote_waiver_flash");
+            Line("remote_waiver_subliminal");
+            Line("remote_waiver_overlays");
+            Line("remote_waiver_bubbles");
             if (tier is "standard" or "full")
             {
-                a.AppendLine("  - Trigger mandatory videos (from YOUR video folder)");
-                a.AppendLine("  - Trigger haptic device patterns");
-                a.AppendLine("  - Duck/unduck audio");
+                Line("remote_waiver_videos");
+                Line("remote_waiver_haptics");
+                Line("remote_waiver_audio");
             }
             if (tier == "full")
             {
-                a.AppendLine("  - Start/stop autonomy mode");
-                a.AppendLine("  - Start/pause/stop sessions");
-                a.AppendLine("  - Enable strict lock (videos cannot be skipped)");
+                Line("remote_waiver_autonomy");
+                Line("remote_waiver_sessions");
             }
-            return "You are about to allow another person to remotely control parts of your app.\n\n" +
-                   $"The Controller will be able to:\n{a}\n" +
-                   "All media content shown comes from YOUR local files and settings.\n" +
-                   "You assume full responsibility for this interaction.\n" +
-                   "You can stop the session at ANY time by clicking \"Stop Session\" or closing the app.\n" +
-                   "A controller can never turn your panic key off.\n" +
-                   "The session stays active as long as the app is running. If the app closes without stopping the session, it expires within 4 hours.";
+            return Loc.Get("remote_waiver_intro") + "\n\n" +
+                   $"{Loc.Get("remote_waiver_can")}\n{a}\n" +
+                   Loc.Get("remote_waiver_panic") + "\n" +
+                   Loc.Get("remote_waiver_media") + "\n" +
+                   Loc.Get("remote_waiver_responsibility") + "\n" +
+                   Loc.Get("remote_waiver_stop") + "\n" +
+                   Loc.Get("remote_waiver_expiry");
         }
 
         /// <summary>WPF MainWindow.RemoteControl.cs:35: premium gate, then login, then the double waiver, then start.
@@ -127,7 +128,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 return;
             }
             var tier = SelectedTier;
-            if (!await WarningDialog.ShowDoubleWarningAsync(owner, "Remote Control", Waiver(tier))) { SetChecked(false); return; }
+            if (!await WarningDialog.ShowDoubleWarningAsync(owner, Loc.Get("tab_remote_control"), Waiver(tier))) { SetChecked(false); return; }
             await StartAsync(owner, tier);
         }
 
@@ -145,6 +146,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 return;
             }
             ShowSession(code);
+            _ = RunOptInChainAsync();
         }
 
         /// <summary>The session panels on (a code) or off (null): WPF's enable path and StopRemoteControl/OnRemoteSessionEnded.</summary>
@@ -154,7 +156,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             if (!on) SetChecked(false);
             TxtRemoteCode.Text = on ? string.Join(" ", code!.ToCharArray()) : "- - - - - - - -";
             var pin = on ? Relay.Value.ConnectPin : null;
-            TxtRemotePin.Text = string.IsNullOrEmpty(pin) ? "" : $"PIN: {pin}";
+            TxtRemotePin.Text = string.IsNullOrEmpty(pin) ? "" : Loc.GetF("remote_overlay_pin", pin);
             TxtRemotePin.IsVisible = !string.IsNullOrEmpty(pin);
             RemoteControlPanel.IsVisible = RemoteLinkPanel.IsVisible = RemoteCodePanel.IsVisible = BtnStopRemote.IsVisible = on;
             // SP5: the opt-in section stays visible but greyed while a session runs.
@@ -162,6 +164,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             OptInSectionPanel.Opacity = on ? 0.5 : 1.0;
             if (!on) { ChkOptIntoDirectory.IsChecked = false; OptInFormPanel.IsVisible = false; _log.Clear(); }
             UpdateRemoteStatus(false, idle: !on);
+            UpdateDirectoryListingStatus();
             ImgRemoteQrCode.Source = on ? QrCode(RemoteRelay.PairingUrl(code!, pin)) : null;
         }
 
@@ -186,6 +189,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             RemoteStatusDot.Fill = idle ? Grey : connected ? Green : Orange;
             BindKey(TxtRemoteStatus, idle ? "label_remote_idle" : connected ? "label_controller_connected" : "label_waiting_for_controller");
             TxtRemoteStatus.Foreground = connected ? Green : Grey;
+            // WPF UpdateDirectoryListingStatus: the title bar pill follows the session (hidden with none).
+            (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.UpdateDirectoryListingStatus(!idle, Relay.Value.DirectoryOptedIn, connected);
         }
 
         /// <summary>WPF AppendRemoteCommandLog: newest first, 50 entries, quiet verbs skipped.</summary>
@@ -212,7 +217,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             RefreshTierCardHighlight();
             var r = Relay.Value;
             if (_isLoading || !r.IsActive || SelectedTier == r.Tier || TopLevel.GetTopLevel(this) is not Window owner) return;
-            if (!await WarningDialog.ShowDoubleWarningAsync(owner, "Remote Control", Waiver(SelectedTier))) return;
+            if (!await WarningDialog.ShowDoubleWarningAsync(owner, Loc.Get("tab_remote_control"), Waiver(SelectedTier))) return;
             await r.StopAsync();
             SetChecked(true);
             await StartAsync(owner, SelectedTier);
@@ -234,7 +239,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         {
             var r = Relay.Value;
             if (string.IsNullOrEmpty(r.SessionCode)) return;
-            await Copy(BtnCopyRemoteCode, string.IsNullOrEmpty(r.ConnectPin) ? r.SessionCode : $"{r.SessionCode} (PIN: {r.ConnectPin})", "btn_copy");
+            await Copy(BtnCopyRemoteCode, string.IsNullOrEmpty(r.ConnectPin) ? r.SessionCode : $"{r.SessionCode} ({Loc.GetF("remote_overlay_pin", r.ConnectPin)})", "btn_copy");
         }
 
         private async void BtnCopyRemoteLink_Click(object? sender, RoutedEventArgs e)
@@ -276,7 +281,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             await Relay.Value.PushStatusNowAsync();
         }
 
-        // View half of MainWindow.RemoteControl.cs:647 - reveal the opt-in form, then pre-populate.
+        // ---- Directory opt-in: WPF MainWindow.RemoteControl.cs:513-735 ----
+        // The opt-in tick never persists (re-opt every session). Tags and the status line persist only
+        // when "Remember" is ticked at the moment the listing succeeds.
+        internal const int OptInMaxTags = 5;
+
+        private CheckBox[] OptInTagCheckBoxes() => new[]
+        {
+            ChkTagBimbo, ChkTagDrone, ChkTagTrance, ChkTagFeminization, ChkTagSubmission,
+            ChkTagDegradation, ChkTagAudioOk, ChkTagSoftOnly, ChkTagLockdownOk, ChkTagChastity,
+        };
+
         private void ChkOptIntoDirectory_Changed(object? sender, RoutedEventArgs e)
         {
             var checkedNow = ChkOptIntoDirectory.IsChecked == true;
@@ -284,32 +299,186 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             if (checkedNow) PopulateOptInFormFromSavedSettings();
         }
 
-        // Mirrors MainWindow.RemoteControl.cs:660. SavedDirectoryTags is on AppSettings, in Core.
         private void PopulateOptInFormFromSavedSettings()
         {
-            var saved = CoreSettings.Current.SavedDirectoryTags;
-            if (saved == null) return;
-            foreach (var cb in new[]
+            var s = CoreSettings.Current;
+            var saved = new System.Collections.Generic.HashSet<string>(s.SavedDirectoryTags ?? new System.Collections.Generic.List<string>());
+            foreach (var cb in OptInTagCheckBoxes()) cb.IsChecked = cb.Tag is string tag && saved.Contains(tag);
+            TxtOptInStatus.Text = s.SavedDirectoryStatusText ?? "";
+            UpdateOptInStatusCharCount();
+            ChkRememberOptInDetails.IsChecked = s.RememberDirectoryDetails;
+        }
+
+        private void TxtOptInStatus_TextChanged(object? sender, TextChangedEventArgs e) => UpdateOptInStatusCharCount();
+
+        private void UpdateOptInStatusCharCount()
+        {
+            if (TxtOptInStatusCount != null && TxtOptInStatus != null) TxtOptInStatusCount.Text = $"{(TxtOptInStatus.Text ?? "").Length}/80";
+        }
+
+        /// <summary>Soft cap of five tags: the sixth tick is undone and says why for 2.5 s.</summary>
+        private void ChkOptInTag_Click(object? sender, RoutedEventArgs e)
+        {
+            if (sender is not CheckBox { IsChecked: true } cb) return;
+            if (System.Linq.Enumerable.Count(OptInTagCheckBoxes(), c => c.IsChecked == true) <= OptInMaxTags) return;
+            cb.IsChecked = false;
+            ShowOptInFeedback(Loc.Get("msg_optin_directory_max_tags"), 2500);
+        }
+
+        private System.Collections.Generic.List<string> GetSelectedDirectoryTags()
+        {
+            var list = new System.Collections.Generic.List<string>();
+            foreach (var cb in OptInTagCheckBoxes())
+                if (cb.IsChecked == true && cb.Tag is string tag && tag.Length > 0) list.Add(tag);
+            return list;
+        }
+
+        private DispatcherTimer? _optInFeedbackTimer;
+        private void ShowOptInFeedback(string message, int persistMs)
+        {
+            TxtOptInFeedback.Text = message;
+            TxtOptInFeedback.IsVisible = true;
+            _optInFeedbackTimer?.Stop();
+            _optInFeedbackTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(persistMs) };
+            _optInFeedbackTimer.Tick += (_, _) =>
             {
-                ChkTagBimbo, ChkTagDrone, ChkTagTrance, ChkTagFeminization, ChkTagSubmission,
-                ChkTagDegradation, ChkTagAudioOk, ChkTagSoftOnly, ChkTagLockdownOk, ChkTagChastity,
-            })
+                _optInFeedbackTimer?.Stop();
+                TxtOptInFeedback.Text = "";
+                TxtOptInFeedback.IsVisible = false;
+            };
+            _optInFeedbackTimer.Start();
+        }
+
+        /// <summary>WPF RunOptInChainAsync: after a session starts, list it if the box is ticked. Best-effort,
+        /// the session is already running; a failure is one inline line for 4 s.</summary>
+        internal async Task RunOptInChainAsync()
+        {
+            if (ChkOptIntoDirectory.IsChecked != true) return;
+            var tags = GetSelectedDirectoryTags();
+            var statusText = TxtOptInStatus.Text ?? "";
+            if (tags.Count > OptInMaxTags) tags = tags.GetRange(0, OptInMaxTags);
+            if (statusText.Length > 80) statusText = statusText.Substring(0, 80);
+            var remember = ChkRememberOptInDetails.IsChecked == true;
+
+            if (!await Relay.Value.OptInToDirectoryAsync(tags, statusText))
             {
-                cb.IsChecked = cb.Tag is string tag && saved.Contains(tag);
+                ShowOptInFeedback(Loc.Get("msg_optin_directory_failed"), 4000);
+                return;
+            }
+            UpdateDirectoryListingStatus();
+
+            var s = CoreSettings.Current;
+            if (remember)
+            {
+                s.RememberDirectoryDetails = true;
+                s.SavedDirectoryTags = tags;
+                s.SavedDirectoryStatusText = statusText;
+                CoreSettings.Save();
+            }
+            else if (s.RememberDirectoryDetails)
+            {
+                // Remember was on, now off: the saved details go.
+                s.RememberDirectoryDetails = false;
+                s.SavedDirectoryTags = new System.Collections.Generic.List<string>();
+                s.SavedDirectoryStatusText = "";
+                CoreSettings.Save();
             }
         }
 
-        // ponytail: emotes (Core RemoteRelay has no /v2/remote/emote yet) and the directory opt-in chain
-        // (/v2/directory/opt-in) are not ported; the opt-in form stays a local form that publishes nothing.
-        private void BtnEditEmoteCancel_Click(object? sender, RoutedEventArgs e) { }
-        private void BtnEditEmoteSave_Click(object? sender, RoutedEventArgs e) { }
-        private void BtnEmoteCustomSend_Click(object? sender, RoutedEventArgs e) { }
-        private void BtnEmoteEdit_Click(object? sender, RoutedEventArgs e) { }
-        private void BtnEmotePreset_Click(object? sender, RoutedEventArgs e) { }
+        /// <summary>WPF UpdateDirectoryListingStatus, tab half: the "you're listed" banner under the code.
+        /// SEAM(s1): the title-bar pill (Private only / Listed / Claimed) reads Relay.Value.DirectoryOptedIn.</summary>
+        private void UpdateDirectoryListingStatus()
+        {
+            var r = Relay.Value;
+            ListedConfirmationPanel.IsVisible = r.IsActive && r.DirectoryOptedIn;
+        }
+
+        // ---- Emotes: WPF MainWindow.RemoteControl.cs:325-480. The shell's big picker shares these. ----
+        private Models.EmotePreset? _editingPreset;
+        private static readonly IBrush Sent = Brushes.LightGreen, Failed = Brushes.Salmon;
+
+        private async void BtnEmotePreset_Click(object? sender, RoutedEventArgs e)
+        {
+            if (sender is Button { Tag: Models.EmotePreset p } && !string.IsNullOrWhiteSpace(p.Text))
+                await SendEmoteAndReportAsync(p.Text, p.Icon ?? "", "preset", TxtEmoteStatus);
+        }
+
+        private async void BtnEmoteCustomSend_Click(object? sender, RoutedEventArgs e) => await SendCustomEmoteAsync(TxtEmoteCustom, TxtEmoteStatus);
+
+        private async void TxtEmoteCustom_KeyDown(object? sender, KeyEventArgs e)
+        {
+            if (e.Key != Key.Enter) return;
+            e.Handled = true;
+            await SendCustomEmoteAsync(TxtEmoteCustom, TxtEmoteStatus);
+        }
+
+        /// <summary>WPF SendCustomEmoteAsync: empty is a silent no-op; a sent text clears the box and becomes its ghost.</summary>
+        internal static async Task SendCustomEmoteAsync(TextBox box, TextBlock status)
+        {
+            var trimmed = (box.Text ?? "").Trim();
+            if (trimmed.Length == 0) return;
+            if (!await SendEmoteAndReportAsync(trimmed, "", "custom", status)) return;
+            box.Text = "";
+            box.Watermark = trimmed;   // WPF EmoteHelper.SetLastSentEmoteHint
+        }
+
+        /// <summary>The avatar's emote bubble (WPF App.AvatarWindow?.ShowEmoteFeedback); the shell sets it.</summary>
+        internal static Action<string, bool>? EmoteFeedback;
+
+        private static void ShowEmoteFeedback(string text, bool pending)
+        {
+            try { EmoteFeedback?.Invoke(text, pending); }
+            catch (Exception ex) { Serilog.Log.Warning(ex, "[Avatar] ShowEmoteFeedback failed"); }
+        }
+
+        /// <summary>WPF SendEmoteAndReportAsync: "Sent" green, debounce silent, else the salmon reason.</summary>
+        internal static async Task<bool> SendEmoteAndReportAsync(string text, string icon, string kind, TextBlock? status)
+        {
+            // WPF step 3.6: the avatar's bubble says "Sending..." at once, whichever surface fired, unless the
+            // send would bounce straight away (no session, or inside the debounce window), then "Sent: ...".
+            var relay = Relay.Value;
+            if (relay.IsActive && !relay.IsWithinDebounceWindow) ShowEmoteFeedback(text, true);
+            var (ok, error, retry) = await relay.SendEmoteAsync(text, icon, kind);
+            if (ok) ShowEmoteFeedback(text, false);
+            if (error == "debounced" || status == null) return ok;
+            status.Foreground = ok ? Sent : Failed;
+            status.Text = ok ? Loc.Get("status_emote_sent")
+                : error == "rate_limited" && retry.HasValue ? Loc.GetF("status_emote_rate_limited", retry.Value)
+                : error == "session not active" ? Loc.Get("status_emote_no_session")
+                : Loc.Get("status_emote_failed");
+            return ok;
+        }
+
+        private void BtnEmoteEdit_Click(object? sender, RoutedEventArgs e)
+        {
+            if (sender is not Button { Tag: Models.EmotePreset p } btn) return;
+            _editingPreset = p;
+            TxtEditEmoteIcon.Text = p.Icon ?? "";
+            TxtEditEmoteText.Text = p.Text ?? "";
+            BtnEditEmoteSave.IsEnabled = !string.IsNullOrWhiteSpace(p.Text);
+            EmoteEditPopup.PlacementTarget = btn;
+            EmoteEditPopup.IsOpen = true;
+            TxtEditEmoteText.Focus();
+        }
+
+        private void TxtEditEmoteText_TextChanged(object? sender, TextChangedEventArgs e)
+        {
+            if (BtnEditEmoteSave != null) BtnEditEmoteSave.IsEnabled = !string.IsNullOrWhiteSpace(TxtEditEmoteText.Text);
+        }
+
+        private void BtnEditEmoteSave_Click(object? sender, RoutedEventArgs e)
+        {
+            var text = (TxtEditEmoteText.Text ?? "").Trim();
+            if (_editingPreset == null || text.Length == 0) return;
+            _editingPreset.Icon = TxtEditEmoteIcon.Text ?? "";
+            _editingPreset.Text = text;
+            CoreSettings.Save();
+            EmoteEditPopup.IsOpen = false;
+            _editingPreset = null;
+        }
+
+        private void BtnEditEmoteCancel_Click(object? sender, RoutedEventArgs e) { EmoteEditPopup.IsOpen = false; _editingPreset = null; }
+
         private void BtnGateUnlock_Click(object? sender, RoutedEventArgs e) => (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.BtnGateUnlock_Click(sender, e);
-        private void ChkOptInTag_Click(object? sender, RoutedEventArgs e) { }
-        private void TxtEditEmoteText_TextChanged(object? sender, TextChangedEventArgs e) { }
-        private void TxtEmoteCustom_KeyDown(object? sender, KeyEventArgs e) { }
-        private void TxtOptInStatus_TextChanged(object? sender, TextChangedEventArgs e) { }
     }
 }

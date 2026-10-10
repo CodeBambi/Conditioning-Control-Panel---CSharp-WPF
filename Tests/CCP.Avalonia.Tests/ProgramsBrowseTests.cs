@@ -37,10 +37,22 @@ public sealed class ProgramsBrowseTests
             EnsureAvalonia();
             Window? host = null;
             var previousLanguage = LocalizationManager.Instance.CurrentLanguage;
+            Func<ProgramTask, bool>? previousGate = null;
             try
             {
+                // The parity trunk raises keyword triggers and takes rituals, so every built-in
+                // program is enrollable; switch rituals off to see a refused card render.
+                // App startup seeds the gate; a headless test app never runs that, so seed it here.
+                previousGate = CoreProgram.TaskAvailableProvider;
+                CoreProgram.TaskAvailableProvider = global::ConditioningControlPanel.Avalonia.Platform.ProgramCapabilities.IsAvailable;
+                global::ConditioningControlPanel.Avalonia.Platform.ProgramCapabilities.RitualsAvailable = false;
                 LocalizationManager.Instance.SetLanguage("en");
+                // One free program with a required ritual: on screen, and never behind a Premium lock.
+                var ritual = BuiltInPrograms.All().First(p =>
+                    p.AllDays.SelectMany(d => d.Tasks).Any(t => t.Kind == ProgramTaskKind.Ritual && !t.Optional));
+                ritual.Tier = ProgramTier.Free;
                 var view = new ProgramsTabView { Width = 1200, Height = 900 };
+                view.UseProgramLibrary(new[] { ritual });
                 host = new Window { Width = 1200, Height = 900, Content = view };
                 host.Show();
                 Dispatcher.UIThread.RunJobs();
@@ -48,11 +60,13 @@ public sealed class ProgramsBrowseTests
 
                 var texts = view.FindControl<ListBox>("ProgramLibraryList")!
                     .GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text ?? "").ToArray();
-                Assert.Contains("Not available on this build yet: needs Keyword Triggers.", texts);
+                Assert.Contains("Not available on this build yet: needs Rituals.", texts);
                 Assert.DoesNotContain(texts, t => t.Contains("programs_needs_feature"));
             }
             finally
             {
+                global::ConditioningControlPanel.Avalonia.Platform.ProgramCapabilities.RitualsAvailable = true;
+                CoreProgram.TaskAvailableProvider = previousGate;
                 LocalizationManager.Instance.SetLanguage(previousLanguage);
                 host?.Close();
                 Dispatcher.UIThread.RunJobs();
@@ -121,11 +135,10 @@ public sealed class ProgramsBrowseTests
                 Assert.Equal(definitions.Select(program => program.Id), rows.Select(row => row.ProgramId));
                 Assert.Equal(definitions.Select(program => program.Title), rows.Select(row => row.Title));
                 Assert.All(rows, row => Assert.False(row.IsActionEnabled));
-                // Nothing can be started here, so no card may blame a missing pledge. A program this
-                // head can never finish names what it needs instead (programs-3a decision).
+                // No ProgramService (App.Programs null in tests): a free card says it cannot start;
+                // a locked premium card carries WPF's pledge hint (BuildProgramBrowseList, progression#1).
                 var unavailable = Loc.Get("programs_unavailable");
-                Assert.All(rows, row => Assert.Equal(ExpectedReason(row.Definition), row.ReasonText));
-                Assert.Equal(unavailable, rows.Single(row => row.ProgramId == "first_week").ReasonText);
+                Assert.All(rows, row => Assert.Equal(row.IsLocked ? Loc.Get("programs_locked_hint") : unavailable, row.ReasonText));
                 Assert.All(rows, row => Assert.True(row.ReasonVisible));
                 Assert.Contains(rows, row => row.IsLocked);
                 Assert.Contains(rows, row => row.TierLabel == Loc.Get("programs_tier_premium"));
@@ -224,7 +237,8 @@ public sealed class ProgramsBrowseTests
                     view.FindControl<TextBlock>("TxtProgramDetailsTitle")!.Text);
                 Assert.Equal(selected.Chapters.Count,
                     view.FindControl<ItemsControl>("ProgramDetailsChapterList")!.ItemCount);
-                Assert.Equal(ExpectedReason(selected), ((ProgramBrowseItem)list.SelectedItem!).ReasonText);
+                var picked = (ProgramBrowseItem)list.SelectedItem!;
+                Assert.Equal(Loc.Get(picked.IsLocked ? "programs_locked_hint" : "programs_unavailable"), picked.ReasonText);
             }
             finally
             {

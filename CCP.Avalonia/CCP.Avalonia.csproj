@@ -14,11 +14,16 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>            <!-- 'WinExe' just suppresses the console window; it is not Windows-specific -->
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>..\Assets\app.ico</ApplicationIcon>   <!-- the exe's own icon (Explorer, pinned taskbar) -->
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
     <RootNamespace>ConditioningControlPanel.Avalonia</RootNamespace>
     <AssemblyName>CCP.Avalonia</AssemblyName>
+    <!-- The label of an unreleased build (Version.props) rides the informational version only:
+         AssemblyVersion stays the plain number every version check parses. -->
+    <InformationalVersion Condition="'$(CcpVersionLabel)' != ''">$(Version)-$(CcpVersionLabel)</InformationalVersion>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <WarningsAsErrors>$(WarningsAsErrors);CA1416</WarningsAsErrors>
   </PropertyGroup>
@@ -41,6 +46,8 @@
          12.1.2 as Avalonia itself - a control package built against a different Avalonia minor
          throws at attach, which no compiler catches. -->
     <PackageReference Include="Avalonia.Controls.ColorPicker" Version="12.1.2" />
+    <!-- Discord Rich Presence: the client WPF ships (cross-platform IPC; lane z1). -->
+    <PackageReference Include="DiscordRichPresence" Version="1.6.1.70" />
     <!-- Audio (and later video) on both OSes; see docs/avalonia-decisions.md. Linux loads the
          system libvlc (libvlc.so.5); only Windows needs the bundled natives. -->
     <PackageReference Include="LibVLCSharp" Version="3.10.1" />
@@ -66,6 +73,10 @@
     <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.13.0.20260627" />
   </ItemGroup>
 
+  <!-- WinRT for the Awareness lane (Windows.Media.Ocr screen reads, Windows.Media.Control now-playing):
+       see ..\WinRtProjection.props. Windows builds only; code under CCP_WINRT. -->
+  <Import Project="..\WinRtProjection.props" />
+
   <ItemGroup Condition="$(RuntimeIdentifier.StartsWith('linux')) Or ('$(RuntimeIdentifier)' == '' And $([MSBuild]::IsOSPlatform('Linux')))">
     <PackageReference Include="OpenCvSharp4.official.runtime.linux-x64" Version="4.13.0.20260627" />
     <!-- OnnxRuntime's props copy the win-x64 onnxruntime.dll to the root on any AnyCPU build (11 MB of
@@ -87,6 +98,17 @@
     </Content>
     <!-- WPF CornerGifMedia's built-in corner asset (pre-scaled), CornerGifOverlay's fallback. -->
     <Content Include="..\Assets\spiral_corner.gif" Link="Resources\spiral_corner.gif">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+    </Content>
+    <!-- Chaos art. The native Chaos run is retired on this head (owner, 2026-10-10), and with it the hub, boon,
+         portrait, backdrop, announce, crafted, material, biome, guide, upgrade and menu art (about 360 MB): the web
+         descent draws its own. What still ships is the one sprite a live feature reads: the Melt bubble
+         (Views/Overlays/BubbleOverlay reads Views/Chaos/ChaosArt.Resolve("bubbles", BrainDrainBubble.VariantId)).
+         A new sprite is one more explicit line here, never the folder glob. -->
+    <Content Include="..\ConditioningControlPanel\assets\Chaos\bubbles\braindrain_melt.png"
+             Link="assets\Chaos\bubbles\%(Filename)%(Extension)">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
@@ -114,6 +136,13 @@
                       ..\Assets\web\piecebypiece\dev\**\*;..\Assets\web\piecebypiece\package.json;
                       ..\Assets\web\intake\assets\vo\**\*.mp3;..\Assets\web\intake\assets\sfx\**\*.mp3;
                       ..\Assets\web\intake\assets\music\**\*.mp3;..\Assets\web\dtrh\assets\**\*.mp3">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+    </Content>
+    <!-- One icon per launcher tile, beside the exe: a desktop shortcut cannot read an embedded resource
+         (WPF Resources\launcher-icons, Core LauncherShortcuts.IconFolder). -->
+    <Content Include="..\Assets\launcher-icons\*.ico" Link="Resources\launcher-icons\%(Filename)%(Extension)">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
@@ -189,7 +218,18 @@
     <AvaloniaResource Include="..\Assets\app.ico" Link="Resources\app.ico" />
     <!-- WPF EmiFace.PixelFont's shipped Press Start 2P (Resources/emi/fonts), for the ring cards. -->
     <AvaloniaResource Include="..\Assets\emi\fonts\*.ttf" Link="Resources\emi\fonts\%(Filename)%(Extension)" />
-    <AvaloniaResource Include="..\Assets\*.png"
+    <!-- EMI desk lines: read from disk beside the exe by Core EmiLineEngine (WPF ConditioningControlPanel.csproj:656). -->
+    <Content Include="..\Assets\emi\desk-lines.json" Link="Resources\emi\desk-lines.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+    </Content>
+    <!-- Fredoka (SIL OFL 1.1, licence beside it): the rounded display face WPF packs as /Fonts/#Fredoka.
+         Views name it "Fredoka, Segoe UI"; Platform/AppFonts.cs maps the name to this resource on
+         every OS, so no call site carries a path. -->
+    <AvaloniaResource Include="..\Assets\fonts\Fredoka.ttf" Link="Resources\fonts\Fredoka.ttf" />
+    <AvaloniaResource Include="..\Assets\fonts\OFL-Fredoka.txt" Link="Resources\fonts\OFL-Fredoka.txt" />
+    <AvaloniaResource Include="..\Assets\*.png;..\Assets\Pink filter.webp;..\Assets\prime subject.webp"
                       Link="Resources\%(Filename)%(Extension)" />
 
     <AvaloniaResource Include="..\Assets\achievements\*.png"
@@ -197,6 +237,21 @@
     <!-- Profile hero banners (Core CosmeticsPool.Banners), compiled in as WPF ConditioningControlPanel.csproj:436. -->
     <AvaloniaResource Include="..\Assets\banners\*.png"
                       Link="Resources\banners\%(Filename)%(Extension)" />
+    <!-- Avatar-0 (blonde) emote set shared by BambiSleep + Sissy at avatar set 1, compiled in as
+         WPF ConditioningControlPanel.csproj:386-388 (GIF clips + emotes.json + clip_timing.json). -->
+    <AvaloniaResource Include="..\Assets\avatar0_emotes\*.gif;..\Assets\avatar0_emotes\*.json"
+                      Link="Resources\avatar0_emotes\%(Filename)%(Extension)" />
+    <!-- (modId, avatarSet) -> emote folder, as WPF; read by AvatarTubeWindow.Emotes.cs. -->
+    <AvaloniaResource Include="..\Assets\avatar_emotes_registry.json" Link="Resources\avatar_emotes_registry.json" />
+    <!-- Home dashboard billboard posters, one per roster card (WPF DashboardBillboard), as WPF
+         ConditioningControlPanel.csproj:419-424. Globbed: the folder holds exactly those six. -->
+    <AvaloniaResource Include="..\Assets\billboard\*.png"
+                      Link="Resources\billboard\%(Filename)%(Extension)" />
+    <!-- Header Sparkle Points wallet: the croupier EMI sprite (WPF Controls/Header/SparkleWallet). -->
+    <AvaloniaResource Include="..\Assets\emi\wallet_croupier_*.png"
+                      Link="Resources\emi\%(Filename)%(Extension)" />
+    <!-- Home logo dial source art (WPF DashboardLogoRenderer). -->
+    <AvaloniaResource Include="..\Assets\branding\ccp-logo.jpg" Link="Resources\branding\ccp-logo.jpg" />
     <!-- Program art (Core ProgramArtPaths), single level like WPF ConditioningControlPanel.csproj:426.
          hero_*.png is the read-only run view's Today band (ProgramArtPaths.DayHero). -->
     <AvaloniaResource Include="..\Assets\programs\banner_*.png;..\Assets\programs\sigil_*.png;..\Assets\programs\plate_*.png;..\Assets\programs\hero_*.png"

@@ -356,8 +356,7 @@
                                  trip. -->
                             <TextBlock x:Name="TxtAudioFolderPath" x:FieldModifier="internal"
                                        Foreground="{DynamicResource TextMutedBrush}"
-                                       FontFamily="Consolas, Courier New" FontSize="10.5"
-                                       Opacity="0.75" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                                       FontFamily="Consolas, Courier New" FontSize="10.5" TextWrapping="Wrap" Margin="0,6,0,0"/>
 
                             <!-- Shown ONLY when the old install-directory folder still holds clips.
                                  Those files keep playing (both folders are scanned and merged), but
@@ -372,8 +371,7 @@
                                        Visibility="Collapsed"/>
                             <TextBlock x:Name="TxtLegacyFolderPath" x:FieldModifier="internal"
                                        Foreground="{DynamicResource TextMutedBrush}"
-                                       FontFamily="Consolas, Courier New" FontSize="10.5"
-                                       Opacity="0.75" TextWrapping="Wrap" Margin="0,3,0,0"
+                                       FontFamily="Consolas, Courier New" FontSize="10.5" TextWrapping="Wrap" Margin="0,3,0,0"
                                        Visibility="Collapsed"/>
                         </StackPanel>
                     </Grid>

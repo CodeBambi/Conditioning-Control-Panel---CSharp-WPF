@@ -226,18 +226,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                     VerticalAlignment = VerticalAlignment.Center,
                 });
 
-                _ = new Animation
-                {
-                    Duration = TimeSpan.FromSeconds(0.8),
-                    Easing = new LinearEasing(),
-                    IterationCount = IterationCount.Infinite,
-                    PlaybackDirection = PlaybackDirection.Alternate,
-                    Children =
-                    {
-                        new KeyFrame { Cue = new Cue(0d), Setters = { new Setter(OpacityProperty, 0.5) } },
-                        new KeyFrame { Cue = new Cue(1d), Setters = { new Setter(OpacityProperty, 1.0) } },
-                    },
-                }.RunAsync(bgEllipse, _pulseCts?.Token ?? CancellationToken.None);
+                // 0.5 -> 1.0 over 0.8 s and back, linear, on the shared beat (drops itself with the row).
+                Helpers.BeatLoop.Run(bgEllipse, _pulseCts?.Token ?? CancellationToken.None,
+                    t => bgEllipse.Opacity = 0.5 + (0.5 * Helpers.BeatLoop.PingPong(t, 0.8)));
             }
 
             // ---- objective box, above the circle

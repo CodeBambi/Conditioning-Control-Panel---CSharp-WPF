@@ -56,10 +56,10 @@ public class LauncherShortcutsTests
     public void Every_launcher_game_ships_an_icon_file()
     {
         var dir = new System.IO.DirectoryInfo(System.AppContext.BaseDirectory);
-        while (dir != null && !System.IO.Directory.Exists(System.IO.Path.Combine(dir.FullName, "ConditioningControlPanel", LauncherShortcuts.IconFolder)))
+        while (dir != null && !System.IO.Directory.Exists(System.IO.Path.Combine(dir.FullName, "Assets", "launcher-icons")))
             dir = dir.Parent;
         Assert.NotNull(dir);
-        var folder = System.IO.Path.Combine(dir!.FullName, "ConditioningControlPanel", LauncherShortcuts.IconFolder);
+        var folder = System.IO.Path.Combine(dir!.FullName, "Assets", "launcher-icons");
         foreach (var game in LauncherCatalogue.Games)
         {
             var name = LauncherShortcuts.IconFileName(game.Id);

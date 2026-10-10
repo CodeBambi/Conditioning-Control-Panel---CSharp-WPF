@@ -1,0 +1,3217 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using global::Avalonia.Controls.ApplicationLifetimes;
+using global::Avalonia.VisualTree;
+using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Avalonia.Views.Deeper;
+using ConditioningControlPanel.Avalonia.Views.Windows;
+using Application = global::Avalonia.Application;
+using Window = global::Avalonia.Controls.Window;
+using WindowState = global::Avalonia.Controls.WindowState;
+using Visual = global::Avalonia.Visual;
+
+// PORTED from WPF 7.1.5 ConditioningControlPanel/Services/TutorialService.cs + Models/TutorialStep.cs.
+// The step lists below the head hooks are the WPF text, moved by script (scratch port_tut.pl): every
+// id, target name, tab key and order is WPF's. What this head changes is only how a step reaches the
+// app: TutorialHeadHooks (shell, demos, folder reveal) and the three prep helpers.
+//
+// not ported: EMI narrating a tour (WPF Services/EmiDesk/EmiTourNarrator.cs is not in Core).
+// not ported: the short walk's one demo flash on "sw-flash" (no one-shot flash entry on this head;
+//             TutorialHeadHooks.FlashDemo is the seam, unassigned = the card reads the same, WPF's
+//             own fallback when the assets folder is empty).
+namespace ConditioningControlPanel.Avalonia.Tours
+{
+    public enum TutorialStepPosition { Top, Bottom, Left, Right, Center }
+
+    public enum TutorialAdvanceTrigger { Manual, OnButtonClick, OnTextEquals, OnSelectionEquals, OnSliderAtLeast, OnEvent }
+
+    /// <summary>WPF Models/TutorialStep.cs, member for member.</summary>
+    public class TutorialStep
+    {
+        public string Id { get; set; } = "";
+        public string Title { get; set; } = "";
+        public string Description { get; set; } = "";
+        public string Icon { get; set; } = "";
+        public string? TargetElementName { get; set; }
+        public string? RequiresTab { get; set; }
+        public TutorialStepPosition TextPosition { get; set; } = TutorialStepPosition.Bottom;
+        public Action? OnActivate { get; set; }
+        /// <summary>Runs BEFORE the RequiresTab navigation (OnActivate runs after it).</summary>
+        public Action? OnBeforeTab { get; set; }
+        /// <summary>Run by the overlay just before it looks for the target, so the target measures.</summary>
+        public Action<Window>? PrepareTargetWindowAction { get; set; }
+        public TutorialAdvanceTrigger AdvanceTrigger { get; set; } = TutorialAdvanceTrigger.Manual;
+        public string? AdvanceValue { get; set; }
+        public double AdvanceMinValue { get; set; }
+        public double AdvanceMaxValue { get; set; } = double.NaN;
+        public string? AdvanceEventName { get; set; }
+        public bool AllowManualSkip { get; set; } = false;
+        public string? TargetWindowTypeName { get; set; }
+        public bool IsFollowUpCard { get; set; } = false;
+        public bool MatchByTag { get; set; } = false;
+        public bool BlockBackgroundClicks { get; set; } = true;
+        public Action<TutorialStep>? FollowUpAction1 { get; set; }
+        public Action<TutorialStep>? FollowUpAction2 { get; set; }
+        public Action<TutorialStep>? FollowUpAction3 { get; set; }
+        public string? FollowUpButton1Text { get; set; }
+        public string? FollowUpButton2Text { get; set; }
+        public string? FollowUpButton3Text { get; set; }
+    }
+
+    /// <summary>Everything the WPF service reached through App.* / Application.Current, in one place.
+    /// Each is a seam a test can swap; every path swallows (a tour never blocks on UI quirks).</summary>
+    internal static class TutorialHeadHooks
+    {
+        internal static Func<MainShellWindow?> ShellProvider = () =>
+            (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow as MainShellWindow;
+
+        internal static MainShellWindow? Shell { get { try { return ShellProvider(); } catch { return null; } } }
+
+        /// <summary>WPF App.Flash.TriggerFlashOnce(1, 1600, suppressHaptic: true). Unassigned on this head.</summary>
+        internal static Action? FlashDemo;
+
+        internal static bool HasCloudIdentity => !string.IsNullOrEmpty(CoreAccount.UnifiedUserId);
+
+        internal static void FireKeywordDemo(string keyword, string source)
+        {
+            try { Platform.KeywordTriggerHead.Engine.FireDemo(keyword, source); } catch { }
+        }
+
+        internal static void PreselectRack(string rackKey)
+        {
+            try { Shell?.StudioRack?.PreselectRackEntry(rackKey); } catch { }
+        }
+
+        /// <summary>WPF ExplorerLauncher.RevealInExplorer: the containing folder.</summary>
+        internal static void RevealInFolder(string? path)
+        {
+            if (string.IsNullOrEmpty(path)) return;
+            var dir = System.IO.Directory.Exists(path) ? path : System.IO.Path.GetDirectoryName(path);
+            if (!string.IsNullOrEmpty(dir)) Platform.ExternalOpener.Open(dir);
+        }
+
+        /// <summary>WPF TutorialService.EnsureMainWindowVisible (ccp-bugs #999).</summary>
+        internal static void EnsureShellVisible()
+        {
+            try
+            {
+                var mw = Shell;
+                if (mw == null) return;
+                if (mw.IsVisible && mw.WindowState != WindowState.Minimized) return;
+                mw.ShowFromTray();
+                if (!mw.IsVisible) mw.Show();
+                if (mw.WindowState == WindowState.Minimized) mw.WindowState = WindowState.Normal;
+                Serilog.Log.Information("Tutorial: restored the main window before starting the tour");
+            }
+            catch (Exception ex)
+            {
+                Serilog.Log.Warning(ex, "Tutorial: could not restore the main window before starting the tour");
+            }
+        }
+
+        /// <summary>WPF OpenDeeperPlayerWithLastSavedEnhancement: the player, loaded with the file the
+        /// walkthrough just saved; a bare player when it cannot be read.</summary>
+        internal static void OpenDeeperPlayerWithLastSaved()
+        {
+            var path = CoreTutorialEvents.LastSavedEnhancementPath;
+            ConditioningControlPanel.Models.Deeper.Enhancement? enh = null;
+            if (!string.IsNullOrEmpty(path) && System.IO.File.Exists(path))
+            {
+                try { enh = ConditioningControlPanel.Services.Deeper.EnhancementSerializer.LoadFromFile(path); }
+                catch (Exception ex) { Serilog.Log.Debug("TutorialService: failed to load tutorial enhancement {Path}: {Error}", path, ex.Message); }
+            }
+            var player = new EnhancementPlayerWindow(enh, enh != null ? "tutorial-followup" : null);
+            if (Shell is { } owner) player.Show(owner); else player.Show();
+        }
+
+        internal static T? FindDescendant<T>(Visual? root) where T : class
+        {
+            if (root == null) return null;
+            if (root is T hit) return hit;
+            try { return root.GetVisualDescendants().OfType<T>().FirstOrDefault(); } catch { return null; }
+        }
+    }
+
+    internal static class DeeperTutorialPrep
+    {
+        public static readonly Action<Window> ExpandMetadataDrawer = w =>
+        {
+            try { (w as DeeperEditorWindow)?.ExpandMetadataDrawer(); } catch { }
+        };
+    }
+
+    /// <summary>WPF CompanionTutorialPrep: open the Workshop / Engine Room drawer the step points into.</summary>
+    internal static class CompanionTutorialPrep
+    {
+        public static readonly Action<Window> ExpandWorkshop = w => Reveal(w, null);
+
+        public static readonly Action<Window> ExpandRoster = w =>
+            Reveal(w, Views.Controls.Companion.CompanionRoomAnchors.WorkshopRosterCell);
+
+        public static readonly Action<Window> ExpandEngineRoom = w =>
+        {
+            try { TutorialHeadHooks.FindDescendant<Views.Controls.Companion.CompanionRoomView>(w)?.RevealEngineRoom(); }
+            catch { /* a tour never blocks on UI quirks */ }
+        };
+
+        private static void Reveal(Window w, string? cellKey)
+        {
+            try { TutorialHeadHooks.FindDescendant<Views.Controls.Companion.CompanionRoomView>(w)?.RevealWorkshop(cellKey); }
+            catch { /* a tour never blocks on UI quirks */ }
+        }
+    }
+
+    /// <summary>WPF AppSettingsTutorialPrep: Settings is one scrolling page, so a step names its section.</summary>
+    internal static class AppSettingsTutorialPrep
+    {
+        public static Action Focus(string sectionKey) => () => FocusOn(TutorialHeadHooks.Shell, sectionKey);
+
+        public static Action<Window> Prepare(string sectionKey) => w => FocusOn(w, sectionKey);
+
+        private static void FocusOn(Window? window, string sectionKey)
+        {
+            try { (window as MainShellWindow)?.AppSettingsPage?.FocusSection(sectionKey); }
+            catch { /* a tour never blocks on UI quirks */ }
+        }
+    }
+
+    /// <summary>
+    /// Types of tutorials available in the app
+    /// </summary>
+    public enum TutorialType
+    {
+        FullTour,       // Complete app tour (original behavior)
+        GettingStarted, // Quick overview
+        Settings,       // Settings tab features
+        Presets,        // Presets tab
+        Progression,    // Progression tab
+        Achievements,   // Achievements tab
+        Companion,      // Companion tab
+        Patreon,        // Patreon exclusives tab
+        Avatar,         // Avatar companion
+        Modding,        // Mod creation guide
+        Awareness,      // Awareness Engine (keyword triggers + OCR)
+        Deeper,         // Deeper tab (universal media enhancement)
+        DeeperEditor,   // Deeper editor coachmarks (targets the editor window)
+        DeeperEditorInteractiveHT, // Interactive on-rails HypnoTube walkthrough - Part 1 (NewEnhancementDialog → click Create)
+        DeeperEditorInteractiveHTPart2, // Part 2 - runs in DeeperEditorWindow after dialog hands off
+        DeeperEditorInteractiveLocalAudio, // Interactive on-rails Local Audio walkthrough - Part 1
+        DeeperEditorInteractiveLocalAudioPart2, // Part 2 - runs in DeeperEditorWindow (audio mode: waveform preview, audio-only triggers)
+        DeeperEditorInteractiveLocalVideo, // Interactive on-rails Local Video walkthrough - Part 1
+        DeeperEditorInteractiveLocalVideoPart2, // Part 2 - runs in DeeperEditorWindow (video mode: showcases AttentionLost gaze trigger)
+        UpgradeTour,    // "What moved in 6.8" - the 6.7.4 -> 6.8 relocation map for upgraders
+
+        /// <summary>
+        /// Ask EMI wave 1's "short walk": seven cards, about ninety seconds, the smallest set of
+        /// facts that makes the app usable. It is what the first-run wizard's "Take the tour"
+        /// button starts and what EMI's knock offers. See docs/emi-desk/WAVE1-CONTRACT.md - the
+        /// seven step ids are load-bearing, because the narrator maps each one onto a line pool.
+        /// </summary>
+        ShortWalk
+    }
+
+    /// <summary>
+    /// How a tour ended. <c>Completed</c> is true ONLY for the last card advanced off the end;
+    /// Escape, the skip button, the host window closing and app shutdown all report false.
+    /// </summary>
+    public sealed class TutorialFinishedEventArgs : EventArgs
+    {
+        public TutorialFinishedEventArgs(TutorialType type, bool completed)
+        {
+            Type = type;
+            Completed = completed;
+        }
+
+        /// <summary>The tour that just ended.</summary>
+        public TutorialType Type { get; }
+
+        /// <summary>True = walked to the end. False = abandoned part way.</summary>
+        public bool Completed { get; }
+    }
+
+    public class TutorialService
+    {
+        private List<TutorialStep> _currentSteps;
+        private int _currentStepIndex = 0;
+        private TutorialType _currentTutorialType = TutorialType.FullTour;
+
+        // Callbacks for tab navigation
+        private Action? _showSettings;
+        private Action? _showPresets;
+        private Action? _showProgression;
+        private Action? _showAchievements;
+        private Action? _showCompanion;
+        private Action? _showPatreon;
+        private Action? _showAwareness;
+        private Action? _showDeeper;
+        // Generic router for every other ShowTab key. The named callbacks above only cover eight
+        // keys, so before this existed a step declaring any other RequiresTab navigated nowhere
+        // (silently - the spotlight just landed on whatever tab happened to be open).
+        private Action<string>? _showTab;
+
+        /// <summary>
+        /// Nav entry element name -> the ShowTab key whose sidebar door owns that entry. A step can
+        /// spotlight a nav entry that lives in a *different* door than the tab it requires (the
+        /// "open the assets folder" step stands on the dashboard but points at the Assets entry), so
+        /// the door to open is decided by the target element first, RequiresTab second.
+        /// Keys are the x:Names the nav has always used - they are API for the tutorial and FX.
+        /// </summary>
+        private static readonly Dictionary<string, string> NavEntryDoorKeys = new(StringComparer.Ordinal)
+        {
+            ["BtnSettings"] = "settings",
+            ["BtnPresets"] = "presets",
+            ["BtnQuests"] = "quests",
+            ["BtnPrograms"] = "programs",
+            ["BtnEnhancements"] = "enhancements",
+            ["BtnDeeper"] = "deeper",
+            ["BtnAvailableSubjects"] = "availablesubjects",
+            ["BtnOpenAssetsTop"] = "assets",
+            ["BtnAchievements"] = "achievements",
+            ["BtnLeaderboard"] = "leaderboard",
+            ["BtnCompanion"] = "companion",
+            ["BtnDiscordTab"] = "discord",
+            // The Spiral Room shares the You door with the profile. The row is Collapsed for most
+            // accounts, so a step spotlighting it would only ever be authored for one that has it -
+            // but the door still has to open, or the spotlight lands inside a clipped panel.
+            ["BtnNavSpiral"] = "spiral",
+            // The x:Name is API and never changes; the VALUE is the live ShowTab key, so it moved
+            // to "play" when Phase 6 retired the Lab page into the Play door's card wall.
+            // ("lab" would still resolve - ExpandDoorForTab canonicalises the alias - but a door
+            // map that names a deleted view is how the next reader learns the wrong thing.)
+            ["BtnLab"] = "play",
+            ["BtnPatreonExclusives"] = "exclusives",
+
+            // The rest of the rail, backfilled. Every key below is a live x:Name in
+            // MainWindow.xaml and every VALUE is a live ShowTab key that NavDoorMap
+            // (MainWindow.TabNavigation.cs) files under the named door - a step that spotlights
+            // one of these entries now opens the door that actually contains it instead of
+            // whichever door happened to be open.
+            // Studio door:
+            ["BtnNavStudio"] = "studio",
+            ["BtnNavHaptics"] = "haptics",
+            // Companion door:
+            ["BtnNavAwareness"] = "awareness",
+            ["BtnNavBambiTakeover"] = "bambitakeover",
+            ["BtnNavSheListening"] = "shelistening",
+            // Play door:
+            ["BtnNavGradedIntake"] = "gradedintake",
+            ["BtnNavLockdown"] = "lockdown",
+            ["BtnNavBlinkTrainer"] = "blinktrainer",
+            ["BtnNavRemoteControl"] = "remotecontrol",
+            // Library door. These four entries open DIALOGS rather than tabs (BtnManageMods_Click,
+            // BtnCatalogue_Click, BtnManagePhrases_Click, BtnNavMediaLog_Click), so they have no
+            // ShowTab key of their own - "assets" is the Library door's only/default tab and is
+            // what resolves the door, exactly as BtnOpenAssetsTop does above.
+            ["BtnNavMods"] = "assets",
+            ["BtnNavCatalogue"] = "assets",
+            ["BtnNavPhrases"] = "assets",
+            ["BtnNavMediaLog"] = "assets",
+            ["BtnNavJustDrop"] = "justdrop"
+        };
+
+        public event EventHandler<TutorialStep>? StepChanged;
+        public event EventHandler? TutorialStarted;
+
+        /// <summary>
+        /// A tour ENDED, by any route. Fires for a finish and for a skip alike, which is why
+        /// <see cref="TutorialFinished"/> exists beside it: the overlay only wants to know that
+        /// it is over, but the narrator and the completion ledger have to tell the two apart.
+        /// </summary>
+        public event EventHandler? TutorialCompleted;
+
+        /// <summary>
+        /// The same ending, with the two facts a listener actually needs: WHICH tour, and
+        /// whether it was walked to the end or abandoned. Raised immediately after
+        /// <see cref="TutorialCompleted"/> so an existing subscriber never changes order.
+        /// </summary>
+        public event EventHandler<TutorialFinishedEventArgs>? TutorialFinished;
+
+        public TutorialStep? CurrentStep =>
+            _currentStepIndex >= 0 && _currentStepIndex < _currentSteps.Count
+                ? _currentSteps[_currentStepIndex]
+                : null;
+
+        public int CurrentStepIndex => _currentStepIndex;
+        public int TotalSteps => _currentSteps.Count;
+        public IReadOnlyList<TutorialStep> CurrentSteps => _currentSteps;
+        public bool IsActive { get; private set; }
+        public bool IsFirstStep => _currentStepIndex == 0;
+        public bool IsLastStep => _currentStepIndex == _currentSteps.Count - 1;
+        public TutorialType CurrentTutorialType => _currentTutorialType;
+
+        public TutorialService()
+        {
+            _currentSteps = CreateFullTourSteps();
+        }
+
+        /// <summary>
+        /// Configure OnActivate callbacks with MainWindow actions
+        /// </summary>
+        public void ConfigureCallbacks(
+            Action showSettings,
+            Action showPresets,
+            Action showProgression,
+            Action showAchievements,
+            Action showCompanion,
+            Action showPatreon,
+            Action? showAwareness = null,
+            Action? showDeeper = null,
+            Action<string>? showTab = null)
+        {
+            _showSettings = showSettings;
+            _showPresets = showPresets;
+            _showProgression = showProgression;
+            _showAchievements = showAchievements;
+            _showCompanion = showCompanion;
+            _showPatreon = showPatreon;
+            _showAwareness = showAwareness;
+            _showDeeper = showDeeper;
+            _showTab = showTab;
+        }
+
+        /// <summary>
+        /// Get the steps for a specific tutorial type
+        /// </summary>
+        /// <summary>The step list of a tour, unstarted (tests, the target audit).</summary>
+        internal List<TutorialStep> StepsFor(TutorialType type) => GetStepsForTutorial(type);
+
+        private List<TutorialStep> GetStepsForTutorial(TutorialType type)
+        {
+            return type switch
+            {
+                TutorialType.FullTour => CreateFullTourSteps(),
+                TutorialType.GettingStarted => CreateGettingStartedSteps(),
+                TutorialType.Settings => CreateSettingsSteps(),
+                TutorialType.Presets => CreatePresetsSteps(),
+                TutorialType.Progression => CreateProgressionSteps(),
+                TutorialType.Achievements => CreateAchievementsSteps(),
+                TutorialType.Companion => CreateCompanionSteps(),
+                TutorialType.Patreon => CreatePatreonSteps(),
+                TutorialType.Avatar => CreateAvatarSteps(),
+                TutorialType.Modding => CreateModdingSteps(),
+                TutorialType.Awareness => CreateAwarenessSteps(),
+                TutorialType.Deeper => CreateDeeperSteps(),
+                TutorialType.DeeperEditor => CreateDeeperEditorSteps(),
+                TutorialType.DeeperEditorInteractiveHT => CreateDeeperEditorInteractiveHTSteps(),
+                TutorialType.DeeperEditorInteractiveHTPart2 => CreateDeeperEditorInteractiveHTPart2Steps(),
+                TutorialType.DeeperEditorInteractiveLocalAudio => CreateDeeperEditorInteractiveLocalAudioSteps(),
+                TutorialType.DeeperEditorInteractiveLocalAudioPart2 => CreateDeeperEditorInteractiveLocalAudioPart2Steps(),
+                TutorialType.DeeperEditorInteractiveLocalVideo => CreateDeeperEditorInteractiveLocalVideoSteps(),
+                TutorialType.DeeperEditorInteractiveLocalVideoPart2 => CreateDeeperEditorInteractiveLocalVideoPart2Steps(),
+                TutorialType.UpgradeTour => CreateUpgradeTourSteps(),
+                TutorialType.ShortWalk => CreateShortWalkSteps(),
+                _ => CreateFullTourSteps()
+            };
+        }
+
+        /// <summary>
+        /// Start a specific tutorial
+        /// </summary>
+        public void Start(TutorialType type = TutorialType.FullTour)
+        {
+            // A tutorial is nothing but spotlight cut-outs positioned over MainWindow's controls.
+            // If the window is minimized, or tucked in the tray by Settings > "Start hidden", every
+            // step resolves a target with no on-screen rectangle and the tour draws its boxes over
+            // the bare desktop, pointing at nothing (ccp-bugs #999). Restore the window first -
+            // before TutorialStarted fires, so the overlay measures against a real window.
+            EnsureMainWindowVisible();
+
+            _currentTutorialType = type;
+            _currentSteps = GetStepsForTutorial(type);
+            ApplyCallbacksToSteps();
+
+            _currentStepIndex = 0;
+            IsActive = true;
+            TutorialStarted?.Invoke(this, EventArgs.Empty);
+
+            if (CurrentStep != null)
+            {
+                CurrentStep.OnActivate?.Invoke();
+                StepChanged?.Invoke(this, CurrentStep);
+            }
+        }
+
+        /// <summary>
+        /// Start the full tour (original behavior)
+        /// </summary>
+        public void Start()
+        {
+            Start(TutorialType.FullTour);
+        }
+
+        /// <summary>
+        /// Brings MainWindow back on screen if it is minimized or hidden, so the tutorial spotlight
+        /// has something to point at (ccp-bugs #999). No-op when the window is already up.
+        /// </summary>
+        private static void EnsureMainWindowVisible() => TutorialHeadHooks.EnsureShellVisible();
+
+        private void ApplyCallbacksToSteps()
+        {
+            foreach (var step in _currentSteps)
+            {
+                // Three slots, one fixed order: OnBeforeTab, then the RequiresTab navigation, then
+                // the step's own OnActivate. Most steps only fill the last two - the tab switch has
+                // to happen before anything that touches the page (AppSettingsTutorialPrep.Focus
+                // scrolls a section into view, which needs the page up). OnBeforeTab exists for the
+                // opposite need: the Studio rack steps must choose their module BEFORE ShowTab, or
+                // ShowTab's studio case announces whichever module was selected last.
+                var tabAction = step.RequiresTab != null ? ResolveTabAction(step.RequiresTab) : null;
+                var preTab = step.OnBeforeTab;
+                if (tabAction == null && preTab == null) continue;
+
+                // Compose with any custom OnActivate the step set in its constructor
+                // (e.g. demo-fire steps that need the tab switch AND a side-effect).
+                var existingActivate = step.OnActivate;
+                step.OnActivate = () =>
+                {
+                    preTab?.Invoke();
+                    tabAction?.Invoke();
+                    existingActivate?.Invoke();
+                };
+            }
+        }
+
+        /// <summary>
+        /// The navigation action for a step's RequiresTab. The eight named callbacks keep their
+        /// hand-wired behaviour (presets also refreshes its list; "patreon" is kept wired for
+        /// compatibility but no step asks for it since Phase 2 moved the account cards to
+        /// Settings · Account); every other key goes through the generic router so adding a door
+        /// never means adding another callback field. "mod:*" keys belong to the Mod Creator
+        /// window's own tab strip and are handled there.
+        /// </summary>
+        private Action? ResolveTabAction(string tab)
+        {
+            if (tab.StartsWith("mod:", StringComparison.Ordinal)) return null;
+
+            var named = tab switch
+            {
+                "settings" => _showSettings,
+                "presets" => _showPresets,
+                "progression" => _showProgression,
+                "achievements" => _showAchievements,
+                "companion" => _showCompanion,
+                "patreon" => _showPatreon,
+                "awareness" => _showAwareness,
+                "deeper" => _showDeeper,
+                _ => null
+            };
+            if (named != null) return named;
+
+            if (_showTab != null)
+            {
+                var router = _showTab;
+                return () => router(tab);
+            }
+
+            // Last resort so a tour started before ConfigureCallbacks (or from a window that never
+            // configured one) still lands on the right tab instead of silently staying put.
+            return () =>
+            {
+                try { TutorialHeadHooks.Shell?.ShowTab(tab); }
+                catch { /* a tour never blocks on UI quirks */ }
+            };
+        }
+
+        /// <summary>
+        /// The ShowTab key whose sidebar door must be open before this step's target can be found
+        /// and measured. Null when the step points at chrome that lives outside the doors (title
+        /// bar, bottom bar), at nothing at all, or at another window's tabs ("mod:*").
+        /// TutorialOverlay calls this before every spotlight measure.
+        /// </summary>
+        internal static string? DoorTabKeyFor(TutorialStep step)
+        {
+            if (step.TargetElementName != null &&
+                NavEntryDoorKeys.TryGetValue(step.TargetElementName, out var navDoor))
+            {
+                return navDoor;
+            }
+
+            var tab = step.RequiresTab;
+            if (string.IsNullOrEmpty(tab)) return null;
+            if (tab!.StartsWith("mod:", StringComparison.Ordinal)) return null;
+            return tab;
+        }
+
+        /// <summary>
+        /// Selects an entry in the Studio rack (Phase 4). <c>ShowTab("studio")</c> only opens the
+        /// door and restores whatever entry was last selected, so a step that spotlights one
+        /// rack panel has to ask for it by name or it lands on a Collapsed panel and degrades to
+        /// a centred card.
+        ///
+        /// Wired to <see cref="TutorialStep.OnBeforeTab"/>, i.e. it runs BEFORE the RequiresTab
+        /// navigation, and selects QUIETLY: ShowTab's studio case re-announces the rack's current
+        /// selection on the way in, so choosing the step's module first makes that one announcement
+        /// name the right module instead of the one the user was last looking at. Selecting after
+        /// the switch (the Phase 4 wiring) announced the previous module and then this one.
+        ///
+        /// Unknown keys are a quiet no-op inside <c>PreselectRackEntry</c>, and the whole thing is
+        /// swallowed on failure: a tour never blocks on UI quirks.
+        /// </summary>
+        private static void FocusStudioRack(string rackKey)
+        {
+            try { TutorialHeadHooks.PreselectRack(rackKey); }
+            catch { /* see above */ }
+        }
+
+        public void Next()
+        {
+            if (!IsActive) return;
+
+            if (_currentStepIndex < _currentSteps.Count - 1)
+            {
+                _currentStepIndex++;
+                CurrentStep?.OnActivate?.Invoke();
+                StepChanged?.Invoke(this, CurrentStep!);
+            }
+            else
+            {
+                // The ONLY genuine completion: the last card, advanced off the end.
+                Complete(completed: true);
+            }
+        }
+
+        public void Previous()
+        {
+            if (!IsActive || _currentStepIndex <= 0) return;
+
+            _currentStepIndex--;
+            CurrentStep?.OnActivate?.Invoke();
+            StepChanged?.Invoke(this, CurrentStep!);
+        }
+
+        /// <summary>
+        /// Abandon the tour. Escape, the card's skip button, the host window closing and the
+        /// app-shutdown teardown all land here, and NONE of them latch the tour as done - a walk
+        /// somebody bailed out of is a walk they have not had.
+        /// </summary>
+        public void Skip()
+        {
+            Complete(completed: false);
+        }
+
+        private void Complete(bool completed)
+        {
+            // Skip() is called defensively from several teardown paths (ForceShutdown, the
+            // target-closed check), so a second ending must not fire a second set of events or
+            // latch a tour that is already over.
+            if (!IsActive) return;
+
+            var type = _currentTutorialType;
+            IsActive = false;
+
+            if (completed) LatchCompleted(type);
+
+            TutorialCompleted?.Invoke(this, EventArgs.Empty);
+            try { TutorialFinished?.Invoke(this, new TutorialFinishedEventArgs(type, completed)); }
+            catch (Exception ex) { Serilog.Log.Debug(ex, "Tutorial: a TutorialFinished handler threw"); }
+        }
+
+        // =================================================================================
+        //  the completion ledger
+        // =================================================================================
+
+        /// <summary>
+        /// Where a finished tour is remembered. One interface, one seam: the shipping
+        /// implementation writes EMI Desk's <c>toursDone</c> ledger, and a test can hand the
+        /// service a store that never touches disk.
+        /// </summary>
+        internal interface ITourCompletionStore
+        {
+            bool Has(string tutorialTypeName);
+            void Latch(string tutorialTypeName);
+        }
+
+        /// <summary>
+        /// The shipping ledger: <c>EmiState.ToursDone</c>, a list of <c>TutorialType</c> NAMES
+        /// (never ordinals - an ordinal moves the day somebody inserts a value into the middle
+        /// of the enum). It is EMI's state file only because that file already exists and is
+        /// already written safely; nothing here needs EMI Desk to be enabled, present or even
+        /// constructed, and every path swallows.
+        /// </summary>
+        private sealed class EmiStateTourStore : ITourCompletionStore
+        {
+            // One ledger, one write path. EmiState.NoteTourDone is the idempotent,
+            // case-insensitive add that also SaveNow()s: a tour finished thirty seconds before
+            // the user quits is exactly the tour that would otherwise be re-offered next launch.
+            public bool Has(string tutorialTypeName)
+                => global::ConditioningControlPanel.Services.EmiDesk.EmiState.HasTourDone(tutorialTypeName);
+
+            public void Latch(string tutorialTypeName)
+                => global::ConditioningControlPanel.Services.EmiDesk.EmiState.NoteTourDone(tutorialTypeName);
+        }
+
+        private static ITourCompletionStore _completionStore = new EmiStateTourStore();
+
+        /// <summary>Test seam. Null restores the shipping EMI-state-backed ledger.</summary>
+        internal static ITourCompletionStore CompletionStore
+        {
+            get => _completionStore;
+            set => _completionStore = value ?? new EmiStateTourStore();
+        }
+
+        /// <summary>
+        /// Has this tour been walked end to end, on this machine, ever? The first thing
+        /// <c>TutorialService</c> has ever remembered across a restart - before it, every tour
+        /// was re-offerable forever. EMI's knock reads it as brake 4
+        /// (docs/emi-desk/WAVE1-CONTRACT.md); anything else in the app may read it too.
+        /// Never throws.
+        /// </summary>
+        public bool HasCompleted(TutorialType type)
+        {
+            try { return _completionStore.Has(type.ToString()); }
+            catch { return false; }
+        }
+
+        private static void LatchCompleted(TutorialType type)
+        {
+            try
+            {
+                _completionStore.Latch(type.ToString());
+                Serilog.Log.Information("Tutorial: {Tour} completed and latched", type);
+            }
+            catch (Exception ex)
+            {
+                Serilog.Log.Debug(ex, "Tutorial: could not latch {Tour} as completed", type);
+            }
+        }
+
+        #region Tutorial Step Definitions
+
+        /// <summary>
+        /// Phase 8's doors tour - what the first-run wizard's last step launches and what the ?
+        /// button replays. It walks the rail, spotlighting each door HEADER while navigating to
+        /// that door's default tab.
+        ///
+        /// <para>Two mechanical rules keep the door steps working, both learned the hard way:</para>
+        /// <list type="bullet">
+        /// <item>A door step must NOT be <c>TutorialStepPosition.Center</c>: UpdateSpotlight
+        /// early-returns for centered cards before it measures anything, so a centered "look at
+        /// this door" step would spotlight nothing.</item>
+        /// <item><c>RequiresTab</c> is the door's DEFAULT tab, and that is what opens the
+        /// accordion. Door headers are deliberately NOT in <see cref="NavEntryDoorKeys"/> (that map
+        /// is for nav ENTRIES), so <see cref="DoorTabKeyFor"/> falls through to RequiresTab,
+        /// TutorialOverlay hands it to ExpandDoorForTab, and the settle loop re-measures while the
+        /// 160ms accordion animates.</item>
+        /// </list>
+        /// Step ids are stable API and are never renamed, which is why two of the door steps carry
+        /// ids from the top-tab world ("settings_tab" is the Home door, "presets_intro" is Studio).
+        /// </summary>
+        private List<TutorialStep> CreateFullTourSteps()
+        {
+            return new List<TutorialStep>
+            {
+                new TutorialStep
+                {
+                    Id = "welcome",
+                    Icon = "~",
+                    Title = "Welcome to Conditioning Control Panel",
+                    Description = "Everything lives behind seven doors down the left. This quick tour opens each " +
+                                  "one so you know where things are.\n\n" +
+                                  "You can replay it any time from the ? button in the title bar.",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "avatar_intro",
+                    Icon = "<3",
+                    Title = "Meet Your Companion",
+                    Description = "Your avatar companion lives in the tube! Click her to chat, right-click for quick options. " +
+                                  "She evolves as you level up.",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    // Id kept (stable API). This is the FIRST door in the walk - Home - not the
+                    // pinned Settings door at the bottom of the rail, which is "tour_door_settings".
+                    Id = "settings_tab",
+                    Icon = ">",
+                    Title = "Home",
+                    Description = "Your dashboard: the big START button, the feature mosaic, the browser card, " +
+                                  "today's program and the marquee.\n\n" +
+                                  "Left-click a mosaic tile to jump to its controls; right-click one to flip that " +
+                                  "feature on or off without leaving Home.",
+                    TargetElementName = "DoorHome",
+                    RequiresTab = "settings",
+                    TextPosition = TutorialStepPosition.Right
+                },
+                new TutorialStep
+                {
+                    // Id kept: presets are one entry of this door now, and the door is the story.
+                    Id = "presets_intro",
+                    Icon = ">",
+                    Title = "Studio",
+                    Description = "Where every effect is tuned. The rack lists them - flashes, visuals, videos, " +
+                                  "subliminals, spirals, brain drain, bubbles - and the panel beside it is that " +
+                                  "effect's full settings.\n\n" +
+                                  "Presets & Sessions, the Scheduler, the Intensity Ramp and your toys are entries " +
+                                  "of this door too.",
+                    TargetElementName = "DoorStudio",
+                    RequiresTab = "studio",
+                    TextPosition = TutorialStepPosition.Right
+                },
+                new TutorialStep
+                {
+                    Id = "progression_intro",
+                    Icon = ">",
+                    Title = "Progress",
+                    Description = "Running the engine earns XP and levels you up. Your level, XP bar and " +
+                                  "stat pills live on Home; the Skill Tree under You spends what you earn.",
+                    // Phase 8: was TargetElementName = "BtnProgression", an element that has not
+                    // existed since the two-row tab strip was replaced - the step had been
+                    // silently degrading to an unspotlit card. BtnSettings is the Home door
+                    // button, which is exactly where ShowTab("progression") lands and what
+                    // MainWindow.ChromeFx.cs already maps the key onto. RequiresTab stays
+                    // "progression": the key is API (54 bark rules per mod) and must keep firing.
+                    TargetElementName = "BtnSettings",
+                    RequiresTab = "progression",
+                    TextPosition = TutorialStepPosition.Right
+                },
+                new TutorialStep
+                {
+                    Id = "tour_door_companion",
+                    Icon = ">",
+                    Title = "Companion",
+                    Description = "Her room. Who she is, how she talks, and what she is allowed to do.\n\n" +
+                                  "Takeover, She's Listening and the Awareness engine are entries here, and every " +
+                                  "AI permission sits in one grid so you can see the whole picture at once.",
+                    TargetElementName = "DoorCompanion",
+                    RequiresTab = "companion",
+                    TextPosition = TutorialStepPosition.Right
+                },
+                new TutorialStep
+                {
+                    Id = "tour_door_play",
+                    Icon = ">",
+                    Title = "Play",
+                    Description = "The card wall: Down the Rabbit Hole, Goon, Gaze, the Bureau, Deeper, Graded " +
+                                  "Intake, Lockdown, Remote Control and the Showcase shelf.\n\n" +
+                                  "Locked cards stay visible on purpose - the card tells you what it is before you " +
+                                  "ever decide whether you want it.",
+                    TargetElementName = "DoorPlay",
+                    RequiresTab = "play",
+                    TextPosition = TutorialStepPosition.Right
+                },
+                new TutorialStep
+                {
+                    Id = "tour_door_you",
+                    Icon = ">",
+                    Title = "You",
+                    Description = "Your Trainer Card, quests, achievements, the Skill Tree, training programs and " +
+                                  "the leaderboard.\n\n" +
+                                  "Every feature is available from level 1 - XP buys skill points and bragging " +
+                                  "rights, not permission.",
+                    TargetElementName = "DoorYou",
+                    RequiresTab = "discord",
+                    TextPosition = TutorialStepPosition.Right
+                },
+                new TutorialStep
+                {
+                    Id = "tour_door_library",
+                    Icon = ">",
+                    Title = "Library",
+                    Description = "Everything you own: your assets and content packs, your mods, the catalogue, " +
+                                  "your phrase pools and the media log.\n\n" +
+                                  "Drop images and videos into the assets folder from here and they start showing " +
+                                  "up in flashes and videos straight away.",
+                    TargetElementName = "DoorLibrary",
+                    RequiresTab = "assets",
+                    TextPosition = TutorialStepPosition.Right
+                },
+                new TutorialStep
+                {
+                    Id = "tour_door_settings",
+                    Icon = ">",
+                    Title = "Settings",
+                    Description = "The system side, pinned to the bottom of the rail: language, audio, devices, " +
+                                  "performance, notifications, your account, your data and updates.\n\n" +
+                                  "One home each - the camera, the microphone and the panic key are configured " +
+                                  "here and nowhere else.",
+                    TargetElementName = "DoorSettings",
+                    RequiresTab = "appsettings",
+                    TextPosition = TutorialStepPosition.Right
+                },
+                new TutorialStep
+                {
+                    Id = "help_button",
+                    Icon = "?",
+                    Title = "Need Help?",
+                    Description = "Click the ? button anytime to see detailed guides for each feature. " +
+                                  "You can also start focused tutorials for individual doors.",
+                    TargetElementName = "BtnMainHelp",
+                    TextPosition = TutorialStepPosition.Left
+                },
+                new TutorialStep
+                {
+                    Id = "start_button",
+                    Icon = ">",
+                    Title = "Ready to Begin?",
+                    Description = "Click the START button to begin your conditioning session. " +
+                                  "All your configured effects will activate. Click again to stop.",
+                    TargetElementName = "BtnStart",
+                    TextPosition = TutorialStepPosition.Top
+                }
+            };
+        }
+
+        private List<TutorialStep> CreateGettingStartedSteps()
+        {
+            return new List<TutorialStep>
+            {
+                new TutorialStep
+                {
+                    Id = "gs_welcome",
+                    Icon = "~",
+                    Title = "Getting Started",
+                    Description = "Let's quickly cover the basics of Conditioning Control Panel.",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "gs_start",
+                    Icon = ">",
+                    Title = "The START Button",
+                    Description = "The big START button at the bottom starts/stops all your configured effects. " +
+                                  "When running, effects like flashes, videos, and subliminals will trigger based on your settings.",
+                    TargetElementName = "BtnStart",
+                    TextPosition = TutorialStepPosition.Top
+                },
+                new TutorialStep
+                {
+                    Id = "gs_hover",
+                    Icon = "?",
+                    Title = "Hover for Help",
+                    Description = "Hover over any slider, checkbox, or button to see a tooltip explaining what it does. " +
+                                  "This is the fastest way to learn.",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "gs_assets",
+                    Icon = ">",
+                    Title = "Add Your Own Content",
+                    Description = "Add images to 'assets/images' for flashes, and videos to 'assets/videos'. " +
+                                  "The Library door opens that folder for you, and takes any folder you like " +
+                                  "instead.",
+                    // "BtnOpenAssets" only ever existed in the Gaze minigame window - in MainWindow
+                    // the assets nav entry has always been BtnOpenAssetsTop, so this step silently
+                    // degraded to a centered card. It lives in the Library door (see NavEntryDoorKeys).
+                    // Nav rework (2026-10-06): the Assets row left the rail; the Library section
+                    // row is the rail's way to the folder now.
+                    TargetElementName = "DoorLibrary",
+                    RequiresTab = "settings",
+                    TextPosition = TutorialStepPosition.Right
+                },
+                new TutorialStep
+                {
+                    Id = "gs_done",
+                    Icon = "<3",
+                    Title = "You're Ready",
+                    Description = "That's the basics! Open the seven doors on the left to discover the rest, " +
+                                  "or click the ? button for detailed guides on each one.",
+                    TextPosition = TutorialStepPosition.Center
+                }
+            };
+        }
+
+        /// <summary>
+        /// THE SHORT WALK (Ask EMI wave 1). Seven cards, about ninety seconds, and the smallest set
+        /// of facts that makes the app usable on its own: where content comes from, what an effect
+        /// looks like, how to stop everything, who the chip at the bottom of the rail is, what XP
+        /// is for, where the system settings live, and how to get this back.
+        ///
+        /// <para>The seven ids are API. <see cref="Services.EmiDesk.EmiTourNarrator"/> maps each one
+        /// onto the line pool <c>tour.&lt;stepId&gt;</c>, so renaming a step here silently mutes her
+        /// for that card (docs/emi-desk/WAVE1-CONTRACT.md).</para>
+        ///
+        /// <para>The descriptions are deliberately ONE LINE each - EMI carries the colour and the
+        /// card carries the fact. That split has to hold in both directions: with EMI Desk off,
+        /// missing or muted these seven cards are the entire tour, so no card may lean on a line
+        /// that might never be spoken.</para>
+        ///
+        /// <para>Same two mechanical rules as every other tour. A spotlight step is never
+        /// <c>Center</c> (UpdateSpotlight early-returns for centred cards before it measures
+        /// anything), and every TargetElementName below is a live x:Name - a name that does not
+        /// resolve degrades SILENTLY to an unspotlit centred card, which is how three steps of the
+        /// older tours rotted unnoticed.</para>
+        /// </summary>
+        private List<TutorialStep> CreateShortWalkSteps()
+        {
+            return new List<TutorialStep>
+            {
+                new TutorialStep
+                {
+                    Id = "sw-assets",
+                    Icon = ">",
+                    Title = Loc.Get("tut_sw_assets_title"),
+                    Description = Loc.Get("tut_sw_assets_body"),
+                    // The Library door's assets entry - the same target CreateGettingStartedSteps
+                    // uses, and the only one in the rail that opens the folder itself. It is in
+                    // NavEntryDoorKeys, so DoorTabKeyFor opens the Library door for it while
+                    // RequiresTab keeps the page on Home.
+                    TargetElementName = "DoorLibrary",
+                    RequiresTab = "settings",
+                    TextPosition = TutorialStepPosition.Right
+                },
+                new TutorialStep
+                {
+                    Id = "sw-flash",
+                    Icon = "⚡",
+                    Title = Loc.Get("tut_sw_flash_title"),
+                    Description = Loc.Get("tut_sw_flash_body"),
+                    // The Home mosaic's flash tile: the card the user will actually click later.
+                    TargetElementName = "CardFlash",
+                    RequiresTab = "settings",
+                    TextPosition = TutorialStepPosition.Right,
+                    // Show, do not tell. One image, on top of everything, gone again - the whole
+                    // app in a second and a half. Haptics suppressed: a demo must not buzz a toy.
+                    // Silent no-op when the assets folder is empty or the service never came up,
+                    // and the card's copy still reads correctly if nothing appears.
+                    OnActivate = () =>
+                    {
+                        try { TutorialHeadHooks.FlashDemo?.Invoke(); }
+                        catch { /* a tour never blocks on a demo */ }
+                    }
+                },
+                new TutorialStep
+                {
+                    Id = "sw-panic",
+                    Icon = "!",
+                    Title = Loc.Get("tut_sw_panic_title"),
+                    Description = Loc.Get("tut_sw_panic_body"),
+                    // THE rebind surface (Settings - Devices & Safety). The System popup shows the
+                    // key read-only, so this is the only place the card can point at.
+                    //
+                    // The copy deliberately does NOT invite a press: TutorialOverlay.OnKeyDown maps
+                    // Escape onto Skip(), so "try it now" would end the tour instead of teaching
+                    // the key. It is placed here, before anything has ever been started, so the one
+                    // moment the user learns the panic key is a moment with nothing to panic about.
+                    TargetElementName = "BtnPanicKey",
+                    RequiresTab = "appsettings",
+                    PrepareTargetWindowAction = AppSettingsTutorialPrep.Prepare("devices"),
+                    TextPosition = TutorialStepPosition.Left
+                },
+                new TutorialStep
+                {
+                    Id = "sw-dock",
+                    Icon = "~",
+                    Title = Loc.Get("tut_sw_dock_title"),
+                    Description = Loc.Get("tut_sw_dock_body"),
+                    // Controls/EmiDock.xaml, pinned under the Settings door. NOT a door - it has no
+                    // NavDoorMap row and no RequiresTab, so DoorTabKeyFor returns null and the
+                    // overlay measures it where it stands. It is never Collapsed, so the spotlight
+                    // lands even on a run where EMI Desk is switched off - which is exactly the run
+                    // this card has to teach on its own.
+                    TargetElementName = "EmiDockChip",
+                    TextPosition = TutorialStepPosition.Right
+                },
+                new TutorialStep
+                {
+                    Id = "sw-xp",
+                    Icon = "⭐",
+                    Title = Loc.Get("tut_sw_xp_title"),
+                    Description = Loc.Get("tut_sw_xp_body"),
+                    // The XP bar row, window chrome rather than a page, so no RequiresTab: it is on
+                    // screen behind whatever door is open. The login overlay dims it to 0.3 opacity
+                    // but never collapses it, so it always measures.
+                    TargetElementName = "XPBarContent",
+                    TextPosition = TutorialStepPosition.Bottom
+                },
+                new TutorialStep
+                {
+                    Id = "sw-settings",
+                    Icon = "⚙",
+                    Title = Loc.Get("tut_sw_settings_title"),
+                    Description = Loc.Get("tut_sw_settings_body"),
+                    TargetElementName = "DoorSettings",
+                    RequiresTab = "appsettings",
+                    TextPosition = TutorialStepPosition.Right
+                },
+                new TutorialStep
+                {
+                    Id = "sw-done",
+                    Icon = "✓",
+                    Title = Loc.Get("tut_sw_done_title"),
+                    Description = Loc.Get("tut_sw_done_body"),
+                    TargetElementName = "BtnMainHelp",
+                    TextPosition = TutorialStepPosition.Left
+                }
+            };
+        }
+
+        /// <summary>
+        /// "What moved in 6.8" - the tour written for someone who already knew 6.7.4. It answers
+        /// one question per step ("where did my tab go", "why does clicking do the other thing")
+        /// rather than teaching the app, so it is deliberately short and never opens a dialog.
+        ///
+        /// <para>Same two mechanical rules as <see cref="CreateFullTourSteps"/>: a door step is
+        /// never <c>Center</c> (UpdateSpotlight early-returns for centred cards before it measures
+        /// anything), and <c>RequiresTab</c> carries the door's DEFAULT tab so
+        /// <see cref="DoorTabKeyFor"/> hands the right key to ExpandDoorForTab.</para>
+        ///
+        /// <para>Every TargetElementName below is a live x:Name - a name that does not resolve
+        /// degrades SILENTLY to an unspotlit centred card, which is how three steps of the old
+        /// tours rotted unnoticed (see the Phase 8 notes on "BtnProgression" and "FlashSection").
+        /// The two dashboard targets live inside <c>SettingsTabView</c>, which TutorialOverlay
+        /// reaches because FindElementByName walks the visual tree rather than trusting a single
+        /// namescope. <c>MysteryFlipHost</c>, not <c>CardMystery</c>: the card itself is collapsed
+        /// while the plate is showing its reveal face (MainWindow.DashboardFx flips it on hover),
+        /// and a Collapsed target has no bounds.</para>
+        /// </summary>
+        private List<TutorialStep> CreateUpgradeTourSteps()
+        {
+            return new List<TutorialStep>
+            {
+                new TutorialStep
+                {
+                    Id = "ut_welcome",
+                    Icon = "~",
+                    Title = "Everything Moved",
+                    Description = "v6.8 rebuilt the whole layout, so nothing is quite where you left it.\n\n" +
+                                  "Here is the 60-second map. Nine short steps and you will know where all of " +
+                                  "your old tabs went.",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "ut_rail",
+                    Icon = ">",
+                    Title = "The Tab Strip Became A Rail",
+                    Description = "The two rows of tabs are gone. Everything now lives behind six doors down " +
+                                  "the left edge, with Settings pinned at the bottom.\n\n" +
+                                  "Hover the rail and it opens; click a door and its pages fold out underneath it.",
+                    // The rail Border itself (MainWindow.xaml) - the whole column is the point here,
+                    // not any one door. RequiresTab lands us on Home so the Home door is the open one.
+                    TargetElementName = "NavSidebar",
+                    RequiresTab = "settings",
+                    TextPosition = TutorialStepPosition.Right
+                },
+                new TutorialStep
+                {
+                    Id = "ut_map",
+                    Icon = "?",
+                    Title = "Where Your Tabs Went",
+                    Description = "Old tab  ->  its door now\n\n" +
+                                  "• Dashboard  ->  Home\n" +
+                                  "• Presets, Haptics, the tile popups  ->  Studio\n" +
+                                  "• Companion, Takeover, She's Listening, Awareness  ->  Companion\n" +
+                                  "• Lab, Deeper, Exclusives, Graded Intake, Lockdown,\n" +
+                                  "   Blink Trainer, Remote Control, Available Subjects  ->  Play\n" +
+                                  "• Profile, Quests, Achievements, Enhancements,\n" +
+                                  "   Programs, Leaderboard  ->  You\n" +
+                                  "• Assets, Mods, Catalogue, Phrase Manager, Media Log  ->  Library\n\n" +
+                                  "Two renames worth knowing: the Lab page is gone (its contents are cards on " +
+                                  "the Play wall), and Enhancements is now the Skill Tree.",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "ut_studio",
+                    Icon = ">",
+                    Title = "Studio",
+                    Description = "Every dashboard tile used to pop open its own little window. Those windows " +
+                                  "are gone: the tile now opens the matching module in this rack, where all of " +
+                                  "the settings live side by side.\n\n" +
+                                  "Presets & Sessions, Haptics and Just Drop are entries of this door too.",
+                    TargetElementName = "DoorStudio",
+                    RequiresTab = "studio",
+                    // The rack restores whatever module was last selected, so pick one that matches
+                    // the tile this tour spotlights two steps later.
+                    OnBeforeTab = () => FocusStudioRack("flash"),
+                    TextPosition = TutorialStepPosition.Right
+                },
+                new TutorialStep
+                {
+                    Id = "ut_play",
+                    Icon = ">",
+                    Title = "Play",
+                    Description = "The Lab tab no longer exists. Everything it held is a card on this wall, " +
+                                  "next to Deeper, Exclusives, Graded Intake, Lockdown, the Blink Trainer, " +
+                                  "Remote Control and Available Subjects.\n\n" +
+                                  "Locked cards stay visible on purpose, so you can see what a thing is before " +
+                                  "you decide whether you want it.",
+                    TargetElementName = "DoorPlay",
+                    RequiresTab = "play",
+                    TextPosition = TutorialStepPosition.Right
+                },
+                new TutorialStep
+                {
+                    Id = "ut_you",
+                    Icon = ">",
+                    Title = "You",
+                    Description = "Your Profile, Quests, Achievements, Programs and the Leaderboard, all under " +
+                                  "one door.\n\n" +
+                                  "Enhancements moved here as well, under its new name: the Skill Tree.",
+                    TargetElementName = "DoorYou",
+                    RequiresTab = "discord",
+                    TextPosition = TutorialStepPosition.Right
+                },
+                new TutorialStep
+                {
+                    Id = "ut_settings",
+                    Icon = "⚙",
+                    Title = "Settings, In Eight Sections",
+                    Description = "Pinned to the bottom of the rail and rebuilt: General, Audio, Devices, " +
+                                  "Performance, Notifications, Account, Data and Updates.\n\n" +
+                                  "Devices is the one that catches people out. Your webcam, your microphone, " +
+                                  "the blink kill switch, gaze restriction, the panic key and the global hotkeys " +
+                                  "are all configured there now, and nowhere else.",
+                    TargetElementName = "DoorSettings",
+                    RequiresTab = "appsettings",
+                    // Runs after the tab switch, so the page behind the spotlight is already showing
+                    // the section the card is talking about.
+                    OnActivate = AppSettingsTutorialPrep.Focus("devices"),
+                    TextPosition = TutorialStepPosition.Right
+                },
+                new TutorialStep
+                {
+                    Id = "ut_gestures",
+                    Icon = "!",
+                    Title = "Your Clicks Swapped",
+                    Description = "This is the one that will surprise you.\n\n" +
+                                  "LEFT-click a dashboard tile (or a rail chip) to OPEN its page.\n" +
+                                  "RIGHT-click it to turn that feature on or off without leaving Home.\n\n" +
+                                  "In 6.7.4 it was the other way round. Muscle memory will fight you for an " +
+                                  "evening, then it will not.",
+                    TargetElementName = "CardFlash",
+                    RequiresTab = "settings",
+                    TextPosition = TutorialStepPosition.Right
+                },
+                new TutorialStep
+                {
+                    Id = "ut_daily_free",
+                    Icon = "?",
+                    Title = "The ? Box",
+                    Description = "Not decoration, and not a tease: one premium feature is genuinely free for " +
+                                  "everyone, all day, every day. Hover the box to see which one today is.\n\n" +
+                                  "It changes at midnight, so it is worth a look each time you open the app.",
+                    TargetElementName = "MysteryFlipHost",
+                    RequiresTab = "settings",
+                    TextPosition = TutorialStepPosition.Right
+                },
+                new TutorialStep
+                {
+                    Id = "ut_palette",
+                    Icon = "⌨",
+                    Title = "Ctrl+K Finds Anything",
+                    Description = "Six doors is a lot to remember, so you do not have to.\n\n" +
+                                  "Press Ctrl+K anywhere in the app, type a few letters of a setting - " +
+                                  "\"panic\", \"blink\", \"volume\" - and it takes you straight to it.\n\n" +
+                                  "If you only keep one thing from this tour, keep this one.",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "ut_done",
+                    Icon = "✓",
+                    Title = "That's The Whole Map",
+                    Description = "Doors on the left, gestures swapped, Ctrl+K for everything else.\n\n" +
+                                  "You can replay this tour any time from the ? button - it is the first row " +
+                                  "in there, \"What moved in 6.8\".",
+                    TargetElementName = "BtnMainHelp",
+                    TextPosition = TutorialStepPosition.Left
+                }
+            };
+        }
+
+        private List<TutorialStep> CreateSettingsSteps()
+        {
+            return new List<TutorialStep>
+            {
+                new TutorialStep
+                {
+                    Id = "set_intro",
+                    Icon = "⚙",
+                    Title = "Effects Guide",
+                    Description = "The Studio door is where every conditioning effect is configured, and the " +
+                                  "Settings door holds the app itself - audio, devices, performance.\n\n" +
+                                  "Let's walk both.",
+                    // Phase 8: was RequiresTab = "settings" (the DASHBOARD, not Settings) with copy
+                    // to match. Every step below already navigates to "studio" or "appsettings";
+                    // this one now opens on the same door its first real step lands in.
+                    RequiresTab = "studio",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "set_flash",
+                    Icon = "⚡",
+                    Title = "Flash Images",
+                    Description = "Flash images appear randomly on screen. Configure:\n" +
+                                  "• Enable/Disable the feature\n" +
+                                  "• Per Hour: How many flash events per hour\n" +
+                                  "• Images: How many images per flash event\n" +
+                                  "• Clickable: Click to dismiss or click-through\n" +
+                                  "• Hydra Mode: Clicking spawns more images.",
+                    // Phase 3: the dashboard flash card is a Studio shortcut now; the real
+                    // controls live on the rack. "FlashSection" was the dead LegacyDashboardHost
+                    // Border - the spotlight degraded to a centred card.
+                    RequiresTab = "studio",
+                    TargetElementName = "PanelFlash",
+                    OnBeforeTab = () => FocusStudioRack("flash"),
+                    TextPosition = TutorialStepPosition.Left
+                },
+                new TutorialStep
+                {
+                    Id = "set_visuals",
+                    Icon = "👁",
+                    Title = "Visuals Settings",
+                    Description = "Customize how flash images look:\n" +
+                                  "• Size: Scale images up or down\n" +
+                                  "• Opacity: Make images more transparent\n" +
+                                  "• Fade: Smooth fade in/out animation\n" +
+                                  "• Duration: How long images stay visible",
+                    RequiresTab = "studio",
+                    TargetElementName = "PanelVisuals",
+                    OnBeforeTab = () => FocusStudioRack("visuals"),
+                    TextPosition = TutorialStepPosition.Left
+                },
+                new TutorialStep
+                {
+                    Id = "set_video",
+                    Icon = "🎬",
+                    Title = "Videos",
+                    Description = "Mandatory video popups that demand attention:\n" +
+                                  "• Per Hour: How often videos play\n" +
+                                  "• Force Focus: Bring video to front\n" +
+                                  "• Attention Targets: Click targets to dismiss\n" +
+                                  "Add videos to 'assets/videos' folder.",
+                    RequiresTab = "studio",
+                    TargetElementName = "PanelVideo",
+                    OnBeforeTab = () => FocusStudioRack("video"),
+                    TextPosition = TutorialStepPosition.Left
+                },
+                new TutorialStep
+                {
+                    Id = "set_audio",
+                    Icon = "🔊",
+                    Title = "Audio Settings",
+                    Description = "Control audio behavior:\n" +
+                                  "• Audio Ducking: Lower other audio during videos\n" +
+                                  "• Video Volume: Control video playback volume\n" +
+                                  "• Moans: Enable/configure moaning sounds",
+                    // Phase 2: the audio block moved off the dashboard into the Settings door
+                    // (Views/Controls/AppSettings/AudioSettingsSection.xaml). The Border kept the
+                    // name "AudioSection", and TutorialOverlay resolves by walking the visual tree
+                    // comparing Name, so it still finds it inside the nested UserControl.
+                    RequiresTab = "appsettings",
+                    TargetElementName = "AudioSection",
+                    PrepareTargetWindowAction = AppSettingsTutorialPrep.Prepare("audio"),
+                    TextPosition = TutorialStepPosition.Left
+                },
+                new TutorialStep
+                {
+                    Id = "set_subliminal",
+                    Icon = "💭",
+                    Title = "Subliminals",
+                    Description = "Quick text messages that flash on screen:\n" +
+                                  "• Frequency: How often they appear\n" +
+                                  "• Duration: How long they're visible\n" +
+                                  "• Customize text in the Subliminals section",
+                    RequiresTab = "studio",
+                    TargetElementName = "PanelSubliminal",
+                    OnBeforeTab = () => FocusStudioRack("subliminal"),
+                    TextPosition = TutorialStepPosition.Left
+                },
+                new TutorialStep
+                {
+                    Id = "set_system",
+                    Icon = "⚙",
+                    Title = "System Settings",
+                    Description = "Application behavior settings:\n" +
+                                  "• Auto-start on Windows startup\n" +
+                                  "• Start minimized to tray\n" +
+                                  "• Custom assets folder location\n" +
+                                  "• Open assets folder to add content",
+                    // Phase 3: startup/tray/assets settings live in Settings - General now
+                    // ("SystemSection" was the dead LegacyDashboardHost Border).
+                    RequiresTab = "appsettings",
+                    TargetElementName = "SectionGeneral",
+                    PrepareTargetWindowAction = AppSettingsTutorialPrep.Prepare("general"),
+                    TextPosition = TutorialStepPosition.Left
+                },
+                new TutorialStep
+                {
+                    Id = "set_overlays",
+                    Icon = "🌀",
+                    Title = "Overlays & Effects",
+                    Description = "Every screen effect is available from the start - pick your dose:\n" +
+                                  "• Spiral Overlay: a spiral over your screen\n" +
+                                  "• Pink Filter: a colour wash over everything\n" +
+                                  "• Brain Drain: blur/distortion\n" +
+                                  "• Bouncing Text: phrases drifting across the screen\n" +
+                                  "• Bubbles: pop them for XP!\n" +
+                                  "They all live here in the Studio rack.",
+                    // Phase 8: was RequiresTab = "progression" with no target, so it landed on a
+                    // view nothing revealed and listed level gates that no longer exist
+                    // (gap-report T-4 - level gating was removed; every feature is on from
+                    // level 1). Re-pointed at the Studio rack the same way its neighbours are.
+                    RequiresTab = "studio",
+                    OnBeforeTab = () => FocusStudioRack("spiral"),
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "set_done",
+                    Icon = "✓",
+                    Title = "Settings Complete",
+                    Description = "Now you know all the settings! Remember:\n" +
+                                  "• Hover over any control for details\n" +
+                                  "• Use 'Test Now' buttons to preview effects\n" +
+                                  "• Save your setup as a Preset.",
+                    TextPosition = TutorialStepPosition.Center
+                }
+            };
+        }
+
+        private List<TutorialStep> CreatePresetsSteps()
+        {
+            return new List<TutorialStep>
+            {
+                new TutorialStep
+                {
+                    Id = "pre_intro",
+                    Icon = "💾",
+                    Title = "Presets & Sessions Guide",
+                    Description = "Studio's Presets & Sessions entry lets you save configurations and run " +
+                                  "timed sessions.",
+                    RequiresTab = "presets",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "pre_save",
+                    Icon = "💾",
+                    Title = "Saving Presets",
+                    Description = "Click 'Save Current as Preset' to save your current settings.\n" +
+                                  "Give it a name and description. Load presets anytime to restore settings.",
+                    RequiresTab = "presets",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "pre_sessions",
+                    Icon = "🎯",
+                    Title = "Sessions",
+                    Description = "Sessions are timed experiences with scripted effects.\n" +
+                                  "• Click a session to see details\n" +
+                                  "• Sessions bypass level requirements\n" +
+                                  "• Great for trying new features.",
+                    RequiresTab = "presets",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "pre_editor",
+                    Icon = "✏",
+                    Title = "Session Editor",
+                    Description = "Create your own sessions!\n" +
+                                  "• Drag feature icons onto the timeline\n" +
+                                  "• Green = start, Red = stop\n" +
+                                  "• Export and share with others",
+                    TargetElementName = "BtnCreateSession",
+                    RequiresTab = "presets",
+                    TextPosition = TutorialStepPosition.Left
+                },
+                new TutorialStep
+                {
+                    Id = "pre_import",
+                    Icon = "📂",
+                    Title = "Import & Export",
+                    Description = "Drag .session.json files onto the app to import.\n" +
+                                  "Use the Export button to share your sessions.",
+                    RequiresTab = "presets",
+                    TextPosition = TutorialStepPosition.Center
+                }
+            };
+        }
+
+        private List<TutorialStep> CreateProgressionSteps()
+        {
+            return new List<TutorialStep>
+            {
+                new TutorialStep
+                {
+                    Id = "prog_intro",
+                    Icon = "📊",
+                    Title = "Progress Guide",
+                    Description = "How XP, levels and the Skill Tree fit together - and what the Scheduler and " +
+                                  "Intensity Ramp do with your time.",
+                    RequiresTab = "progression",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "prog_xp",
+                    Icon = "⭐",
+                    Title = "XP & Leveling",
+                    Description = "Gain XP by:\n" +
+                                  "• Running the engine (1 XP/minute)\n" +
+                                  "• Completing sessions\n" +
+                                  "• Popping bubbles\n" +
+                                  "• Clicking flash images\n" +
+                                  "Levels earn skill points, rank titles and new companion personalities - " +
+                                  "never permission to use a feature.",
+                    RequiresTab = "progression",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "prog_unlocks",
+                    Icon = "🔓",
+                    Title = "What Levelling Buys You",
+                    Description = "No feature is locked behind a level - every effect is yours from " +
+                                  "level 1, in the Studio rack.\n" +
+                                  "Levels buy the extras instead:\n" +
+                                  "• Skill points to spend in the Skill Tree - it lives behind the You door, " +
+                                  "under the name Enhancements used to have\n" +
+                                  "• Rank titles and stat pills on your XP bar\n" +
+                                  "• Extra companion personalities at higher levels",
+                    // Phase 8: the old copy listed Lvl 5/10/20/75 gates that were removed long ago
+                    // (gap-report T-4). RequiresTab stays "progression" - the key is API, and its
+                    // redirect lands on Home, which is the right backdrop for a levelling beat.
+                    // Deliberately a copy fix, not a re-target: this is a centred card standing on
+                    // Home, and the Skill Tree view has no stable x:Name worth spotlighting, so the
+                    // card names the door instead of pretending to point at it.
+                    RequiresTab = "progression",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "prog_scheduler",
+                    Icon = "📅",
+                    Title = "Scheduler",
+                    Description = "Set automatic start times:\n" +
+                                  "• Choose active hours\n" +
+                                  "• Select days of the week\n" +
+                                  "• App auto-starts during scheduled times\n" +
+                                  "Lives in Studio ▸ Scheduler.",
+                    // Phase 4: the Scheduler moved into the Studio rack. StudioSchedulerPanel is
+                    // that panel's root (Views/Controls/Studio/SchedulerRackPanel.xaml). The name
+                    // avoided colliding with the ghost tab's "SchedulerPanel" - Phase 8 has now
+                    // deleted that twin, so the duplicate-name hazard is gone, but the name stays
+                    // as authored: renaming it back would be churn for zero gain.
+                    TargetElementName = "StudioSchedulerPanel",
+                    RequiresTab = "studio",
+                    OnBeforeTab = () => FocusStudioRack("scheduler"),
+                    TextPosition = TutorialStepPosition.Left
+                },
+                new TutorialStep
+                {
+                    Id = "prog_ramp",
+                    Icon = "📈",
+                    Title = "Intensity Ramp",
+                    Description = "Gradually increase intensity over time:\n" +
+                                  "• Start at lower intensity\n" +
+                                  "• Ramp up to your settings\n" +
+                                  "• Great for longer sessions!\n" +
+                                  "Lives in Studio ▸ Intensity Ramp.",
+                    // Phase 4, same story as prog_scheduler above. The rack's copy is the richer
+                    // one - it owns CmbRampCurve, which the deleted twin never had.
+                    TargetElementName = "StudioRampPanel",
+                    RequiresTab = "studio",
+                    OnBeforeTab = () => FocusStudioRack("ramp"),
+                    TextPosition = TutorialStepPosition.Left
+                }
+            };
+        }
+
+        private List<TutorialStep> CreateAchievementsSteps()
+        {
+            return new List<TutorialStep>
+            {
+                new TutorialStep
+                {
+                    Id = "ach_intro",
+                    Icon = "🏆",
+                    Title = "Achievements Guide",
+                    Description = "Unlock achievements by reaching milestones.",
+                    RequiresTab = "achievements",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "ach_types",
+                    Icon = "🏆",
+                    Title = "Achievement Types",
+                    Description = "Different ways to earn achievements:\n" +
+                                  "• Session completion milestones\n" +
+                                  "• Total runtime goals\n" +
+                                  "• Feature usage achievements\n" +
+                                  "• Level milestones\n" +
+                                  "• Special hidden achievements",
+                    RequiresTab = "achievements",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "ach_view",
+                    Icon = "👁",
+                    Title = "Viewing Achievements",
+                    Description = "Click on any achievement tile to see details.\n" +
+                                  "Locked achievements show hints on how to unlock them.\n" +
+                                  "Try to collect them all.",
+                    RequiresTab = "achievements",
+                    TextPosition = TutorialStepPosition.Center
+                }
+            };
+        }
+
+        private List<TutorialStep> CreateCompanionSteps()
+        {
+            // OnActivate helper: idempotently open the Workshop on its roster pigeonhole, which is
+            // where the roster tray went (design §6). Idempotent by construction now - the hero's
+            // Switch chip stopped being a toggle, so this is the same call it makes.
+            Action revealRoster = () =>
+            {
+                try
+                {
+                    if (TutorialHeadHooks.Shell is Window win) CompanionTutorialPrep.ExpandRoster(win);
+                }
+                catch { /* tour never blocks on UI quirks */ }
+            };
+
+            bool aiUnlocked = TutorialHeadHooks.HasCloudIdentity;
+
+            var steps = new List<TutorialStep>
+            {
+                new TutorialStep
+                {
+                    Id = "comp_intro",
+                    Icon = "💗",
+                    Title = "Meet Your Companion",
+                    Description = "This tab is where she lives.\n\n" +
+                                  "She's the voice in your speech bubbles, the personality behind your AI chats, " +
+                                  "and the one keeping score of your XP. There's a lot in here - let's walk it together.",
+                    RequiresTab = "companion",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "comp_hero",
+                    Icon = "✨",
+                    Title = "Active Companion",
+                    Description = "Up here you see who's currently active: her avatar, her name, " +
+                                  "her level, and the XP bar toward her next level.\n\n" +
+                                  "The two pills under her name show whether AI is on (Off / Cloud / Local) " +
+                                  "and whether she is watching your windows. Both are buttons - they jump " +
+                                  "straight to the section that controls them.",
+                    RequiresTab = "companion",
+                    TargetElementName = "HeroZone",
+                    TextPosition = TutorialStepPosition.Bottom
+                },
+                new TutorialStep
+                {
+                    Id = "comp_switch",
+                    Icon = "🔄",
+                    Title = "Five Companions",
+                    Description = "There are five companions, and each one gives you a different XP bonus " +
+                                  "(Pink Filter, Autonomy, XP Drain, Strict Mode, Session Completion).\n\n" +
+                                  "The Switch chip opens the Workshop on her roster - your XP for each is tracked separately.",
+                    RequiresTab = "companion",
+                    TargetElementName = "HeroZone",
+                    TextPosition = TutorialStepPosition.Right,
+                    OnActivate = revealRoster
+                },
+                new TutorialStep
+                {
+                    Id = "comp_roster",
+                    Icon = "🎭",
+                    Title = "The Roster - Two Clicks",
+                    Description = "The roster lives in the Workshop, at the bottom of the page. " +
+                                  "Two different clicks live on each card:\n\n" +
+                                  "• Click the card itself → switch to that companion.\n" +
+                                  "• Click the small 🎭 button → assign an AI personality to her without switching.\n\n" +
+                                  "Each card also shows that companion's level and her XP bonus.",
+                    RequiresTab = "companion",
+                    TargetElementName = "WorkshopZone",
+                    TextPosition = TutorialStepPosition.Top,
+                    OnActivate = revealRoster
+                },
+                new TutorialStep
+                {
+                    Id = "comp_chat_shortcut",
+                    Icon = "💬",
+                    Title = "Chat Hotkey",
+                    Description = "She has a global hotkey for chat - Ctrl+T by default, anywhere on your machine.\n\n" +
+                                  "The hero's Chat button shows the live combo; this is where you rebind it, " +
+                                  "in the Workshop's Behavior shelf. Useful when Ctrl+T collides with " +
+                                  "another app you use a lot.",
+                    RequiresTab = "companion",
+                    TargetElementName = "BtnChatShortcut",
+                    PrepareTargetWindowAction = CompanionTutorialPrep.ExpandWorkshop,
+                    TextPosition = TutorialStepPosition.Left
+                },
+                new TutorialStep
+                {
+                    Id = "comp_avatar",
+                    Icon = "👁",
+                    Title = "Avatar Window Controls",
+                    Description = "Three quick chips on her card:\n\n" +
+                                  "• The eye chip - pop her on or off your screen.\n" +
+                                  "• The speaker chip - silence her speech and sound effects.\n" +
+                                  "• Detach - float her free of the main window so you can drag her anywhere.",
+                    RequiresTab = "companion",
+                    TargetElementName = "HeroZone",
+                    TextPosition = TutorialStepPosition.Top
+                },
+                new TutorialStep
+                {
+                    Id = "comp_customize",
+                    Icon = "🎨",
+                    Title = "Personality Editor",
+                    Description = "\"Make her yours\" is the front door to her personality - preset chips, " +
+                                  "the spice switch, and who she currently is.\n\n" +
+                                  "The quiet links at the bottom of that card - View compiled prompt, Fork & edit " +
+                                  "by hand, Community prompts - open the full editor.",
+                    RequiresTab = "companion",
+                    TargetElementName = "PersonalityZone",
+                    TextPosition = TutorialStepPosition.Top
+                },
+                new TutorialStep
+                {
+                    Id = "comp_ai_brain_intro",
+                    Icon = "🧠",
+                    Title = "The Engine Room",
+                    Description = aiUnlocked
+                        ? "The Engine Room is what gives her real conversation. She'll reply to you, react to " +
+                          "what's on your screen, and chime in unprompted.\n\n" +
+                          "Three things to set up here: which provider, which capabilities, and how spicy."
+                        : "The Engine Room is what gives her real conversation - replies, reactions, unprompted chimes.\n\n" +
+                          "Right now it's locked because you're not signed in. " +
+                          "Sign in with Discord or Patreon and her chat unlocks. " +
+                          "AI is free for all signed-in users.",
+                    RequiresTab = "companion",
+                    TextPosition = TutorialStepPosition.Center
+                }
+            };
+
+            if (aiUnlocked)
+            {
+                steps.Add(new TutorialStep
+                {
+                    Id = "comp_ai_provider",
+                    Icon = "📡",
+                    Title = "Pick a Provider",
+                    Description = "Three modes:\n\n" +
+                                  "• Off - no AI, just her phrase library.\n" +
+                                  "• Cloud - easiest. Talks to our proxy. Free for signed-in users.\n" +
+                                  "• Local - runs Ollama on your own machine. Fully private, but you install Ollama once.\n\n" +
+                                  "Pick Local and the model name + host fields appear below, along with a Setup wizard " +
+                                  "that walks you through Ollama install.",
+                    RequiresTab = "companion",
+                    TargetElementName = "EngineZone",
+                    PrepareTargetWindowAction = CompanionTutorialPrep.ExpandEngineRoom,
+                    TextPosition = TutorialStepPosition.Top
+                });
+                steps.Add(new TutorialStep
+                {
+                    Id = "comp_capabilities",
+                    Icon = "💡",
+                    Title = "Behaviour & Triggers",
+                    Description = "Turning the provider above to Cloud or Local switches on her AI replies. " +
+                                  "The Workshop holds the rest of her tuning:\n\n" +
+                                  "• Idle chatter, bubble duration and trigger phrases.\n" +
+                                  "• Awareness fine-tuning - the cooldowns that stop her spamming. The eye dial in " +
+                                  "\"What she can see\" is what turns the watching on.",
+                    RequiresTab = "companion",
+                    TargetElementName = "WorkshopZone",
+                    PrepareTargetWindowAction = CompanionTutorialPrep.ExpandWorkshop,
+                    TextPosition = TutorialStepPosition.Right
+                });
+                steps.Add(new TutorialStep
+                {
+                    Id = "comp_slut_mode",
+                    Icon = "🌶",
+                    Title = "Slut Mode",
+                    Description = "The flame switch on \"Make her yours\" flips her to the spicier " +
+                                  "personality variant - same companion, dirtier mouth.\n\n" +
+                                  "Toggle on or off whenever; it doesn't change her level or XP.",
+                    RequiresTab = "companion",
+                    TargetElementName = "PersonalityZone",
+                    TextPosition = TutorialStepPosition.Right
+                });
+            }
+            else
+            {
+                steps.Add(new TutorialStep
+                {
+                    Id = "comp_ai_locked",
+                    Icon = "🔒",
+                    Title = "Login Unlocks AI",
+                    Description = "Chatting with her needs a login - that is what the veil on " +
+                                  "\"Talk to her\" is.\n\n" +
+                                  "Discord login or Patreon login both work, and everything else on this page - " +
+                                  "her barks, her diary, her personality - is already yours. Once you're in, " +
+                                  "replay this tour and we'll cover all the AI controls.",
+                    RequiresTab = "companion",
+                    TargetElementName = "ChatZone",
+                    TextPosition = TutorialStepPosition.Top
+                });
+            }
+
+            steps.Add(new TutorialStep
+            {
+                Id = "comp_timing",
+                Icon = "⏱",
+                Title = "How Often, How Long",
+                Description = "Two timing sliders in the Workshop's Behavior shelf:\n\n" +
+                              "• Idle Giggle Interval (5-300s) - how often she chimes in unprompted.\n" +
+                              "• Bubble Duration (1-10s) - how long each speech bubble stays on screen.\n\n" +
+                              "If she feels too chatty, raise the giggle interval. If you can't read fast enough, " +
+                              "raise the bubble duration.",
+                RequiresTab = "companion",
+                TargetElementName = "SliderIdleIntervalCompanion",
+                PrepareTargetWindowAction = CompanionTutorialPrep.ExpandWorkshop,
+                TextPosition = TutorialStepPosition.Left
+            });
+            steps.Add(new TutorialStep
+            {
+                Id = "comp_triggers",
+                Icon = "⚡",
+                Title = "Trigger Mode",
+                Description = "Trigger Mode rotates a list of phrases at a fixed interval - handy for mantra-style " +
+                              "drilling without typing anything yourself.\n\n" +
+                              "Flip it on and a panel appears with the rotation interval and an Edit Triggers button " +
+                              "where you can add or remove phrases.",
+                RequiresTab = "companion",
+                TargetElementName = "ChkTriggerModeCompanion",
+                PrepareTargetWindowAction = CompanionTutorialPrep.ExpandWorkshop,
+                TextPosition = TutorialStepPosition.Left
+            });
+            steps.Add(new TutorialStep
+            {
+                Id = "comp_phrases_community",
+                Icon = "📚",
+                Title = "Phrases & Community Prompts",
+                Description = "Three more shelves in the Workshop:\n\n" +
+                              "• Manage Phrases - her speech bubble library, with on/off per phrase.\n" +
+                              "• Phrase Presets - save a phrase config and load it later.\n" +
+                              "• Community Prompts - Browse / Import / Export AI personalities other users have made.\n" +
+                              "• Hypnotube Links - comma-separated video URLs she's allowed to suggest (2000-char cap).",
+                RequiresTab = "companion",
+                TargetElementName = "BtnManagePhrases",
+                PrepareTargetWindowAction = CompanionTutorialPrep.ExpandWorkshop,
+                TextPosition = TutorialStepPosition.Left
+            });
+            steps.Add(new TutorialStep
+            {
+                Id = "comp_done",
+                Icon = "❤",
+                Title = "You're Set",
+                Description = "That's the whole Companion door.\n\n" +
+                              "• Want to replay this tour? The 🎓 button next to the page title runs it again.\n" +
+                              "• It's also in the ? menu (top-right) under Companion.\n" +
+                              "• Most controls have hover tooltips with extra detail.\n\n" +
+                              "Click Finish - go play.",
+                RequiresTab = "companion",
+                TextPosition = TutorialStepPosition.Center
+            });
+
+            return steps;
+        }
+
+        // Phase 2 retired the App Info popup's account section (gap-report R-2): the login cards,
+        // linking, cloud backup and privacy blocks are now Settings · Account. These five steps
+        // used RequiresTab="patreon", whose named callback opened that popup; they now say where
+        // they actually land. The "patreon" ShowTab key itself is untouched API (bark rules, ten
+        // redirect call sites) - only these steps stopped going through it.
+        // Every step here is a centered card, so the section focus has to ride OnActivate:
+        // UpdateSpotlight early-returns past PrepareTargetWindowAction for Center steps.
+        private List<TutorialStep> CreatePatreonSteps()
+        {
+            return new List<TutorialStep>
+            {
+                new TutorialStep
+                {
+                    Id = "pat_intro",
+                    Icon = "💎",
+                    Title = "Account & Supporter Perks",
+                    Description = "Settings ▸ Account is where you sign in and where supporter features " +
+                                  "switch themselves on.",
+                    RequiresTab = "appsettings",
+                    OnActivate = AppSettingsTutorialPrep.Focus("account"),
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "pat_login",
+                    Icon = "🔑",
+                    Title = "Logging In",
+                    Description = "Click 'Login with Patreon' to connect your account.\n" +
+                                  "Your subscription tier unlocks corresponding features automatically.",
+                    RequiresTab = "appsettings",
+                    OnActivate = AppSettingsTutorialPrep.Focus("account"),
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "pat_ai",
+                    Icon = "🤖",
+                    Title = "AI Chat",
+                    Description = "Signing in here is what switches her AI on. The chat itself lives over in " +
+                                  "the Companion door:\n" +
+                                  "• Double-click the avatar in her tube to chat\n" +
+                                  "• She remembers conversation context\n" +
+                                  "• Her personality is chosen in Companion ▸ Workshop",
+                    RequiresTab = "appsettings",
+                    OnActivate = AppSettingsTutorialPrep.Focus("account"),
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "pat_awareness",
+                    Icon = "👁",
+                    Title = "Window Awareness",
+                    Description = "Over in the Companion door, the Awareness entry lets her notice what " +
+                                  "you're doing:\n" +
+                                  "• Detects active windows\n" +
+                                  "• Comments on your activity\n" +
+                                  "• Privacy: Only window titles are read",
+                    RequiresTab = "appsettings",
+                    OnActivate = AppSettingsTutorialPrep.Focus("account"),
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "pat_slut",
+                    Icon = "🔥",
+                    Title = "Slut Mode",
+                    Description = "Explicit AI responses, switched on with her other permissions over in " +
+                                  "the Companion door:\n" +
+                                  "• More provocative messages\n" +
+                                  "• Adult-themed interactions\n" +
+                                  "• Toggle on/off anytime",
+                    RequiresTab = "appsettings",
+                    OnActivate = AppSettingsTutorialPrep.Focus("account"),
+                    TextPosition = TutorialStepPosition.Center
+                }
+            };
+        }
+
+        private List<TutorialStep> CreateAvatarSteps()
+        {
+            return new List<TutorialStep>
+            {
+                new TutorialStep
+                {
+                    Id = "ava_intro",
+                    Icon = "💗",
+                    Title = "Avatar Companion Guide",
+                    Description = "Everything about your avatar companion.",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "ava_tube",
+                    Icon = "🔮",
+                    Title = "The Avatar Tube",
+                    // AvatarTubeWindow.Windowing.cs UpdatePosition hangs the attached tube to the
+                    // LEFT of the main window (newLeft = parent.Left - width - offset), so the old
+                    // "right side" was simply wrong.
+                    Description = "Your companion lives in the glass tube attached to the left edge of the " +
+                                  "main window.\n" +
+                                  "She's always there watching and reacting to what happens in the app.",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "ava_click",
+                    Icon = "👆",
+                    Title = "Interacting",
+                    Description = "• Single click: Open chat (if enabled)\n" +
+                                  "• Double click: Quick chat\n" +
+                                  "• Right click: Quick menu (Start, Trigger, Slut Mode)",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "ava_detach",
+                    Icon = "📌",
+                    Title = "Detaching",
+                    Description = "Click the 'Detach' button to pop out the avatar:\n" +
+                                  "• Drag her anywhere on screen\n" +
+                                  "• Resize with Ctrl+Scroll or Arrow keys\n" +
+                                  "• Click 'Attach' to return to main window",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "ava_evolution",
+                    Icon = "🌟",
+                    Title = "Her Looks",
+                    // The old copy listed Level 1/10/25/50/75 gates that no longer exist:
+                    // AvatarTubeWindow.Avatar.cs IsAvatarSetUnlocked returns true unconditionally
+                    // ("Feature level gating has been removed - every avatar set is always
+                    // unlocked") and GetAvatarSetForLevel returns a constant. The arrows are
+                    // BtnPrevAvatar / BtnNextAvatar, shown by UpdateNavigationArrows whenever more
+                    // than one set is available.
+                    Description = "She has a whole wardrobe of looks, and none of them are locked - " +
+                                  "every one is available from the start.\n" +
+                                  "• Use the little arrows beside the tube to flip through them\n" +
+                                  "• The look you pick is remembered\n" +
+                                  "Installing a mod can change the line-up entirely - mods bring their own.",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "ava_animations",
+                    Icon = "✨",
+                    Title = "Animations",
+                    Description = "Your avatar reacts to events:\n" +
+                                  "• Blinks and idles\n" +
+                                  "• Reacts to flashes and videos\n" +
+                                  "• Shows emotions during interactions",
+                    TextPosition = TutorialStepPosition.Center
+                }
+            };
+        }
+
+        private List<TutorialStep> CreateModdingSteps()
+        {
+            return new List<TutorialStep>
+            {
+                new TutorialStep
+                {
+                    Id = "mod_welcome",
+                    Icon = "\uD83D\uDD27",
+                    Title = "Welcome to the Mod Creator",
+                    Description = "This tool lets you build a complete mod visually - no manual file editing needed.\n\n" +
+                                  "We'll walk through each tab so you know exactly what everything does. " +
+                                  "You can reopen this guide anytime with the ? button in the title bar.",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "mod_tab_info",
+                    Icon = "\u2139",
+                    Title = "Info",
+                    Description = "Start here - give your mod a name, author, version, and description.\n\n" +
+                                  "Add a preview image that shows in the mod manager so people know what your mod looks like at a glance.",
+                    RequiresTab = "mod:info",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "mod_tab_theme",
+                    Icon = "\uD83C\uDFA8",
+                    Title = "Theme",
+                    Description = "Pick your mod's color scheme. Click any color swatch to open a color picker, or type hex codes directly.\n\n" +
+                                  "The preview strip at the top shows all your colors together so you can see how they look as a set.",
+                    RequiresTab = "mod:theme",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "mod_tab_identity",
+                    Icon = "\uD83E\uDD16",
+                    Title = "Identity",
+                    Description = "Define who the companion is. Change their name, what they call the user, the mode name, and button labels.\n\n" +
+                                  "These labels appear throughout the entire app when your mod is active.",
+                    RequiresTab = "mod:identity",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "mod_tab_achievements",
+                    Icon = "\uD83C\uDFC6",
+                    Title = "Achievements",
+                    Description = "Drag and drop custom achievement icons onto each slot. These replace the default badges.\n\n" +
+                                  "Leave slots empty to keep the originals - you only need to replace what you want to change.",
+                    RequiresTab = "mod:achievements",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "mod_tab_features",
+                    Icon = "\u26A1",
+                    Title = "Features",
+                    Description = "Replace feature icons (flash, video, subliminal, etc.) with your own artwork.\n\n" +
+                                  "Drag PNG images onto any slot. These are the icons that appear on the nav rail and UI controls.",
+                    RequiresTab = "mod:features",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "mod_tab_skills",
+                    Icon = "\uD83C\uDF32",
+                    Title = "Skills",
+                    Description = "Custom skill tree icons. Each slot maps to a skill in the progression system.\n\n" +
+                                  "Drag and drop your own icons to give the skill tree a completely different look.",
+                    RequiresTab = "mod:skills",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "mod_tab_avatars",
+                    Icon = "\uD83D\uDC64",
+                    Title = "Avatars",
+                    Description = "Your mod can have up to 7 avatar sets with 4 poses each (Standby, Active, Alert, Override).\n\n" +
+                                  "Drag images to customize your companion's appearance at each evolution stage.",
+                    RequiresTab = "mod:avatars",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "mod_tab_uiassets",
+                    Icon = "\uD83D\uDDBC",
+                    Title = "UI Assets",
+                    Description = "Replace bubbles, tube frames, logo, speech bubbles, and card art.\n\n" +
+                                  "These are the decorative elements throughout the app. Drop your images onto any slot to replace them.",
+                    RequiresTab = "mod:uiassets",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "mod_tab_triggers",
+                    Icon = "\uD83D\uDCA5",
+                    Title = "Triggers",
+                    Description = "Customize trigger text - what happens on Freeze, Reset, Collapse, and Autonomy events.\n\n" +
+                                  "Type your own text for each trigger to match your mod's theme.",
+                    RequiresTab = "mod:triggers",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "mod_tab_messages",
+                    Icon = "\uD83D\uDCE2",
+                    Title = "Messages",
+                    Description = "Set the companion's attention check messages and bubble count retry text.\n\n" +
+                                  "These show up during interactive moments when the app needs the user's attention.",
+                    RequiresTab = "mod:messages",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "mod_tab_phrases",
+                    Icon = "\uD83D\uDCAC",
+                    Title = "Phrases",
+                    Description = "The big one! Add phrases for every situation - greetings, idle chatter, gaming, browsing, level ups, and more.\n\n" +
+                                  "Click a category to expand it, then add as many phrases as you want. " +
+                                  "The companion picks randomly from your list.",
+                    RequiresTab = "mod:phrases",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "mod_tab_replacements",
+                    Icon = "\uD83D\uDD04",
+                    Title = "Text Replacements",
+                    Description = "Find-and-replace across the entire UI. Map words to your mod's equivalent.\n\n" +
+                                  "These apply everywhere automatically - every label, phrase, and message gets substituted.",
+                    RequiresTab = "mod:replacements",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "mod_export",
+                    Icon = "\uD83D\uDCE5",
+                    Title = "Export Your Mod",
+                    Description = "When you're done, click 'Export as .ccpmod' at the bottom. Your mod is packaged into a single file ready to share!\n\n" +
+                                  "You can also load an existing .ccpmod to edit it using the 'Load .ccpmod' button.",
+                    TextPosition = TutorialStepPosition.Center
+                }
+            };
+        }
+
+        // Awareness Engine tutorial - narrated around setting up a "good boy" clicker
+        // so each section has a concrete reason to exist in the user's head, not just
+        // a description. The script is intentionally non-technical: the engine, OCR,
+        // cooldowns, scroll dedup, and the action editor are all explained in plain
+        // language. Step 11 fires a synthetic trigger so users actually SEE the
+        // engine react instead of just being told what it would do.
+        private List<TutorialStep> CreateAwarenessSteps()
+        {
+            return new List<TutorialStep>
+            {
+                new TutorialStep
+                {
+                    Id = "aw_intro",
+                    Icon = "\uD83D\uDC41",
+                    Title = "The Awareness Engine",
+                    Description = "The Awareness Engine watches your screen and your typing for keywords " +
+                                  "you choose, then reacts - a sound, a glow, a praise line from your companion, " +
+                                  "anything you want.\n\n" +
+                                  "Let's walk through it by setting up a simple \"good boy\" clicker.",
+                    RequiresTab = "awareness",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "aw_master",
+                    Icon = "\uD83D\uDD18",
+                    Title = "Master Switch",
+                    Description = "This is the master switch. Off = nothing happens at all.\n\n" +
+                                  "The dot turns green when the engine is on and listening.",
+                    RequiresTab = "awareness",
+                    TargetElementName = "ChkAwarenessMaster",
+                    TextPosition = TutorialStepPosition.Bottom
+                },
+                new TutorialStep
+                {
+                    Id = "aw_pulse",
+                    Icon = "\uD83D\uDCE1",
+                    Title = "Live Pulse Feed",
+                    Description = "Every time a keyword fires, it lands here - your live receipt.\n\n" +
+                                  "If you're ever wondering \"did the engine actually catch that?\", " +
+                                  "this feed tells you in real time. We'll come back here in a moment.",
+                    RequiresTab = "awareness",
+                    TargetElementName = "AwarenessPulseFeed",
+                    TextPosition = TutorialStepPosition.Right
+                },
+                new TutorialStep
+                {
+                    Id = "aw_sources_ocr",
+                    Icon = "\uD83D\uDDA5",
+                    Title = "Screen OCR",
+                    Description = "Screen OCR scans your monitors every few seconds and reads the text on them.\n\n" +
+                                  "This is how the engine catches words on web pages, chat windows, " +
+                                  "captions, anything visible - even if you didn't type it yourself.\n\n" +
+                                  "It runs entirely on your computer. Nothing is sent anywhere.",
+                    RequiresTab = "awareness",
+                    TargetElementName = "ChkAwarenessOcr",
+                    TextPosition = TutorialStepPosition.Right
+                },
+                new TutorialStep
+                {
+                    Id = "aw_sources_keyboard",
+                    Icon = "\u2328",
+                    Title = "Keyboard Watching",
+                    Description = "Keyboard mode watches what you type, even outside this app.\n\n" +
+                                  "Either source works on its own - you can use OCR, keyboard, or both at once. " +
+                                  "Most people leave both on.",
+                    RequiresTab = "awareness",
+                    TargetElementName = "ChkAwarenessKeyboard",
+                    TextPosition = TutorialStepPosition.Right
+                },
+                new TutorialStep
+                {
+                    Id = "aw_safety_ownui",
+                    Icon = "\uD83D\uDEE1",
+                    Title = "Ignore Own UI",
+                    Description = "This skips the app's own windows during OCR scans.\n\n" +
+                                  "Without it, the engine would read your settings text and trigger on it. Leave this on.",
+                    RequiresTab = "awareness",
+                    TargetElementName = "ChkAwarenessIgnoreOwnUi",
+                    TextPosition = TutorialStepPosition.Left
+                },
+                new TutorialStep
+                {
+                    Id = "aw_safety_loop",
+                    Icon = "\uD83D\uDD01",
+                    Title = "Loop Protection",
+                    Description = "Some triggers flash the keyword back on screen. Without protection, " +
+                                  "OCR would re-read it and the trigger would fire forever.\n\n" +
+                                  "Loop Protection mutes a keyword for a few seconds after it fires, " +
+                                  "across all sources. Leave this on too.",
+                    RequiresTab = "awareness",
+                    TargetElementName = "ChkAwarenessLoopProtection",
+                    TextPosition = TutorialStepPosition.Left
+                },
+                new TutorialStep
+                {
+                    Id = "aw_scroll_note",
+                    Icon = "\uD83D\uDCDC",
+                    Title = "What About Scrolling?",
+                    Description = "When you scroll a page, OCR sees the same words again - you might worry that " +
+                                  "scrolling would spam the engine with false fires.\n\n" +
+                                  "It doesn't. The engine waits for a word to stay in the same spot for two scans " +
+                                  "before counting it. Scrolling, redraws, and cursor movement are filtered out automatically.\n\n" +
+                                  "There's nothing here for you to configure - it just works.",
+                    RequiresTab = "awareness",
+                    TargetElementName = "AwarenessPulseFeed",
+                    TextPosition = TutorialStepPosition.Bottom
+                },
+                new TutorialStep
+                {
+                    Id = "aw_cd_global",
+                    Icon = "\u23F1",
+                    Title = "Global Cooldown",
+                    Description = "Global cooldown = the gap between any two reactions, regardless of which keyword fired.\n\n" +
+                                  "If multiple words land at once and you'd rather feel one click than five, " +
+                                  "raise this slider. Most people start around 10 seconds and tune from there.",
+                    RequiresTab = "awareness",
+                    TargetElementName = "SliderAwarenessGlobalCooldown",
+                    TextPosition = TutorialStepPosition.Top
+                },
+                new TutorialStep
+                {
+                    Id = "aw_cd_sameword",
+                    Icon = "\uD83D\uDD52",
+                    Title = "Same-Word Cooldown",
+                    Description = "Same-word cooldown = the gap before the same keyword can fire again.\n\n" +
+                                  "If \"good boy\" appears five times on a page, only the first one fires. " +
+                                  "Other keywords can still fire normally during that window.\n\n" +
+                                  "Crank both cooldowns up if you ever feel overloaded - it's the gentlest way to dial things back.",
+                    RequiresTab = "awareness",
+                    TargetElementName = "SliderAwarenessSameWordCooldown",
+                    TextPosition = TutorialStepPosition.Top
+                },
+                new TutorialStep
+                {
+                    Id = "aw_demo_fire",
+                    Icon = "\u2728",
+                    Title = "Watch It Catch a Word",
+                    Description = "Watch the pulse feed - the engine just simulated a fire for the word \"good boy\".\n\n" +
+                                  "That's exactly what happens when OCR or your keyboard catches one of your keywords " +
+                                  "in real life. If your companion is attached, she may have said something too.",
+                    RequiresTab = "awareness",
+                    TargetElementName = "AwarenessPulseFeed",
+                    TextPosition = TutorialStepPosition.Right,
+                    OnActivate = () =>
+                    {
+                        try { TutorialHeadHooks.FireKeywordDemo("good boy", "Tutorial"); }
+                        catch { /* tutorial demo never blocks the tour */ }
+                    }
+                },
+                new TutorialStep
+                {
+                    Id = "aw_presets",
+                    Icon = "\uD83C\uDF81",
+                    Title = "Preset Packs",
+                    Description = "The easiest way to start: install a preset pack.\n\n" +
+                                  "Each pack bundles a set of keywords and the responses that fire when they're caught. " +
+                                  "The Puppy Pet pack already includes \"good boy\" with a clicker sound and a praise line - " +
+                                  "pick it if you want a one-click clicker setup, or browse the others.",
+                    RequiresTab = "awareness",
+                    TargetElementName = "AwarenessPresetItems",
+                    TextPosition = TutorialStepPosition.Top
+                },
+                new TutorialStep
+                {
+                    Id = "aw_highlight",
+                    Icon = "\uD83C\uDFA8",
+                    Title = "Highlight Glow",
+                    Description = "When a keyword is caught on-screen, the engine paints a glow around it " +
+                                  "so you actually see the recognition happen.\n\n" +
+                                  "Pick a color you like - pink by default. The \"visible in screen capture\" toggle " +
+                                  "decides whether OBS / streaming software sees the glow too.",
+                    RequiresTab = "awareness",
+                    TargetElementName = "AwarenessHighlightColorPanel",
+                    TextPosition = TutorialStepPosition.Top
+                },
+                new TutorialStep
+                {
+                    Id = "aw_advanced",
+                    Icon = "\uD83D\uDD27",
+                    Title = "Your Keyword Triggers",
+                    Description = "This panel is your keyword list - every word the engine listens for, and what " +
+                                  "it does when it catches one.\n\n" +
+                                  "Want more control (swap the clicker sound, change the praise line, add XP per " +
+                                  "fire, send time to a Chaster lock)? The \"Customize individual triggers " +
+                                  "(advanced)\" link just below opens the full editor.\n\n" +
+                                  "Hit Next to peek inside.",
+                    RequiresTab = "awareness",
+                    // A <Hyperlink> can NEVER be a spotlight target: it is a FrameworkContentElement,
+                    // and TutorialOverlay.FindElementByName only walks FrameworkElements - so the old
+                    // "LnkAwarenessAdvanced" target resolved to nothing and this step silently
+                    // degraded to an unspotlit card. KeywordPanel (the KeywordTriggersPanel at
+                    // Views/Tabs/AwarenessTabView.xaml:483) is the surface the copy introduces.
+                    TargetElementName = "KeywordPanel",
+                    TextPosition = TutorialStepPosition.Top
+                },
+                new TutorialStep
+                {
+                    Id = "aw_editor_open",
+                    Icon = "\uD83C\uDFAF",
+                    Title = "Inside the Editor",
+                    Description = "Each row in the editor is one keyword, with a stack of responses below it:\n\n" +
+                                  "\uD83D\uDD0A sound clip   \u2728 glow   \uD83D\uDCAC avatar line   \u2B50 XP\n" +
+                                  "\uD83D\uDCF3 haptic   \u23F1 extend session   \uD83D\uDD12 Chaster time\n\n" +
+                                  "Add, remove, retune any of them - your changes save the moment you close.\n\n" +
+                                  "We'll pop the editor open with the Puppy preset for you when you finish this tour.",
+                    RequiresTab = "awareness",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "aw_done",
+                    Icon = "\u2764",
+                    Title = "You're Set",
+                    Description = "That's the whole tour.\n\n" +
+                                  "\u2022 Privacy: nothing leaves your machine - OCR runs locally on Windows.\n" +
+                                  "\u2022 Feeling overloaded later? Raise the two cooldown sliders.\n" +
+                                  "\u2022 Want this tour again? It's in the ? button at the top right.\n\n" +
+                                  "Click Finish - the editor will open so you can play.",
+                    TextPosition = TutorialStepPosition.Center
+                }
+            };
+        }
+
+        // Deeper tab tour. Targets element names in the Deeper tab; the
+        // RequiresTab="deeper" flips into the tab via the showDeeper callback.
+        private List<TutorialStep> CreateDeeperSteps()
+        {
+            return new List<TutorialStep>
+            {
+                new TutorialStep
+                {
+                    Id = "dp_intro",
+                    Icon = "\ud83c\udf0a",
+                    Title = Loc.Get("deeper_tut_tab_intro_title"),
+                    Description = Loc.Get("deeper_tut_tab_intro_body"),
+                    RequiresTab = "deeper",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "dp_player",
+                    Icon = "\u25b6",
+                    Title = Loc.Get("deeper_tut_tab_player_title"),
+                    Description = Loc.Get("deeper_tut_tab_player_body"),
+                    RequiresTab = "deeper",
+                    TargetElementName = "BtnDeeperOpenPlayer",
+                    TextPosition = TutorialStepPosition.Bottom
+                },
+                new TutorialStep
+                {
+                    Id = "dp_new",
+                    Icon = "\u2728",
+                    Title = Loc.Get("deeper_tut_tab_new_title"),
+                    Description = Loc.Get("deeper_tut_tab_new_body"),
+                    RequiresTab = "deeper",
+                    TargetElementName = "BtnDeeperNewEnhancement",
+                    TextPosition = TutorialStepPosition.Bottom
+                },
+                new TutorialStep
+                {
+                    Id = "dp_library",
+                    Icon = "\ud83d\udcda",
+                    Title = Loc.Get("deeper_tut_tab_library_title"),
+                    Description = Loc.Get("deeper_tut_tab_library_body"),
+                    RequiresTab = "deeper",
+                    // Mission 2: DeeperLibraryCard removed; retarget to the
+                    // unified ItemsControl (DeeperLibraryList x:Name preserved).
+                    TargetElementName = "DeeperLibraryList",
+                    TextPosition = TutorialStepPosition.Top
+                },
+                new TutorialStep
+                {
+                    // Mission 2: dp_recent repurposed as "intro the new search /
+                    // filter / sort strip" since Recent is now a sort option,
+                    // not a surface. Step id kept for save-state continuity;
+                    // loc key renamed to deeper_tut_tab_filters_body to match
+                    // the new role.
+                    Id = "dp_recent",
+                    Icon = "\ud83d\udd0e",
+                    Title = Loc.Get("deeper_tut_tab_filters_title"),
+                    Description = Loc.Get("deeper_tut_tab_filters_body"),
+                    RequiresTab = "deeper",
+                    TargetElementName = "DeeperLibraryFilterStrip",
+                    TextPosition = TutorialStepPosition.Bottom
+                },
+                new TutorialStep
+                {
+                    Id = "dp_export",
+                    Icon = "\ud83d\udce6",
+                    Title = Loc.Get("deeper_tut_tab_export_title"),
+                    Description = Loc.Get("deeper_tut_tab_export_body"),
+                    RequiresTab = "deeper",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "dp_done",
+                    Icon = "\u2764",
+                    Title = Loc.Get("deeper_tut_tab_done_title"),
+                    Description = Loc.Get("deeper_tut_tab_done_body"),
+                    RequiresTab = "deeper",
+                    TextPosition = TutorialStepPosition.Center
+                }
+            };
+        }
+
+        // Deeper editor coachmarks. These steps target element names that live
+        // inside the editor *window*, so the consumer must construct the
+        // TutorialOverlay against the editor window (not MainWindow). No
+        // RequiresTab - the editor is its own surface.
+        private List<TutorialStep> CreateDeeperEditorSteps()
+        {
+            return new List<TutorialStep>
+            {
+                new TutorialStep
+                {
+                    Id = "de_intro",
+                    Icon = "\ud83c\udfa8",
+                    Title = Loc.Get("deeper_tut_ed_intro_title"),
+                    Description = Loc.Get("deeper_tut_ed_intro_body"),
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "de_timeline",
+                    Icon = "\u23f1",
+                    Title = Loc.Get("deeper_tut_ed_timeline_title"),
+                    Description = Loc.Get("deeper_tut_ed_timeline_body"),
+                    TargetElementName = "TimelineCanvas",
+                    TextPosition = TutorialStepPosition.Top
+                },
+                new TutorialStep
+                {
+                    Id = "de_preview",
+                    Icon = "\ud83d\udc41",
+                    Title = Loc.Get("deeper_tut_ed_preview_title"),
+                    Description = Loc.Get("deeper_tut_ed_preview_body"),
+                    TargetElementName = "BtnPreview",
+                    TextPosition = TutorialStepPosition.Left
+                },
+                new TutorialStep
+                {
+                    Id = "de_metadata",
+                    Icon = "\ud83d\udcdd",
+                    Title = Loc.Get("deeper_tut_ed_metadata_title"),
+                    Description = Loc.Get("deeper_tut_ed_metadata_body"),
+                    TargetElementName = "TxtMetaName",
+                    TextPosition = TutorialStepPosition.Left,
+                    // Mission 1: TxtMetaName lives inside the (default-collapsed)
+                    // Metadata drawer; open it before measuring so the spotlight
+                    // doesn't strand the user on 0,0/0x0 bounds.
+                    PrepareTargetWindowAction = DeeperTutorialPrep.ExpandMetadataDrawer
+                },
+                new TutorialStep
+                {
+                    Id = "de_rules",
+                    Icon = "\ud83d\udd17",
+                    Title = Loc.Get("deeper_tut_ed_rules_title"),
+                    Description = Loc.Get("deeper_tut_ed_rules_body"),
+                    // Rules are no longer a dedicated lane (the timeline is three lanes:
+                    // Regions / Effects / Haptics). Rules render as full-height pins
+                    // across the canvas, so spotlight the canvas itself for this step.
+                    TargetElementName = "TimelineCanvas",
+                    TextPosition = TutorialStepPosition.Top
+                },
+                new TutorialStep
+                {
+                    Id = "de_selected",
+                    Icon = "\ud83d\udc49",
+                    Title = Loc.Get("deeper_tut_ed_selected_title"),
+                    Description = Loc.Get("deeper_tut_ed_selected_body"),
+                    TargetElementName = "SelectedPlaceholder",
+                    TextPosition = TutorialStepPosition.Left
+                },
+                new TutorialStep
+                {
+                    Id = "de_save",
+                    Icon = "\ud83d\udcbe",
+                    Title = Loc.Get("deeper_tut_ed_save_title"),
+                    Description = Loc.Get("deeper_tut_ed_save_body"),
+                    TargetElementName = "TxtValidationSummary",
+                    TextPosition = TutorialStepPosition.Top
+                },
+                new TutorialStep
+                {
+                    Id = "de_done",
+                    Icon = "\u2764",
+                    Title = Loc.Get("deeper_tut_ed_done_title"),
+                    Description = Loc.Get("deeper_tut_ed_done_body"),
+                    TextPosition = TutorialStepPosition.Center
+                }
+            };
+        }
+
+        // Interactive on-rails HypnoTube walkthrough. Spans NewEnhancementDialog
+        // -> DeeperEditorWindow, gating on real user interactions and emitting
+        // events through CoreTutorialEvents. Produces a saved .ccpenh.json with
+        // 1 Haptic effect at 5s and 1 TimeReached -> ScreenShake rule at 15s.
+        // Part 1: lives entirely inside NewEnhancementDialog. One step that
+        // ends when the user clicks Create. The dialog then closes, the
+        // editor opens, and DeeperEditorWindow.Loaded starts Part 2 with a
+        // fresh overlay. Splitting avoids the cross-window state machine.
+        private List<TutorialStep> CreateDeeperEditorInteractiveHTSteps()
+        {
+            return new List<TutorialStep>
+            {
+                new TutorialStep
+                {
+                    Id = "iht_create",
+                    Icon = "\ud83c\udfac",
+                    Title = Loc.Get("deeper_itut_ht_step1_title"),
+                    Description = Loc.Get("deeper_itut_ht_step1_body"),
+                    TargetElementName = "BtnCreate",
+                    TextPosition = TutorialStepPosition.Top,
+                    AdvanceTrigger = TutorialAdvanceTrigger.OnButtonClick
+                }
+            };
+        }
+
+        // Part 2: runs in DeeperEditorWindow. Started by the editor's Loaded
+        // handler when CoreTutorialEvents.PendingPart2Tutorial points at this
+        // type. No step uses TargetWindowTypeName because everything lives in
+        // one window now.
+        private List<TutorialStep> CreateDeeperEditorInteractiveHTPart2Steps()
+        {
+            return new List<TutorialStep>
+            {
+                // Phase 2 - editor metadata + preview
+                new TutorialStep
+                {
+                    Id = "iht_metadata",
+                    Icon = "\ud83d\udcdd",
+                    Title = Loc.Get("deeper_itut_ht_step2_title"),
+                    Description = Loc.Get("deeper_itut_ht_step2_body"),
+                    TargetElementName = "TxtMetaName",
+                    TextPosition = TutorialStepPosition.Left,
+                    AdvanceTrigger = TutorialAdvanceTrigger.Manual,
+                    PrepareTargetWindowAction = DeeperTutorialPrep.ExpandMetadataDrawer
+                },
+                new TutorialStep
+                {
+                    Id = "iht_lock",
+                    Icon = "\ud83d\udd12",
+                    Title = Loc.Get("deeper_itut_ht_step3_title"),
+                    Description = Loc.Get("deeper_itut_ht_step3_body"),
+                    TargetElementName = "BtnCreatorLockToggle",
+                    TextPosition = TutorialStepPosition.Left,
+                    AdvanceTrigger = TutorialAdvanceTrigger.Manual,
+                    PrepareTargetWindowAction = DeeperTutorialPrep.ExpandMetadataDrawer
+                },
+                new TutorialStep
+                {
+                    Id = "iht_play",
+                    Icon = "\u25b6",
+                    Title = Loc.Get("deeper_itut_ht_step4_title"),
+                    Description = Loc.Get("deeper_itut_ht_step4_body"),
+                    TargetElementName = "BtnPlayPause",
+                    TextPosition = TutorialStepPosition.Top,
+                    AdvanceTrigger = TutorialAdvanceTrigger.OnButtonClick,
+                    AllowManualSkip = true
+                },
+                new TutorialStep
+                {
+                    Id = "iht_pause",
+                    Icon = "\u23f8",
+                    Title = Loc.Get("deeper_itut_ht_step5_title"),
+                    Description = Loc.Get("deeper_itut_ht_step5_body"),
+                    TargetElementName = "BtnPlayPause",
+                    TextPosition = TutorialStepPosition.Top,
+                    AdvanceTrigger = TutorialAdvanceTrigger.OnButtonClick,
+                    AllowManualSkip = true
+                },
+
+                // Phase 3 - Add Haptic effect
+                new TutorialStep
+                {
+                    Id = "iht_addeffect",
+                    Icon = "\u2728",
+                    Title = Loc.Get("deeper_itut_ht_step6_title"),
+                    Description = Loc.Get("deeper_itut_ht_step6_body"),
+                    TargetElementName = "BtnAddEffectHero",
+                    TextPosition = TutorialStepPosition.Bottom,
+                    AdvanceTrigger = TutorialAdvanceTrigger.OnEvent,
+                    AdvanceEventName = "EffectAdded"
+                },
+                new TutorialStep
+                {
+                    Id = "iht_intensity",
+                    Icon = "\ud83c\udf9a",
+                    Title = Loc.Get("deeper_itut_ht_step7_title"),
+                    Description = Loc.Get("deeper_itut_ht_step7_body"),
+                    TargetElementName = "SliderHapticIntensity",
+                    TextPosition = TutorialStepPosition.Left,
+                    AdvanceTrigger = TutorialAdvanceTrigger.OnSliderAtLeast,
+                    AdvanceMinValue = 0.3,
+                    AdvanceMaxValue = 0.7
+                },
+                new TutorialStep
+                {
+                    Id = "iht_pattern",
+                    Icon = "\ud83c\udf0a",
+                    Title = Loc.Get("deeper_itut_ht_step8_title"),
+                    Description = Loc.Get("deeper_itut_ht_step8_body"),
+                    TargetElementName = "CmbHapticPattern",
+                    TextPosition = TutorialStepPosition.Left,
+                    AdvanceTrigger = TutorialAdvanceTrigger.OnSelectionEquals,
+                    // Empty AdvanceValue \u2192 any pattern selection advances.
+                    // (Stock patterns don't visibly differ in the editor without
+                    // hitting Test, so demanding a specific name was a trap.)
+                    AllowManualSkip = true
+                },
+                new TutorialStep
+                {
+                    Id = "iht_test",
+                    Icon = "\ud83c\udfae",
+                    Title = Loc.Get("deeper_itut_ht_step9_title"),
+                    Description = Loc.Get("deeper_itut_ht_step9_body"),
+                    TargetElementName = "BtnTestHaptic",
+                    TextPosition = TutorialStepPosition.Top,
+                    AdvanceTrigger = TutorialAdvanceTrigger.OnButtonClick,
+                    AllowManualSkip = true
+                },
+
+                // Phase 4 - Add Rule
+                new TutorialStep
+                {
+                    Id = "iht_addrule",
+                    Icon = "\ud83d\udd17",
+                    Title = Loc.Get("deeper_itut_ht_step10_title"),
+                    Description = Loc.Get("deeper_itut_ht_step10_body"),
+                    TargetElementName = "BtnAddRuleHero",
+                    TextPosition = TutorialStepPosition.Bottom,
+                    AdvanceTrigger = TutorialAdvanceTrigger.OnEvent,
+                    AdvanceEventName = "RuleAdded"
+                },
+                new TutorialStep
+                {
+                    Id = "iht_ruletime",
+                    Icon = "\u23f1",
+                    Title = Loc.Get("deeper_itut_ht_step11_title"),
+                    Description = Loc.Get("deeper_itut_ht_step11_body"),
+                    TargetElementName = "TutorialTriggerTimeField",
+                    TextPosition = TutorialStepPosition.Left,
+                    AdvanceTrigger = TutorialAdvanceTrigger.OnTextEquals,
+                    AdvanceValue = "15"
+                },
+                new TutorialStep
+                {
+                    Id = "iht_ruleaction",
+                    Icon = "\u26a1",
+                    Title = Loc.Get("deeper_itut_ht_step12_title"),
+                    Description = Loc.Get("deeper_itut_ht_step12_body"),
+                    TargetElementName = "CmbActionType",
+                    TextPosition = TutorialStepPosition.Left,
+                    AdvanceTrigger = TutorialAdvanceTrigger.OnSelectionEquals,
+                    AdvanceValue = "screen_shake",
+                    // Combo items show a localized friendly name in Content
+                    // ("Shake the screen"), with the raw type ("screen_shake")
+                    // in Tag. Match by Tag so the comparison is stable across
+                    // languages and friendly-name tweaks.
+                    MatchByTag = true
+                },
+                new TutorialStep
+                {
+                    Id = "iht_actionintensity",
+                    Icon = "\ud83c\udf9a",
+                    Title = Loc.Get("deeper_itut_ht_step13_title"),
+                    Description = Loc.Get("deeper_itut_ht_step13_body"),
+                    TargetElementName = "TutorialActionIntensityField",
+                    TextPosition = TutorialStepPosition.Left,
+                    AdvanceTrigger = TutorialAdvanceTrigger.OnTextEquals,
+                    AdvanceValue = "0.7"
+                },
+
+                // Phase 5 - Save
+                new TutorialStep
+                {
+                    Id = "iht_save",
+                    Icon = "\ud83d\udcbe",
+                    Title = Loc.Get("deeper_itut_ht_step14_title"),
+                    Description = Loc.Get("deeper_itut_ht_step14_body"),
+                    TargetElementName = "BtnEditorSave",
+                    TextPosition = TutorialStepPosition.Top,
+                    AdvanceTrigger = TutorialAdvanceTrigger.OnButtonClick
+                },
+                new TutorialStep
+                {
+                    Id = "iht_savedialog",
+                    Icon = "\ud83d\udcbe",
+                    Title = Loc.Get("deeper_itut_ht_step15_title"),
+                    Description = Loc.Get("deeper_itut_ht_step15_body"),
+                    TextPosition = TutorialStepPosition.Center,
+                    AdvanceTrigger = TutorialAdvanceTrigger.OnEvent,
+                    AdvanceEventName = "FileSaved",
+                    AllowManualSkip = true,
+                    // The OS save dialog is on top of the editor - let clicks
+                    // pass through the dim so the user can pick a filename and
+                    // hit Save without our overlay eating their input.
+                    BlockBackgroundClicks = false
+                },
+
+                // Phase 6 - Follow-up card
+                new TutorialStep
+                {
+                    Id = "iht_done",
+                    Icon = "\ud83c\udf89",
+                    Title = Loc.Get("deeper_itut_ht_step16_title"),
+                    Description = Loc.Get("deeper_itut_ht_step16_body"),
+                    TextPosition = TutorialStepPosition.Center,
+                    IsFollowUpCard = true,
+                    FollowUpButton1Text = Loc.Get("deeper_itut_ht_followup_open_folder"),
+                    FollowUpAction1 = step =>
+                    {
+                        try
+                        {
+                            TutorialHeadHooks.RevealInFolder(CoreTutorialEvents.LastSavedEnhancementPath);
+                        }
+                        catch { }
+                        try { CoreTutorial.Skip(); } catch { }
+                    },
+                    FollowUpButton2Text = Loc.Get("deeper_itut_ht_followup_open_player"),
+                    FollowUpAction2 = step =>
+                    {
+                        try { OpenDeeperPlayerWithLastSavedEnhancement(); } catch { }
+                        try { CoreTutorial.Skip(); } catch { }
+                    },
+                    FollowUpButton3Text = Loc.Get("deeper_itut_ht_followup_done"),
+                    FollowUpAction3 = step =>
+                    {
+                        try { CoreTutorial.Skip(); } catch { }
+                    }
+                }
+            };
+        }
+
+        // Local Audio interactive walkthrough. Mirrors the HT flow's two-part
+        // shape but anchors on a user-picked .mp3/.wav file instead of a
+        // pre-filled URL, and showcases audio-mode editor differences
+        // (waveform preview, no gaze/attention triggers, Pause action).
+        // Part 1 lives in NewEnhancementDialog: pick a file via Browse, then
+        // Create. Two steps because the user needs to actually choose a file -
+        // unlike HT, we can't pre-fill the source.
+        private List<TutorialStep> CreateDeeperEditorInteractiveLocalAudioSteps()
+        {
+            return new List<TutorialStep>
+            {
+                new TutorialStep
+                {
+                    Id = "iaud_browse",
+                    Icon = "📁",
+                    Title = Loc.Get("deeper_itut_audio_step1_title"),
+                    Description = Loc.Get("deeper_itut_audio_step1_body"),
+                    TargetElementName = "BtnBrowse",
+                    TextPosition = TutorialStepPosition.Top,
+                    AdvanceTrigger = TutorialAdvanceTrigger.OnButtonClick,
+                    AllowManualSkip = true,
+                    // Let clicks pass through the dim - the OS file picker
+                    // opens on this click and lives outside our overlay; we
+                    // can't have the dim eat the user's interactions while
+                    // they navigate the picker (or want to type a path
+                    // directly into TxtSource instead of using Browse).
+                    BlockBackgroundClicks = false
+                },
+                new TutorialStep
+                {
+                    Id = "iaud_create",
+                    Icon = "✨",
+                    Title = Loc.Get("deeper_itut_audio_step2_title"),
+                    Description = Loc.Get("deeper_itut_audio_step2_body"),
+                    TargetElementName = "BtnCreate",
+                    TextPosition = TutorialStepPosition.Top,
+                    AdvanceTrigger = TutorialAdvanceTrigger.OnButtonClick,
+                    // Click-through too: user may need to re-Browse or edit
+                    // TxtSource if they cancelled the picker on step 1.
+                    BlockBackgroundClicks = false
+                }
+            };
+        }
+
+        // Local Audio Part 2 - runs in DeeperEditorWindow (audio mode).
+        // Same overall arc as HT Part 2 but with audio-specific framing in
+        // the body copy (waveform replaces the video preview), and a Pause
+        // action on the rule instead of screen_shake to teach a different
+        // action while keeping the click count identical.
+        private List<TutorialStep> CreateDeeperEditorInteractiveLocalAudioPart2Steps()
+        {
+            return new List<TutorialStep>
+            {
+                // Phase 1 - metadata
+                new TutorialStep
+                {
+                    Id = "iaud_metadata",
+                    Icon = "📝",
+                    Title = Loc.Get("deeper_itut_audio_step3_title"),
+                    Description = Loc.Get("deeper_itut_audio_step3_body"),
+                    TargetElementName = "TxtMetaName",
+                    TextPosition = TutorialStepPosition.Left,
+                    AdvanceTrigger = TutorialAdvanceTrigger.Manual,
+                    PrepareTargetWindowAction = DeeperTutorialPrep.ExpandMetadataDrawer
+                },
+
+                // Phase 2 - preview
+                new TutorialStep
+                {
+                    Id = "iaud_play",
+                    Icon = "▶",
+                    Title = Loc.Get("deeper_itut_audio_step4_title"),
+                    Description = Loc.Get("deeper_itut_audio_step4_body"),
+                    TargetElementName = "BtnPlayPause",
+                    TextPosition = TutorialStepPosition.Top,
+                    AdvanceTrigger = TutorialAdvanceTrigger.OnButtonClick,
+                    AllowManualSkip = true
+                },
+                new TutorialStep
+                {
+                    Id = "iaud_pause",
+                    Icon = "⏸",
+                    Title = Loc.Get("deeper_itut_audio_step5_title"),
+                    Description = Loc.Get("deeper_itut_audio_step5_body"),
+                    TargetElementName = "BtnPlayPause",
+                    TextPosition = TutorialStepPosition.Top,
+                    AdvanceTrigger = TutorialAdvanceTrigger.OnButtonClick,
+                    AllowManualSkip = true
+                },
+
+                // Phase 3 - Add Haptic effect
+                new TutorialStep
+                {
+                    Id = "iaud_addeffect",
+                    Icon = "✨",
+                    Title = Loc.Get("deeper_itut_audio_step6_title"),
+                    Description = Loc.Get("deeper_itut_audio_step6_body"),
+                    TargetElementName = "BtnAddEffectHero",
+                    TextPosition = TutorialStepPosition.Bottom,
+                    AdvanceTrigger = TutorialAdvanceTrigger.OnEvent,
+                    AdvanceEventName = "EffectAdded"
+                },
+                new TutorialStep
+                {
+                    Id = "iaud_intensity",
+                    Icon = "🎚",
+                    Title = Loc.Get("deeper_itut_audio_step7_title"),
+                    Description = Loc.Get("deeper_itut_audio_step7_body"),
+                    TargetElementName = "SliderHapticIntensity",
+                    TextPosition = TutorialStepPosition.Left,
+                    AdvanceTrigger = TutorialAdvanceTrigger.OnSliderAtLeast,
+                    AdvanceMinValue = 0.3,
+                    AdvanceMaxValue = 0.7
+                },
+                new TutorialStep
+                {
+                    Id = "iaud_pattern",
+                    Icon = "🌊",
+                    Title = Loc.Get("deeper_itut_audio_step8_title"),
+                    Description = Loc.Get("deeper_itut_audio_step8_body"),
+                    TargetElementName = "CmbHapticPattern",
+                    TextPosition = TutorialStepPosition.Left,
+                    AdvanceTrigger = TutorialAdvanceTrigger.OnSelectionEquals,
+                    AllowManualSkip = true
+                },
+                new TutorialStep
+                {
+                    Id = "iaud_test",
+                    Icon = "🎮",
+                    Title = Loc.Get("deeper_itut_audio_step9_title"),
+                    Description = Loc.Get("deeper_itut_audio_step9_body"),
+                    TargetElementName = "BtnTestHaptic",
+                    TextPosition = TutorialStepPosition.Top,
+                    AdvanceTrigger = TutorialAdvanceTrigger.OnButtonClick,
+                    AllowManualSkip = true
+                },
+
+                // Phase 4 - Add Rule (TimeReached → pause)
+                new TutorialStep
+                {
+                    Id = "iaud_addrule",
+                    Icon = "🔗",
+                    Title = Loc.Get("deeper_itut_audio_step10_title"),
+                    Description = Loc.Get("deeper_itut_audio_step10_body"),
+                    TargetElementName = "BtnAddRuleHero",
+                    TextPosition = TutorialStepPosition.Bottom,
+                    AdvanceTrigger = TutorialAdvanceTrigger.OnEvent,
+                    AdvanceEventName = "RuleAdded"
+                },
+                new TutorialStep
+                {
+                    Id = "iaud_ruletime",
+                    Icon = "⏱",
+                    Title = Loc.Get("deeper_itut_audio_step11_title"),
+                    Description = Loc.Get("deeper_itut_audio_step11_body"),
+                    TargetElementName = "TutorialTriggerTimeField",
+                    TextPosition = TutorialStepPosition.Left,
+                    AdvanceTrigger = TutorialAdvanceTrigger.OnTextEquals,
+                    AdvanceValue = "8"
+                },
+                new TutorialStep
+                {
+                    Id = "iaud_ruleaction",
+                    Icon = "⏸",
+                    Title = Loc.Get("deeper_itut_audio_step12_title"),
+                    Description = Loc.Get("deeper_itut_audio_step12_body"),
+                    TargetElementName = "CmbActionType",
+                    TextPosition = TutorialStepPosition.Left,
+                    AdvanceTrigger = TutorialAdvanceTrigger.OnSelectionEquals,
+                    AdvanceValue = "pause",
+                    MatchByTag = true,
+                    AllowManualSkip = true
+                },
+
+                // Phase 5 - Save
+                new TutorialStep
+                {
+                    Id = "iaud_save",
+                    Icon = "💾",
+                    Title = Loc.Get("deeper_itut_audio_step13_title"),
+                    Description = Loc.Get("deeper_itut_audio_step13_body"),
+                    TargetElementName = "BtnEditorSave",
+                    TextPosition = TutorialStepPosition.Top,
+                    AdvanceTrigger = TutorialAdvanceTrigger.OnButtonClick
+                },
+                new TutorialStep
+                {
+                    Id = "iaud_savedialog",
+                    Icon = "💾",
+                    Title = Loc.Get("deeper_itut_audio_step14_title"),
+                    Description = Loc.Get("deeper_itut_audio_step14_body"),
+                    TextPosition = TutorialStepPosition.Center,
+                    AdvanceTrigger = TutorialAdvanceTrigger.OnEvent,
+                    AdvanceEventName = "FileSaved",
+                    AllowManualSkip = true,
+                    BlockBackgroundClicks = false
+                },
+
+                // Phase 6 - Follow-up card
+                BuildInteractiveDoneCard(
+                    "iaud_done",
+                    Loc.Get("deeper_itut_audio_step15_title"),
+                    Loc.Get("deeper_itut_audio_step15_body"))
+            };
+        }
+
+        // Local Video interactive walkthrough. Same Part-1 shape as Local Audio
+        // (Browse → Create), then Part 2 showcases video's unique trigger:
+        // AttentionLost. Action stays screen_shake to mirror HT - the teaching
+        // delta is the trigger choice, not the action.
+        private List<TutorialStep> CreateDeeperEditorInteractiveLocalVideoSteps()
+        {
+            return new List<TutorialStep>
+            {
+                new TutorialStep
+                {
+                    Id = "ivid_browse",
+                    Icon = "📁",
+                    Title = Loc.Get("deeper_itut_video_step1_title"),
+                    Description = Loc.Get("deeper_itut_video_step1_body"),
+                    TargetElementName = "BtnBrowse",
+                    TextPosition = TutorialStepPosition.Top,
+                    AdvanceTrigger = TutorialAdvanceTrigger.OnButtonClick,
+                    AllowManualSkip = true,
+                    // See iaud_browse: dim must not eat clicks while the OS
+                    // file picker is open and modal to the dialog underneath.
+                    BlockBackgroundClicks = false
+                },
+                new TutorialStep
+                {
+                    Id = "ivid_create",
+                    Icon = "✨",
+                    Title = Loc.Get("deeper_itut_video_step2_title"),
+                    Description = Loc.Get("deeper_itut_video_step2_body"),
+                    TargetElementName = "BtnCreate",
+                    TextPosition = TutorialStepPosition.Top,
+                    AdvanceTrigger = TutorialAdvanceTrigger.OnButtonClick,
+                    BlockBackgroundClicks = false
+                }
+            };
+        }
+
+        // Local Video Part 2 - runs in DeeperEditorWindow (video mode).
+        // Identical scaffolding to Audio Part 2 except the rule uses a video-
+        // only AttentionLost trigger (no time field) → screen_shake action,
+        // which teaches the gaze-aware rule path that's the point of using
+        // video over audio in the first place.
+        private List<TutorialStep> CreateDeeperEditorInteractiveLocalVideoPart2Steps()
+        {
+            return new List<TutorialStep>
+            {
+                // Phase 1 - metadata
+                new TutorialStep
+                {
+                    Id = "ivid_metadata",
+                    Icon = "📝",
+                    Title = Loc.Get("deeper_itut_video_step3_title"),
+                    Description = Loc.Get("deeper_itut_video_step3_body"),
+                    TargetElementName = "TxtMetaName",
+                    TextPosition = TutorialStepPosition.Left,
+                    AdvanceTrigger = TutorialAdvanceTrigger.Manual,
+                    PrepareTargetWindowAction = DeeperTutorialPrep.ExpandMetadataDrawer
+                },
+
+                // Phase 2 - preview
+                new TutorialStep
+                {
+                    Id = "ivid_play",
+                    Icon = "▶",
+                    Title = Loc.Get("deeper_itut_video_step4_title"),
+                    Description = Loc.Get("deeper_itut_video_step4_body"),
+                    TargetElementName = "BtnPlayPause",
+                    TextPosition = TutorialStepPosition.Top,
+                    AdvanceTrigger = TutorialAdvanceTrigger.OnButtonClick,
+                    AllowManualSkip = true
+                },
+                new TutorialStep
+                {
+                    Id = "ivid_pause",
+                    Icon = "⏸",
+                    Title = Loc.Get("deeper_itut_video_step5_title"),
+                    Description = Loc.Get("deeper_itut_video_step5_body"),
+                    TargetElementName = "BtnPlayPause",
+                    TextPosition = TutorialStepPosition.Top,
+                    AdvanceTrigger = TutorialAdvanceTrigger.OnButtonClick,
+                    AllowManualSkip = true
+                },
+
+                // Phase 3 - Add Haptic effect (same as HT/Audio for parallelism)
+                new TutorialStep
+                {
+                    Id = "ivid_addeffect",
+                    Icon = "✨",
+                    Title = Loc.Get("deeper_itut_video_step6_title"),
+                    Description = Loc.Get("deeper_itut_video_step6_body"),
+                    TargetElementName = "BtnAddEffectHero",
+                    TextPosition = TutorialStepPosition.Bottom,
+                    AdvanceTrigger = TutorialAdvanceTrigger.OnEvent,
+                    AdvanceEventName = "EffectAdded"
+                },
+                new TutorialStep
+                {
+                    Id = "ivid_intensity",
+                    Icon = "🎚",
+                    Title = Loc.Get("deeper_itut_video_step7_title"),
+                    Description = Loc.Get("deeper_itut_video_step7_body"),
+                    TargetElementName = "SliderHapticIntensity",
+                    TextPosition = TutorialStepPosition.Left,
+                    AdvanceTrigger = TutorialAdvanceTrigger.OnSliderAtLeast,
+                    AdvanceMinValue = 0.3,
+                    AdvanceMaxValue = 0.7
+                },
+                new TutorialStep
+                {
+                    Id = "ivid_pattern",
+                    Icon = "🌊",
+                    Title = Loc.Get("deeper_itut_video_step8_title"),
+                    Description = Loc.Get("deeper_itut_video_step8_body"),
+                    TargetElementName = "CmbHapticPattern",
+                    TextPosition = TutorialStepPosition.Left,
+                    AdvanceTrigger = TutorialAdvanceTrigger.OnSelectionEquals,
+                    AllowManualSkip = true
+                },
+                new TutorialStep
+                {
+                    Id = "ivid_test",
+                    Icon = "🎮",
+                    Title = Loc.Get("deeper_itut_video_step9_title"),
+                    Description = Loc.Get("deeper_itut_video_step9_body"),
+                    TargetElementName = "BtnTestHaptic",
+                    TextPosition = TutorialStepPosition.Top,
+                    AdvanceTrigger = TutorialAdvanceTrigger.OnButtonClick,
+                    AllowManualSkip = true
+                },
+
+                // Phase 4 - Add Rule, switch trigger to AttentionLost (gaze)
+                new TutorialStep
+                {
+                    Id = "ivid_addrule",
+                    Icon = "🔗",
+                    Title = Loc.Get("deeper_itut_video_step10_title"),
+                    Description = Loc.Get("deeper_itut_video_step10_body"),
+                    TargetElementName = "BtnAddRuleHero",
+                    TextPosition = TutorialStepPosition.Bottom,
+                    AdvanceTrigger = TutorialAdvanceTrigger.OnEvent,
+                    AdvanceEventName = "RuleAdded"
+                },
+                new TutorialStep
+                {
+                    Id = "ivid_ruletrigger",
+                    Icon = "👁",
+                    Title = Loc.Get("deeper_itut_video_step11_title"),
+                    Description = Loc.Get("deeper_itut_video_step11_body"),
+                    TargetElementName = "CmbTriggerType",
+                    TextPosition = TutorialStepPosition.Left,
+                    AdvanceTrigger = TutorialAdvanceTrigger.OnSelectionEquals,
+                    AdvanceValue = "attention_lost",
+                    MatchByTag = true,
+                    AllowManualSkip = true
+                },
+                new TutorialStep
+                {
+                    Id = "ivid_ruleaction",
+                    Icon = "⚡",
+                    Title = Loc.Get("deeper_itut_video_step12_title"),
+                    Description = Loc.Get("deeper_itut_video_step12_body"),
+                    TargetElementName = "CmbActionType",
+                    TextPosition = TutorialStepPosition.Left,
+                    AdvanceTrigger = TutorialAdvanceTrigger.OnSelectionEquals,
+                    AdvanceValue = "screen_shake",
+                    MatchByTag = true,
+                    AllowManualSkip = true
+                },
+                new TutorialStep
+                {
+                    Id = "ivid_actionintensity",
+                    Icon = "🎚",
+                    Title = Loc.Get("deeper_itut_video_step13_title"),
+                    Description = Loc.Get("deeper_itut_video_step13_body"),
+                    TargetElementName = "TutorialActionIntensityField",
+                    TextPosition = TutorialStepPosition.Left,
+                    AdvanceTrigger = TutorialAdvanceTrigger.OnTextEquals,
+                    AdvanceValue = "0.7"
+                },
+
+                // Phase 5 - Save
+                new TutorialStep
+                {
+                    Id = "ivid_save",
+                    Icon = "💾",
+                    Title = Loc.Get("deeper_itut_video_step14_title"),
+                    Description = Loc.Get("deeper_itut_video_step14_body"),
+                    TargetElementName = "BtnEditorSave",
+                    TextPosition = TutorialStepPosition.Top,
+                    AdvanceTrigger = TutorialAdvanceTrigger.OnButtonClick
+                },
+                new TutorialStep
+                {
+                    Id = "ivid_savedialog",
+                    Icon = "💾",
+                    Title = Loc.Get("deeper_itut_video_step15_title"),
+                    Description = Loc.Get("deeper_itut_video_step15_body"),
+                    TextPosition = TutorialStepPosition.Center,
+                    AdvanceTrigger = TutorialAdvanceTrigger.OnEvent,
+                    AdvanceEventName = "FileSaved",
+                    AllowManualSkip = true,
+                    BlockBackgroundClicks = false
+                },
+
+                // Phase 6 - Follow-up card
+                BuildInteractiveDoneCard(
+                    "ivid_done",
+                    Loc.Get("deeper_itut_video_step16_title"),
+                    Loc.Get("deeper_itut_video_step16_body"))
+            };
+        }
+
+        // Shared "your enhancement is saved" follow-up card with Open Folder /
+        // Open Player / Done buttons. The HT flow has its own copy of this
+        // because it predates the helper; new flows route through here so the
+        // three buttons stay consistent across all interactive walkthroughs.
+        private static TutorialStep BuildInteractiveDoneCard(string id, string title, string body)
+        {
+            return new TutorialStep
+            {
+                Id = id,
+                Icon = "🎉",
+                Title = title,
+                Description = body,
+                TextPosition = TutorialStepPosition.Center,
+                IsFollowUpCard = true,
+                FollowUpButton1Text = Loc.Get("deeper_itut_ht_followup_open_folder"),
+                FollowUpAction1 = step =>
+                {
+                    try
+                    {
+                        TutorialHeadHooks.RevealInFolder(CoreTutorialEvents.LastSavedEnhancementPath);
+                    }
+                    catch { }
+                    try { CoreTutorial.Skip(); } catch { }
+                },
+                FollowUpButton2Text = Loc.Get("deeper_itut_ht_followup_open_player"),
+                FollowUpAction2 = step =>
+                {
+                    try { OpenDeeperPlayerWithLastSavedEnhancement(); } catch { }
+                    try { CoreTutorial.Skip(); } catch { }
+                },
+                FollowUpButton3Text = Loc.Get("deeper_itut_ht_followup_done"),
+                FollowUpAction3 = step =>
+                {
+                    try { CoreTutorial.Skip(); } catch { }
+                }
+            };
+        }
+
+        #endregion
+
+        // Tutorial follow-up entrypoint: open the Deeper Player and auto-load
+        // the enhancement the user just saved during the tutorial. Without
+        // this, the player opened with no media and Play had nothing to drive.
+        // Falls back to a bare player on any load failure so the user always
+        // gets a window.
+        private static void OpenDeeperPlayerWithLastSavedEnhancement() => TutorialHeadHooks.OpenDeeperPlayerWithLastSaved();
+    }
+}

@@ -17,33 +17,17 @@
 // generated x:Name fields are permanently null - `page.ProfileVatGlass` would compile and be a
 // silent no-op forever.
 //
-// STILL HEAD-SIDE, each with the exact symbol and where it lives today:
-//   ApplyDescentToVat      - App.Descent (ConditioningControlPanel/Services/Descent/
-//   OnDescentBlockChanged    DescentService.cs), the wire half of the feature. Services.Descent's
-//   WireProfileVat           VatFillCoordinator and DescentReader ARE in Core
-//   EvaluateVatPoll          (CCP.Core/Services/Descent/), so the fold and the read parsing are
-//   CreateVatPollTimer       already portable - only the thing that ASKS the server is not, and a
-//                            vat filled from anything else is a number nobody agreed to.
-//   the faucet               - _faucetHold, ArmFaucet, DisarmFaucet, OnFaucetVatOffScreen,
-//                            UpdateFaucetPresentation and PositionVatTickGlyphs are all in
-//                            MainShellWindow.ProfileFaucet.cs, still a wholesale stub (1,146 WPF
-//                            lines). ArmVat and DisarmVat below therefore arm and disarm the JAR
-//                            only; the tap that holds earned XP comes with that file.
-//   MaybeShowFeatureIntro  - CCP.Avalonia/Views/Windows/FeatureIntroPopup exists, but the spend
-//                            ledger it reads is on the shell's stub side; and the explainer may
-//                            only fire from ApplyDescentToVat, which is blocked above.
-//   OnProfileVatVisibilityChanged - its caller (OnProfileTabVisibilityChanged,
-//                            MainShellWindow.ProfileFx.cs) is 100% head-side, and its own body is
-//                            the poll plus the faucet snap. Blocked at both ends.
-//
-// NO CALLER YET: on WPF every entry into this file is OnProfileVatVisibilityChanged or
-// OnDescentBlockChanged, both named above. The four restored members are called by whoever
-// restores MainShellWindow.ProfileFaucet.cs / the Descent seam.
+// THE WIRE HALF (lane z1): App.Descent is Core DescentService; the block arrives on BlockChanged and
+// is folded by Core VatFillCoordinator, then by Core VatFaucetHold (the tap that holds earned XP until
+// the user pours it - MainShellWindow.ProfileFaucet.cs). Entries: InitializeProfileVat (shell ctor),
+// OnProfileVatVisibilityChanged (the Profile tab shown / hidden) and OnDescentBlockChanged.
 
 using System;
 using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Threading;
+using ConditioningControlPanel.Services.Descent;
 using ConditioningControlPanel.Avalonia.Controls;
 using ConditioningControlPanel.Localization;
 using Serilog;
@@ -63,6 +47,158 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private const double VatDarkAvatarSize = 104;
 
         private bool _vatArmed;
+        private readonly VatFillCoordinator _vatCoordinator = new();
+        private DispatcherTimer? _vatPollTimer;
+        private bool _vatWired;
+        private bool _vatOnScreen;
+
+        /// <summary>Shell constructor hook: follow the Profile page on and off screen. Nothing is drawn or
+        /// asked until the page shows, and nothing at all without a descent block (the tri-state law).</summary>
+        internal void InitializeProfileVat()
+        {
+            try
+            {
+                if (ProfilePage is not { } page) return;
+                page.PropertyChanged += (_, e) =>
+                {
+                    if (e.Property == IsVisibleProperty) OnProfileVatVisibilityChanged(page.IsEffectivelyVisible);
+                };
+                PropertyChanged += (_, e) =>
+                {
+                    if (e.Property == WindowStateProperty || e.Property == IsActiveProperty) EvaluateVatPoll();
+                };
+                Closed += (_, _) =>
+                {
+                    _vatPollTimer?.Stop();
+                    OnFaucetVatOffScreen();
+                    if (App.Descent != null) App.Descent.BlockChanged -= OnDescentBlockChanged;
+                };
+                if (page.IsEffectivelyVisible) OnProfileVatVisibilityChanged(true);
+            }
+            catch (Exception ex) { Log.Debug("InitializeProfileVat: {E}", ex.Message); }
+        }
+
+        /// <summary>WPF OnProfileVatVisibilityChanged: draw what is known, ask once, run the 60 s poll only
+        /// while the card is really on screen.</summary>
+        internal void OnProfileVatVisibilityChanged(bool onScreen)
+        {
+            try
+            {
+                WireProfileVat();
+                _vatOnScreen = onScreen;
+                if (!onScreen)
+                {
+                    _vatPollTimer?.Stop();
+                    OnFaucetVatOffScreen();
+                    return;
+                }
+
+                if (_vatArmed && _faucetHold.HeldXp > 0) VatGlass?.SnapTo(_faucetHold.DisplayFill);
+                ApplyDescentToVat();
+                App.Descent?.RequestRefresh("trainer card open");
+                EvaluateVatPoll();
+            }
+            catch (Exception ex) { Log.Debug("OnProfileVatVisibilityChanged: {E}", ex.Message); }
+        }
+
+        private bool VatPollWanted =>
+            _vatOnScreen && ProfilePage?.IsEffectivelyVisible == true
+            && App.Descent?.HasSeenBlock == true && VatGlassCanvas.WindowIsPresenting(this);
+
+        private void EvaluateVatPoll()
+        {
+            try
+            {
+                if (!VatPollWanted) { _vatPollTimer?.Stop(); return; }
+                _vatPollTimer ??= CreateVatPollTimer();
+                _vatPollTimer.Start();
+            }
+            catch (Exception ex) { Log.Debug("EvaluateVatPoll: {E}", ex.Message); }
+        }
+
+        private DispatcherTimer CreateVatPollTimer()
+        {
+            var timer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(60) };
+            timer.Tick += (_, _) =>
+            {
+                try
+                {
+                    if (!VatPollWanted)
+                    {
+                        _vatPollTimer?.Stop();
+                        // The page left without telling us (a parent hid it): park the faucet loops too.
+                        if (ProfilePage?.IsEffectivelyVisible != true) { _vatOnScreen = false; OnFaucetVatOffScreen(); }
+                        return;
+                    }
+                    App.Descent?.RequestRefresh("trainer card poll");
+                }
+                catch (Exception ex) { Log.Debug("Vat poll: {E}", ex.Message); }
+            };
+            return timer;
+        }
+
+        private void WireProfileVat()
+        {
+            if (_vatWired) return;
+            try
+            {
+                var glass = VatGlass;
+                if (glass == null) return;                 // the page is not realized yet: try again next time
+                _vatWired = true;
+                if (App.Descent != null) App.Descent.BlockChanged += OnDescentBlockChanged;
+                glass.FillPercentChanged += OnVatFillPercentChanged;
+            }
+            catch (Exception ex) { Log.Debug("WireProfileVat: {E}", ex.Message); }
+        }
+
+        private void OnDescentBlockChanged(object? sender, EventArgs e)
+        {
+            try
+            {
+                ApplyDescentToVat();
+                EvaluateVatPoll();
+            }
+            catch (Exception ex) { Log.Debug("OnDescentBlockChanged: {E}", ex.Message); }
+        }
+
+        /// <summary>
+        /// WPF ApplyDescentToVat. TRI-STATE: no block, or a block with no vat, and the jar does not exist.
+        /// The fold order is fixed: coordinator (what the server says) then faucet hold (what is drawn).
+        /// </summary>
+        internal void ApplyDescentToVat()
+        {
+            var glass = VatGlass;
+            if (glass == null) return;
+
+            var block = App.Descent?.Current;
+            var read = _vatCoordinator.Apply(block);
+            if (read.Kind == VatReadKind.Ignored && !_vatArmed) { DisarmVat(); return; }
+            if (block?.Vat is null) { DisarmVat(); return; }
+
+            ArmVat(glass, read.Cap);
+            glass.SetLip(read.Lip);
+            PositionVatTickGlyphs();
+
+            if (_vatOnScreen) MaybeShowFeatureIntro("descent-vat", "discord");
+
+            var step = _faucetHold.Fold(read, pouring: glass.IsPouring);
+            switch (step.Action)
+            {
+                case FaucetActionKind.Snap: glass.SnapTo(step.Fill); break;
+                case FaucetActionKind.Ease: glass.EaseTo(step.Fill); break;
+                case FaucetActionKind.Pour:
+                    if (!glass.IsPresenting) { glass.EaseTo(step.Fill); break; }
+                    glass.PourTo(step.Fill, userGesture: true);
+                    Log.Debug("[Descent] vat pour extended +{Xp} XP -> {Pct:F0}%", read.DeltaXp, step.Fill * 100);
+                    break;
+            }
+
+            if (read.DeltaXp > 0 && step.Action == FaucetActionKind.None)
+                Log.Debug("[Descent] faucet holding +{Xp} XP ({Held} total)", read.DeltaXp, _faucetHold.HeldXp);
+
+            UpdateVatReadout();
+            UpdateFaucetPresentation();
+        }
 
         /// <summary>
         /// The server's daily cap for the last accepted reading - the divisor the readout needs to
@@ -74,8 +210,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>The glass, or null before the Profile tab has been realized.</summary>
         private VatGlassCanvas? VatGlass => ProfilePage?.FindControl<VatGlassCanvas>("ProfileVatGlass");
 
-        /// <summary>Repaint the readout when the drawn percent changes. Wired by WireProfileVat on
-        /// WPF; that method needs App.Descent and is not restored here.</summary>
+        /// <summary>Repaint the readout when the drawn percent changes (wired by WireProfileVat).</summary>
         private void OnVatFillPercentChanged(object? sender, int pct)
         {
             try { UpdateVatReadout(); }
@@ -168,7 +303,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             }
             UpdateVatReadout();
 
-            // ponytail: ArmFaucet(glass, jarW, jarH) belongs here - see the header.
+            ArmFaucet(glass, jarW, jarH);
             Log.Information("[Descent] vat armed on the Trainer Card");
         }
 
@@ -201,7 +336,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             var readout = ProfilePage?.FindControl<TextBlock>("ProfileVatReadout");
             if (readout != null) readout.IsVisible = false;
 
-            // ponytail: DisarmFaucet() belongs here - see the header.
+            DisarmFaucet();
         }
     }
 }

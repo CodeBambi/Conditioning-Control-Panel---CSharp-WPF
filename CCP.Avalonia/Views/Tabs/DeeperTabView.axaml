@@ -376,9 +376,7 @@
                                    VerticalAlignment="Center" Margin="0,0,14,0"/>
                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
                             <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="{loc:Str deeper_empty_title}"
-                                           Foreground="{DynamicResource TextLightBrush}"
-                                           FontSize="17" FontWeight="Bold"
+                                <TextBlock Theme="{StaticResource Type.CardTitle}" Text="{loc:Str deeper_empty_title}"
                                            VerticalAlignment="Center"/>
                                 <Border Margin="10,0,0,0" Padding="7,2"
                                         VerticalAlignment="Center"
@@ -428,14 +426,14 @@
                         </Button>
                         <Button x:Name="BtnDeeperImport"
                                 Theme="{StaticResource DeeperRoundButton}"
-                                ToolTip.Tip="Import a .ccpenh.json file into your library (or drag &amp; drop one anywhere on this tab)"
+                                ToolTip.Tip="{loc:Str deeper_tab_import_tooltip}"
                                 Click="BtnDeeperImport_Click"
                                 Padding="12,7" FontSize="11.5" Cursor="Hand"
                                 Background="#8C131320"
                                 Foreground="{DynamicResource DeeperAccentBrush}"
                                 BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1"
                                 Margin="0,0,8,0">
-                            <TextBlock Text="📥 Import"/>
+                            <TextBlock Text="{loc:Str deeper_tab_import_btn}"/>
                         </Button>
                         <Button x:Name="BtnDeeperNewEnhancement"
                                 Theme="{StaticResource DeeperPrimaryCtaButton}"
@@ -857,7 +855,7 @@
                                                  kept in sync with the Blink Trainer toggle via
                                                  RefreshBlinkTrainerTrackerButton on the WPF head. -->
                                             <Button x:Name="BtnDeeperWebcamStartStopTracker" x:FieldModifier="internal"
-                                                    Content="Start tracker"
+                                                    Content="{loc:Str deeper_webcam_start_tracker}"
                                                     Theme="{StaticResource OutlineButton}"
                                                     Padding="10,4" Margin="0,0,0,6" FontSize="10"
                                                     Click="BtnDeeperWebcamStartStopTracker_Click"/>

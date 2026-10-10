@@ -154,7 +154,10 @@ public class AwarenessConsentTests
         var source = SourceRoots.ReadProductFile("Services", "Awareness", "AwarenessObserver.cs");
 
         Assert.Contains("HasEntitlement && s.UseAwarenessV2", source, StringComparison.Ordinal);
-        Assert.Contains("App.Patreon?.HasPremiumAccess == true", source, StringComparison.Ordinal);
+        Assert.Contains("CoreEntitlement.HasPremium", source, StringComparison.Ordinal);
+        // The observer lives in Core now; the WPF app answers the entitlement seam with the same read.
+        Assert.Contains("CoreEntitlement.HasPremiumProvider = () => Patreon?.HasPremiumAccess == true",
+            SourceRoots.ReadProductFile("App.xaml.cs"), StringComparison.Ordinal);
         // The free day has to be OR'd in or the ? box would advertise a door it cannot open.
         Assert.Contains("IsFreeToday(\"awareness\")", source, StringComparison.Ordinal);
     }

@@ -11,6 +11,8 @@ using ConditioningControlPanel.Avalonia.Views.Tabs;
 using ConditioningControlPanel.Avalonia.Views.Windows;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services.Program;
+using ConditioningControlPanel.Services.UI;
+using Avalonia.VisualTree;
 using Xunit;
 
 namespace CCP.Avalonia.Tests;
@@ -38,12 +40,14 @@ public sealed class ExclusivesVaultTests
                 Dispatcher.UIThread.RunJobs();
 
                 // Unseeded: every premium door is veiled, Just Drop and the Arcademy (no door seeded) are
-                // absent, the free doors stay open. Main 2e9080399: Prime first, then Basic, then untiered.
+                // absent, the free doors stay open. WPF 7.1.5 polish 12: the shelf is grouped Basic,
+                // Prime, Free (Core PremiumShelfOrder), each card on its own group's shelf.
                 var rows = Rows(view);
                 Assert.DoesNotContain(rows, r => r.Feature.Key is "justdrop" or "arcademy");
-                Assert.Equal(new[] { "dtrh", "breakout", "gazeminigame", "focusgaze", "fyp" }, rows.Take(5).Select(r => r.Feature.Key));
-                Assert.Equal(rows.Select(r => r.Feature.Tier switch { 2 => 0, 1 => 1, _ => 2 }).OrderBy(t => t),
-                             rows.Select(r => r.Feature.Tier switch { 2 => 0, 1 => 1, _ => 2 }));
+                var groups = Groups(view);
+                Assert.Equal(new[] { PremiumGroup.Basic, PremiumGroup.Prime, PremiumGroup.Free }, groups.Select(g => g.Group));
+                Assert.All(groups, g => Assert.All(g.Cards, c => Assert.Equal(g.Group, c.Group)));
+                Assert.Equal("fyp", groups[0].Cards[0].Feature.Key);
                 ExclusiveFeature.ArcademyDoorProvider = () => true;
                 view.RefreshVault();
                 Assert.Contains(Rows(view), r => r.Feature.Key == "arcademy");
@@ -52,7 +56,10 @@ public sealed class ExclusivesVaultTests
                 rows = Rows(view);
 
                 // Main bf57cecdf: the cards stretch to fill the row at as many columns as fit.
-                var wrap = (WrapPanel)view.FindControl<ItemsControl>("ExclusivesShelf")!.ItemsPanelRoot!;
+                // The groups re-template on every repaint; the fit lands after layout.
+                view.UpdateLayout();
+                Dispatcher.UIThread.RunJobs();
+                var wrap = view.FindControl<ItemsControl>("ExclusivesShelf")!.GetVisualDescendants().OfType<WrapPanel>().First();
                 var fit = ConditioningControlPanel.Services.UI.ExclusiveShelfFit.For(view.FindControl<ItemsControl>("ExclusivesShelf")!.Bounds.Width);
                 Assert.True(fit.Columns >= 3);
                 Assert.Equal(fit.Width + 16, wrap.ItemWidth);
@@ -62,11 +69,12 @@ public sealed class ExclusivesVaultTests
                 Assert.True(rows.Single(r => r.Feature.Key == "haptics").HasArt);
                 Assert.True(view.FindControl<Border>("SpotVeil")!.IsVisible);
 
-                // No launcher on this head: visible, inert, and it says so.
-                var tip = ConditioningControlPanel.Localization.Loc.Get("exclusives_not_on_this_build");
-                Assert.Equal(tip, rows.Single(r => r.Feature.Key == "backroom").UnavailableTip);
+                // Lane k9: For You has its window now, so its card is a live door like the rest.
+                Assert.Null(rows.Single(r => r.Feature.Key == "fyp").UnavailableTip);
+                Assert.True(rows.Single(r => r.Feature.Key == "fyp").IsAvailable);
+                Assert.Null(rows.Single(r => r.Feature.Key == "backroom").UnavailableTip);   // wave 3 r5: the games open
                 Assert.Null(rows.Single(r => r.Feature.Key == "haptics").UnavailableTip);
-                Assert.False(view.FindControl<Button>("BtnSpotOpen")!.IsEnabled);
+                Assert.True(view.FindControl<Button>("BtnSpotOpen")!.IsEnabled);   // the spotlight (For You) opens too
 
                 // A free account with its weekly pass unspent, and fyp rotated in as today's free one.
                 CoreEntitlement.IntakePassAvailableProvider = () => true;
@@ -89,6 +97,10 @@ public sealed class ExclusivesVaultTests
                 // premium does not open those; the Lab bar does.
                 Assert.All(rows.Where(r => r.Feature.Key != "gradedintake" && r.Feature.Tier < 2), r => Assert.False(r.IsLocked));
                 Assert.All(rows.Where(r => r.Feature.Tier == 2), r => Assert.True(r.IsLocked));
+                // Open doors lead their group, and wear the rim; locked Prime cards do not.
+                groups = Groups(view);
+                Assert.True(groups[0].Cards.First().IsMine);
+                Assert.Contains(groups.Single(g => g.Group == PremiumGroup.Prime).Cards, c => !c.IsMine);
                 Assert.False(rows.Single(r => r.Feature.Key == "fyp").FreeToday);
             }
             finally
@@ -150,8 +162,10 @@ public sealed class ExclusivesVaultTests
         finally { CoreEntitlement.HasPremiumProvider = premium; CoreEntitlement.IsFreeTodayProvider = free; }
     }
 
-    private static ExclusiveCardRow[] Rows(ExclusivesTabView view) =>
-        view.FindControl<ItemsControl>("ExclusivesShelf")!.Items.OfType<ExclusiveCardRow>().ToArray();
+    private static ExclusiveShelfGroup[] Groups(ExclusivesTabView view) =>
+        view.FindControl<ItemsControl>("ExclusivesShelf")!.Items.Cast<ExclusiveShelfGroup>().ToArray();
+
+    private static ExclusiveCardRow[] Rows(ExclusivesTabView view) => Groups(view).SelectMany(g => g.Cards).ToArray();
 
     private static void EnsureAvalonia()
     {

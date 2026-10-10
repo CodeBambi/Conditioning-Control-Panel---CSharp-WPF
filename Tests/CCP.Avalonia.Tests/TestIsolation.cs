@@ -52,13 +52,25 @@ internal sealed class IsolateProcessStateAttribute : BeforeAfterTestAttribute
     // On the shared Avalonia UI thread: reading a head static can create Dispatcher.UIThread, which
     // must be the thread the tests' headless platform lives on, and settings change handlers are UI code.
     public override void Before(MethodInfo methodUnderTest, IXunitTest test) =>
-        CCP.Avalonia.Testing.AvaloniaTestDispatcher.Run(() => { Current = ProcessStateSnapshot.Take(); OpenWindows.Mark(); });
+        CCP.Avalonia.Testing.AvaloniaTestDispatcher.Run(() => { WireSingletons(); Current = ProcessStateSnapshot.Take(); OpenWindows.Mark(); });
+
+    /// <summary>A process singleton that wires static seams in its constructor (EmiDeskService: the
+    /// EmiDeskBus sink, the release sink, the haptic fire, the knock and offer probes) is built BEFORE
+    /// the first snapshot. Built inside a test, the restore after that test put the seams back to
+    /// null and the singleton stayed deaf for the rest of the run (EmiDeskMomentTests, EmiDeskAskTests
+    /// went red the day a test first assigned EmiDeskBus.Sink and so put it under the snapshot).
+    /// RunClassConstructor, not a discarded read of Instance: the JIT may drop that read.</summary>
+    private static void WireSingletons() =>
+        RuntimeHelpers.RunClassConstructor(typeof(ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk.EmiDeskService).TypeHandle);
     public override void After(MethodInfo methodUnderTest, IXunitTest test) =>
         CCP.Avalonia.Testing.AvaloniaTestDispatcher.Run(() =>
         {
             // PLAYBOOK P52: a passive card (FeatureIntroPopup, AnnouncementPopup) or any other app
             // window a test left open holds the next test's startup surfaces, so close it first.
             OpenWindows.CloseLeftovers();
+            // Singletons whose own state outlives a test: EMI left out, a failed camera start.
+            ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk.EmiDeskService.Instance.ResetForTests();
+            ConditioningControlPanel.Avalonia.Platform.WebcamTracker.Instance.ClearErrorForTests();
             ConditioningControlPanel.Avalonia.Platform.StartupLadder.ResetForTests();
             Current?.Restore();
             Current = null;

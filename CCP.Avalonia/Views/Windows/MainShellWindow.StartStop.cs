@@ -28,17 +28,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private async void BtnStart_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
         {
+            if (RemoteControllerConnected) return;   // WPF StartStop.cs:43: a controller drives
             if ((CoreEngine.IsRunning || App.Sessions?.IsRunning == true) && RefuseStopUnderLockdown()) return;
             // WPF MainWindow.StartStop.cs:58: a running session asks first; declining keeps everything on.
             if (App.Sessions?.IsRunning == true)
             {
                 Serilog.Log.Information("Start button: asking to stop the running session");
                 await ConfirmStopSession("dialog_stop_session_title", "dialog_stop_session_body");
-                if (!App.Sessions.IsRunning) StopEngine();
+                if (!App.Sessions.IsRunning) { NoteSchedulerManualStop(); Platform.AchievementAutosave.NoteManualStop(); StopEngine(); }
                 return;
             }
-            if (CoreEngine.IsRunning) { Serilog.Log.Information("Start button: stopping the engine"); StopEngine(); }
-            else StartEngine();
+            if (CoreEngine.IsRunning) { Serilog.Log.Information("Start button: stopping the engine"); NoteSchedulerManualStop(); Platform.AchievementAutosave.NoteManualStop(); StopEngine(); }
+            else { Scheduler.NoteManualStart(); StartEngine(); }   // WPF StartStop.cs:111
         }
 
         private void MenuJumpRightIn_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => RandomizeAndStart();
@@ -67,17 +68,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (!CoreEngine.IsRunning) StartEngine();
         }
 
-        /// <summary>WPF StartEngine, through the portal wrapper so the panic key is bound first.</summary>
-        internal void StartEngine()
+        /// <summary>WPF StartEngine, through the portal wrapper so the panic key is bound first.
+        /// <paramref name="systemInitiated"/> = WPF StartStop.cs:293: the Lockdown Dose keeper started it, not a press
+        /// (no session count, EMI hears the real flag; this head has no Relapse check or video enhancement prompt to skip).</summary>
+        internal void StartEngine(bool systemInitiated = false)
         {
             var gen = ++_engineGen;
             StartEffect(() =>
             {
                 if (gen != _engineGen || CoreEngine.IsRunning) return;
-                CoreEngine.Start();
+                CoreEngine.Start(systemInitiated);
+                StartRampIfEnabled();              // WPF StartEngine :398
                 PinkRushHost.Start();              // WPF StartEngine :309 App.SkillTree?.Start()
                 PinkFilterOverlay.Refresh(this);   // WPF App.Overlay.Start()
                 SpiralOverlay.Refresh(this);
+                BrainDrainOverlay.Refresh(this);   // the haze follows the engine (WPF App.Overlay.Start / Stop)
                 UpdateStartButton();
             });
         }
@@ -89,15 +94,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _engineGen++;
             App.Sessions?.Pause();
             CoreEngine.Stop();
+            Overlays.BrainDrainOverlay.CloseAll();   // the haze goes on every stop and panic, engine running or not
         }
 
         /// <summary><see cref="CoreEngine.StoppedHook"/>: the head half of StopEngineCore.</summary>
         internal void OnEngineStopped()
         {
+            Platform.ProgramEngineBridge.RaiseSessionChanged();   // any session end repaints the Programs row
             // WPF StartStop.cs:485: hand back anything a Takeover pulse borrowed before the overlays go;
             // also retires the pulse timers so an old one cannot end the next run's bubbles.
             CancelAutonomyPulses();
             PinkRushHost.Stop();                   // WPF StartStop.cs:505 App.SkillTree?.Stop()
+            StopRampTimer();                       // WPF StartStop.cs:537: reset the ramped values
             App.StopDesktopOverlays(final: false);
             PopQuizHost.Instance.CloseAll();   // first: drops a queued quiz before cards close; WPF StartStop.cs:521
             LockCardWindow.ForceCloseAll();
@@ -112,8 +120,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         /// <summary>WPF UpdateStartButton: red ■ Stop while running, the accent ▶ Start otherwise.</summary>
-        internal void UpdateStartButton()
+        internal void UpdateStartButton(bool force = false)
         {
+            if (!force && RemoteControllerConnected) return;   // WPF :941 keeps the remote label
             var running = CoreEngine.IsRunning;
             if (Named<Button>("BtnStart") is { } b)
             {

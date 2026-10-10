@@ -30,11 +30,11 @@
 //     dialogs themselves DO exist here (CCP.Avalonia/Views/Dialogs/WhatsNewDialog.axaml.cs,
 //     Views/Controls/SeasonRecapCard); what is missing is the "has this launch already shown a
 //     modal" arbitration those read from App.
-//   RefreshMarqueeFromSettings / CheckServerUpdateBanner and their two response DTOs
-//     (MarqueeResponse, UpdateBannerResponse), plus _serverUpdateUrl and
-//     _serverAnnouncementShownThisLaunch (only the intake nudge reads it) - HttpClient calls to
-//     the CC Labs API with no Core client yet. CheckServerAnnouncement is ported:
-//     MainShellWindow.Announcement.cs over Core V2AuthService.
+//   (CheckServerUpdateBanner / CheckServerAnnouncement are PORTED: MainShellWindow.ServerBanners.cs.)
+//   was: CheckServerUpdateBanner / CheckServerAnnouncement and their DTOs (UpdateBannerResponse,
+//     AnnouncementResponse), plus _serverUpdateUrl and _serverAnnouncementShownThisLaunch - the
+//     banner needs the in-app updater, the announcement the startup popup arbitration.
+//     (RefreshMarqueeFromSettings + MarqueeResponse are PORTED: MainShellWindow.MarqueeStrip.cs.)
 //   CheckIntakePassNudge / StartIntakeFromNudge - App.Programs (the weekly intake pass); the
 //     accepted nudge then wants ShowTab("gradedintake"), which does exist here.
 //   (BannerWebLink_Click is ported below: the beat's inline SafeHyperlinkButton opens through
@@ -42,11 +42,10 @@
 //   LocOr - a Loc.Get with an English literal fallback. Used only by the marquee and takeaway
 //     formatters, neither of which runs here; Loc.Get already returns the key when a string is
 //     missing, so there is nothing to restore in isolation.
-//   StartMarqueeAnimation / UpdateMarqueeMessage - the scrolling marquee strip, a WPF Storyboard
-//     over a TranslateTransform on a control MainShellWindow.axaml does not carry. Nothing to
-//     drive: a still banner that says the right thing beats a faked scroll.
-//   SweepBannerSheen - MainShellWindow.ChromeFx.cs, still a stub. The BannerSheen border is in
-//     the XAML and parked at Opacity 0, so its absence costs nothing visible.
+//   (StartMarqueeAnimation is PORTED in Views/Tabs/SettingsTabView.Marquee.cs, the page that
+//     carries MarqueeText; UpdateMarqueeMessage in MainShellWindow.MarqueeStrip.cs. Only the
+//     interlude acts of WPF MainWindow.MarqueeReads.cs are still missing.)
+//   (SweepBannerSheen, the drum roll and the beat FX are live in MainShellWindow.BannerFx.cs.)
 
 using System;
 using System.Linq;
@@ -76,7 +75,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         public static bool IsStartupDialogShowing { get; set; }
 
         private const int BannerFadeMs = 500;
-        private static readonly TimeSpan BannerRotationInterval = TimeSpan.FromSeconds(4);
+        private static readonly TimeSpan BannerRotationInterval = TimeSpan.FromSeconds(ConditioningControlPanel.Fx.BannerFxRules.RotationSeconds);
 
         private DispatcherTimer? _bannerRotationTimer;
         private int _bannerCurrentIndex;          // 0 = Primary (support), 1 = Secondary (welcome)
@@ -98,6 +97,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             try
             {
                 InitializeBannerRotation();
+                InitializeMarqueeBanner();
+                InitializeBannerLinks();
+                InitializeServerBanners();
+                InitializeHeaderHud();
                 UpdateQuickLoginUI();
                 RefreshSessionFeatureLock();
 
@@ -184,7 +187,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // ponytail: WPF falls back to App.Patreon/App.Discord DisplayName when the unified
             // name is blank. Neither provider exists on this head, so a user who linked an
             // account but has no UserDisplayName written back gets the generic line.
+            // WPF falls back to the signed-in provider's name; on this head that is the account seam.
             var displayName = s.UserDisplayName;
+            if (string.IsNullOrWhiteSpace(displayName)) displayName = CoreAccount.DisplayName;
             secondary.Text = string.IsNullOrEmpty(displayName)
                 ? Loc.Get("label_welcome_consider_logging_in_with_patreon_for")
                 : Loc.GetF("label_welcome_back_0", displayName!);
@@ -197,11 +202,20 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (_bannerCurrentIndex >= banners.Length) _bannerCurrentIndex = 0;
 
             var nextIndex = (_bannerCurrentIndex + 1) % banners.Length;
-            Crossfade(banners[_bannerCurrentIndex], banners[nextIndex]);
+            var outgoing = banners[_bannerCurrentIndex];
+            var incoming = banners[nextIndex];
+            // Polish wave 13: at Full the drum also rolls one face (MainShellWindow.BannerFx.cs).
+            // The drum is decoration: a throw in it must never take the tick (and the app) with it.
+            bool rolled = false;
+            try { rolled = RollBannerDrum(outgoing, incoming); }
+            catch (Exception ex) { Log.Debug("RollBannerDrum: {E}", ex.Message); }
+            Crossfade(outgoing, incoming);
             _bannerCurrentIndex = nextIndex;
 
-            // ponytail: WPF also calls SweepBannerSheen() here. MainShellWindow.ChromeFx.cs is
-            // still a stub, so the sheen pass is skipped rather than faked.
+            // A light sheen rides the crossfade (throttled inside), then the incoming beat pops,
+            // the pill flashes and the support line gets its sparkle run (BannerFx.cs).
+            SweepBannerSheen();
+            OnBannerBeatChanged(incoming, rolled);
         }
 
         /// <summary>
@@ -211,8 +225,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// </summary>
         private static void Crossfade(TextBlock outgoing, TextBlock incoming)
         {
-            EnsureFadeTransition(outgoing);
-            EnsureFadeTransition(incoming);
+            // Motion Off (nav polish wave 6): nothing moves, the text just swaps.
+            if (global::ConditioningControlPanel.Avalonia.Controls.AmbientFxCanvas.Env.AllowTransitions)
+            {
+                EnsureFadeTransition(outgoing);
+                EnsureFadeTransition(incoming);
+            }
+            else
+            {
+                outgoing.Transitions = null;
+                incoming.Transitions = null;
+            }
 
             outgoing.Opacity = 0;
             incoming.Opacity = 1;
@@ -230,6 +253,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             var secondary = BannerSecondary;
             if (secondary is not null) secondary.Text = message;
+
+            // A genuinely new message, so it bypasses the rotation throttle.
+            SweepBannerSheen(force: true);
 
             if (_bannerRotationTimer is { IsEnabled: false }) _bannerRotationTimer.Start();
         }

@@ -46,9 +46,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         private bool _shimmerPlayed;
         private ChatThresholdViewModel? _vm;
 
+        private Helpers.VisibleBeat? _thinkingBeat;
+        internal bool ThinkingDotsRunning => _thinkingBeat?.IsRunning == true;
+
         public ChatThresholdView()
         {
             InitializeComponent();
+            // "Thinking" dots: 0.25 -> 1.0 -> 0.25 over 0.9 s, while the row shows (IsThinking).
+            if (this.FindControl<StackPanel>("ThinkingDots") is { } thinkingDots)
+            {
+                _thinkingBeat = Helpers.VisibleBeat.Attach(thinkingDots, t =>
+                {
+                    double o = 0.25 + (0.75 * Helpers.BeatLoop.PingPong(t, 0.45));
+                    foreach (var dot in thinkingDots.Children) dot.Opacity = o;
+                }, decoration: false);
+            }
             DataContext = _vm = new ChatThresholdViewModel();
             DataContextChanged += (_, _) =>
             {
@@ -193,10 +205,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
             // WPF's CommandManager.RequerySuggested re-polled CanExecute for free; Avalonia only
             // re-polls on CanExecuteChanged, so Draft and IsThinking raise it by hand.
             SendCommand = _send = new Relay(Send, () => CanSend && !IsThinking && !string.IsNullOrWhiteSpace(Draft));
-            // ponytail: OpenFullChat needs the tube's chat pane (AvatarTubeWindow has no chat
-            // surface on this head yet); History needs the transcript viewer; Unlock needs the
-            // Patreon tab. None of the three has a target here, and all three are Relays whose
-            // CanExecute is constant so the buttons at least do not pretend to be armed.
+            // Staged (not live): the three commands are disarmed Relays, so the buttons do not
+            // pretend to be armed.
             // Live: Open full chat is the tube's input box (WPF App.AvatarWindow.OpenChatInput),
             // History the stored transcript (WPF CompanionTranscriptWindow.ShowFor) and Unlock the Patreon tab.
             OpenFullChatCommand = live
@@ -354,8 +364,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
 
         private void RebuildThread(CompanionBrain? brain)
         {
-            // ponytail: no link chip (WPF CompanionLinkIndex + CompanionLinkLauncher) - the launcher
-            // routes to the embedded browser and the remote-control guard, neither hosted here yet.
+            // She names titles; the app owns links. Only her own chat lines get a watch chip
+            // (WPF ChatThresholdRuntimeVm): never the user's message, never a bark echo.
             var projected = brain != null && CompanionBrain.ShouldRoute(brain)
                 ? CompanionRoomLogic.PickThread(brain.Session.Turns).Select(t => new ChatBubble(
                     t.Kind switch
@@ -365,16 +375,23 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
                         _ => ChatBubble.BubbleKind.Her
                     },
                     CompanionRoomLogic.BubbleText(t), CompanionRoomLogic.IsAiBubble(t),
-                    CompanionRoomLogic.RelativeTime(t.Utc))).ToList()
+                    CompanionRoomLogic.RelativeTime(t.Utc),
+                    WatchLink(t)?.Title,
+                    WatchLink(t) is { } hit ? Runtime.CompanionLinkLauncher.CommandFor(hit.Url) : null)).ToList()
                 : new List<ChatBubble>();
 
-            var signature = string.Concat(projected.Select(b => $"{b.Kind}\u001F{b.IsAiGenerated}\u001F{b.Text}\u001F{b.Timestamp}\u001F"));
+            var signature = string.Concat(projected.Select(b => $"{b.Kind}\u001F{b.IsAiGenerated}\u001F{b.Text}\u001F{b.Timestamp}\u001F{b.LinkTitle}\u001F"));
             if (Turns.Count == projected.Count && signature == _threadSignature) return;
             _threadSignature = signature;
             Turns.Clear();
             foreach (var b in projected) Turns.Add(b);
             Raise(nameof(FooterCopy));
         }
+
+        internal static ConditioningControlPanel.Services.Companion.CompanionLinkIndex.Entry? WatchLink(CompanionTurn t) =>
+            t.Kind == TurnKind.AssistantChat
+                ? ConditioningControlPanel.Services.Companion.CompanionLinkIndex.FindMentionedTitle(t.Text)
+                : null;
 
         private void RefreshLastHeard(CompanionBrain? brain)
         {

@@ -82,8 +82,7 @@
           <Button x:Name="HelpBtnAchievements" Theme="{StaticResource HelpButtonStyle}"
                   HorizontalAlignment="Right" Tag="Achievements"/>
         </Grid>
-        <TextBlock Text="{loc:Str achv_subtitle_rewards}"
-                   Foreground="{DynamicResource TextMutedBrush}" FontSize="12" Margin="0,0,0,10"/>
+        <TextBlock Theme="{StaticResource Type.Body}" Text="{loc:Str achv_subtitle_rewards}" Margin="0,0,0,10"/>
 
         <!-- Filter chips (populated in code-behind: All / Unlocked / Locked / Rewards) -->
         <WrapPanel x:Name="AchievementFilters" Margin="0,0,0,8"/>
@@ -99,7 +98,7 @@
         <!-- Third, independent counter: wardrobe items earned through achievements.
              Never folded into the free or patron achievement counts. -->
         <TextBlock x:Name="TxtRewardCount" Text="{Binding LocRewardCount}" IsVisible="{Binding RewardCountVisible}"
-                   Foreground="#8079A3" FontSize="12"
+                   Foreground="{DynamicResource TextMutedBrush}" FontSize="12"
                    HorizontalAlignment="Center" Margin="0,4,0,0"/>
 
         <!-- Patron-exclusive achievements: separate section with its OWN counter.
@@ -107,8 +106,7 @@
         <Border Height="1" Background="#33FFFFFF" Margin="0,24,0,0"/>
         <TextBlock Theme="{StaticResource SectionHeader}"
                    Text="{loc:Str section_patron_achievements}" Margin="0,18,0,0"/>
-        <TextBlock Text="{loc:Str label_patron_achievements_subtitle}"
-                   Foreground="{DynamicResource TextMutedBrush}" FontSize="12" Margin="0,0,0,12"/>
+        <TextBlock Theme="{StaticResource Type.Body}" Text="{loc:Str label_patron_achievements_subtitle}" Margin="0,0,0,12"/>
 
         <Grid Margin="0,5,0,0">
           <StackPanel>
@@ -123,13 +121,15 @@
                   ZIndex="100" IsVisible="{Binding PatronLocked}">
             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="20">
               <TextBlock Text="🔒" FontSize="40" HorizontalAlignment="Center" Margin="0,0,0,15"/>
-              <TextBlock Text="{loc:Str section_patron_achievements}"
-                         Foreground="{DynamicResource PinkBrush}"
-                         FontSize="22" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,0,0,10">
-                <TextBlock.Effect>
-                  <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="20" OffsetX="0" OffsetY="0" Opacity="0.5"/>
-                </TextBlock.Effect>
-              </TextBlock>
+              <!-- The title glow is a BoxShadow on a sibling line behind the text, never an Effect on the text
+                   (an Effect makes the subtree an offscreen layer; Views/Features/CardGlow.cs). -->
+              <Grid HorizontalAlignment="Center" Margin="0,0,0,10">
+                <Border x:Name="PatronTitleGlow" Height="2" Margin="24,0" VerticalAlignment="Center"
+                        CornerRadius="1" Opacity="0.5" IsHitTestVisible="False"/>
+                <TextBlock Text="{loc:Str section_patron_achievements}"
+                           Foreground="{DynamicResource PinkBrush}"
+                           FontSize="22" FontWeight="Bold" HorizontalAlignment="Center"/>
+              </Grid>
               <TextBlock Text="{loc:Str label_patron_achievements_locked}" Foreground="{DynamicResource TextMutedBrush}"
                          FontSize="14" HorizontalAlignment="Center" TextAlignment="Center"
                          TextWrapping="Wrap" MaxWidth="380"/>
@@ -139,7 +139,7 @@
                    RecognizesAccessKey is set, so it never bit the original. Any localized string
                    containing an underscore hits this - including every fallback that shows the
                    raw key. A TextBlock child opts out of access-key parsing entirely. -->
-              <Button Background="#FF424D" Foreground="White"
+              <Button x:Name="BtnVisitPatreon" Click="BtnVisitPatreon_Click" Background="#FF424D" Foreground="White"
                       BorderThickness="0" Padding="18,8" Margin="0,15,0,0"
                       HorizontalAlignment="Center">
                 <TextBlock Text="{loc:Str btn_visit_patreon}"/>

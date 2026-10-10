@@ -12,6 +12,9 @@ using Xunit;
 
 namespace CCP.Avalonia.Tests;
 
+// Runs alone: the test yields between shells, and a shell another class opens in that gap reads as
+// a rooted closed shell here.
+[Collection(RunsAloneCollection.Name)]
 public sealed class ShellMemoryTests(ITestOutputHelper output)
 {
     [Fact]
@@ -41,6 +44,18 @@ public sealed class ShellMemoryTests(ITestOutputHelper output)
             GC.Collect();
             using var process = Process.GetCurrentProcess();
             output.WriteLine($"iteration {i}: rss={process.WorkingSet64 / 1048576} MiB managed={GC.GetTotalMemory(false) / 1048576} MiB alive={Array.FindAll(windows, w => w?.IsAlive == true).Length}");
+        }
+        // A shell starts background work at open (art decodes, fetches) that holds it until the work
+        // lands. Earlier shells had the later iterations to finish; the last one gets a bounded wait.
+        // Run alone this passed; in the full suite it failed about one run in two without the wait.
+        for (var wait = 0; wait < 60 && Array.Exists(windows, w => w.IsAlive); wait++)
+        {
+            await Task.Delay(250);
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+            Dispatcher.UIThread.RunJobs();
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
         }
         // Object liveness, not an allocator/OS-dependent RSS threshold, is the regression guard.
         Assert.All(windows, w => Assert.False(w.IsAlive, "A closed shell is still rooted."));

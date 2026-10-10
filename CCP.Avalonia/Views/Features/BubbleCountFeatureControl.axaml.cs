@@ -38,6 +38,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             SliderFreq.ValueChanged += SliderFreq_Changed;
             CmbDifficulty.SelectionChanged += CmbDifficulty_Changed;
             ChkStrict.IsCheckedChanged += ChkStrict_Changed;
+            // WPF Lab.cs:649-656 / 733-739: greyed only when ticked (Lockdown does not force it on).
+            Windows.MainShellWindow.HoldWhileLockdown(ChkStrict,
+                () => ConditioningControlPanel.Services.LockdownStrictHold.HoldsNow && CoreSettings.Current.BubbleCountStrictLock);
             BtnTest.Click += BtnTest_Click;
 
             Loaded += (_, _) => RebindToCurrentSettings();
@@ -174,7 +177,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
                     "• " + (CoreSettings.Current.MercySystemEnabled   // #1145: names the picked threshold
                         ? global::ConditioningControlPanel.Localization.Loc.GetF("warning_strict_mercy_line", CoreSettings.Current.MercyAfterFails)
                         : global::ConditioningControlPanel.Localization.Loc.Get("warning_strict_mercy_off")) + "\n" +
-                    "• This can be very restrictive!");
+                    "• This can be very restrictive.");
 
                 if (!confirmed)
                 {

@@ -44,21 +44,21 @@ public sealed class SheListeningTests
                 (CoreEntitlement.HasPremiumProvider, CoreEntitlement.IsFreeTodayProvider) = (() => false, _ => false);
                 Master();
                 Assert.False(s.SpeechWakeWordEnabled);
-                Assert.Equal("Mic off", tab.SL_StatusTitle.Text);
-                Assert.StartsWith("Tap Start listening", tab.SL_StatusSub.Text);
+                Assert.Equal(ConditioningControlPanel.Localization.Loc.Get("shelisten_status_off_title"), tab.SL_StatusTitle.Text);
+                Assert.Equal(ConditioningControlPanel.Localization.Loc.Get("shelisten_status_off_sub"), tab.SL_StatusSub.Text);
 
                 // Voice free day: arming defaults to the wake word and the hero says the mic is open
                 // (MainShellWindow.VoiceCommands.cs is the consumer; VoiceCommandsTests proves it opens).
                 CoreEntitlement.IsFreeTodayProvider = k => k == "voice";
                 Master();
                 Assert.True(s.SpeechWakeWordEnabled);
-                Assert.Equal("She's listening", tab.SL_StatusTitle.Text);
-                Assert.Equal("The mic is open. Call her, then say a command.", tab.SL_StatusSub.Text);
+                Assert.Equal(ConditioningControlPanel.Localization.Loc.Get("shelisten_status_on_title"), tab.SL_StatusTitle.Text);
+                Assert.Equal(Loc.Get("shelisten_status_on_sub"), tab.SL_StatusSub.Text);
                 Assert.NotEqual(Loc.Get("set2_chip_off"), tab.TxtSL_WakeWordChip.Text);
                 // WPF UpdateMicPill / SetSheListeningStatusPulse: the pill lights and the disc breathes.
                 var pill = shell.FindControl<Border>("MicActivePill")!;
                 Assert.True(pill.IsVisible);
-                Assert.IsType<global::Avalonia.Media.DropShadowEffect>(tab.SL_StatusDot.Effect);
+                Assert.True(ConditioningControlPanel.Avalonia.Views.Windows.MainShellWindow.StatusGlowLayer(tab.SL_StatusDot) is { Opacity: > 0 }, "the mic disc glow layer is dark");
                 Assert.False(tab.BtnSL_OpenModels.IsVisible);
 
                 // The pill is the privacy stop, by mouse and by keyboard (P17).
@@ -69,7 +69,7 @@ public sealed class SheListeningTests
                 Assert.False(s.SpeechWakeWordEnabled);
                 Assert.False(pill.IsVisible);
                 Assert.Null(tab.SL_StatusDot.Effect);
-                Assert.Equal("Mic off", tab.SL_StatusTitle.Text);
+                Assert.Equal(ConditioningControlPanel.Localization.Loc.Get("shelisten_status_off_title"), tab.SL_StatusTitle.Text);
                 Master();
                 Assert.True(pill.IsVisible);
                 pill.RaiseEvent(new global::Avalonia.Input.KeyEventArgs
@@ -117,7 +117,7 @@ public sealed class SheListeningTests
                 shell.ShowTab("shelistening");
                 Dispatcher.UIThread.RunJobs();
                 var tab = shell.SheListeningPage!;
-                Assert.Equal("Microphone not ready", tab.SL_StatusTitle.Text);
+                Assert.Equal(ConditioningControlPanel.Localization.Loc.Get("shelisten_status_not_ready_title"), tab.SL_StatusTitle.Text);
                 Assert.True(tab.BtnSL_OpenModels.IsVisible);
                 Assert.Null(tab.SL_StatusDot.Effect);
 

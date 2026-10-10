@@ -46,6 +46,40 @@ namespace ConditioningControlPanel
 
         /// <summary>Chaos Mode: the run crossed into a new rank, by its lowercase name.</summary>
         public static volatile Action<string>? ChaosRankUp;
+        /// <summary>A skill was bought (WPF BarkService wires App.SkillTree.SkillUnlocked: the skill_unlock rule).</summary>
+        public static volatile Action<string>? SkillUnlocked;
+
+        /// <summary>WPF BarkService.DispatchIdle: the tube's idle beat asks the bark engine first (barks ARE the
+        /// idle chatter). True when a bark spoke; false (or unseeded) = fall back to the preset phrase.</summary>
+        public static volatile Func<bool>? IdleDispatcher;
+
+        /// <summary>WPF BarkService.NotifyAppOpened(awayBucket): the voiced welcome. True when it spoke;
+        /// false (or unseeded) = the tube's text-only absence greeting.</summary>
+        public static volatile Func<string, bool>? AppOpenedDispatcher;
+
+        /// <summary>Any other trigger by name (Raise), with optional context values. True when it spoke.</summary>
+        public static volatile Func<string, IReadOnlyDictionary<string, object>?, bool, bool>? RaiseProvider;
+
+        public static bool TryDispatchIdle()
+        { try { return IdleDispatcher?.Invoke() == true; } catch { return false; } }
+
+        public static bool TryAppOpened(string awayBucket)
+        { try { return AppOpenedDispatcher?.Invoke(awayBucket) == true; } catch { return false; } }
+
+        public static bool Raise(string trigger, IReadOnlyDictionary<string, object>? values = null, bool guaranteed = false)
+        { try { return RaiseProvider?.Invoke(trigger, values, guaranteed) == true; } catch { return false; } }
+
+        /// <summary>WPF AvatarTubeWindow.GreetingAwayBucket (Speech.cs:2739): first, soon (&lt;6 h), back (&lt;18 h), while (&lt;3 d), long.</summary>
+        public static string GreetingAwayBucket(DateTime? lastSeenUtc, DateTime? nowUtc = null)
+        {
+            if (lastSeenUtc == null) return "first";
+            var elapsed = (nowUtc ?? DateTime.UtcNow) - lastSeenUtc.Value;
+            if (elapsed < TimeSpan.Zero) elapsed = TimeSpan.Zero;
+            if (elapsed < TimeSpan.FromHours(6)) return "soon";
+            if (elapsed < TimeSpan.FromHours(18)) return "back";
+            if (elapsed < TimeSpan.FromDays(3)) return "while";
+            return "long";
+        }
 
         /// <summary>Every inline bark line of the active mod's rule set, for the Phrase Manager.</summary>
         public static volatile Func<IReadOnlyList<BarkLineInfo>>? AllLinesProvider;
@@ -71,6 +105,9 @@ namespace ConditioningControlPanel
             try { ChaosResultsShown?.Invoke(score, bestScore, pbDelta, isPb, defused, detonated, bestCombo, difficulty); }
             catch { }
         }
+
+        public static void NotifySkillUnlocked(string skillId)
+        { try { SkillUnlocked?.Invoke(skillId); } catch { } }
 
         public static void NotifyChaosRankUp(string rank)
         { try { ChaosRankUp?.Invoke(rank); } catch { } }

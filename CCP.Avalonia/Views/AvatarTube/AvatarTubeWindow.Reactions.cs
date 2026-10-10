@@ -18,7 +18,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
     /// with v2 on WPF's arbiter speaks instead and titles stay local. This head has no v2 observer,
     /// so with v2 on it says the preset and nothing leaves (<see cref="MaySendToAi"/>,
     /// docs/avalonia-decisions.md). The deny list and incognito drop run in the poll, before any
-    /// event. ponytail: WPF's queued <c>Giggle</c> is <see cref="GigglePriority"/> (no speech queue).</para>
+    /// event.</para>
     /// </summary>
     public partial class AvatarTubeWindow
     {
@@ -60,6 +60,9 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
         {
             try
             {
+                // Awareness v2 owns the awareness moment once it is live and attached (WPF Reactions.cs:62):
+                // the arbiter drives delivery back through SpeakAwarenessLine below.
+                if (ConditioningControlPanel.Services.Awareness.AwarenessV2Routing.IsActive) return;
                 if (!MayReact(e.Category) || !App.WindowAwareness.CanReact() || _activityAiInFlight) return;
 
                 string displayName = string.IsNullOrEmpty(e.ServiceName) ? e.DetectedName : e.ServiceName;
@@ -90,12 +93,35 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             catch (Exception ex) { Log.Warning(ex, "OnActivityChanged handler failed"); }
         }
 
+        /// <summary>
+        /// WPF SpeakAwarenessLine (Reactions.cs:287): the arbiter's delivery door. The line was written
+        /// from a privacy-projected frame and has already passed every gate; this only puts it in the
+        /// bubble. Rare and above get the double bounce. Text only: there is no recorded clip for a
+        /// model-written line, so it is never voiced.
+        /// </summary>
+        public void SpeakAwarenessLine(string text, bool doubleBounce)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return;
+            RunOnAvatar(() =>
+            {
+                try
+                {
+                    if (doubleBounce) PlayDoubleBounce();
+                    GigglePriority(text, aiGenerated: true);
+                    Log.Debug("Awareness v2 line delivered (rare={Rare}, {Chars} chars)", doubleBounce, text.Length);
+                }
+                catch (Exception ex) { Log.Warning(ex, "SpeakAwarenessLine failed"); }
+            });
+        }
+
         internal async void OnStillOnActivity(object? sender, ActivityChangedEventArgs e) => await ReactStillOnAsync(e);
 
         internal async Task ReactStillOnAsync(ActivityChangedEventArgs e)
         {
             try
             {
+                // v2 owns still-on moments too: they arrive as Milestone frames (WPF Reactions.cs:179).
+                if (ConditioningControlPanel.Services.Awareness.AwarenessV2Routing.IsActive) return;
                 if (!MayReact(e.Category) || !App.WindowAwareness.CanStillOnReact() || _stillOnAiInFlight) return;
 
                 var duration = App.WindowAwareness.CurrentActivityDuration;

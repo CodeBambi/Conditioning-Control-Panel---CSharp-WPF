@@ -33,7 +33,7 @@ public sealed class HelpButtonsTests
 
     private static readonly string[] Tabs =
     {
-        "settings", "studio", "presets", "haptics", "companion", "awareness", "play", "gradedintake",
+        "settings", "studio", "presets", "haptics", "companion", "personality", "permissions", "companionlinks", "awareness", "play", "gradedintake",
         "blinktrainer", "remotecontrol", "discord", "quests", "achievements", "leaderboard", "assets", "appsettings",
     };
 
@@ -85,7 +85,13 @@ public sealed class HelpButtonsTests
                 buttons.UnionWith(w.GetVisualDescendants().OfType<Button>());
             }
             var problems = new List<string>();
-            foreach (var (name, id) in MainShellWindow.HelpButtonSections)
+            // 7.1.5 v2: the hero (QuickControls) and the Workshop accordion header (CompanionSettings) sit in
+            // the collapsed room, unreachable in WPF too. Awareness: WPF hosts that cell on the Awareness
+            // tab (AwarenessTabView.Companion.cs); seam request from lane E1 until this head does.
+            // Companions (the Workshop Roster cell's ?): WPF 7.1.5 PersonalityPage hosts CompanionPickerCard and
+            // never adopts Shelf.Roster (RevealWorkshop(ROSTER) lands on Personality), so that ? stays in the
+            // collapsed room on both heads. "Companions" has no drawn loop, so no loop is orphaned by it.
+            foreach (var (name, id) in MainShellWindow.HelpButtonSections.Where(p => p.Key is not ("HelpBtnCompanionSettings" or "HelpBtnQuickControls" or "HelpBtnAwareness" or "HelpBtnCompanions")))
             {
                 var b = buttons.FirstOrDefault(x => x.Name == name);
                 if (b is null) { problems.Add($"{name}: not in the shell"); continue; }

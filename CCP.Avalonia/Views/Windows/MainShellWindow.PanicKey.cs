@@ -3,10 +3,10 @@
 // The decision is the same Core PanicPolicy; the listener is Platform/X11PanicKey (XInput2 raw keys,
 // non-consuming like the WH_KEYBOARD_LL hook - docs/avalonia-decisions.md, panic key row).
 // The stop pass is PanicSurfaces.StopAll (one registry shared with the tray and the safe word); a new
-// surface registers there, never here. ponytail: no bark on this head yet. The #919b off-thread watchdog is omitted: the listener is its own thread,
-// so a wedged UI thread cannot drop the hook, but the queued stop still waits for the UI thread.
-// ponytail: Windows has no panic listener on this head yet (WPF's WH_KEYBOARD_LL hook is not ported);
-// X11PanicKey.Start returns false there and the tray's Stop everything is the only panic control.
+// surface registers there, never here. ponytail: no bark on this head yet. The #919b watchdog is Platform/PanicWatchdog:
+// a queued stop the UI thread never runs is torn down off-thread after 2 s.
+// The optional Pause key and the EscapeClaim surfaces ride Platform/Win32Input (Windows only).
+// Windows: Platform/Win32PanicKey (WH_KEYBOARD_LL on its own thread) feeds the same HandlePanicKeyPress.
 // ponytail: a rebind while a portal session is open keeps the OLD trigger until the effects stop and
 // the next effect re-binds; re-bind on PanicKey change if that matters.
 
@@ -37,11 +37,28 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         internal bool StartPanicKey()
         {
             _portalAllowed = true;
+            // WPF EscapeClaim surfaces (TAB-8 / DESK-3): the focus snapshot the hook thread reads.
+            EscapeClaim.MarkType(typeof(Views.Controls.FriendsDrawer));
+            EscapeClaim.StartTracking();
+            if (OperatingSystem.IsWindows())
+            {
+                WireLeashHold();   // WPF hold-to-cut: timing only, the press path is unchanged
+                return Win32Input.Start(() => HandlePanicKeyPress(DateTime.Now));   // WH_KEYBOARD_LL twin
+            }
             return X11PanicKey.Start(() => CoreSettings.Current.PanicKey,
                 () =>
                 {
                     Serilog.Log.Information("Panic trigger: XInput2 key press");
-                    Dispatcher.UIThread.Post(() => HandlePanicKeyPress(DateTime.Now));
+                    var s = CoreSettings.Current;
+                    if (!s.PanicKeyEnabled || CapturingPanicKey || LockdownActive)
+                    {
+                        // WPF LeashPanicKeyWhilePanicOff: panic always works on a leash.
+                        if ((!s.PanicKeyEnabled || LockdownActive) && Platform.LeashHead.IsLeashed)
+                            Dispatcher.UIThread.Post(() => Platform.LeashTaskHost.OnPanicPress(panicRuns: false));
+                        Dispatcher.UIThread.Post(() => HandlePanicKeyPress(DateTime.Now));
+                    }
+                    else
+                        PanicWatchdog.QueueWatched(() => HandlePanicKeyPress(DateTime.Now));   // #919b
                 });
         }
 
@@ -54,6 +71,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // WPF MainWindow.xaml.cs:888: Lockdown ignores every GLOBAL key, whatever LockdownDisablePanicKey
             // says. Only this listener layer: window and TextBox input (the secret phrase) are untouched.
             if (LockdownActive) { Serilog.Log.Information("Panic key ignored under Lockdown"); return; }
+            // WPF TryRacePauseOnEscape, BEFORE everything below: Escape in front of Breakout, the chess board
+            // or the race is that game's pause (a second Escape within 2 s is a full panic). A pause is not
+            // a panic, so it arms nothing and stops nothing.
+            if (Games.GameWindow.TryKeepEscapeAsPause(s.PanicKey, CoreEngine.IsRunning, LockCardWindow.IsAnyOpen(), DateTime.UtcNow)) return;
+            // WPF :1589: armed up here because the rungs below return early (lock card, palette, grace pause).
+            PanicSurfaces.ArmSafetyHold();
             IntakeHostWindow.StopMicsForPanic();   // every press, before the lock-card stop or the capture abort reads as silence
             CancelPendingAi();   // every press, even one a lock card or the palette consumes
 
@@ -64,6 +87,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 && SettingsPaletteWindow.TryConsumeEscape();
             var rung = PanicPolicy.Decide(lockCardOpen, paletteClaimed, PanicPolicy.OverrideEnabled(s));
             Serilog.Log.Information("Panic key pressed ({Rung})", rung);
+            // Owner, 2026-10-10: every accepted press switches keyword triggers off until the user turns them
+            // back on, the rungs that return early included (lock card, grace pause). An Escape the settings
+            // palette claimed is not a panic (PanicPolicy: no stop pass), so it changes nothing.
+            if (rung != PanicPolicy.Rung.DismissSettingsPalette) PanicSurfaces.SwitchOffKeywordTriggers();
             if (rung == PanicPolicy.Rung.DismissLockCard) { StopLockCards(); StopCameraForPanic(); }
             if (!PanicPolicy.StopsSurfaces(rung)) return;
             // WPF MainWindow.xaml.cs:1709: close the game surface that owns the screen, then the normal
@@ -81,7 +108,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 return;
             }
             bool wasRunning = CoreEngine.IsRunning;
-            PanicSurfaces.StopAll("panic key", this);
+            PanicSurfaces.StopAll("panic key", this, holdArmed: true);   // armed once, above
             if (wasRunning) ShowFromTray();   // WPF: Show + Activate the main window after a running stop
 
             if ((now - _lastPanicTime).TotalMilliseconds > 2000) _panicPressCount = 0;

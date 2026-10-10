@@ -19,9 +19,9 @@
        PreviewKeyDown / MouseLeftButtonDown    -> KeyDown / PointerPressed, wired in the constructor
        Click="BtnDismiss_Click"                -> wired in the constructor -->
 <Window xmlns="https://github.com/avaloniaui"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="ConditioningControlPanel.Avalonia.Views.Windows.ProgramsIntroPopup"
-        Title="Training Programs"
+        Title="{loc:Str programs_browse_header}"
         Width="620" SizeToContent="Height" MaxHeight="640"
         SystemDecorations="None"
         TransparencyLevelHint="Transparent"
@@ -219,7 +219,7 @@
                         Width="132" Height="37"
                         Cursor="Hand"
                         FontSize="14" FontWeight="SemiBold">
-                    <TextBlock Text="Got it"/>
+                    <TextBlock Text="{loc:Str btn_got_it}"/>
                 </Button>
             </StackPanel>
         </Grid>

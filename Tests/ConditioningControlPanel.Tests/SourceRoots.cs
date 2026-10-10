@@ -171,6 +171,11 @@ internal static class SourceRoots
     internal static string ReadProductFile(params string[] relativeParts) =>
         File.ReadAllText(FindProductFile(relativeParts));
 
+    /// <summary>One real file per head: the WPF copy, by name. For a test that pins the WPF
+    /// implementation of a class Core carries a different half of (the Arcademy window host).</summary>
+    internal static string WpfHeadFile(params string[] relativeParts) =>
+        Path.Combine(RepoRoot, "ConditioningControlPanel", Path.Combine(relativeParts));
+
     /// <summary>A product file's path relative to the repo root, forward-slashed, e.g.
     /// <c>ConditioningControlPanel/Models/AppSettings.cs</c>.
     ///

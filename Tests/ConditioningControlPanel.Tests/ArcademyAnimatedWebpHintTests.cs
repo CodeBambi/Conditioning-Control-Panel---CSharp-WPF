@@ -206,7 +206,7 @@ public class ArcademyAnimatedWebpHintTests
         // The extension cannot say which lane a webp belongs to, so it is a candidate for both
         // and the probe decides. Dropping it back out of the loop lane would leave an
         // animated-webp-only library with an empty loop pool and a dead-looking wall.
-        var host = SourceRoots.ReadProductFile("Services", "Arcademy", "ArcademyHostService.cs");
+        var host = File.ReadAllText(SourceRoots.WpfHeadFile("Services", "Arcademy", "ArcademyHostService.cs"));
         var loop = Regex.Match(host, @"LocalLoopExts\s*=\s*\{(?<body>[^}]*)\}");
         Assert.True(loop.Success, "LocalLoopExts is no longer an array initialiser");
         Assert.Contains("\".webp\"", loop.Groups["body"].Value, StringComparison.Ordinal);

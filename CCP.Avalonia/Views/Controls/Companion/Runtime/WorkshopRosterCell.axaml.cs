@@ -51,8 +51,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion.Runtime
                 // otherwise fire too. Neither is ported: Avalonia's Button marks PointerPressed
                 // handled, and a routed handler does not see handled events by default, so the
                 // card's handler never runs for a click on this button.
-                this.FindControl<Button>($"BtnCompanion{index}Personality")!.Click +=
-                    (_, _) => PersonalityAssignRequested?.Invoke(this, index);
+                var personality = this.FindControl<Button>($"BtnCompanion{index}Personality")!;
+                personality.Click += (_, _) => PersonalityAssignRequested?.Invoke(this, index);
+                // Hidden: assigning a prompt file to a companion waits for CommunityPromptService
+                // (WPF Services/Companion) to cross to CCP.Core.
+                personality.IsVisible = false;
             }
         }
 

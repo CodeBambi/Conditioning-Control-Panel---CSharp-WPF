@@ -66,7 +66,7 @@ public sealed class EmiDeskSummonTests
             Assert.True(heard);
 
             Click();
-            await Pump(2000);   // wink + CRT off + burst sweep
+            await Pump(5000);   // wake tail + wink (1280 ms, a real chain since B3) + CRT off + burst sweep
             Assert.False(svc.IsOut);
             Assert.False(svc.Window!.IsVisible);
             Assert.False(heard);
@@ -131,6 +131,7 @@ public sealed class EmiDeskSummonTests
         var main = new Window { Width = 800, Height = 600 };
         main.Show();
         var tube = new AvatarTubeWindow(main);
+        tube.Show();   // WPF ShowGiggle skips a line while the tube is off screen (IsAvatarVisibleOnScreen)
         try
         {
             tube.GigglePriority("before", playSound: false);
@@ -186,7 +187,7 @@ public sealed class EmiDeskSummonTests
             await svc.Summon();
             Assert.True(svc.IsOut);
             section.FindControl<CheckBox>("ChkEnabled")!.IsChecked = false;
-            await Pump(2000);
+            await Pump(5000);
             Assert.False(svc.IsOut);
             Assert.False(svc.Window!.IsVisible);
         }
@@ -235,7 +236,7 @@ public sealed class EmiDeskSummonTests
             Assert.Equal(">_<", mini.Text);
 
             svc.Dismiss();
-            await Pump(2000);
+            await Pump(5000);   // the parity dismiss runs the real exit chain
             Assert.False(svc.IsOut);
             Assert.Equal("0_0", mini.Text);
             svc.Window!.DrawFace("^_^");

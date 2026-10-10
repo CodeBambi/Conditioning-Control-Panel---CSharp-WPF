@@ -26,6 +26,14 @@ namespace ConditioningControlPanel.Avalonia
             if (owner is not { IsVisible: true })
                 owner = (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?
                     .Windows.FirstOrDefault(w => w.IsVisible && w != dialog);
+            // A modal that opens while another app is in front (the browser after an OAuth step) lands
+            // BEHIND it on Windows while its owner is already disabled: the panel takes no clicks and the
+            // dialog is nowhere to be seen. Lift it once to the top and activate it as it opens.
+            dialog.Opened += (_, _) =>
+            {
+                try { dialog.Topmost = true; dialog.Activate(); dialog.Topmost = false; }
+                catch (System.Exception ex) { Serilog.Log.Debug("Dialog raise: {E}", ex.Message); }
+            };
             if (owner != null) return dialog.ShowDialog<T>(owner);
             var done = new TaskCompletionSource<T>();
             dialog.Closed += (_, _) =>

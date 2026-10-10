@@ -17,14 +17,14 @@ using AvApp = ConditioningControlPanel.Avalonia.App;
 namespace ConditioningControlPanel.Avalonia.Views.Tabs
 {
     /// <summary>
-    /// The READ-ONLY run view: an existing enrollment from <see cref="AvApp.Programs"/> (built with
-    /// ProgramService.CreateReadOnly, CHECKPOINT A) drawn the way WPF MainWindow.ProgramsTab.cs:539-1450
-    /// and :1978-1998 draw it. Nothing here writes, rolls over, credits a task or starts a session:
-    /// the lifecycle buttons are hidden in the XAML, the ritual/mantra doors stay closed, and because
-    /// no rollover runs on this head the day is labelled "last saved" whenever the program clock has
-    /// moved past it (<see cref="IsSnapshotStale"/>), computed for display only.
-    /// ponytail: ignition FX, day/task pops, node breathe and the live session row are programs
-    /// slices 3 and 5 (~/ccp-port/briefs/programs-run-plan.md).
+    /// The run view: the enrollment in <see cref="AvApp.Programs"/> drawn the way WPF
+    /// MainWindow.ProgramsTab.cs:539-1450 and :1978-1998 draw it. Every lifecycle door is live
+    /// (Withdraw, today's session, Pause/Resume, Restart, Dismiss, the ritual photo and the mantra
+    /// door, progression#1); a read-only service greys or hides them all. A day the program clock has
+    /// moved past without a rollover (a read-only service, or the minute poll not yet run) is labelled
+    /// "last saved" (<see cref="IsSnapshotStale"/>). The live session clock and bar follow the runner's tick.
+    /// ponytail: ignition FX, day/task pops, node breathe and the session sheen are programs
+    /// slice 5 (~/ccp-port/briefs/programs-run-plan.md).
     /// </summary>
     public partial class ProgramsTabView
     {
@@ -32,6 +32,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         internal static TimeProvider Clock { get; set; } = TimeProvider.System;
 
         private ProgramService? _subscribed;
+        private global::ConditioningControlPanel.Services.SessionRunner? _ticking;
         private bool _refreshPending;
 
         /// <summary>The stale verdict the shown run panel was built with; null when no run panel is up.
@@ -56,7 +57,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             svc.TodayChanged += OnProgramChanged;
             svc.ProgramLapsed += OnProgramChanged;
             svc.ProgramGraduated += OnProgramChanged;
+            svc.DayCompleted += OnProgramChanged;
             _subscribed = svc;
+            if (AvApp.Sessions is { } runner)
+            {
+                runner.Ticked += OnSessionTicked;
+                _ticking = runner;
+            }
         }
 
         private void UnsubscribePrograms()
@@ -65,13 +72,27 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             _subscribed.TodayChanged -= OnProgramChanged;
             _subscribed.ProgramLapsed -= OnProgramChanged;
             _subscribed.ProgramGraduated -= OnProgramChanged;
+            _subscribed.DayCompleted -= OnProgramChanged;
             _subscribed = null;
+            if (_ticking != null) _ticking.Ticked -= OnSessionTicked;
+            _ticking = null;
         }
+
+        /// <summary>WPF UpdateProgramSessionRow on every progress tick: the clock and the bar only,
+        /// never a rebuild (P07).</summary>
+        private void OnSessionTicked() => Dispatcher.UIThread.Post(() =>
+        {
+            if (VisualRoot is null || !IsVisible || !Find<StackPanel>("ProgramsRunPanel").IsVisible) return;
+            try { UpdateSessionClock(); }
+            catch (Exception ex) { Serilog.Log.Debug("Program session clock: {E}", ex.Message); }
+        });
 
         private void OnProgramChanged(object? sender, EventArgs e) => Dispatcher.UIThread.Post(() =>
         {
             if (VisualRoot is not null) RefreshPrograms();
         });
+
+        private void OnProgramSessionChanged() => OnProgramChanged(null, EventArgs.Empty);
 
         /// <summary>WPF :509-516: a hidden tab only remembers that it is stale; showing it flushes.</summary>
         protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
@@ -129,7 +150,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 Find<StackPanel>("ProgramsLapsedPanel").IsVisible = lapsed;
                 Find<StackPanel>("ProgramsGraduatedPanel").IsVisible = graduated;
                 Find<StackPanel>("ProgramsRunPanel").IsVisible = run;
-                Find<Border>("RunReadOnlyNote").IsVisible = !browse;
+                // A newer build's file: nothing here may write it, so every lifecycle door greys.
+                var readOnly = svc?.IsReadOnly == true;
+                Find<Border>("RunReadOnlyNote").IsVisible = !browse && readOnly;
+                Find<Button>("BtnProgramWithdraw").IsEnabled = !readOnly;
+                Find<Button>("BtnProgramLapsedWithdraw").IsEnabled = !readOnly;
+                // Pause/Resume, Restart and Dismiss would write too: not offered at all then.
+                Find<Button>("BtnProgramPauseResume").IsVisible = !readOnly;
+                Find<Button>("BtnProgramRestart").IsVisible = !readOnly;
+                Find<Button>("BtnProgramDismissGraduated").IsVisible = !readOnly;
             }
         }
 
@@ -179,10 +208,77 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             Find<TextBlock>("TxtRunChapterReward").Text = chapterReward ?? "";
             ToolTip.SetTip(chip, chapterReward);
 
-            Find<Border>("RunPausedNote").IsVisible = enrollment.State == ProgramEnrollmentState.Paused;
+            var paused = enrollment.State == ProgramEnrollmentState.Paused;
+            Find<Border>("RunPausedNote").IsVisible = paused;
+            Find<TextBlock>("TxtProgramPauseResume").Text = Loc.Get(paused ? "btn_program_resume" : "btn_program_pause");
 
             BuildDayStrip(program, enrollment, accent, stale);
             BuildTodayPanel(svc, program, enrollment, accent, stale);
+        }
+
+        /// <summary>WPF UpdateProgramSessionRow :1451-1585, button and glyph states. Repainted on every
+        /// refresh and on a session start/end (ProgramEngineBridge.SessionChanged), never per tick (P07);
+        /// the tick moves only <see cref="UpdateSessionClock"/>. ponytail: the sheen is programs slice 5.</summary>
+        private void UpdateSessionRow(ProgramService svc, ProgramEnrollment enrollment, ProgramDayRecord record,
+                                      IBrush accent, IBrush muted)
+        {
+            var runner = AvApp.Sessions;
+            var running = runner?.IsRunning == true;
+            var ours = running && svc.IsProgramSession(runner!.CurrentSession);
+            var (key, enabled, tip) =
+                ours ? ("programs_session_in_progress", false, "programs_session_stop_hint")
+                : record.SessionCompleted ? ("programs_session_done", false, null)
+                : running ? ("programs_session_other_running", false, "programs_session_other_running_hint")
+                : ("btn_program_start_session", enrollment.State != ProgramEnrollmentState.Paused, (string?)null);
+            var glyph = Find<TextBlock>("TxtTodaySessionGlyph");
+            glyph.Text = ours ? "◉" : record.SessionCompleted ? "✓" : "○";
+            glyph.Foreground = ours || record.SessionCompleted ? accent : muted;
+            var button = Find<Button>("BtnStartTodaySession");
+            button.IsEnabled = enabled && !svc.IsReadOnly;
+            ToolTip.SetTip(button, tip == null ? null : Loc.Get(tip));
+            // P09: choose the key in code and bind it, so a language switch keeps the state's text.
+            Find<TextBlock>("TxtStartTodaySession").Bind(TextBlock.TextProperty,
+                (global::Avalonia.Data.Binding)new Localization.StrExtension(key).ProvideValue(null!));
+
+            // WPF :1470: no pausing the program out from under its own running session.
+            var paused = enrollment.State == ProgramEnrollmentState.Paused;
+            var pause = Find<Button>("BtnProgramPauseResume");
+            pause.IsEnabled = !(ours && !paused);
+            ToolTip.SetTip(pause, ours && !paused ? Loc.Get("programs_pause_blocked_hint") : null);
+            UpdateSessionClock();
+        }
+
+        private static string ClockText(TimeSpan span) =>
+            span.TotalHours >= 1 ? $"{(int)span.TotalHours}:{span.Minutes:D2}:{span.Seconds:D2}" : $"{(int)span.TotalMinutes}:{span.Seconds:D2}";
+
+        /// <summary>The live clock and bar while the program's own session runs (WPF
+        /// UpdateProgramSessionRow :1490-1530); hidden for any other state.</summary>
+        private void UpdateSessionClock()
+        {
+            var row = Find<Grid>("TodaySessionProgressRow");
+            var text = Find<TextBlock>("TxtTodaySessionProgress");
+            var bar = Find<ProgressBar>("TodaySessionProgressBar");
+            var svc = AvApp.Programs;
+            var runner = AvApp.Sessions;
+            var current = runner?.IsRunning == true ? runner.CurrentSession : null;
+            if (svc == null || runner == null || current == null || !svc.IsProgramSession(current))
+            {
+                row.IsVisible = text.IsVisible = false;
+                bar.Value = 0;
+                return;
+            }
+            var chapter = svc.TodayChapter;
+            var accent = MainShellWindow.AccentBrush(
+                !string.IsNullOrWhiteSpace(chapter?.AccentColor) ? chapter!.AccentColor : svc.ActiveProgram?.AccentColor);
+            var total = TimeSpan.FromMinutes(Math.Max(1, current.DurationMinutes));
+            var elapsed = runner.Elapsed;
+            if (elapsed > total) elapsed = total;
+            bar.Foreground = accent;
+            bar.Value = Math.Clamp(elapsed.TotalSeconds / total.TotalSeconds * 100, 0, 100);
+            var clock = Loc.GetF("programs_session_progress", ClockText(elapsed), ClockText(total));
+            text.Text = runner.IsPaused ? Loc.GetF("programs_session_progress_paused", clock) : clock;
+            text.Foreground = accent;
+            row.IsVisible = text.IsVisible = true;
         }
 
         // ---- reward track (WPF BuildProgramDayStrip :794-939) ----
@@ -321,12 +417,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             ToolTip.SetTip(Find<Border>("TodayRewardChip"), day.RewardDescription);
             Find<Border>("TodayCompleteBanner").IsVisible = record.DayCompleted;
 
-            // Session slot, idle states only (WPF UpdateProgramSessionRow :1555-1568): nothing runs here.
             var minutes = record.IsReturnDay ? ProgramService.ReturnDayMinutes(day.SessionMinutes) : day.SessionMinutes;
             Find<TextBlock>("TxtTodaySessionMinutes").Text = Loc.GetF("programs_session_minutes", minutes);
-            var glyph = Find<TextBlock>("TxtTodaySessionGlyph");
-            glyph.Text = record.SessionCompleted ? "✓" : "○";
-            glyph.Foreground = record.SessionCompleted ? accent : muted;
+            UpdateSessionRow(svc, enrollment, record, accent, muted);
 
             var ambient = day.Ambient;
             var showAmbient = ambient != null &&
@@ -347,6 +440,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             int required = 0, completedRequired = 0, optional = 0, blocked = 0;
             var hasRitual = false;
             var doneInk = ContrastForeground(accent, light);
+            // The ritual picker and the mantra door record progress: never on a read-only service,
+            // never while the run is paused (WPF :1180).
+            var doors = !svc.IsReadOnly && enrollment.State != ProgramEnrollmentState.Paused;
             foreach (var task in day.Tasks)
             {
                 var complete = svc.IsTaskComplete(record, task);
@@ -371,9 +467,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                     CardBorderBrush = complete ? accent : glass,
                     DoneChipVisible = complete,
                     DoneChipForeground = doneInk,
-                    // Read-only head: the ritual picker and the mantra door would record progress.
-                    SubmitVisible = false,
-                    OpenVisible = false,
+                    SubmitVisible = doors && task.Kind == ProgramTaskKind.Ritual && !complete && !isBlocked,
+                    OpenReps = Math.Max(1, task.TargetValue),
+                    OpenVisible = doors && task.Kind == ProgramTaskKind.AutoVerified &&
+                                  task.Verifier == QuestCategory.Mantra && !complete && !isBlocked,
                 };
 
                 var icon = ModArt.TryLoad(TaskIconPath(task));

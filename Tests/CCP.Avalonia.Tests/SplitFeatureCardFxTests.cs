@@ -49,24 +49,24 @@ public sealed class SplitFeatureCardFxTests
             Reshow();
 
             Assert.True(card.IsActiveA);
-            Assert.NotNull(F<object?>(card, "_breath"));
-            Assert.Equal(1.0, F<Border>(card, "_halfHostA").Opacity);
-            Assert.Equal(0.62, F<Border>(card, "_halfHostB").Opacity);           // the off half rests dim
+            Assert.True(F<ConditioningControlPanel.Avalonia.Views.Features.BreathClock?>(card, "_breathClock")?.IsRunning == true);
+            Assert.Equal(1.0, F<Panel>(card, "_halfA").Opacity);
+            Assert.Equal(0.62, F<Panel>(card, "_halfB").Opacity);           // the off half rests dim
             Assert.True(F<Button>(card, "_btnHelpA").IsVisible, "MindWipe has help content");
             Assert.True(F<Button>(card, "_btnHelpB").IsVisible, "BrainDrain has help content");
 
             // Reduced: no ambient loop, glow parked at its peak.
             s.MotionLevel = MotionLevel.Reduced;
             Reshow();
-            Assert.Null(F<object?>(card, "_breath"));
-            Assert.Equal(0.90, F<DropShadowEffect>(card, "_activeGlow").Opacity, 3);
+            Assert.False(F<ConditioningControlPanel.Avalonia.Views.Features.BreathClock?>(card, "_breathClock")?.IsRunning == true);
+            Assert.Equal(0.90, F<Border>(card, "_activeGlow").Opacity, 3);
 
             // Performance tier: no glow at all.
             s.MotionLevel = MotionLevel.Full;
             s.PerformanceMode = true;
             Reshow();
-            Assert.Null(F<object?>(card, "_breath"));
-            Assert.Equal(0, F<DropShadowEffect>(card, "_activeGlow").Opacity);
+            Assert.False(F<ConditioningControlPanel.Avalonia.Views.Features.BreathClock?>(card, "_breathClock")?.IsRunning == true);
+            Assert.Equal(0, F<Border>(card, "_activeGlow").Opacity);
 
             // Sweep gated off: hovering the OFF half B lands the seam on its end state at once, A's "?" steps aside.
             shell.UpdateLayout();
@@ -81,7 +81,7 @@ public sealed class SplitFeatureCardFxTests
             Assert.Equal(0.26, card.GetValue(progress!), 3);
             Assert.True(snaps > 0, "gated: the seam lands with the transition detached");
             Assert.Equal(0, F<Button>(card, "_btnHelpA").Opacity);
-            Assert.Equal(0.62, F<Border>(card, "_halfHostB").Opacity);           // dashboard: hover does not undim
+            Assert.Equal(0.62, F<Panel>(card, "_halfB").Opacity);           // dashboard: hover does not undim
 
             // Full motion: the sweep animates instead of snapping.
             shell.MouseMove(card.TranslatePoint(new Point(-20, -20), shell)!.Value);

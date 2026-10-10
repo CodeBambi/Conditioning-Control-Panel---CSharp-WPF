@@ -4,6 +4,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
         xmlns:fx="clr-namespace:ConditioningControlPanel.Avalonia.Controls"
+        xmlns:cmp="clr-namespace:ConditioningControlPanel.Avalonia.Views.Controls"
         x:Class="ConditioningControlPanel.Avalonia.Views.Windows.LauncherWindow"
         Title="CC Labs"
         Icon="avares://CCP.Avalonia/Resources/app.ico"
@@ -131,6 +132,12 @@
             <Setter Property="FontWeight" Value="SemiBold"/>
         </Style>
         <!-- LauncherLink's underline on hover (a ControlTheme may not hold a descendant selector). -->
+        <Style Selector="Button#ShortcutLink:pointerover TextBlock">
+            <Setter Property="TextDecorations" Value="Underline"/>
+        </Style>
+        <Style Selector="Button#WhatsNewLink:pointerover TextBlock">
+            <Setter Property="TextDecorations" Value="Underline"/>
+        </Style>
         <Style Selector="Button#StopLink:pointerover TextBlock">
             <Setter Property="TextDecorations" Value="Underline"/>
         </Style>
@@ -184,7 +191,7 @@
             </RadialGradientBrush>
         </Border.Background>
     </Border>
-    <Border Opacity="0.22" Margin="-28" IsHitTestVisible="False">
+    <Border x:Name="PoolLayer" Opacity="0.22" Margin="-28" IsHitTestVisible="False">
         <Border.Background>
             <RadialGradientBrush GradientOrigin="16%,82%" Center="16%,82%" RadiusX="48%" RadiusY="46%">
                 <GradientStop Color="{DynamicResource FxParticleColor}" Offset="0"/>
@@ -208,12 +215,17 @@
         <!-- ================= top bar ================= -->
         <Border x:Name="TitleBar" Grid.Row="0" Background="Transparent" PointerPressed="TitleBar_PointerPressed">
             <Grid ColumnDefinitions="Auto,*,Auto">
-                <StackPanel x:Name="Wordmark" Orientation="Horizontal" Margin="18,0,0,0" VerticalAlignment="Center">
-                    <Image Source="avares://CCP.Avalonia/Resources/logo2.png" Height="28"/>
+                <!-- WPF LauncherWindow.xaml:357: the wordmark clips its own light pass. -->
+                <Panel x:Name="Wordmark" Margin="18,0,0,0" VerticalAlignment="Center" ClipToBounds="True">
+                <StackPanel Orientation="Horizontal">
+                    <Image x:Name="WordmarkImage" Source="avares://CCP.Avalonia/Resources/logo2.png" Height="28"/>
                     <TextBlock Text="{loc:Str launcher_window_title}" Margin="10,0,0,0"
                                FontFamily="Fredoka, Segoe UI" FontSize="18" FontWeight="SemiBold"
                                Foreground="{DynamicResource TextLightBrush}" VerticalAlignment="Center"/>
                 </StackPanel>
+                    <!-- One light pass every 25-40 s (LauncherWindow.ArtMotion.cs); opacity 0 at rest. -->
+                    <Rectangle x:Name="WordmarkSheen" Width="70" HorizontalAlignment="Left" IsHitTestVisible="False" Opacity="0"/>
+                </Panel>
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
                     <!-- signed out: a sign-in pill where the chip would be -->
                     <Button x:Name="SignInPill" Theme="{StaticResource LauncherSignInPill}" Margin="0,0,6,0"
@@ -253,6 +265,30 @@
                                        MaxWidth="170" TextTrimming="CharacterEllipsis"/>
                             <TextBlock Text="&#x25BE;" FontSize="10" Margin="6,1,0,0" VerticalAlignment="Center"
                                        Foreground="{DynamicResource TextSecondaryBrush}"/>
+                        </StackPanel>
+                    </Button>
+                    <!-- WPF LauncherWindow.xaml:452: mutes the launcher's own cues only -->
+                    <Button x:Name="BtnSound" Theme="{StaticResource LauncherBarPill}"
+                            Click="BtnSound_Click" Padding="10,0" Margin="0,0,6,0">
+                        <Grid Width="19" Height="17" VerticalAlignment="Center">
+                            <Path x:Name="SoundCone" Data="M1,6 L5,6 L10,1.5 L10,15.5 L5,11 L1,11 Z"
+                                  Fill="{DynamicResource PanelAccentBrush}"/>
+                            <Path x:Name="SoundWaves" Data="M12.5,5 A5,5 0 0 1 12.5,12"
+                                  Stroke="{DynamicResource PanelAccentBrush}" StrokeThickness="1.6"
+                                  StrokeLineCap="Round"/>
+                            <Path x:Name="SoundSlash" Data="M12.5,5.5 L18,11.5 M18,5.5 L12.5,11.5"
+                                  Stroke="{DynamicResource TextSecondaryBrush}" StrokeThickness="1.6"
+                                  StrokeLineCap="Round" IsVisible="False"/>
+                        </Grid>
+                    </Button>
+                    <!-- WPF LauncherWindow.xaml:466 "Media": source, niches, asset preset and the master volume for every room -->
+                    <Button x:Name="BtnGear" Theme="{StaticResource LauncherBarPill}" Margin="0,0,8,0"
+                            ToolTip.Tip="{loc:Str launcher_media_tooltip}" Click="BtnGear_Click">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#x25A3;" FontSize="12" Margin="0,0,7,0" VerticalAlignment="Center"
+                                       FontFamily="Segoe MDL2 Assets, Segoe UI Symbol, Segoe UI"
+                                       Foreground="{DynamicResource PanelAccentBrush}"/>
+                            <TextBlock Text="{loc:Str launcher_media_button}" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Button>
                     <Button x:Name="BtnMinimize" Content="─" Width="46" Height="36"
@@ -327,6 +363,11 @@
                         <Button x:Name="PanelCta" Theme="{StaticResource LauncherCta}" Click="PanelCta_Click">
                             <TextBlock x:Name="PanelCtaText" Text="{loc:Str launcher_panel_launch}"/>
                         </Button>
+                        <!-- WPF LauncherWindow.xaml:553 -->
+                        <Button x:Name="ShortcutLink" Theme="{StaticResource LauncherLink}"
+                                HorizontalAlignment="Center" Margin="0,12,0,0" Click="ShortcutLink_Click">
+                            <TextBlock x:Name="ShortcutLinkText" Text="{loc:Str launcher_add_shortcut}"/>
+                        </Button>
                     </StackPanel>
                 </Grid>
             </Border>
@@ -334,19 +375,28 @@
             <!-- the games: two columns or three by the column's width (LauncherGridLayout) -->
             <Grid x:Name="GamesColumn" Grid.Column="2" RowDefinitions="Auto,*">
                 <TextBlock Text="{loc:Str launcher_section_games}" Classes="eyebrow" Margin="9,0,0,4"/>
-                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <ScrollViewer x:Name="GamesScroller" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                     <UniformGrid x:Name="GamesGrid" Columns="2" VerticalAlignment="Top"/>
                 </ScrollViewer>
             </Grid>
         </Grid>
 
         <!-- ================= bottom row ================= -->
-        <!-- ponytail: the friends chip and the What's New link (WPF left side) are not here yet. -->
+        <!-- WPF LauncherWindow.xaml:580: the friends chip and "What's new" on the left, the skip box on the right. -->
         <Border Grid.Row="2" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="0,1,0,0" Margin="28,0,28,0">
-            <CheckBox x:Name="SkipToPanel" HorizontalAlignment="Right" VerticalAlignment="Center"
-                      Click="SkipToPanel_Click">
-                <TextBlock Text="{loc:Str launcher_skip_to_panel}" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}"/>
-            </CheckBox>
+            <Grid>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Left">
+                    <cmp:FriendsRailChip x:Name="FriendsChip" Margin="-8,0,10,0"/>
+                    <Button x:Name="WhatsNewLink" Theme="{StaticResource LauncherLink}" VerticalAlignment="Center"
+                            Click="WhatsNew_Click">
+                        <TextBlock Text="{loc:Str launcher_link_whats_new}"/>
+                    </Button>
+                </StackPanel>
+                <CheckBox x:Name="SkipToPanel" HorizontalAlignment="Right" VerticalAlignment="Center"
+                          Click="SkipToPanel_Click">
+                    <TextBlock Text="{loc:Str launcher_skip_to_panel}" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                </CheckBox>
+            </Grid>
         </Border>
 
         <!-- Lockdown veil (WPF LauncherWindow.xaml:597): the launcher waits, it never argues. Over every
@@ -363,6 +413,7 @@
     </Grid>
 
     <Canvas x:Name="ShockwaveCanvas" IsHitTestVisible="False" ClipToBounds="True"/>
+    <Canvas x:Name="TrailCanvas" IsHitTestVisible="False"/>
     <fx:AmbientFxCanvas x:Name="BurstLayer" IsHitTestVisible="False"/>
 
     <Panel x:Name="EdgeHost" IsHitTestVisible="False">

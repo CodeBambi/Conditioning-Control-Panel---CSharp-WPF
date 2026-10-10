@@ -3,8 +3,10 @@
 // the live hero clock (:301), the ends line (:277), the pills (:372), the account chip (:871),
 // the link flow (:830-863) on the Core loopback OAuth, the lock pick (:962-1053) and the fact cap.
 // Circe's mood is the CircesMoodMeter heat row and her lines land in PageSays (WPF ChasterTabView.Mood.cs).
-// ponytail: the ground (spiral/glow/ambient), hero art, paper tag,
-// LockTitle letters, limits, menu, trailer and most Fx. The numbers + receipt (Numbers.cs), calendar (Calendar.cs) and keys (Keys.cs) are partials.
+// The hero art, the paper tag, the menu (two boards, the red flash switch, How it works, Reset), the
+// click-to-set figures, the two limits and the trailer are Menu.cs / PriceEdit.cs / Limits.cs / Trailer.cs.
+// The motion (ground loops, bursts, rings, pops, the bill's print-down) is ChasterTabView.Fx.cs.
+// The numbers + receipt (Numbers.cs), calendar (Calendar.cs) and keys (Keys.cs) are partials.
 // The heads-up clock, raffle card and ladder scrap are ChasterTabView.Ladder.cs (ChasterTabView.Fx.cs: FxSwitch/FxConsentShown/FxConsentOk
 // bursts included) are later slices. Unlink, the switch + consent and pause are real (slice 2).
 using System;
@@ -27,11 +29,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 {
     public partial class ChasterTabView : UserControl
     {
-        private static readonly Color EarnColour = Color.FromRgb(0x5F, 0xFF, 0xD0);
+        internal static readonly Color EarnColour = Color.FromRgb(0x5F, 0xFF, 0xD0);
         private static readonly Color IceColour = Color.FromRgb(0x9F, 0xD8, 0xFF);
         private static readonly Color AmberColour = Color.FromRgb(0xFF, 0xC9, 0x8A);
         private static readonly Color MutedColour = Color.FromRgb(0xA8, 0xA2, 0xB8);
-        private static readonly Color CostColour = Color.FromRgb(0xFF, 0x6B, 0x8A);
+        internal static readonly Color CostColour = Color.FromRgb(0xFF, 0x6B, 0x8A);
         private static readonly Color PauseGold = Color.FromRgb(0xE0, 0xB0, 0x52);
         private static readonly FontFamily Display = new("Fredoka, Segoe UI");
 
@@ -44,10 +46,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private string _clockShape = "";
         private readonly List<TextBlock> _clockNumbers = new();
         private bool _loading;
+        private bool _nudgingKeys;
+        internal bool NudgingKeys => _nudgingKeys;
 
         public ChasterTabView()
         {
             InitializeComponent();
+            SetupHint.PointerReleased += (_, e) =>
+            {
+                if (!_nudgingKeys) return;
+                PresetRow.BringIntoView();
+                e.Handled = true;
+            };
             _tick.Tick += (_, _) => { PaintHeroClock(); PaintChasterChip(ChasterHead.Service); };
             SlowTick.Tick += (_, _) => RefreshHero();
             // WPF (:99) only listens and ticks while the page is on screen; the shell hides tabs with IsVisible.
@@ -57,6 +67,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             LadderInit();
             NumbersInit();
             KeysInit();
+            MenuInit();
+            FxInit();
             Refresh();
             LadderRenderSample();
         }
@@ -66,6 +78,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         public void OnTabShown()
         {
             Refresh();
+            FxOnShown();
             LadderOnShown();
             _ = LoadLocksAsync();
             _ = ChasterHead.Service?.RefreshLockAsync();
@@ -94,9 +107,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         }
 
         // All three arrive on whatever thread found out.
-        private void OnLinkChanged() => Dispatcher.UIThread.Post(OnTabShown);
-        private void OnLockChanged() => Dispatcher.UIThread.Post(RefreshHero);
-        private void OnBooked(string eventId, TabBooking booking) => Dispatcher.UIThread.Post(() => { RefreshHero(); RefreshAdded(); RefreshNumbers(); });
+        private void OnLinkChanged() => Dispatcher.UIThread.Post(() =>
+        {
+            OnTabShown();
+            if (ChasterHead.Service?.IsLinked == true) FxLinked();   // WPF :163
+        });
+        // WPF :167-172: a lock starting or ending also opens or closes the figures.
+        private void OnLockChanged() => Dispatcher.UIThread.Post(() => { RefreshHero(); PaintStamps(); });
+        // WPF :154-158: the numbers move, then the booking's beat (pop, sparks, ring, the padlocks' tug).
+        private void OnBooked(string eventId, TabBooking booking) => Dispatcher.UIThread.Post(() =>
+        {
+            RefreshHero(); RefreshAdded(); RefreshNumbers();
+            if (booking.AppliedSeconds != 0) FxBooked(booking.AppliedSeconds, eventId);
+        });
 
         internal void Refresh()
         {
@@ -107,14 +130,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             AccountStrip.IsVisible = linked;
             AddedRow.IsVisible = linked;
             NumbersPanel.IsVisible = linked;
-            if (linked) { RefreshNumbers(); RefreshPresets(); }
+            MenuPanel.IsVisible = linked;
+            PaperTag.IsVisible = linked;
+            if (!linked) HideTrailer();
+            RefreshLimits();
+            if (linked) { ApplyPriceToggles(); RefreshNumbers(); RefreshPresets(); }
             if (linked) RefreshAdded(); else HideLadder();
             SwitchPill.IsVisible = linked;
             PausePill.IsVisible = linked;
             PaintPause(CoreSettings.Current.ChasterPaused);
             BtnLink.IsEnabled = chaster != null;
             ShowLinking(chaster?.IsLinking == true);
-            TxtFactCap1.Text = TxtFactCap2.Text = CircesTab.Format((chaster?.Caps ?? TabLimits.Default).DailySeconds, signed: false);
             if (!linked) LockRow.IsVisible = false;
             RefreshHero();
             ConsentCard.IsVisible = false;
@@ -148,12 +174,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 try { ChkTab.IsChecked = false; }
                 finally { _loading = false; }
                 ConsentCard.IsVisible = true;
+                FxConsentShown();
                 return;
             }
             ConsentCard.IsVisible = false;
             settings.ChasterTabEnabled = wanted;
             CoreSettings.Save();
             RefreshHero();
+            FxSwitch(wanted);
         }
 
         private void BtnConsentOk_Click(object? sender, RoutedEventArgs e)
@@ -167,6 +195,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             finally { _loading = false; }
             PaintSwitch(true);
             RefreshHero();
+            FxConsentOk();   // before the card hides: the sparks leave from its button
             ConsentCard.IsVisible = false;
         }
 
@@ -219,6 +248,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             PaintChasterChip(chaster);
             RefreshMood(chaster);
             HeroTitle.IsVisible = linked;
+            if (linked) HeroTitle.Text = Loc.Get("chaster_hero_title");
             HeroPills.Children.Clear();
             if (!linked)
             {
@@ -236,10 +266,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 anyRowOn: TabPageText.AnyRowOn(CoreSettings.Current.ChasterPrices));
             SetupHint.Text = key == null ? "" : Loc.Get(key);
             SetupHint.IsVisible = key != null;
+            // Nothing can count: the line says so, and a click on it takes the player to the keys (WPF :276-286).
+            _nudgingKeys = key == "chaster_setup_nothing";
+            SetupHint.Cursor = _nudgingKeys ? new global::Avalonia.Input.Cursor(global::Avalonia.Input.StandardCursorType.Hand) : null;
+            FxNudgeKeys(_nudgingKeys);
             PaintHeroClock();
             var ends = LiveLockClock.EndsAt(snapshot, chaster.BalanceSeconds, DateTime.UtcNow)?.ToLocalTime();
             TxtHeroEnds.Text = ends is { } when ? Loc.GetF("chaster_hero_ends", when.ToString("ddd d MMM HH:mm")) : "";
             TxtHeroEnds.IsVisible = ends != null;
+            // WPF PaintHeroEnds (:289): the tooltip names the two parts, Chaster's own end and what the tab still adds.
+            var pending = LiveLockClock.PendingAdd(chaster.BalanceSeconds);
+            ToolTip.SetTip(TxtHeroEnds, ends != null && pending > 0 && snapshot?.EndsAtUtc is { } own
+                ? Loc.GetF("chaster_hero_ends_tip", own.ToLocalTime().ToString("ddd d MMM HH:mm"), CircesTab.Format(pending))
+                : null);
             RefreshPills(chaster.LockLookup, snapshot, chaster.SafetyHoldRemaining);
             BuildCalendar(snapshot);
         }
@@ -296,7 +335,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 return;
             }
             for (var i = 0; i < parts.Count && i < _clockNumbers.Count; i++)
+            {
+                if (i == 0 && LeadHeld) continue;   // the count-up owns the lead number
                 if (_clockNumbers[i].Text != parts[i].Value) _clockNumbers[i].Text = parts[i].Value;
+            }
         }
 
         private IBrush? Brush(string key) =>
@@ -389,6 +431,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         {
             BtnLink.IsVisible = !linking;
             LinkingRow.IsVisible = linking;
+            FxLinking(linking);
         }
 
         private async void BtnLink_Click(object? sender, RoutedEventArgs e)

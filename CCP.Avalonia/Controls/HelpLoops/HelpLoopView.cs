@@ -69,14 +69,14 @@ namespace ConditioningControlPanel.Avalonia.Controls.HelpLoops
 
         private bool WantsToRun =>
             !Failed && IsEffectivelyVisible && TopLevel.GetTopLevel(this) != null
-            && CoreSettings.Current.MotionLevel != MotionLevel.Off;
+            && AmbientFxCanvas.Env.Level != MotionLevel.Off;
 
         /// <summary>Starts or stops the frame loop to match <see cref="WantsToRun"/>.</summary>
         public void UpdateRunning()
         {
             if (WantsToRun && !_running)
             {
-                _speed = CoreSettings.Current.MotionLevel == MotionLevel.Reduced ? .5 : 1;
+                _speed = AmbientFxCanvas.Env.Level == MotionLevel.Reduced ? .5 : 1;
                 _base = CurrentTime;
                 _startTs = Time.GetTimestamp();
                 _running = true;

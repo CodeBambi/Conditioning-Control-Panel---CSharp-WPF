@@ -4,10 +4,10 @@
 // What is real: the registry (_statusPulses), its single decision point (ApplyStatusPulse) and the
 // four per-tab entry points. A dot breathes only while its feature genuinely runs, which is the
 // whole "zero idle loops" rule the WPF file is held to. WPF's DoubleAnimation with AutoReverse +
-// RepeatBehavior.Forever over DropShadowEffect.Opacity becomes one Avalonia Animation with
-// PlaybackDirection.Alternate + IterationCount.Infinite over the same property - the same motion,
-// not an approximation - cancelled through a CancellationTokenSource the way every other loop on
-// this head is (see MainShellWindow.DeeperFx.cs).
+// RepeatBehavior.Forever over DropShadowEffect.Opacity is one Helpers.BeatLoop here: the same breath
+// (min, max, period) written to a glow layer's Opacity on the shared 30 fps beat, stopped through a
+// CancellationTokenSource. Never an infinite Avalonia Animation and never an animated Effect: either
+// makes the whole window compose at 60 Hz (NoInfiniteAnimationTests keeps the head free of them).
 //
 // On WPF each status tab calls its Set*StatusPulse from the state-change method it already has.
 // Here SetBlinkTrainerStatusPulse is called by BlinkTrainerTabView.RefreshStatusRow and
@@ -71,7 +71,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             internal bool Wanted;
             internal double Blur;
             internal Color Tint;
-            internal DropShadowEffect? Glow;
+            /// <summary>The dot's sibling glow layer (Tag "StatusGlow" in the tab's axaml), while lit.</summary>
+            internal Border? Glow;
             internal CancellationTokenSource? Clock;
         }
 
@@ -97,7 +98,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _pr4aFxInitialized = true;
             try
             {
-                // A plain Animation does not park itself on deactivate/minimise the way
+                // A BeatLoop does not park itself on deactivate/minimise the way
                 // AmbientFxCanvas does, so the pulses need this window funnel.
                 Activated += OnPr4aFxWindowStateish;
                 Deactivated += OnPr4aFxWindowStateish;
@@ -149,7 +150,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     foreach (var req in _statusPulses.Values)
                     {
                         req.Tint = tint;
-                        if (req.Glow != null) req.Glow.Color = tint;
+                        if (req.Glow != null) req.Glow.BoxShadow = StatusGlowShadow(tint, req.Blur);
                     }
                 }
                 catch (Exception ex) { Log.Debug("OnPr4aModChanged: {E}", ex.Message); }
@@ -220,46 +221,47 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             {
                 bool run = req.Wanted && dot.IsEffectivelyVisible && Pr4aAmbientAllowed;
 
-                if (!run)
+                var layer = StatusGlowLayer(dot);
+                if (!run || layer == null)
                 {
+                    // OUT: the clock stops, the glow layer goes dark and drops its shadow.
                     StopStatusPulseClock(req);
                     req.Glow = null;
                     dot.Opacity = 1;
                     dot.ClearValue(Visual.EffectProperty);
+                    if (layer != null) { layer.Opacity = 0; layer.ClearValue(Border.BoxShadowProperty); }
                     return;
                 }
 
-                if (req.Glow != null && ReferenceEquals(dot.Effect, req.Glow))
+                if (req.Glow != null && ReferenceEquals(layer, req.Glow) && req.Clock != null)
                     return;                          // already breathing, leave the clock alone
 
                 StopStatusPulseClock(req);
-                req.Glow = new DropShadowEffect
-                {
-                    Color = req.Tint,
-                    BlurRadius = req.Blur,
-                    OffsetX = 0,
-                    OffsetY = 0,
-                    Opacity = StatusPulseMaxOpacity,
-                };
-                dot.Effect = req.Glow;
+                // The glow is a sibling Border behind the dot wearing a BoxShadow; only its Opacity
+                // moves, on the shared 30 fps beat. (WPF: a DropShadowEffect on the dot. Here an
+                // Effect is an offscreen layer re-rendered on every beat.)
+                layer.BoxShadow = StatusGlowShadow(req.Tint, req.Blur);
+                layer.Opacity = StatusPulseMaxOpacity;
+                req.Glow = layer;
 
                 req.Clock = new CancellationTokenSource();
-                var anim = new Animation
-                {
-                    Duration = TimeSpan.FromSeconds(StatusPulseSeconds),
-                    IterationCount = IterationCount.Infinite,
-                    PlaybackDirection = PlaybackDirection.Alternate,
-                    Easing = new SineEaseInOut(),
-                    Children =
-                    {
-                        new KeyFrame { Cue = new Cue(0d), Setters = { new Setter(DropShadowEffect.OpacityProperty, StatusPulseMinOpacity) } },
-                        new KeyFrame { Cue = new Cue(1d), Setters = { new Setter(DropShadowEffect.OpacityProperty, StatusPulseMaxOpacity) } },
-                    },
-                };
-                _ = anim.RunAsync(req.Glow, req.Clock.Token);
+                Helpers.BeatLoop.Run(layer, req.Clock.Token, t =>
+                    layer.Opacity = Math.Clamp(StatusPulseMinOpacity + ((StatusPulseMaxOpacity - StatusPulseMinOpacity) * Helpers.BeatLoop.Breath(t, StatusPulseSeconds)), 0, 1));
             }
             catch (Exception ex) { Log.Debug("ApplyStatusPulse: {E}", ex.Message); }
         }
+
+        /// <summary>The glow layer the tab's axaml lays behind <paramref name="dot"/>.</summary>
+        internal static Border? StatusGlowLayer(Control dot)
+        {
+            if (dot.Parent is not Panel host) return null;
+            foreach (var child in host.Children)
+                if (child is Border b && Equals(b.Tag, "StatusGlow")) return b;
+            return null;
+        }
+
+        private static BoxShadows StatusGlowShadow(Color tint, double blur) =>
+            new(new BoxShadow { Blur = blur, Color = tint });
 
         private static void StopStatusPulseClock(StatusPulseRequest req)
         {

@@ -29,6 +29,10 @@ namespace ConditioningControlPanel
         /// cards, the pink tint). Runs after every Stop, running or not.</summary>
         public static volatile Action? StoppedHook;
 
+        /// <summary>WPF EngineCrashSentinel (StartStop.cs:417, :560): arm the dirty-shutdown file while the
+        /// engine runs. Off until a head that reads it at startup switches it on (hunt3 IC7).</summary>
+        public static volatile bool CrashSentinel;
+
         /// <summary>The head's pop-quiz scheduler (it owns the <see cref="IPopQuizHost"/>); null
         /// on a head with no pop-quiz window.</summary>
         public static volatile PopQuizScheduler? PopQuiz;
@@ -39,17 +43,26 @@ namespace ConditioningControlPanel
         /// <summary>The head's bubble-count game (it owns the <see cref="IBubbleCountHost"/>).</summary>
         public static volatile BubbleCountScheduler? BubbleCount;
 
+        /// <summary>The head's layered audio bed (WPF App.LayeredAudio.Start(ignoreMasterToggle: true)),
+        /// started for an Audio-Only Hypno session (#668); null on a head with no layered audio.</summary>
+        public static volatile Action? AudioBedStart;
+
+        /// <summary>Stops the head's layered audio bed (WPF App.LayeredAudio.Stop()).</summary>
+        public static volatile Action? AudioBedStop;
+
         /// <summary>WPF StartEngine's arming matrix, minus the services no head here has.
-        /// Not idempotent in TotalSessions, exactly as WPF; callers start only when stopped.</summary>
-        public static void Start()
+        /// Not idempotent in TotalSessions, exactly as WPF; callers start only when stopped.
+        /// <paramref name="systemInitiated"/> (WPF StartStop.cs:293): the app started the engine on the user's
+        /// behalf (the Lockdown Dose keeper), so it is not counted as a session and EMI is told so.</summary>
+        public static void Start(bool systemInitiated = false)
         {
             var s = CoreSettings.Current;
-            s.TotalSessions++;
+            // WPF StartStop.cs:298: Relapse = a start the player chose inside ten seconds of a panic press.
+            if (!systemInitiated) { try { AchievementEngine.Current?.CheckRelapse(); } catch (Exception ex) { Log.Debug(ex, "relapse check"); } }
+            if (!systemInitiated) s.TotalSessions++;   // WPF StartStop.cs:308: a keeper start is not a session the user chose
             CoreSettings.Save();
 
             // #668 Audio-Only Hypno (WPF :304): the visual features sit the session out.
-            // ponytail: WPF also starts the layered audio bed (LayeredAudio.Start(ignoreMasterToggle: true));
-            // no head here has it in Core yet - add it with the audio-layers port.
             bool audioOnly = s.AudioOnlySession;
             if (!audioOnly) CoreFlash.Start();   // it checks FlashEnabled itself
             if (!audioOnly && s.SubliminalEnabled) CoreSubliminal.Start();
@@ -60,14 +73,26 @@ namespace ConditioningControlPanel
             if (!audioOnly && s.PopQuizEnabled) PopQuiz?.Start();   // WPF StartStop.cs:393
             if (!audioOnly && s.BouncingTextEnabled) CoreBouncingText.Start();
             else CoreBouncingText.Stop();   // WPF: clean up any leftover state
+            // WPF StartStop.cs:333: the audio-only bed plays the layered tracks regardless of the
+            // standalone Audio Layers master toggle.
+            if (audioOnly) { try { AudioBedStart?.Invoke(); } catch (Exception ex) { Log.Warning(ex, "Audio-only bed failed to start"); } }
             if (!audioOnly && s.MindWipeEnabled)   // WPF StartStop.cs:366
             {
                 CoreMindWipe.Start(s.MindWipeFrequency, s.MindWipeVolume / 100.0);
                 if (s.MindWipeLoop) CoreMindWipe.StartLoop(s.MindWipeVolume / 100.0);
             }
+            if (!audioOnly && s.BrainDrainEnabled) CoreBrainDrain.Start();   // WPF StartStop.cs:378 (studio#3)
 
             _running = true;
             StartedUtc = DateTime.UtcNow;
+            ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("engineStarted", new { systemInitiated });   // WPF StartStop.cs:412
+            // WPF StartStop.cs:417: the dirty-shutdown sentinel, armed while the engine runs. Only a head
+            // that consumes it at startup switches it on (tests and other hosts never write the file).
+            if (CrashSentinel)
+                EngineCrashSentinel.Mark($"started {DateTime.Now:yyyy-MM-dd HH:mm:ss} | flash {(s.FlashEnabled ? "on" : "off")}" +
+                    $" | bubbles {(s.BubblesEnabled ? "on" : "off")} | video {(s.MandatoryVideosEnabled ? "on" : "off")}" +
+                    $" | subliminal {(s.SubliminalEnabled ? "on" : "off")}");
+            ConditioningTime.OnEngineStarted(DateTime.Now);   // WPF StartStop.cs:423 StartConditioningTimeTracker
             Log.Information("Engine started - Flash: {Flash}, Subliminal: {Sub}, LockCard: {Lock}, BouncingText: {Bt}",
                 s.FlashEnabled, s.SubliminalEnabled, s.LockCardEnabled, s.BouncingTextEnabled);
         }
@@ -90,10 +115,22 @@ namespace ConditioningControlPanel
                 LockCardScheduler.Instance.Stop();
                 PopQuiz?.Stop();   // closes an open quiz (WPF StartStop.cs:492)
                 CoreMindWipe.Stop();   // WPF StartStop.cs:489, also ends the loop
+                CoreBrainDrain.Stop();   // WPF StartStop.cs:490
+                // WPF StartStop.cs:493: an audio-only session force-started the layered bed; stop it on
+                // session end unless the standalone Audio Layers master is on (then it keeps playing).
+                if (CoreSettings.Current?.AudioLayersEnabled != true)
+                {
+                    try { AudioBedStop?.Invoke(); } catch (Exception ex) { Log.Warning(ex, "Audio-only bed failed to stop"); }
+                }
                 _running = false;
+                int emiRanMinutes = StartedUtc is { } emiStarted ? Math.Max(0, (int)(DateTime.UtcNow - emiStarted).TotalMinutes) : 0;
                 StartedUtc = null;
+                ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("engineStopped", new { minutes = emiRanMinutes });   // WPF StartStop.cs:554
+                ConditioningTime.OnEngineStopped(DateTime.Now);   // WPF StartStop.cs:540 StopConditioningTimeTracker
+                if (CrashSentinel) EngineCrashSentinel.Clear();   // WPF StartStop.cs:560: a clean stop
                 try { StoppedHook?.Invoke(); }
                 catch (Exception ex) { Log.Warning(ex, "Engine stop hook failed"); }
+                CoreTubeEvents.RaiseEngineStopped();   // WPF MainWindow.EngineStopped -> the tube's EngineStop line
                 Log.Information("Engine stopped");
             }
             finally { _stopInProgress = false; }
@@ -130,6 +167,7 @@ namespace ConditioningControlPanel
                 case "bubbles": if (on) CoreBubbles.Start(); else CoreBubbles.Stop(); break;
                 case "video": if (on) Video?.Start(); else Video?.Stop(); break;   // WPF VideoFeatureControl ChkEnable
                 case "bubblecount": if (on) BubbleCount?.Start(); else BubbleCount?.Stop(); break;   // WPF BubbleCountFeatureControl ChkEnable
+                case "braindrain": if (on) CoreBrainDrain.Start(); else CoreBrainDrain.Stop(); break;   // WPF BrainDrainFeatureControl ChkEnable
             }
         }
     }

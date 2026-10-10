@@ -208,12 +208,11 @@ public class AchievementService : IDisposable
         if (settings == null) return;
         var now = DateTime.Now;
 
-        // Track total conditioning time for skill tree (when overlay is running = session active)
-        if (App.Overlay?.IsRunning == true)
-        {
-            // Add 1 second worth of time (1/60 of a minute) every tick
-            App.SkillTree?.AddConditioningTime(1.0 / 60.0);
-        }
+        // Total conditioning time is NOT credited here. MainWindow's conditioning time tracker
+        // (StartConditioningTimeTracker) owns it and writes once a minute. This tick used to add
+        // 1/60 of a minute every second as well, which counted every session minute twice and
+        // wrote two settings plus a settings.json save every second (7.1.5 logs: "Possession
+        // auto-tag walk", two "Bark trigger=SettingChanged", "Settings saved", once a second).
 
         // Track Pink Filter time - the persistent feature during a run, OR the tint actually on
         // screen through an ad-hoc path (voice command / Deeper band / trigger bubble). See

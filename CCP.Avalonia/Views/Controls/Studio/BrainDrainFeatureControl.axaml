@@ -131,7 +131,7 @@
                                 <TextBlock Grid.Column="0" Text="{loc:Str st4_braindrain_blur_strength}" FontSize="13" FontWeight="SemiBold"
                                            Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
                                 <Slider Grid.Column="1" x:Name="SliderBlurStrength" sessionLock:SessionLock.Owned="True"
-                                        Minimum="1" Maximum="100" Value="50"
+                                        Minimum="0" Maximum="100" Value="50"
                                         VerticalAlignment="Center" Margin="10,0"/>
                                 <TextBlock Grid.Column="2" x:Name="TxtBlurStrength" Text="50%"
                                            HorizontalAlignment="Right" VerticalAlignment="Center"
@@ -149,6 +149,22 @@
                                 <TextBlock Grid.Column="0" Text="{loc:Str st4_braindrain_melt}" FontSize="13" FontWeight="SemiBold"
                                            Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
                                 <CheckBox Grid.Column="1" x:Name="ChkMelt" sessionLock:SessionLock.Owned="True"
+                                          Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
+                            </Grid>
+
+                            <Border Height="1" Margin="0,6" Background="{DynamicResource GlassBorderBrush}"/>
+
+                            <!-- Keep pictures clear (BrainDrainKeepPicturesClear): the blur tucks under
+                                 CCP's own windows, so flashes, videos, lock cards and words stay sharp.
+                                 Comfort knob, editable mid-session. -->
+                            <Grid Height="34" Background="Transparent" ToolTip.Tip="{loc:Str st4_braindrain_keep_clear_hint}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str st4_braindrain_keep_clear}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <CheckBox Grid.Column="1" x:Name="ChkKeepClear"
                                           Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
                             </Grid>
 
@@ -180,6 +196,28 @@
                                 <CheckBox Grid.Column="1" x:Name="ChkAllowCapture"
                                           Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
                             </Grid>
+
+                            <!-- Power-user rows, folded (WPF MoreFold, house rule: progressive disclosure). -->
+                            <sessionLock:MoreFold x:Name="FoldMore">
+                                <!-- Brain Drain's own clip volume (BrainDrainVolume, ccp-bugs #1104),
+                                     multiplied with the master volume. A comfort setting, so NOT
+                                     SessionLock-owned. -->
+                                <Grid Height="36" Background="Transparent" ToolTip.Tip="{loc:Str st4_braindrain_volume_hint}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" MinWidth="120"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto" MinWidth="56"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{loc:Str st4_braindrain_volume}" FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                    <Slider Grid.Column="1" x:Name="SliderVolume"
+                                            Minimum="0" Maximum="100" Value="100"
+                                            VerticalAlignment="Center" Margin="10,0"/>
+                                    <TextBlock Grid.Column="2" x:Name="TxtVolume" Text="100%"
+                                               HorizontalAlignment="Right" VerticalAlignment="Center"
+                                               FontSize="13" FontWeight="Bold" Foreground="{DynamicResource PinkBrush}"/>
+                                </Grid>
+                            </sessionLock:MoreFold>
 
                         </StackPanel>
                     </Grid>
@@ -235,8 +273,7 @@
                                  machine-wide installs. -->
                             <TextBlock x:Name="TxtAudioFolderPath"
                                        Foreground="{DynamicResource TextMutedBrush}"
-                                       FontFamily="Consolas, Courier New" FontSize="10.5"
-                                       Opacity="0.75" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                                       FontFamily="Consolas, Courier New" FontSize="10.5" TextWrapping="Wrap" Margin="0,6,0,0"/>
 
                             <!-- Shown ONLY when the old install-directory folder still holds clips.
                                  Nothing is migrated automatically. -->
@@ -247,8 +284,7 @@
                                        IsVisible="False"/>
                             <TextBlock x:Name="TxtLegacyFolderPath"
                                        Foreground="{DynamicResource TextMutedBrush}"
-                                       FontFamily="Consolas, Courier New" FontSize="10.5"
-                                       Opacity="0.75" TextWrapping="Wrap" Margin="0,3,0,0"
+                                       FontFamily="Consolas, Courier New" FontSize="10.5" TextWrapping="Wrap" Margin="0,3,0,0"
                                        IsVisible="False"/>
                         </StackPanel>
                     </Grid>

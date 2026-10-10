@@ -1,9 +1,9 @@
 // PORTED from ConditioningControlPanel/Controls/Friends/FriendsDrawer.Pickers.cs (+ FriendsDrawer.cs
 // BuildCard/ActionButton/ShowResult): the card's Invite / Poke / Send a watch buttons and the picker
 // each opens inline in the card, over IFriendsService.
-// ponytail: no Segoe MDL2 glyphs on the action buttons (no such font on Linux), no Pop() juice and no FriendsSfx sounds (.Juice.cs / FriendsSfx are not on this head). The Goon
-// and chess tiles stay shut here: GoonHostService and PieceByPieceHostService are WPF-only, so this head
-// can neither open a room nor a board (FriendsInviteCodes is the seam that lights them when they move).
+// ponytail: no Segoe MDL2 glyphs on the action buttons (no such font on Linux), a sent chip pops and throws sparks (.Juice.cs).
+// The Goon and chess tiles open through FriendsInviteCodes (GameWindow.Goon.cs / GameWindow.Pbp.cs). The
+// catalogue watch list is empty as on WPF 7.1.5, where nothing fills CatalogueWatches.List either.
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
@@ -22,8 +22,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls;
 
 public sealed partial class FriendsDrawer
 {
-    private static readonly IBrush ButtonBg = new SolidColorBrush(Color.FromRgb(0x1C, 0x12, 0x33)),
-        ButtonHover = new SolidColorBrush(Color.FromRgb(0x3A, 0x1F, 0x66)), Ground = new SolidColorBrush(Color.FromRgb(0x10, 0x0A, 0x1E)),
+    private static readonly IBrush ButtonBg = Friends.FriendsLook.ButtonBrush,
+        ButtonHover = Friends.FriendsLook.ButtonHoverBrush, Ground = Friends.FriendsLook.GroundBrush,
         PokeInk = new SolidColorBrush(Color.FromRgb(0x2A, 0x0A, 0x1C));
 
     /// <summary>The picker open inside the open card: "poke", "invite", "watch" or null.</summary>
@@ -45,7 +45,7 @@ public sealed partial class FriendsDrawer
             var b = Pill(Loc.Get("friends_action_" + act), lit ? ButtonHover : ButtonBg, Text, "friends-action:" + act, lit ? Lilac : Line2);
             (b.CornerRadius, b.Padding, b.HorizontalAlignment) = (new CornerRadius(10), new Thickness(10, 8, 10, 8), HorizontalAlignment.Stretch);
             b.Margin = grid.Children.Count % 2 == 0 ? new Thickness(0, 0, 3, 6) : new Thickness(3, 0, 0, 6);
-            b.Click += (_, _) => { _picker = _picker == act ? null : act; Render(); };
+            b.Click += (_, _) => { Friends.FriendsSfx.Click(); _picker = _picker == act ? null : act; Render(); };
             grid.Children.Add(b);
         }
         return grid;
@@ -67,7 +67,7 @@ public sealed partial class FriendsDrawer
             // WPF hover: pink pill, dark ink (Fluent reads these per button on :pointerover / :pressed).
             foreach (var state in new[] { "PointerOver", "Pressed" })
                 (chip.Resources["ButtonBackground" + state], chip.Resources["ButtonForeground" + state], chip.Resources["ButtonBorderBrush" + state]) = (Pink, PokeInk, Pink);
-            chip.Click += async (_, _) => await PokeAsync(f.Id, id);
+            chip.Click += async (_, _) => { Pop(chip, PinkC); await PokeAsync(f.Id, id); };
             wrap.Children.Add(chip);
         }
         return wrap;
@@ -102,9 +102,12 @@ public sealed partial class FriendsDrawer
                 ToolTip.SetShowOnDisabled(tile, true);
                 ToolTip.SetTip(tile, Loc.Get(blocked));
             }
+            else if (id == InviteDestination.Goon && string.IsNullOrEmpty(FriendsInviteCodes.GoonCode()))
+                ToolTip.SetTip(tile, Loc.Get("friends_invite_goon_tip"));
             tile.Click += async (_, _) =>
             {
-                if (id == InviteDestination.Goon) await InviteAsync(f.Id, id, FriendsInviteCodes.GoonCode());
+                Pop(tile, LilacC);
+                if (id == InviteDestination.Goon) await InviteToGoonAsync(f.Id);
                 else if (id == InviteDestination.Chess) await InviteToChessAsync(f.Id);
                 else await InviteAsync(f.Id, id, null);
             };
@@ -145,6 +148,33 @@ public sealed partial class FriendsDrawer
     }
 
     private bool _openingChess;
+
+    private bool _openingGoonRoom;
+
+    /// <summary>WPF InviteToGoonAsync: send the live room code, or open a room first and send its code
+    /// the moment the game reports it. One tap either way.</summary>
+    internal async Task<SendResult?> InviteToGoonAsync(string friendId)
+    {
+        var code = FriendsInviteCodes.GoonCode();
+        if (string.IsNullOrEmpty(code))
+        {
+            if (!FriendsInviteCodes.CanHostGoon()) { ShowTimed(friendId, Loc.Get("friends_invite_goon_prime"), false); return null; }
+            if (_openingGoonRoom) return null;   // a second tap while the room opens costs nothing
+            _openingGoonRoom = true;
+            ShowNote(friendId, "friends_invite_goon_opening");
+            (string? Code, bool Busy) opened;
+            try { opened = await FriendsInviteCodes.OpenGoonRoom(TimeSpan.FromSeconds(45)); }
+            catch { opened = (null, false); }
+            finally { _openingGoonRoom = false; }
+            if (string.IsNullOrEmpty(opened.Code))
+            {
+                ShowTimed(friendId, Loc.Get(opened.Busy ? "friends_invite_goon_busy" : "friends_invite_goon_failed"), false);
+                return null;
+            }
+            code = opened.Code;
+        }
+        return await InviteAsync(friendId, InviteDestination.Goon, code);
+    }
 
     /// <summary>WPF InviteToChessAsync: open the board on a challenge, then send its id. One tap.</summary>
     internal async Task<SendResult?> InviteToChessAsync(string friendId)
@@ -198,7 +228,7 @@ public sealed partial class FriendsDrawer
             {
                 var title = Loc.Get("friends_flavour_" + fl);
                 var chip = Chip(title, "friends-flavour:" + fl);
-                chip.Click += async (_, _) => await SendWatchAsync(f.Id, new WatchRef(WatchKind.Flavour, fl, title));
+                chip.Click += async (_, _) => { Pop(chip, GoldC); await SendWatchAsync(f.Id, new WatchRef(WatchKind.Flavour, fl, title)); };
                 wrap.Children.Add(chip);
             }
             sp.Children.Add(wrap);
@@ -215,7 +245,7 @@ public sealed partial class FriendsDrawer
         {
             var b = Pill(title, ButtonBg, Text, "friends-catalogue:" + id, Line2);
             (b.Margin, b.HorizontalAlignment, b.HorizontalContentAlignment) = (new Thickness(0, 0, 0, 4), HorizontalAlignment.Stretch, HorizontalAlignment.Left);
-            b.Click += async (_, _) => await SendWatchAsync(f.Id, new WatchRef(WatchKind.Catalogue, id, title));
+            b.Click += async (_, _) => { Pop(b, GoldC); await SendWatchAsync(f.Id, new WatchRef(WatchKind.Catalogue, id, title)); };
             sp.Children.Add(b);
         }
         return sp;
@@ -226,7 +256,7 @@ public sealed partial class FriendsDrawer
         var g = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
         var box = new TextBox
         {
-            MaxLength = 8, FontFamily = Mono, FontSize = 13, Foreground = Text, Background = Ground, BorderBrush = Line2,
+            FontFamily = Mono, FontSize = 13, Foreground = Text, Background = Ground, BorderBrush = Line2,
             CaretBrush = Lilac, Padding = new Thickness(6, 3, 6, 3), Tag = "friends-ht-box",
         };
         ToolTip.SetTip(box, Loc.Get("friends_watch_ht_hint"));
@@ -243,7 +273,9 @@ public sealed partial class FriendsDrawer
         send.Click += async (_, _) =>
         {
             var id = FriendsDrawerRules.NormaliseHtId(box.Text);
-            if (id.Length > 0) await SendWatchAsync(f.Id, new WatchRef(WatchKind.Ht, id, null));
+            if (id.Length == 0) return;
+            Pop(send, GoldC);
+            await SendWatchAsync(f.Id, new WatchRef(WatchKind.Ht, id, null));
         };
         Grid.SetColumn(send, 1);
         g.Children.Add(box);
@@ -271,6 +303,7 @@ public sealed partial class FriendsDrawer
     private void ShowResult(string friendId, SendResult r)
     {
         var text = Loc.Get(FriendsDrawerRules.SendResultKey(r));
+        if (FriendsDrawerRules.IsGood(r)) Friends.FriendsSfx.Sent(); else Friends.FriendsSfx.Denied();
         ShowTimed(friendId, text, FriendsDrawerRules.IsGood(r));
         if (!_isOpen) Say(text, FriendsDrawerRules.IsGood(r));
     }
@@ -279,19 +312,23 @@ public sealed partial class FriendsDrawer
     private void ShowNote(string friendId, string key) { _results[friendId] = (Loc.Get(key), true); Render(); }
 }
 
-/// <summary>WPF InviteCodes + CatalogueWatches. This head hosts neither a Goon room nor a chess board, so
-/// both tiles are shut ("not on this build"); whoever ports a host sets these.</summary>
+/// <summary>WPF InviteCodes + CatalogueWatches. The chess board is hosted (Views/Games/GameWindow.Pbp.cs:
+/// the board opens on a challenge and hands back its id; GameWindow.Goon.cs: the Goon page reports the room
+/// it is hosting, and with no room yet the tile opens one and sends its code, so it is only shut for an
+/// account that cannot host).</summary>
 internal static class FriendsInviteCodes
 {
-    public static Func<string?> GoonCode { get; set; } = () => null;
-    public static Func<string, TimeSpan, Task<string?>> ChallengeFriend { get; set; } = (_, _) => Task.FromResult<string?>(null);
-    public static Func<bool> HostsChess { get; set; } = () => false;
+    public static Func<string?> GoonCode { get; set; } = () => ConditioningControlPanel.Services.GoonGame.GoonHostService.RoomCode;
+    public static Func<bool> CanHostGoon { get; set; } = () => ConditioningControlPanel.Services.GoonGame.GoonHostService.CanHost;
+    public static Func<TimeSpan, Task<(string? Code, bool Busy)>> OpenGoonRoom { get; set; } = Games.GameWindow.OpenGoonRoomForInviteAsync;
+    public static Func<string, TimeSpan, Task<string?>> ChallengeFriend { get; set; } = Games.GameWindow.PbpChallengeFriendAsync;
+    public static Func<bool> HostsChess { get; set; } = () => true;
     public static Func<IReadOnlyList<(string Id, string Title)>> CatalogueWatches { get; set; } = () => Array.Empty<(string, string)>();
 
     /// <summary>The loc key of why a tile is shut, or null when it can be sent.</summary>
     internal static string? BlockedKey(string destination) => destination switch
     {
-        InviteDestination.Goon when string.IsNullOrEmpty(GoonCode()) => "exclusives_not_on_this_build",
+        InviteDestination.Goon when string.IsNullOrEmpty(GoonCode()) && !CanHostGoon() => "friends_invite_goon_prime",
         InviteDestination.Chess when !HostsChess() => "exclusives_not_on_this_build",
         _ => null,
     };

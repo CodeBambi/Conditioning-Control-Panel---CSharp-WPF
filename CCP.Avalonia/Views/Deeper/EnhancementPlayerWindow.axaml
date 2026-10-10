@@ -25,7 +25,7 @@
         xmlns:controls="clr-namespace:ConditioningControlPanel.Avalonia.Views.Controls"
         xmlns:deeper="clr-namespace:ConditioningControlPanel.Avalonia.Views.Deeper"
         x:Class="ConditioningControlPanel.Avalonia.Views.Deeper.EnhancementPlayerWindow"
-        Title="Deeper Player"
+        Title="{loc:Str deeper_player_title}"
         Height="768" Width="900" MinHeight="504" MinWidth="640"
         WindowStartupLocation="CenterOwner"
         Background="{DynamicResource DarkerBgBrush}"
@@ -186,8 +186,8 @@
                 </StackPanel>
 
                 <!-- Right: browser zoom cluster + source pill + Change popover. In WPF the cluster
-                     bound its Visibility to VideoPane's; here ShowMediaPaneFor pins it HIDDEN in
-                     BOTH modes, because AdjustVideoZoom only logs - see its comment for why. -->
+                     bound its Visibility to VideoPane's; here ShowMediaPaneFor shows it in video mode
+                     (the zoom is DeeperPageBridge's CSS zoom). -->
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
                     <StackPanel x:Name="BrowserZoomCluster" Orientation="Horizontal"
                                 VerticalAlignment="Center" Margin="0,0,8,0"
@@ -340,7 +340,7 @@
                     BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1"
                     CornerRadius="4" IsVisible="False">
                 <Grid>
-                    <controls:WebHost x:Name="VideoBrowser"/>
+                    <controls:WebHost x:Name="VideoBrowser" Profile="browser_data_deeper_player"/>
                     <!-- Bottom-centred, not centred as in WPF: WebHost's fallback panel owns the
                          middle of the pane on any machine with no web engine, and two centred
                          messages on top of each other read as one broken one. -->

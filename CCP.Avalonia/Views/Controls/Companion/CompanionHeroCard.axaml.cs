@@ -153,12 +153,29 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         public void StartAmbientLoop()
         {
             if (!IsLoaded) return;
-            this.FindControl<Ellipse>("PortraitRing")?.Classes.Add("breathe");
+            _ringOn = true;
+            if (_ringBeat == null && this.FindControl<Ellipse>("PortraitRing") is { } ring)
+            {
+                ring.RenderTransform = _ringScale;
+                _ringBeat = VisibleBeat.Attach(ring,
+                    t => _ringScale.ScaleX = _ringScale.ScaleY = 1.0 + (0.015 * BeatLoop.Breath(t, 2.5)),
+                    () => _ringScale.ScaleX = _ringScale.ScaleY = 1.0,
+                    () => _ringOn);
+            }
+            _ringBeat?.Refresh();
         }
+
+        private VisibleBeat? _ringBeat;
+        private bool _ringOn;
+        private readonly ScaleTransform _ringScale = new(1, 1);
+        internal bool RingBreathing => _ringBeat?.IsRunning == true;
 
         /// <summary>Stops the ambient loop and releases the clock.</summary>
         public void StopAmbientLoop()
-            => this.FindControl<Ellipse>("PortraitRing")?.Classes.Remove("breathe");
+        {
+            _ringOn = false;
+            _ringBeat?.Refresh();
+        }
 
         // =====================================================================================
         //  the portrait: mod repaint + optical centring
@@ -477,9 +494,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
 
         public CompanionHeaderViewModel(CompanionHeroCardViewModel hero)
         {
-            // ponytail: the tutorial chip needs the Companion tutorial (WPF BtnCompanionTutorial_Click),
-            // which the shell's TutorialOverlay does not script yet; no-op until it does.
-            TutorialCommand = new RelayCommand(() => { });
+            // WPF BtnCompanionTutorial_Click (MainWindow.Settings.cs:665): StartTutorial(Companion).
+            TutorialCommand = new RelayCommand(() => CoreTutorial.Start("Companion"));
             OpenPatreonCommand = new RelayCommand(() => hero.Shell?.ShowTab("patreon"));
         }
 

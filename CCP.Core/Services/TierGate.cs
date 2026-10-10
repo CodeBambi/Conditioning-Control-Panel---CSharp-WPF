@@ -160,6 +160,7 @@ namespace ConditioningControlPanel.Services
         {
             Log.Information("TierGate: blocked {Feature} (needs {Required})", verdict.Feature, verdict.Required);
             CoreEntitlement.ShowDenied(verdict);
+            ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("premiumTeaseSeen", new { target = verdict.Feature?.ToLowerInvariant() });   // WPF TierGate.cs:189
         }
     }
 }

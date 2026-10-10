@@ -18,12 +18,13 @@ namespace ConditioningControlPanel.Services
     /// cut to what is known): the body carries ONLY <see cref="Sent"/>, achievements = server-loaded ∪ local. Gates, all
     /// required: signed in, loaded THIS session (<see cref="MarkLoaded"/>; stricter than WPF's defaults-guard), the 30 s
     /// cooldown and the XP watermark. Also the 120 s heartbeat and the coalesced XP nudge. No periodic push (WPF has none).
-    /// ponytail: no restore-from-backup reconcile, 401 recovery or heartbeat adopt - add with the features that need them.
+    /// ponytail: no restore-from-backup reconcile or heartbeat adopt - add with the features that need them.
     /// </summary>
     public sealed class SyncPush
     {
         public const SyncBody.Field Sent = SyncBody.Field.UnifiedId | SyncBody.Field.Xp | SyncBody.Field.Level
-            | SyncBody.Field.DescentEpoch | SyncBody.Field.Achievements;
+            | SyncBody.Field.DescentEpoch | SyncBody.Field.DescentAuto | SyncBody.Field.Achievements
+            | SyncBody.Field.TotalConditioningMinutes;   // hunt3 IC5 (WPF ProfileSyncService.cs:1820)
         public static readonly TimeSpan Cooldown = TimeSpan.FromSeconds(30);
         public static readonly TimeSpan HeartbeatInterval = TimeSpan.FromSeconds(120);
         private static readonly TimeSpan NudgeSettle = TimeSpan.FromSeconds(3), NudgeCooldownSlack = TimeSpan.FromSeconds(2);
@@ -39,6 +40,41 @@ namespace ConditioningControlPanel.Services
         private int _nudgePending;
         private readonly Func<ProfileCosmetics?, ProfileCosmetics>? _sanitizeCosmetics;
         private volatile bool _pendingCosmeticsClear;
+        private volatile bool _consentAdopted;   // this load read the account's consent before anything was pushed
+
+        /// <summary>The six consent flags (WPF sends all six on every sync).</summary>
+        public const SyncBody.Field Privacy = AdoptedConsent | OwnedConsent;
+        /// <summary>The two the profile read returns: adopted on load (ProfileAdopt.AdoptConsent), then on every sync.</summary>
+        public const SyncBody.Field AdoptedConsent = SyncBody.Field.AllowDiscordDm | SyncBody.Field.ShowOnlineStatus;
+        /// <summary>The four the profile read does not return: on every sync only for the account that set them on
+        /// this install, so a local default never overwrites what another device chose.</summary>
+        public const SyncBody.Field OwnedConsent = SyncBody.Field.ShareProfilePicture | SyncBody.Field.PublicShareAvatar
+            | SyncBody.Field.GoonShareAvatar | SyncBody.Field.GoonShareDm;
+
+        /// <summary>Which consent flags a sync of <paramref name="s"/> carries. None before this load adopted the
+        /// account's values: adopt first, push second.</summary>
+        public static SyncBody.Field ConsentFields(AppSettings s, bool adopted)
+        {
+            var owned = !string.IsNullOrEmpty(s.UnifiedId) && string.Equals(s.ConsentOwnedAccount, s.UnifiedId, StringComparison.Ordinal);
+            return (adopted ? AdoptedConsent : SyncBody.Field.None) | (owned ? Privacy : SyncBody.Field.None);
+        }
+
+        /// <summary>WPF ChkAllowDiscordDm_Changed and its five siblings, and the Goon consent sheet: this account's
+        /// consent is now set HERE (persisted), and it is pushed now so a REVOKE lands at once. Inside the cooldown
+        /// (or with a push in flight) one coalesced push follows; a restart before it lands still owes it.</summary>
+        public async Task<bool> PushPrivacyAsync(string reason = "privacy")
+        {
+            var s = CoreSettings.Current;
+            if (!SignedIn(s)) return false;   // signed out: the switch is local, nothing is owed
+            s.ConsentOwnedAccount = s.UnifiedId;
+            s.ConsentPushPending = true;
+            CoreSettings.Save();
+            if (!Loaded) return false;        // the load's own push carries it
+            if (await PushAsync(reason, waitForGate: true)) return true;
+            Nudge(reason);
+            return false;
+        }
+
 
         /// <summary>WPF ProfileSyncService.PendingCosmeticsClear: set by an EMPTY Customize save (unequip everything),
         /// cleared once a sync carrying the clear succeeds. In memory, as WPF.</summary>
@@ -71,6 +107,12 @@ namespace ConditioningControlPanel.Services
         public bool Loaded { get; private set; }
         /// <summary>The fuse fed by each successful response's <c>descent_countdown</c> block.</summary>
         public Descent.DescentCountdownService? Countdown { get; set; }
+        /// <summary>The stage ladder in hand (the head's DescentService block), for the migration's drip queue.</summary>
+        public Func<Descent.DescentStage?>? StageLadder { get; set; }
+        /// <summary>The silent restore wrote the ledger: the head repaints what reads level, XP and the spiral.</summary>
+        public Action? MigrationApplied { get; set; }
+        /// <summary>A sync the server accepted (WPF asks the descent block again here: today's XP just landed).</summary>
+        public Action? Accepted { get; set; }
         public DateTime? LastSyncTime { get; private set; }
 
         /// <param name="localAchievements">This install's unlocked achievement ids.</param>
@@ -85,9 +127,11 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>The profile load succeeded: the baseline pushes are allowed against.</summary>
-        public void MarkLoaded(IEnumerable<string>? serverAchievements)
+        /// <param name="consentAdopted">The load ran ProfileAdopt.AdoptConsent on the account's profile first.</param>
+        public void MarkLoaded(IEnumerable<string>? serverAchievements, bool consentAdopted = false)
         {
             _serverAchievements = serverAchievements?.ToArray();
+            _consentAdopted = consentAdopted;
             Loaded = true;
         }
 
@@ -98,6 +142,7 @@ namespace ConditioningControlPanel.Services
             Loaded = false;
             _serverAchievements = null;
             _pendingCosmeticsClear = false;   // never carry one account's unequip into the next
+            _consentAdopted = false;          // the next account's consent is read before anything is sent
             LastSyncTime = null;
         }
 
@@ -107,16 +152,34 @@ namespace ConditioningControlPanel.Services
         /// shrunk to local-only). Xp is the TOTAL, as WPF sends it.</summary>
         /// <param name="cosmetics">An explicit loadout save (WPF BuildCosmeticsPayload after a load: the sanitized
         /// loadout, the empty one included - that is the unequip-everything clear). Null leaves the key out.</param>
-        public static SyncBody Body(AppSettings s, IEnumerable<string>? achievements, ProfileCosmetics? cosmetics = null) => new()
+        public static SyncBody Body(AppSettings s, IEnumerable<string>? achievements, ProfileCosmetics? cosmetics = null, SyncBody.Field consent = SyncBody.Field.None,
+            List<Dictionary<string, object>>? featureDayLog = null) => new()
         {
             Known = (achievements == null ? Sent & ~SyncBody.Field.Achievements : Sent)
-                    | (cosmetics == null ? SyncBody.Field.None : SyncBody.Field.Cosmetics),
+                    | (cosmetics == null ? SyncBody.Field.None : SyncBody.Field.Cosmetics)
+                    | (consent & Privacy)
+                    | (featureDayLog == null ? SyncBody.Field.None : SyncBody.Field.Stats)
+                    // WPF ProfileSyncService.cs:1876: `false` acknowledges an applied admin skills reset; the key
+                    // is left out otherwise (ProfileAdopt.ApplySkillsResetOrAdopt arms and disarms the flag).
+                    | (s.PendingSkillsResetAck ? SyncBody.Field.ForceSkillsReset : SyncBody.Field.None),
+            ForceSkillsReset = s.PendingSkillsResetAck ? false : null,
+            // WPF stats["feature_day_log"] (ProfileSyncService.cs:1811), the one stat this head knows: the server
+            // lifts it off the payload before its per-key stats merge, so a stats object with nothing else changes nothing.
+            Stats = featureDayLog == null ? null : new Dictionary<string, object> { ["feature_day_log"] = featureDayLog },
             UnifiedId = s.UnifiedId,
             Xp = (int)ProfileAdopt.TotalXp(s),
             Level = s.PlayerLevel,
+            TotalConditioningMinutes = s.TotalConditioningMinutes,
             DescentEpoch = Descent.DescentEpochs.ClientEpoch,
+            DescentAuto = true,   // this head takes the offer silently (DescentMigration.ApplyRestore)
             Achievements = achievements?.Distinct().OrderBy(a => a, StringComparer.Ordinal).ToList(),
             Cosmetics = cosmetics,
+            AllowDiscordDm = s.AllowDiscordDm,
+            ShowOnlineStatus = s.ShowOnlineStatus,
+            ShareProfilePicture = s.ShareProfilePicture,
+            PublicShareAvatar = s.PublicShareRealAvatar,
+            GoonShareAvatar = s.GoonShareAvatar,
+            GoonShareDm = s.GoonShareDiscordDm,
         };
 
         /// <summary>WPF PersistOwnCosmetics' push, after <paramref name="chosen"/> was saved to settings. Every push
@@ -169,7 +232,21 @@ namespace ConditioningControlPanel.Services
                 var server = _serverAchievements;
                 var clearing = _pendingCosmeticsClear;
                 var cosmetics = CosmeticsPayload(s, clearing);
-                var body = JsonConvert.SerializeObject(Body(s, server?.Concat(_localAchievements() ?? Array.Empty<string>()), cosmetics));
+                var consent = ConsentFields(s, _consentAdopted);
+                // Snapshot what this body says, to tell a switch flipped while it was in flight.
+                var consentSent = (s.AllowDiscordDm, s.ShowOnlineStatus, s.ShareProfilePicture, s.PublicShareRealAvatar, s.GoonShareAvatar, s.GoonShareDiscordDm);
+                var body = JsonConvert.SerializeObject(Body(s, server?.Concat(_localAchievements() ?? Array.Empty<string>()), cosmetics, consent,
+                    FeatureDayLogService.WirePayloadForSync()));   // WPF ProfileSyncService.cs:1762: Flush, then the log
+                // THE CHOICE SUBMIT (WPF SyncProfileAsync): grafted on only while a choice waits for its ack, so
+                // every other sync is byte-identical. The re-derived ledger rides the ordinary xp/level fields.
+                var pendingChoice = s.PendingDescentMigrationChoice;
+                var migrationInFlight = Descent.DescentMigrationChoices.IsValid(pendingChoice);
+                if (migrationInFlight)
+                {
+                    var grafted = JObject.Parse(body);
+                    grafted["descent_migration"] = new JObject { ["choice"] = pendingChoice };
+                    body = grafted.ToString(Formatting.None);
+                }
                 var tokenUsed = s.AuthToken;
                 HttpRequestMessage NewRequest()
                 {
@@ -213,6 +290,10 @@ namespace ConditioningControlPanel.Services
                         Log.Warning("V2 Profile sync refused by server ({Status}), will retry after the cooldown", (int)response.StatusCode);
                         return false;
                     }
+                    // WPF SyncProfileAsync: a 401 runs the recovery (no retry here; the next trigger pushes with
+                    // whatever it recovered). Real network only: a test transport must never reach the proxy.
+                    if (_handler == null && response.StatusCode == HttpStatusCode.Unauthorized)
+                        await AuthRecovery.HandleUnauthorizedAsync(response);
                     Log.Warning("V2 Profile sync failed: {Status} (error body {Bytes} bytes)", (int)response.StatusCode, json.Length);
                     NoteFailureForBackoff((int)response.StatusCode, tokenUsed);
                     return false;
@@ -221,20 +302,38 @@ namespace ConditioningControlPanel.Services
                 (_backoffFailures, _blockedUntilUtc) = (0, null);
                 // The clear has reached the server; an empty loadout goes back to meaning "no change" (WPF).
                 if (clearing && cosmetics?.IsEmpty == true) _pendingCosmeticsClear = false;
+                // The six were delivered as sent: nothing is owed unless a switch moved while this was in flight.
+                if ((consent & Privacy) == Privacy && s.ConsentPushPending
+                    && consentSent == (s.AllowDiscordDm, s.ShowOnlineStatus, s.ShareProfilePicture, s.PublicShareRealAvatar, s.GoonShareAvatar, s.GoonShareDiscordDm))
+                    s.ConsentPushPending = false;
                 Log.Information("V2 Profile synced successfully ({Bytes} bytes)", json.Length);
                 try
                 {
                     var reply = JObject.Parse(json);
-                    ProfileAdopt.ApplySyncResponse(s, reply, UtcNow());
-                    // WPF HandleDescentMigrationAck: settle/heal an account migrated on any device. This head never
-                    // takes the offer (no descent_auto), so only the ack half runs here.
+                    // While a submit is unacked the server still quotes the pre-migration ledger: only a response
+                    // carrying the ack may move level, XP or the watermark (WPF "holding the ceremony's ledger").
+                    if (migrationInFlight && !Descent.DescentMigration.IsAck(reply))
+                        Log.Warning("[Descent] Migration submit was not acknowledged in this response - holding Level {Level}, will re-submit on the next sync.", s.PlayerLevel);
+                    else
+                        ProfileAdopt.ApplySyncResponse(s, reply, UtcNow());
+                    // WPF HandleDescentMigrationAck: settle/heal an account migrated on any device.
                     Descent.DescentMigrationAck.Apply(s, reply);
+                    // WPF HandleDescentMigrationOffer -> ApplyOfferNow: the offer is taken at once, as "restore",
+                    // with no window. The submit rides the next sync (the pending choice is on disk).
+                    if (Descent.DescentMigration.ReadOffer(reply) is { } offer
+                        && Descent.DescentMigration.ApplyRestore(s, offer, StageLadder?.Invoke(), UtcNow()))
+                    {
+                        LastSyncTime = null;   // the submit is not held behind the cooldown
+                        try { MigrationApplied?.Invoke(); } catch (Exception ex) { Log.Debug("MigrationApplied: {E}", ex.Message); }
+                        var submit = Task.Run(() => PushAsync("descent migration submit", waitForGate: true));
+                    }
                 }
                 catch (Exception ex) { Log.Debug("V2 Sync: Could not parse server flags: {Error}", ex.Message); }
                 // THE FUSE's cache, off the RAW body (WPF ProfileSyncService.HandleDescentCountdown).
                 if (Countdown != null && Descent.DescentCountdownService.TryReadCeremonyAt(json, out var ceremonyAt))
                     Countdown.ApplyCeremonyAt(ceremonyAt);
                 CoreSettings.Save();
+                try { Accepted?.Invoke(); } catch (Exception ex) { Log.Debug("SyncPush.Accepted: {E}", ex.Message); }
                 return true;
             }
             catch (Exception ex)
@@ -247,6 +346,20 @@ namespace ConditioningControlPanel.Services
                 return false;
             }
             finally { _gate.Release(); }
+        }
+
+        /// <summary>WPF ProfileSyncService.SyncBeforeRetryAsync (#1300): one real sync before a balance refusal is
+        /// asked again. Waits for a push already running; inside the 30 s cooldown waits out the rest of it once.
+        /// True only when a sync reached the server.</summary>
+        public async Task<bool> SyncBeforeRetryAsync()
+        {
+            var before = LastSyncTime;
+            if (await PushAsync("purchase-retry", waitForGate: true)) return true;
+            if (LastSyncTime != before) return true;   // the push we waited behind landed
+            var left = LastSyncTime is { } last ? Cooldown - (UtcNow() - last) : TimeSpan.Zero;
+            if (left <= TimeSpan.Zero || left > Cooldown) return false;
+            await Task.Delay(left + TimeSpan.FromMilliseconds(250));
+            return await PushAsync("purchase-retry", waitForGate: true);
         }
 
         /// <summary>WPF NudgeSyncSoon: one coalesced push, 3 s out or just past the cooldown.</summary>

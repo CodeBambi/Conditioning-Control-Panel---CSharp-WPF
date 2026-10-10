@@ -9,8 +9,7 @@ namespace ConditioningControlPanel
     /// <see cref="CoreProgression.AddXPProvider"/> with <see cref="Add"/>: the login gate, the XP add and the
     /// level loop with <c>HighestLevelEver</c>.
     /// ponytail: of the skill multiplier only Pink Rush's 3x is applied (sparkle boosts, streak power, night
-    /// shift, early bird and event boost are not, so owners are under-awarded, which errs safe), no skill
-    /// points or companion XP - each lands with its ported feature. Level achievements listen to <see cref="LevelUp"/>; quests listen to <see cref="Awarded"/>
+    /// shift, early bird and event boost are not, so owners are under-awarded, which errs safe). Companion XP: CompanionCore.AddCompanionXP gets the base amount (progression#47). Skill points per level: <see cref="SkillPointsBank"/>. Level achievements listen to <see cref="LevelUp"/>; quests listen to <see cref="Awarded"/>
     /// (the Avalonia head feeds it to QuestService.TrackXPEarned, as WPF AddXP:120 does).
     /// </summary>
     public static class ProgressionBank
@@ -30,11 +29,11 @@ namespace ConditioningControlPanel
                 Log.Debug("XP not awarded - user not logged in and not in offline mode");
                 return;
             }
-            // ponytail: no idle tracker on this head, so the passive sources WPF suppresses while idle
-            // (ProgressionService.cs:70-78) are never banked; bank them again once an idle tracker exists.
-            if (source is "Flash" or "Subliminal" or "BouncingText")
+            // WPF ProgressionService.cs:70-78 anti-cheat: passive sources are dropped only while the user is
+            // idle (ActivityIdle, 3 min without input), never while active.
+            if (ActivityIdle.IsIdle && source is "Flash" or "Subliminal" or "BouncingText")
             {
-                Log.Debug("XP not banked: +{Amount} from passive {Source} (no idle tracker)", amount, source);
+                Log.Debug("XP suppressed (idle): +{Amount} from {Source}", amount, source);
                 return;
             }
             // WPF ProgressionService.AddXP:90: the lasting Descent bonus for a migrated account (1.0 otherwise).
@@ -50,9 +49,13 @@ namespace ConditioningControlPanel
                 s.PlayerXP -= need;
                 s.PlayerLevel++;
                 if (s.PlayerLevel > s.HighestLevelEver) s.HighestLevelEver = s.PlayerLevel;
+                SkillPointsBank.OnLevelUp(s, s.PlayerLevel);   // WPF SpendXPOnLevels:303 App.SkillTree.OnLevelUp
                 levels.Add(s.PlayerLevel);
                 Log.Information("Level up! Now level {Level}", s.PlayerLevel);
             }
+            // progression#47: WPF AddXP:73 App.Companion.AddCompanionXP(amount, source, context) - the BASE amount, after the gates.
+            try { Services.Companion.CompanionCore.AddCompanionXP(amount, source); }
+            catch (Exception ex) { Log.Debug("Companion XP failed: {E}", ex.Message); }
             CoreSettings.Save();
             foreach (var l in levels) LevelUp?.Invoke(l);
             Awarded?.Invoke(amount, source);

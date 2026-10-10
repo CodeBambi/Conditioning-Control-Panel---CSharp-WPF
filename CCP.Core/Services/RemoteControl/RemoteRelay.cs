@@ -17,7 +17,7 @@ namespace ConditioningControlPanel.Services
     /// /v2/remote/*, the PIN, the 429 backoff, the 401/404 endings, the controller connect/idle state
     /// and the 120 s idle auto-disconnect. Commands go through <see cref="RemoteCommandGate"/> first and
     /// then to the executor on the UI thread (<see cref="CoreDispatch.Invoke"/>).
-    /// ponytail: directory opt-in, emotes, session list/progress in the status push are not here yet;
+    /// ponytail: directory opt-in, session list/progress in the status push are not here yet;
     /// add them with the tab parts that use them.
     /// </summary>
     public sealed class RemoteRelay : IDisposable
@@ -55,7 +55,7 @@ namespace ConditioningControlPanel.Services
         private DateTime _lastStatusPush = DateTime.MinValue, _statusBackoffUntil = DateTime.MinValue;
         private string _lastStatus = "ok";
         private string? _lastReason;
-        private bool _remoteSetStrictLock, _pollBackedOff;
+        private bool _pollBackedOff;
         private DateTime _lastControllerCommand = DateTime.MinValue;
         public const double HotPollSeconds = 1.0, HotWindowSeconds = 60.0, ConnectedHeartbeatSeconds = 5.0;   // WPF Screen.cs (d39969827)
 
@@ -71,6 +71,8 @@ namespace ConditioningControlPanel.Services
         internal bool AutoPoll = true;
 
         public bool IsActive { get; private set; }
+        /// <summary>When the last session ended (WPF LastEndedUtc): Circe keeps the remote cap for a short grace after.</summary>
+        public DateTime? LastEndedUtc { get; private set; }
         public string? SessionCode { get; private set; }
         public string? ConnectPin { get; private set; }
         public string? Tier { get; private set; }
@@ -82,6 +84,53 @@ namespace ConditioningControlPanel.Services
         public double PollInterval { get; private set; } = PollIntervalSeconds;
 
         public event EventHandler? ControllerConnectedChanged, ControllerIdleChanged, SessionEnded;
+        /// <summary>WPF RemoteControlService.SessionStarted (:221): the server opened a session for this code.</summary>
+        public event EventHandler? SessionStarted;
+
+        // ---- Remote Control v2 (WPF Services/Remote/RemoteControlService.V2.cs): what the HUD pill reads.
+        /// <summary>The three signals the subject can send up: more, easy, stop.</summary>
+        public static readonly string[] SignalKinds = { "more", "easy", "stop" };
+        /// <summary>The name the controller typed when connecting, or null.</summary>
+        public string? ControllerName { get; private set; }
+        /// <summary>When the current controller connected (UTC), or null when nobody is connected.</summary>
+        public DateTime? ControllerConnectedSinceUtc { get; private set; }
+        /// <summary>Human words for the last command that landed, e.g. "Spiral", "Toy buzz".</summary>
+        public string? LastActionLabel { get; private set; }
+        /// <summary>Raised when a new command lands (and <see cref="LastActionLabel"/> moved).</summary>
+        public event EventHandler? LastActionChanged;
+        /// <summary>The subject's Easy factor (see <see cref="RemoteCommands.EasyFactor"/>).</summary>
+        public double EasyFactor => RemoteCommands.EasyFactor;
+        public event EventHandler? EasyChanged { add => RemoteCommands.EasyChanged += value; remove => RemoteCommands.EasyChanged -= value; }
+
+        /// <summary>WPF SendSignalAsync: the subject's own button, "more", "easy" or "stop". Easy and Stop act
+        /// HERE first (they mean something even if the network never answers), then the signal goes up the
+        /// emote channel (same auth and rate limit, no debounce: a Stop right after an emote is never
+        /// swallowed). True when the signal reached the server. The controller stays connected either way.</summary>
+        public async Task<bool> SendSignalAsync(string kind)
+        {
+            kind = (kind ?? "").Trim().ToLowerInvariant();
+            if (Array.IndexOf(SignalKinds, kind) < 0 || !IsActive) return false;
+            if (kind == "easy") OnUi(RemoteCommands.ApplyEasy);
+            else if (kind == "stop") OnUi(() => _stopEffects(true));
+            var uid = _unifiedId();
+            if (string.IsNullOrEmpty(uid) || _baseUrl == null) return false;
+            try
+            {
+                using var resp = await PostAsync("/v2/remote/emote", new { unified_id = uid, text = kind, icon = "", kind = "signal" }).ConfigureAwait(false);
+                if (resp.IsSuccessStatusCode) { Log.Information("[RemoteControl] Signal sent: {Kind}", kind); return true; }
+                Log.Warning("[RemoteControl] Signal {Kind} not sent: {Status}", kind, resp.StatusCode);
+                return false;
+            }
+            catch (Exception ex) { Log.Warning(ex, "[RemoteControl] Signal {Kind} failed", kind); return false; }
+        }
+
+        /// <summary>Runs on the UI thread and waits; posted instead if a stalled UI cancels the wait.</summary>
+        private static void OnUi(Action work)
+        {
+            void Safe() { try { work(); } catch (Exception ex) { Log.Warning(ex, "[RemoteControl] local signal action failed"); } }
+            var (done, _) = CoreDispatch.Invoke(() => { Safe(); return 0; }, TimeSpan.FromSeconds(10));
+            if (!done) CoreDispatch.Post(Safe);
+        }
         /// <summary>Raised for every command that ran (WPF CommandReceived); refused ones are not.</summary>
         public event EventHandler<string>? CommandReceived;
 
@@ -106,7 +155,12 @@ namespace ConditioningControlPanel.Services
             { Content = new StringContent(JsonConvert.SerializeObject(body), Encoding.UTF8, "application/json") };
             var token = _token();
             if (!string.IsNullOrEmpty(token)) req.Headers.Add("X-Auth-Token", token);
-            return await _http.SendAsync(req).ConfigureAwait(false);
+            var response = await _http.SendAsync(req).ConfigureAwait(false);
+            // Contract D (WPF AuthPostAsync): every remote-control door is keyed on the account; a merge
+            // tombstone answers 409 merged and the handler swaps to the canonical. Callers still see the 409
+            // and fail this one call the way they already do.
+            await MergedAccountRecovery.TryHandleAsync(response).ConfigureAwait(false);
+            return response;
         }
 
         /// <summary>WPF StartSessionAsync: the new session code, or null (logged; see <see cref="LastStartFailedAuth"/>).</summary>
@@ -133,6 +187,8 @@ namespace ConditioningControlPanel.Services
                 (_consecutiveFailures, PollInterval, _lastStatusPush, _statusBackoffUntil) = (0, PollIntervalSeconds, DateTime.MinValue, DateTime.MinValue);
                 if (AutoPoll) StartLoop();
                 Log.Information("[RemoteControl] Session started: {Code}, tier: {Tier}", code, tier);
+                try { SessionStarted?.Invoke(this, EventArgs.Empty); } catch (Exception ex) { Log.Debug("[RemoteControl] SessionStarted listener threw: {E}", ex.Message); }
+                AchievementEngine.OnCurrent(e => e.TrackRemoteSessionStarted(), "remote session start");   // WPF GamificationBridge.OnRemoteSessionStarted
                 return code;
             }
             catch (Exception ex) { Log.Error(ex, "[RemoteControl] Start error"); return null; }
@@ -162,6 +218,20 @@ namespace ConditioningControlPanel.Services
             Cleanup();
         }
 
+        /// <summary>WPF RemoteControlService.EndSessionNow (the leash cut): end HERE first, so nothing the
+        /// controller started keeps running while the network answers, then tell the relay, unawaited.</summary>
+        public void EndSessionNow()
+        {
+            if (!IsActive) return;
+            var uid = _unifiedId();
+            Cleanup();
+            _ = Task.Run(async () =>
+            {
+                try { using var _ = await PostAsync("/v2/remote/stop", new { unified_id = uid }).ConfigureAwait(false); }
+                catch (Exception ex) { Log.Warning(ex, "[RemoteControl] Stop request failed"); }
+            });
+        }
+
         /// <summary>WPF CleanupSession: everything the controller started stops; the subject's own run stays.</summary>
         private void Cleanup()
         {
@@ -169,12 +239,21 @@ namespace ConditioningControlPanel.Services
             _loop?.Cancel();
             _loop = null;
             (IsActive, SessionCode, ConnectPin, Tier, ControllerIdle, _idleSince, _autoDisconnected) = (false, null, null, null, false, null, false);
-            (_remoteSetStrictLock, _pollBackedOff, _lastControllerCommand) = (false, false, DateTime.MinValue);
+            LastEndedUtc = DateTime.UtcNow;
+            (_pollBackedOff, _lastControllerCommand) = (false, DateTime.MinValue);
+            (_lastOptInTags, _lastOptInStatus) = (null, null);
             // StopAsync and the poll loop land here off the UI thread, and the stops close windows: run
             // them on the UI like ControllerLeft, posted if a stalled UI cancels the Invoke.
-            void StopEffects() { try { _stopEffects(false); } catch (Exception ex) { Log.Warning(ex, "[RemoteControl] stop effects failed"); } }
+            void StopEffects()
+            {
+                try { _stopEffects(false); } catch (Exception ex) { Log.Warning(ex, "[RemoteControl] stop effects failed"); }
+                // WPF ResetV2SessionState: Easy hands the subject's own opacity back and returns to 1.
+                try { RemoteCommands.ResetEasy(); } catch (Exception ex) { Log.Warning(ex, "[RemoteControl] easy reset failed"); }
+            }
             var (done, _) = CoreDispatch.Invoke(() => { StopEffects(); return 0; }, TimeSpan.FromSeconds(10));
             if (!done) CoreDispatch.Post(StopEffects);
+            (ControllerName, ControllerConnectedSinceUtc) = (null, null);
+            if (LastActionLabel != null) { LastActionLabel = null; LastActionChanged?.Invoke(this, EventArgs.Empty); }
             if (ControllerConnected) { ControllerConnected = false; ControllerConnectedChanged?.Invoke(this, EventArgs.Empty); }
             SessionEnded?.Invoke(this, EventArgs.Empty);
         }
@@ -206,7 +285,9 @@ namespace ConditioningControlPanel.Services
                 _consecutiveFailures = 0;
                 _pollBackedOff = false;
                 var changed = ApplyControllerState(result["controller_connected"]?.Value<bool>() ?? false,
-                                                   result["controller_idle"]?.Value<bool>() ?? false);
+                                                   result["controller_idle"]?.Value<bool>() ?? false,
+                                                   Remote.RemoteControllerName.Sanitize(
+                                                       result["controller_name"]?.Type == JTokenType.String ? result["controller_name"]!.ToString() : null));
 
                 string? lastId = null, lastAction = null;
                 // Fetched before a panic or a leave: never runs after it, however late its dispatch lands.
@@ -233,7 +314,7 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>WPF's connect/idle block (RemoteControlService.cs:537-625). True when connected changed.</summary>
-        private bool ApplyControllerState(bool serverConnected, bool idle)
+        private bool ApplyControllerState(bool serverConnected, bool idle, string? controllerName = null)
         {
             var connected = serverConnected;
             if (connected && _autoDisconnected)
@@ -243,11 +324,13 @@ namespace ConditioningControlPanel.Services
             }
             if (!serverConnected) _autoDisconnected = false;
 
+            ControllerName = connected ? controllerName : null;
             var changed = connected != ControllerConnected;
             if (changed)
             {
                 ControllerConnected = connected;
-                if (!connected) ControllerLeft();
+                ControllerConnectedSinceUtc = connected ? Now() : null;
+                if (!connected) { ControllerLeft(); _ = RepublishDirectoryIfOptedInAsync(); }
                 ControllerConnectedChanged?.Invoke(this, EventArgs.Empty);
             }
             if (idle != ControllerIdle)
@@ -260,7 +343,9 @@ namespace ConditioningControlPanel.Services
             {
                 Log.Information("[RemoteControl] Controller idle for {Seconds:F0}s - auto-disconnecting", (Now() - since).TotalSeconds);
                 (_autoDisconnected, ControllerConnected, ControllerIdle) = (true, false, false);
+                ControllerConnectedSinceUtc = null;
                 ControllerLeft();
+                _ = RepublishDirectoryIfOptedInAsync();
                 ControllerConnectedChanged?.Invoke(this, EventArgs.Empty);
                 ControllerIdleChanged?.Invoke(this, EventArgs.Empty);
                 changed = true;
@@ -270,8 +355,9 @@ namespace ConditioningControlPanel.Services
 
         // WPF HandleControllerDisconnectCleanup: default leaves effects running; the opt-in stops them.
         // A remote haptic never outlives its controller, and what could trap the subject is handed back
-        // (WPF 71cfc4185 ReleaseRemoteSafetyState, ccp-bugs #1340): panic key on, the controller's own
-        // strict lock off; a strict lock the subject set stays.
+        // (WPF 71cfc4185 ReleaseRemoteSafetyState, ccp-bugs #1340): panic key on. Strict Lock is never a
+        // controller's to switch on (owner, 2026-10-10: RemoteCommandGate), so there is no "controller's
+        // strict lock" to hand back; a strict lock the subject set stays.
         // Runs through the same UI dispatch as commands (and so PanicKeyUiSync, which Avalonia leaves unset,
         // is on the UI thread), after bumping the leave generation that refuses anything still in flight.
         private void ControllerLeft()
@@ -286,15 +372,16 @@ namespace ConditioningControlPanel.Services
         private void ReleaseOnLeave()
         {
             RemoteCommands.RemoteHaptics.Stop();
+            // What the controller put on the screen comes down with it (pink filter, spiral, Melt haze).
+            try { RemoteCommands.ControllerLeft(); } catch (Exception ex) { Log.Warning(ex, "[RemoteControl] overlay release failed"); }
             var s = CoreSettings.Current;
             var changed = false;
-            if (_remoteSetStrictLock) { _remoteSetStrictLock = false; if (s.StrictLockEnabled) { s.StrictLockEnabled = false; changed = true; } }
             if (!s.PanicKeyEnabled) { s.PanicKeyEnabled = true; changed = true; }
             if (changed)
             {
                 CoreSettings.Save();
                 try { LockdownService.PanicKeyUiSync?.Invoke(); } catch { }
-                Log.Information("[RemoteControl] Controller left: panic key back on, controller's strict lock released");
+                Log.Information("[RemoteControl] Controller left: panic key back on");
             }
             if (CoreSettings.Current.StopEffectsOnRemoteDisconnect)
                 try { _stopEffects(false); } catch (Exception ex) { Log.Warning(ex, "[RemoteControl] stop effects failed"); }
@@ -307,7 +394,25 @@ namespace ConditioningControlPanel.Services
             (_lastStatus, _lastReason) = ("ok", null);
             _lastControllerCommand = Now();          // WPF NoteControllerActivity: every command, refused or not
             RemoteCommands.RemoteHaptics.NoteCommand();
-            var reason = RemoteCommandGate.Screen(action, LockdownService.Current?.IsActive == true);
+            // The Leash (owner, 2026-09-26; WPF RemoteControlService.ExecuteCommand): a leashed account keeps
+            // its way out. From ANY remote session Strict Lock never goes on, the panic key never goes off,
+            // and a session start loses its strict_lock flag. Asked first, before any other gate.
+            string? reason = null;
+            var leash = Leash.LeashRemoteRule.Screen(action, Leash.LeashRemoteRule.AsksStrictLock(parameters), Leash.LeashGuard.Check());
+            if (leash == Leash.LeashRemoteVerdict.Refuse) reason = "not while on a leash";
+            else if (leash == Leash.LeashRemoteVerdict.StripStrict)
+            {
+                parameters = parameters == null ? null : (JObject)parameters.DeepClone();
+                if (parameters != null) parameters["strict_lock"] = false;
+                Log.Information("[RemoteControl] start_session asked for strict lock; dropped, the account is leashed");
+            }
+            reason ??= RemoteCommandGate.Screen(action, LockdownService.Current?.IsActive == true);
+            // Owner, 2026-10-10: a session start never carries strict lock, leashed or not, on any tier.
+            if (reason == null && RemoteCommandGate.DropsStrictLockFlag(action, parameters))
+            {
+                parameters = RemoteCommandGate.WithoutStrictLock(parameters);
+                Log.Information("[RemoteControl] {Action} named strict_lock; dropped, a controller never sets it", action);
+            }
             if (reason == null)
             {
                 Log.Information("[RemoteControl] Executing: {Action}", action);
@@ -315,14 +420,7 @@ namespace ConditioningControlPanel.Services
                 {
                     if (gen.Leave != Volatile.Read(ref _leaveGeneration)) return "the controller left";
                     if (gen.Panic != RemoteCommands.PanicGeneration) return "stopped by panic";
-                    var strictBefore = CoreSettings.Current.StrictLockEnabled;
-                    try
-                    {
-                        var refusal = _execute(action, parameters);
-                        // Set here, in the dispatched call, so even a late-landing switch-on is the controller's.
-                        if (refusal == null && action == "enable_strict_lock" && !strictBefore) _remoteSetStrictLock = true;
-                        return refusal;
-                    }
+                    try { return _execute(action, parameters); }
                     catch (Exception ex) { Log.Error(ex, "[RemoteControl] Error executing command: {Action}", action); return "error"; }
                 }, TimeSpan.FromSeconds(10));
                 reason = done ? refused : "timed out";
@@ -334,12 +432,99 @@ namespace ConditioningControlPanel.Services
                 Log.Warning("[RemoteControl] {Action} not delivered: {Reason}", action, reason);
                 return;
             }
+            // WPF NoteLandedCommand: the HUD's "Last: ..." line.
+            LastActionLabel = Remote.RemoteActionLabels.For(action);
+            LastActionChanged?.Invoke(this, EventArgs.Empty);
             CommandReceived?.Invoke(this, action);
+        }
+
+        public const int EmoteDebounceMs = 300;   // WPF RemoteControlService.cs:434
+        private DateTime _lastEmoteSent = DateTime.MinValue;
+
+        /// <summary>WPF IsWithinDebounceWindow: a send now would be swallowed as a double click.</summary>
+        public bool IsWithinDebounceWindow => (Now() - _lastEmoteSent).TotalMilliseconds < EmoteDebounceMs;
+
+        /// <summary>WPF SendEmoteAsync (RemoteControlService.cs:848): POST /v2/remote/emote. Errors as WPF:
+        /// "session not active", "no unified id", "debounced" (silent), "rate_limited" + retry seconds, "http N".</summary>
+        public async Task<(bool ok, string? error, int? retryAfterSeconds)> SendEmoteAsync(string text, string icon, string kind)
+        {
+            if (!IsActive) return (false, "session not active", null);
+            var uid = _unifiedId();
+            if (string.IsNullOrEmpty(uid)) return (false, "no unified id", null);
+            if (IsWithinDebounceWindow) return (false, "debounced", null);
+            _lastEmoteSent = Now();
+            var trimmed = (text ?? "").Trim();
+            if (trimmed.Length == 0) return (false, "text required", null);
+            if (trimmed.Length > 60) trimmed = trimmed.Substring(0, 60);
+            var safeIcon = icon ?? "";
+            if (safeIcon.Length > 8) safeIcon = safeIcon.Substring(0, 8);
+            if (kind is not ("preset" or "custom")) return (false, "invalid kind", null);
+            try
+            {
+                using var resp = await PostAsync("/v2/remote/emote", new { unified_id = uid, text = trimmed, icon = safeIcon, kind }).ConfigureAwait(false);
+                if (resp.IsSuccessStatusCode) { Log.Information("[RemoteControl] Emote sent (kind={Kind}, len={Len})", kind, trimmed.Length); return (true, null, null); }
+                if ((int)resp.StatusCode == 429)
+                {
+                    int? retry = null;
+                    try { if (int.TryParse(JObject.Parse(await resp.Content.ReadAsStringAsync().ConfigureAwait(false))["retry_after_seconds"]?.ToString(), out var n)) retry = n; }
+                    catch { }
+                    return (false, "rate_limited", retry);
+                }
+                Log.Warning("[RemoteControl] Emote send failed: {Status}", resp.StatusCode);
+                return (false, $"http {(int)resp.StatusCode}", null);
+            }
+            catch (Exception ex) { Log.Warning(ex, "[RemoteControl] Emote send error"); return (false, ex.Message, null); }
         }
 
         /// <summary>WPF PushStatusNowAsync: a settings change (share avatar) reaches the controller now,
         /// not at the next ~15 s push. No-op without a session.</summary>
         public Task PushStatusNowAsync() => IsActive ? SendStatusAsync(null, null) : Task.CompletedTask;
+
+        /// <summary>WPF OptInToDirectoryAsync (RemoteControlService.cs:247): list the live session in the
+        /// directory. Best-effort: false on any failure, the session itself is untouched. The body carries
+        /// the PIN the tab already shows; the response body is never logged.</summary>
+        public async Task<bool> OptInToDirectoryAsync(List<string>? tags, string? statusText)
+        {
+            if (!IsActive || string.IsNullOrEmpty(SessionCode) || string.IsNullOrEmpty(ConnectPin))
+            {
+                Log.Warning("[RemoteControl] OptIn called without active session");
+                return false;
+            }
+            var uid = _unifiedId();
+            if (string.IsNullOrEmpty(uid) || _baseUrl == null) return false;
+            tags ??= new List<string>();
+            statusText ??= "";
+            try
+            {
+                using var resp = await PostAsync("/v2/directory/opt-in",
+                    new { unified_id = uid, code = SessionCode, pin = ConnectPin, tags, status_text = statusText }).ConfigureAwait(false);
+                if (!resp.IsSuccessStatusCode)
+                {
+                    Log.Warning("[RemoteControl] Directory opt-in failed: {Status}", resp.StatusCode);
+                    return false;
+                }
+                // Kept so the entry can be re-published when the controller leaves (the server keeps
+                // the claim flag across a disconnect, so the subject would stay "taken").
+                (_lastOptInTags, _lastOptInStatus) = (tags, statusText);
+                Log.Information("[RemoteControl] Directory opt-in OK ({TagCount} tags, status={StatusLen}c)", tags.Count, statusText.Length);
+                return true;
+            }
+            catch (Exception ex) { Log.Warning(ex, "[RemoteControl] Directory opt-in error"); return false; }
+        }
+
+        /// <summary>True once this session's directory opt-in succeeded; cleared when the session ends.</summary>
+        public bool DirectoryOptedIn => _lastOptInTags != null;
+
+        private List<string>? _lastOptInTags;
+        private string? _lastOptInStatus;
+
+        /// <summary>WPF RepublishDirectoryIfOptedInAsync: after a controller leaves, the entry goes back to available.</summary>
+        internal async Task RepublishDirectoryIfOptedInAsync()
+        {
+            if (_lastOptInTags is not { } tags || !IsActive) return;
+            try { await OptInToDirectoryAsync(tags, _lastOptInStatus ?? "").ConfigureAwait(false); }
+            catch (Exception ex) { Log.Warning(ex, "[RemoteControl] Directory re-publish after disconnect failed"); }
+        }
 
         private async Task SendStatusAsync(string? lastId, string? lastAction)
         {
@@ -368,6 +553,8 @@ namespace ConditioningControlPanel.Services
         private static List<string> ActiveServices(Models.AppSettings s)
         {
             var list = new List<string>();
+            if (s.PinkFilterEnabled) list.Add("pink_filter");   // WPF GetActiveServices order
+            if (s.SpiralEnabled) list.Add("spiral");
             if (s.StrictLockEnabled) list.Add("strict_lock");
             if (CoreHaptics.Service?.IsConnected == true) list.Add("haptics");   // WPF 7b22ece8c: trigger_haptic will land
             if (!s.PanicKeyEnabled) list.Add("no_panic");
@@ -387,16 +574,40 @@ namespace ConditioningControlPanel.Services
 
     /// <summary>
     /// Escape integrity (docs/avalonia-decisions.md, 2026-09-30): a controller may never remove the
-    /// subject's last means of escape. disable_panic is always refused (WPF saved it); under Lockdown
-    /// enable_strict_lock is refused. Verbs that only reduce restraint run as on WPF and never touch the
-    /// Lockdown timer; Lockdown restores the pre-lockdown settings when it ends. Strict lock stays the
-    /// same setting, so every strict surface keeps its own fall-open.
+    /// subject's last means of escape. disable_panic is always refused (WPF saved it).
+    ///
+    /// <para>Owner, 2026-10-10: Strict Lock from a remote controller is refused on the client, for every
+    /// controller, on every tier, always (Lockdown or not, leashed or not). enable_strict_lock has no
+    /// execute case at all (RemoteCommands.Execute), and a start_session's strict_lock flag is dropped
+    /// before the head sees it. This is what the waiver promises ("A controller cannot ... turn Strict
+    /// Lock on"). Verbs that only reduce restraint run as on WPF and never touch the Lockdown timer;
+    /// Lockdown restores the pre-lockdown settings when it ends.</para>
     /// </summary>
     public static class RemoteCommandGate
     {
+        public const string PanicStays = "the panic key stays on";   // WPF 719ed9ca5 wording
+        public const string StrictLockIsLocal = "strict lock is never a remote switch";
+
+        /// <summary>Why this verb is refused before it can run; null lets it through. The answer never
+        /// depends on the tier, the controller or <paramref name="lockdownActive"/> (kept so a Lockdown
+        /// rule has its seat; no verb reads it today).</summary>
         public static string? Screen(string action, bool lockdownActive) =>
-            action == "disable_panic" ? "the panic key stays on"   // WPF 719ed9ca5 wording
-            : lockdownActive && action == "enable_strict_lock" ? "not during Lockdown"
+            action == "disable_panic" ? PanicStays
+            : action == "enable_strict_lock" ? StrictLockIsLocal
             : null;
+
+        /// <summary>True when a command (start_session) names strict_lock at all, whatever the value: the key is dropped
+        /// for everyone, so no spelling of "true" can reach a head.</summary>
+        public static bool DropsStrictLockFlag(string action, JObject? parameters) =>
+            parameters?.ContainsKey("strict_lock") == true;   // start_session is the only sender today; any verb loses it
+
+        /// <summary>A copy of the parameters with no strict_lock key at all (the sender's object is untouched).</summary>
+        public static JObject? WithoutStrictLock(JObject? parameters)
+        {
+            if (parameters == null) return null;
+            var copy = (JObject)parameters.DeepClone();
+            copy.Remove("strict_lock");
+            return copy;
+        }
     }
 }

@@ -34,11 +34,13 @@ public sealed class ShellTrayTests
             shell.TrayHostPresent = () => true;
             var items = shell.Tray!.Menu!.Items.OfType<NativeMenuItem>().Where(i => i is not NativeMenuItemSeparator).ToList();
             Assert.Equal(
-                new[] { "tray_show", "launcher_back_to_client", CoreSettings.Current.IsBambiMode ? "tray_wake_bambi" : "tray_wake", "tray_stop_everything", "tray_exit" }
+                new[] { "tray_show", "launcher_back_to_client", CoreSettings.Current.IsBambiMode ? "tray_wake_bambi" : "tray_wake", "leash_cut", "tray_stop_everything", "tray_exit" }
                     .Select(Loc.Get),
                 items.Select(i => i.Header));
-            Assert.IsType<NativeMenuItemSeparator>(shell.Tray.Menu.Items[3]);
+            Assert.IsType<NativeMenuItemSeparator>(shell.Tray.Menu.Items[4]);
             Assert.False(items[1].IsVisible);   // Back to CC Labs: a panel boot with no launcher built
+            Assert.False(items[3].IsVisible);   // Cut leash: only while someone holds this account's leash
+            items.RemoveAt(3);
 
             // Stop everything is StopEngine: schedules stop, queued flashes are dropped, the saved
             // flags stay On (the card stays ticked), and the shell stays open. A plain Start never

@@ -42,21 +42,22 @@ public class PaletteDoorParityTests
     /// "lab" lands on the Play wall; "progression" rides with the Dashboard.
     /// </summary>
     private static readonly HashSet<string> AliasTabKeys =
-        new(StringComparer.Ordinal) { "lab", "progression" };
+        new(StringComparer.Ordinal)
+        {
+            "lab", "progression",
+            // Nav rework zone pills: places on pages that have their own rows (Play, Studio).
+            // The SEARCH lane may still give them rows of their own.
+            "playsessions", "playeyes", "ramp",
+        };
 
     /// <summary>(door, defaultTab) straight out of MainWindow.TabNavigation.cs's NavDoorMap.</summary>
     private static List<(string Door, string DefaultTab)> RailDoors()
     {
-        var src = TabNavigationSource();
-        var start = src.IndexOf("NavDoorMap =", StringComparison.Ordinal);
-        Assert.True(start > 0, "NavDoorMap not found in MainWindow.TabNavigation.cs");
-        var end = src.IndexOf("};", start, StringComparison.Ordinal);
-        Assert.True(end > start, "NavDoorMap's initializer never closes");
-
-        var block = src.Substring(start, end - start);
-        var doors = new List<(string, string)>();
-        foreach (Match m in Regex.Matches(block, @"\(""(\w+)"",\s*""(\w+)"",\s*new\[\]"))
-            doors.Add((m.Groups[1].Value, m.Groups[2].Value));
+        // Nav rework (2026-10-06): the rail is the section table. A row opens its section's
+        // default tab (or the remembered last tab, which the palette does not model).
+        var doors = ConditioningControlPanel.Nav.NavSections.Order
+            .Select(s => (ConditioningControlPanel.Controls.NavRail.NavRailRules.DoorTagForSection(s.Key), s.DefaultTab))
+            .ToList();
 
         Assert.True(doors.Count >= 6, "NavDoorMap parsed as only " + doors.Count + " doors — the regex has rotted");
         return doors;

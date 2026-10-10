@@ -17,11 +17,13 @@ namespace ConditioningControlPanel.Avalonia.Platform
             QuestCategory.Flash, QuestCategory.Video, QuestCategory.Spiral, QuestCategory.PinkFilter,
             QuestCategory.Bubbles, QuestCategory.LockCard, QuestCategory.BubbleCount, QuestCategory.Mantra,
             QuestCategory.Autonomy, QuestCategory.Lockdown, QuestCategory.BlinkTrainer,
-            // Not raised: KeywordTrigger (engine not ported), Remote/RemoteIssue, Session, Streak, Combined.
+            // parity trunk: Platform/KeywordTriggerHead raises KeywordTrigger.
+            QuestCategory.KeywordTrigger,
+            // Not raised: Remote/RemoteIssue, Session, Streak, Combined.
         };
 
-        /// <summary>Ritual tasks need SubmitRitualTask (programs slice 3b flips this).</summary>
-        internal static bool RitualsAvailable = false;
+        /// <summary>Ritual tasks need SubmitRitualTask; the parity trunk's Programs run view submits them.</summary>
+        internal static bool RitualsAvailable = true;
 
         internal static bool IsAvailable(ProgramTask task) =>
             task.Kind == ProgramTaskKind.Ritual ? RitualsAvailable

@@ -224,7 +224,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         private readonly Border _bodyPlaceholder;
         private readonly Image _bodyImage;
         private readonly Canvas _faceLayer;
-        private readonly TextBlock _faceView;
+        private readonly EmiFace _faceView;
         private readonly Canvas _glassCanvas;
         private readonly Image _outfitOverImage;
         private readonly Image _propImage;
@@ -266,9 +266,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         private double _resizeStartWidth;
 
         /// <summary>True while a chain is on screen.</summary>
-        // ponytail: needs EmiChains.Player (Services/EmiDesk/EmiChains.cs), wired when the chain
-        // player moves to Core. Nothing on this head can start a chain, so nothing is ever live.
-        public bool ChainLive => false;
+        public bool ChainLive => _player.IsLive;
 
         /// <summary>True while a summon or dismiss transition is running.</summary>
         public bool Transiting => _transiting;
@@ -294,7 +292,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
             _bodyPlaceholder = this.FindControl<Border>("BodyPlaceholder")!;
             _bodyImage = this.FindControl<Image>("BodyImage")!;
             _faceLayer = this.FindControl<Canvas>("FaceLayer")!;
-            _faceView = this.FindControl<TextBlock>("FaceView")!;
+            _faceView = this.FindControl<EmiFace>("FaceView")!;
             _glassCanvas = this.FindControl<Canvas>("GlassCanvas")!;
             _outfitOverImage = this.FindControl<Image>("OutfitOverImage")!;
             _propImage = this.FindControl<Image>("PropImage")!;
@@ -361,6 +359,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
 
             ApplyBodyWidth(_bodyWidth);
             SetPose("idle");
+            HookArcademyOutfit();   // WPF :359 RefreshOutfit: she wears what the Arcademy Locker armed and the wallet backs
             DrawFace(RestFace);
 
             try { OnReadyCore(); }
@@ -432,9 +431,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
 
                 _faceView.Width = gw;
                 _faceView.Height = gh;
-                // The pixel face fills the bezel; the placeholder's type size is what actually
-                // reads at that scale, so it tracks the glass rather than sitting at a fixed size.
-                _faceView.FontSize = Math.Max(10, gh * 0.55);
                 Canvas.SetLeft(_faceView, gl);
                 Canvas.SetTop(_faceView, gt);
 
@@ -798,169 +794,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
 
         // ---------------------------------------------------------------- face + pose
 
-        /// <summary>Paint one face frame. The chain player's draw hook; safe to call directly.</summary>
-        // ponytail: needs EmiFace (Services/EmiDesk/EmiFace.cs), which renders the mood string as
-        // pixel glyphs and honours `small` and `flat`. The placeholder draws the same string as mono
-        // text in the same pink, so the glass is never blank and the cadence is still visible.
-        public void DrawFace(string? text, bool small = false, bool flat = false)
-        {
-            try
-            {
-                var face = string.IsNullOrEmpty(text) ? RestFace : text;
-                if (_faceView.Text == face) return;
-                _faceView.Text = face;
-                FaceChanged?.Invoke(this, face);
-            }
-            catch (Exception ex) { Log.Debug(ex, "[EmiDesk] DrawFace failed"); }
-        }
-
-        /// <summary>The face on the glass right now. The dock chip's mini face mirrors it.</summary>
-        public string Face => _faceView.Text ?? RestFace;
-
-        /// <summary>Raised with the new face string on every frame that changes it (WPF binds
-        /// EmiDock.MiniFace onto EmiFace.Face; Avalonia has no such property, so this is the feed).</summary>
-        public event EventHandler<string>? FaceChanged;
-
-        /// <summary>Swap the body pose PNG. A no-op when that pose is already up (this runs per sway step).</summary>
-        // ponytail: needs EmiChains.FrameKey / EmiChains.BodyPath (Services/EmiDesk/EmiChains.cs) to
-        // resolve a pose name to a file on disk, plus the BitmapImage cache that went with it.
-        // Nothing here can put art on BodyImage, so BodyPlaceholder stays up; the pose name is still
-        // tracked because the outfit overlay keys off it.
-        public void SetPose(string? frame)
-        {
-            try
-            {
-                var key = string.IsNullOrWhiteSpace(frame) ? "idle" : frame!.Trim();
-                if (key == _pose) return;
-                _pose = key;
-                // The stand-in stands down the moment real art lands, whichever road brings it.
-                _bodyPlaceholder.IsVisible = _bodyImage.Source is null;
-                PaintOutfitOver();
-            }
-            catch (Exception ex)
-            {
-                Log.Debug(ex, "[EmiDesk] SetPose failed for {Frame}", frame);
-            }
-        }
-
-        /// <summary>
-        /// Put a wardrobe sheet's OVERLAY on her, or take it off with null. THE SKIN LAW's one seam.
-        ///
-        /// <para>Deliberately not wired to anything: the desk has no outfit picker, no wardrobe and
-        /// no outfit BODY sheets, and this method invents none of them. What it guarantees is that
-        /// when a sheet does arrive, the part of it that crosses her glass lands in
-        /// <c>OutfitOverImage</c> - which the markup authors ABOVE the face and the glass, so the
-        /// garment is on top and stays there.</para>
-        /// </summary>
-        public void SetOutfit(string? outfit)
-        {
-            try
-            {
-                var want = string.IsNullOrWhiteSpace(outfit) ? null : outfit!.Trim();
-                if (string.Equals(want, _outfit, StringComparison.Ordinal)) return;
-                _outfit = want;
-                PaintOutfitOver();
-            }
-            catch (Exception ex)
-            {
-                Log.Debug(ex, "[EmiDesk] SetOutfit failed for {Outfit}", outfit);
-            }
-        }
-
-        /// <summary>
-        /// Lay the overlay for the pose that is up, or take it off. The body's shadow: no timer, no
-        /// pose logic and no geometry of its own - it is repainted from <see cref="SetPose"/>, which
-        /// is the one place the body PNG changes.
-        /// </summary>
-        // ponytail: needs EmiChains.OverPath (Services/EmiDesk/EmiChains.cs) for the one-probe-per-
-        // outfit file lookup and its cache. Without it there is no sheet to find, so the layer stays
-        // down - which is exactly its resting state on the WPF head today, where nothing picks an
-        // outfit either.
-        private void PaintOutfitOver()
-        {
-            try
-            {
-                _outfitOverImage.IsVisible = _outfitOverImage.Source is not null;
-            }
-            catch (Exception ex) { Log.Debug(ex, "[EmiDesk] outfit overlay paint failed"); }
-        }
-
-        // ---------------------------------------------------------------- chains
-
-        /// <summary>Play a canon chain by id. Unknown ids are ignored.</summary>
-        // ponytail: needs EmiChains + EmiChains.Player (Services/EmiDesk/EmiChains.cs) - the chain
-        // table, the frame clock and the Draw/Bubble/BodyFrame/Fx/Move hook set. Wired when the
-        // chain player moves to Core.
-        public void PlayChain(string chainId, Action? done = null, string? bodyFrameOverride = null)
-        {
-            done?.Invoke();
-        }
-
-        /// <summary>Say a line on the locked . / .. / ... cadence.</summary>
-        // ponytail: needs EmiChains.MakeSay / SayHoldMs / FrameForFace, none of them in Core.
-        public void Say(string? line, string reactionFace = "^_^", Action? done = null)
-        {
-            done?.Invoke();
-        }
-
-        /// <summary>Kill the running chain without firing its done hook.</summary>
-        public void CancelChain()
-        {
-            try { OnBubbleTextCore(null); }
-            catch (Exception ex) { Log.Debug(ex, "[EmiDesk] CancelChain failed"); }
-        }
-
-        // ponytail: the five canon body moves (bounce, thud, nod, droop, shiver) were WPF
-        // DoubleAnimations on _crtScale / _moveShift. Reachable only through a chain, and nothing on
-        // this head can start one, so the animation is left out rather than ported blind - the
-        // upgrade is an Avalonia.Animation.Animation with KeyFrames on the same two transforms.
-        private void RunBodyMove(string move)
-        {
-            bool handled = false;
-            try { OnBodyMoveCore(move, ref handled); }
-            catch (Exception ex) { Log.Debug(ex, "[EmiDesk] body-move seam threw"); }
-        }
-
-        // ---------------------------------------------------------------- idle beats
-
-        /// <summary>True when something is on screen that an idle beat must not interrupt.</summary>
-        private bool Busy()
-        {
-            // ChainLive is the WPF gate's `_player.IsLive` and is constant false on this head. It is
-            // in the expression anyway: this is the one place that decides whether an idle beat may
-            // interrupt her, and a gate that has to be REMEMBERED when the chain player lands is a
-            // gate that will be forgotten.
-            if (_transiting || ChainLive || InputLocked) return true;
-            bool glass = false;
-            try { OnGlassLiveQuery(ref glass); }
-            catch (Exception ex) { Log.Debug(ex, "[EmiDesk] glass-live seam threw"); }
-            return glass;
-        }
-
-        /// <summary>Start (or restart) the idle blink cycle and the idle sway.</summary>
-        // ponytail: needs EmiAlive.BlinkDelayMs and EmiChains.SwayCycle / SwayStepMs /
-        // SwayCentreMinMs / SwayCentreMaxMs (Services/EmiDesk/), neither in Core. The two timers
-        // themselves port straight across once those numbers do - the blink clock re-rolls its
-        // jitter every tick so the cadence is 5200 +/- 600 ms and never a metronome.
-        //
-        // AUDITED 2026-09-04 rather than repeated, because "neither in Core" said nothing about how
-        // far away either one is, and they are close. EmiAlive.cs is 428 lines whose ONLY using is
-        // System, and its whole head coupling is two signatures - GazeTarget and WithinApproach
-        // take System.Windows.Point / Rect - so it is one Core geometry type away, the same single
-        // blocker EmiRingLayout has. EmiChains.cs is 654 lines whose only head type is the
-        // DispatcherTimer inside Player (its file probing is AppContext.BaseDirectory, which Core
-        // already uses in EmiProps), so it is ONE seam swap: a System.Threading.Timer ticking
-        // through CoreDispatch.Post. Neither is a re-derivation candidate - inlining these numbers
-        // here would be a second copy of a table EmiAlive's own header forbids retuning outside the
-        // plan, and it would still drive a PlayChain that no-ops and a SetPose with no art to swap.
-        public void RestartIdleBeats()
-        {
-        }
-
-        /// <summary>Stop the idle blink cycle and the sway.</summary>
-        public void StopIdleBeats()
-        {
-        }
+        // face + pose, chains, body moves and idle beats: EmiDeskWindow.Chains.cs (E1-E3).
 
         // ---------------------------------------------------------------- pointer
 
@@ -1164,6 +998,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         private void OnBodyPointerPressed(object? sender, PointerPressedEventArgs e)
         {
             if (!e.GetCurrentPoint(_bodyRoot).Properties.IsLeftButtonPressed) return;
+            if (PresentationActive) { e.Handled = true; return; }   // WPF: the show owns her
             if (InputLocked || _transiting) { e.Handled = true; return; }
             try
             {
@@ -1191,6 +1026,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
 
         private void OnBodyPointerMoved(object? sender, PointerEventArgs e)
         {
+            if (PresentationActive) { e.Handled = true; return; }   // WPF: the show owns her
             try
             {
                 if (!_dragging)
@@ -1210,6 +1046,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                 {
                     _dragMoved = true;
                     CloseRing();   // WPF Ring.cs OnRingWatchMove: a drag past the threshold folds the fan
+                    OnPickedUp();   // WPF xaml.cs:1536
                 }
                 if (!_dragMoved) return;
 
@@ -1223,6 +1060,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
 
         private void OnBodyPointerReleased(object? sender, PointerReleasedEventArgs e)
         {
+            if (PresentationActive) { e.Handled = true; return; }   // WPF: the show owns her
             try
             {
                 if (e.InitialPressMouseButton == MouseButton.Right) { OnBodyRightClick(e); return; }
@@ -1241,6 +1079,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                     SavePlacement();
                     try { Moved?.Invoke(this, EventArgs.Empty); }
                     catch (Exception ex) { Log.Debug(ex, "[EmiDesk] Moved handler threw"); }
+                    OnPutDown();   // WPF xaml.cs:1566
                     return;
                 }
 
@@ -1381,6 +1220,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
 
         private void OnCloseClick(object? sender, RoutedEventArgs e)
         {
+            // WPF :1922: her x during the show stops the show, then sends her away.
+            if (PresentationActive) { e.Handled = true; _stopPresentation?.Invoke(); Dismiss(); return; }
             try
             {
                 e.Handled = true;
@@ -1632,6 +1473,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         private void OnGripPointerPressed(object? sender, PointerPressedEventArgs e)
         {
             if (!e.GetCurrentPoint(_resizeGrip).Properties.IsLeftButtonPressed) return;
+            if (PresentationActive) { e.Handled = true; return; }   // WPF: the show owns her
             if (InputLocked || _transiting) { e.Handled = true; return; }
             try
             {
@@ -1916,6 +1758,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
             try
             {
                 if (_wobbleLive || _closingForGood) return;
+                StopWeightShift();   // a pick-up takes the lean over cleanly (WPF Alive.cs:596)
                 _wobbleLive = true;
 
                 // ORDER MATTERS, and it is the inverse of WPF's. A settle still running from the
@@ -1968,6 +1811,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                 _wobbleLastX = x;
 
                 _wobbleVx = _wobbleVx * WobbleVelKeep + raw * (1.0 - WobbleVelKeep);
+                NoteTossFrame(dt, _wobbleVx);   // the fling window rides the wobble's own frame
 
                 // She TRAILS the hand: drag her right and her feet swing left, which about a
                 // head-high pivot is a positive (clockwise) angle in a y-down frame.
@@ -2151,6 +1995,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
 
         private Action? _summonDone;
 
+        /// <summary>Bumped by every summon and dismiss; a summon step from an older run stands down.</summary>
+        private int _fxGen;
+
         /// <summary>
         /// Bring her in: smoke bomb, CRT power-on, then the <c>wake</c> chain. Input is locked for
         /// the whole transition so a click cannot land mid-CRT and open a ring onto a 2 % tall EMI.
@@ -2162,6 +2009,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                 if (_closingForGood) return;
                 _transiting = true;
                 InputLocked = true;
+                int gen = ++_fxGen;
 
                 CancelChain();
                 StopIdleBeats();
@@ -2184,6 +2032,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
 
                 After(SmokeLeadMs, () =>
                 {
+                    // A dismiss that landed during the smoke owns her now (the wake chain would
+                    // cancel its wink and the dismiss would never finish).
+                    if (gen != _fxGen) return;
                     SetPose("idle");
                     DrawFace("-_-");
                     _bodyRoot.IsVisible = true;
@@ -2191,6 +2042,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
 
                     After(CrtOnMs + 20, () =>
                     {
+                        if (gen != _fxGen) return;
                         _transiting = false;
                         InputLocked = false;
 
@@ -2253,6 +2105,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
 
                 _transiting = true;
                 InputLocked = true;
+                _fxGen++;
                 StopIdleBeats();
                 DisarmPet();
                 CancelChain();
@@ -2515,11 +2368,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         {
             try
             {
+                // WPF Fx.cs :447: a step scheduled before the show began (or ended) never lands in the other world.
+                int epoch = _presentationEpoch;
                 DispatcherTimer.RunOnce(() =>
                 {
                     try
                     {
                         if (_closingForGood) return;
+                        if (epoch != _presentationEpoch) return;
                         act();
                     }
                     catch (Exception ex)
@@ -2541,36 +2397,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         // still reads as the same code and the later layers have the exact call sites to fill in.
         // React.cs and Fx.cs are no longer among them: both are real, above.
 
-        /// <summary>ponytail: EmiDeskWindow.Alive.cs - the 100 ms gaze/idle poll. Starts with her.</summary>
-        private void StartAlive() { }
+        // StartAlive / StopAlive: EmiDeskWindow.Alive.cs (the 100 ms gaze and idle poll).
 
-        /// <summary>ponytail: EmiDeskWindow.Alive.cs - stops the poll when she goes.</summary>
-        private void StopAlive() { }
-
-        /// <summary>
-        /// The click pat (WPF EmiDeskWindow.React.cs:119): disarms the hover pet so one gesture
-        /// cannot pat twice, plays the pat cue on every touch (EmiSfx's 130 ms floor stops a
-        /// double click machine-gunning it), and past the 6 s cooldown plays the pet chain and
-        /// counts the pat. ponytail: WPF's ChainLive guard, summon-cut, poke ladder (NotePoke /
-        /// PlayPokeFlick / glee streak) and the flick inside the cooldown are not on this head.
-        /// </summary>
-        private void PetFromClick()
-        {
-            try
-            {
-                if (_transiting || InputLocked) return;
-                DisarmPet();
-                _petArmed = true;
-                RaiseActivity();
-                PlayPatSfx();
-                if (DateTime.UtcNow < _petCooldownUntil) return;
-                _petCooldownUntil = DateTime.UtcNow.AddMilliseconds(PetCooldownMs);
-                PlayChain("pet");
-                CountPat();
-                FireDeskEvent("petted");
-            }
-            catch (Exception ex) { Log.Debug(ex, "[EmiDesk] pat failed"); }
-        }
+        // The click pat + poke ladder: EmiDeskWindow.Poke.cs (E9).
 
         /// <summary>WPF EmiDeskWindow.React.cs:198 - the pat counter behind her affection state.</summary>
         private void CountPat()
@@ -2580,22 +2409,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         }
 
 
-        /// <summary>
-        /// ponytail: EmiDeskWindow.Props.cs, and the note this used to carry was wrong about where
-        /// the blocker is. <c>EmiProps</c> - the anchor, the three plates, their sizes, the hold and
-        /// the rise - is ALREADY IN CORE (CCP.Core/Services/EmiDesk/EmiProps.cs) and is pure, so
-        /// LayoutProp / ShowProp / HideProp / the rise port arithmetic for arithmetic. What stops
-        /// them is the ART: <c>EmiProps.Path</c> probes
-        /// <c>Resources/web/arcademy/art/emi/props/*.png</c> beside the exe, and CCP.Avalonia.csproj
-        /// links no <c>Assets/web/</c> tree at all, so every lookup returns null and the whole beat
-        /// is a silent no-op by the WPF original's own design. Take the csproj link and the port in
-        /// ONE layer, or the port draws nothing and says nothing about why. The beat that starts it
-        /// (RunPropBeat) additionally needs a chain, so it is two blockers, not one.
-        /// </summary>
-        private void LayoutProp() { }
-
-        /// <inheritdoc cref="LayoutProp"/>
-        private void HideProp() { }
+        // LayoutProp / ShowProp / HideProp: EmiDeskWindow.Props.cs (the thing she is holding).
 
         /// <summary>ponytail: EmiDeskWindow.Bubble.cs - drops the voice hooks.</summary>
         private void TearDownVox() { }
@@ -2610,8 +2424,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         /// <summary>ponytail: needs App.EmiDesk.ResetOnboarding() - the QA gesture replay.</summary>
         private void ResetOnboarding() { }
 
-        /// <summary>ponytail: needs App.EmiDesk.Fire(...) - her own event bus.</summary>
-        private void FireDeskEvent(string name) { }
+        /// <summary>WPF App.EmiDesk.Fire(...): her own event bus (EmiDeskService.Moments.cs).</summary>
+        private void FireDeskEvent(string name, object? ctx = null) => EmiDeskService.Instance.Fire(name, ctx);
 
         // ---------------------------------------------------------------- teardown
 
@@ -2621,6 +2435,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
             try
             {
                 _closingForGood = true;
+                DisposeChains();
                 try { OnTearDownCore(); }
                 catch (Exception ex) { Log.Debug(ex, "[EmiDesk] teardown seam threw"); }
                 KillOptionsPanel();
@@ -2650,6 +2465,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
             try
             {
                 _closingForGood = true;
+                DisposeChains();
                 KillOptionsPanel();
                 CloseBook();
                 StopIdleBeats();
@@ -2658,6 +2474,20 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                 StopChromeGrace();
                 TearDownReactions();
                 TearDownVox();
+                // hunt3 IC3: off the service's moment event, and the timers no tear-down above stops.
+                if (_askHooked)
+                {
+                    _askHooked = false;
+                    KeyDown -= OnAskKeyDown;
+                    EmiDeskService.Instance.MomentFired -= OnMomentForAsk;
+                }
+                _askTimer?.Stop();
+                _fxSweepTimer?.Stop();
+                _holdTimer?.Stop();
+                _propTimer?.Stop();
+                _weightShiftTween?.Stop();
+                _moveScaleTween?.Stop();
+                _moveShiftTween?.Stop();
             }
             catch (Exception ex)
             {

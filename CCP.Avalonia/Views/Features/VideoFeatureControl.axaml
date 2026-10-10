@@ -26,7 +26,7 @@
         <Border Height="72" CornerRadius="16" Background="{DynamicResource SurfaceBgBrush}"
                 BorderBrush="{StaticResource SectionHueStudioBorderBrush}" BorderThickness="2" Margin="0,0,0,10">
             <Grid>
-                <Border CornerRadius="0,16,16,0" Width="240" HorizontalAlignment="Right"
+                <Border x:Name="HeroArt" CornerRadius="0,16,16,0" Width="240" HorizontalAlignment="Right"
                         Background="{StaticResource SectionHueStudioWashBrush}">
                     <Border.OpacityMask>
                         <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
@@ -94,7 +94,7 @@
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="56"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="Duration filter" FontSize="13" FontWeight="SemiBold"
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_duration_filter}" FontSize="13" FontWeight="SemiBold"
                                            Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
                                 <Slider Grid.Column="1" x:Name="SliderVideoMinDur" sessionLock:SessionLock.Owned="True" Minimum="0" Maximum="600" Value="0"
                                         VerticalAlignment="Center" Margin="14,0,8,0"/>
@@ -245,7 +245,7 @@
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="Stare to click" FontSize="13" FontWeight="SemiBold"
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_stare_to_click}" FontSize="13" FontWeight="SemiBold"
                                            Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
                                 <CheckBox Grid.Column="1" x:Name="ChkVideoGazeClick"
                                           Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
@@ -278,7 +278,7 @@
             </StackPanel>
 
             <!-- SIDE ART. On WPF an ImageBrush background; the wash stands in. Scrim kept verbatim. -->
-            <Border Grid.Column="1" Margin="10,0,0,0" CornerRadius="14"
+            <Border x:Name="SideArt" Grid.Column="1" Margin="10,0,0,0" CornerRadius="14"
                     BorderThickness="2" BorderBrush="{StaticResource VelvetCardBorderBrush}"
                     Background="{StaticResource SectionHueStudioWashBrush}"
                     VerticalAlignment="Stretch" MinHeight="200">

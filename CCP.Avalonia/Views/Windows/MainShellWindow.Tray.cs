@@ -53,10 +53,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             return Tray;
         }
 
-        /// <summary>WPF order: Show, Back to CC Labs, Wake, separator, Exit - with Stop everything above Exit.</summary>
+        /// <summary>WPF order: Show, Back to CC Labs, Wake, Cut leash (leashed only), separator, Exit - with Stop everything above Exit.</summary>
         internal NativeMenu BuildTrayMenu()
         {
             var menu = new NativeMenu();
+            TrayLabels.Clear();
+            HookTrayRelabel();
             menu.Add(Item("tray_show", ShowFromTray));
             // WPF TrayIconService.cs:102: the way back to the launcher, only while it is part of this
             // run, greyed under Lockdown (BackToLauncher refuses anyway).
@@ -68,23 +70,120 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             menu.Add(back);
             // WPF reads the label once at tray creation (TrayIconService.cs Initialize);
             // App.Mods.IsBambiMode there is the active-mod check AppSettings.IsBambiMode makes here.
-            menu.Add(Item(CoreSettings.Current.IsBambiMode ? "tray_wake_bambi" : "tray_wake", WakeBambiUp));
+            menu.Add(Item(() => CoreSettings.Current.IsBambiMode ? "tray_wake_bambi" : "tray_wake", WakeBambiUp));
+            // WPF TrayIconService.cs:119-125: Cut leash, one click, only while someone holds this
+            // account's leash. Never gated, never priced, never greyed (Platform/LeashHead.Cut).
+            var cutLeash = Item("leash_cut", Platform.LeashHead.Cut);
+            void RefreshCut(object? s, EventArgs e) => cutLeash.IsVisible = Platform.LeashHead.IsLeashed;
+            RefreshCut(null, EventArgs.Empty);
+            menu.Opening += RefreshCut;
+            menu.NeedsUpdate += RefreshCut;
+            menu.Add(cutLeash);
             menu.Add(new NativeMenuItemSeparator());
             menu.Add(Item("tray_stop_everything", StopEverything));
             menu.Add(Item("tray_exit", RequestExit));
             return menu;
         }
 
-        private static NativeMenuItem Item(string key, Action action) =>
-            new(Loc.Get(key)) { Command = new CompanionRelayCommand(action) };
+        private static NativeMenuItem Item(string key, Action action) => Item(() => key, action);
 
-        /// <summary>The panic item: WPF StopEngine (a running session is paused, as the panic key does).
-        /// Saved flags stay as the user set them.</summary>
+        private static NativeMenuItem Item(Func<string> key, Action action)
+        {
+            var item = new NativeMenuItem(Loc.Get(key())) { Command = new CompanionRelayCommand(action) };
+            TrayLabels.Add((item, key));
+            return item;
+        }
+
+        // G17: WPF reads the tray labels once; here they follow a language switch and a mod switch
+        // (the wake item's wording is the mod's).
+        private static readonly System.Collections.Generic.List<(NativeMenuItem Item, Func<string> Key)> TrayLabels = new();
+        private bool _trayRelabelHooked;
+
+        private void HookTrayRelabel()
+        {
+            if (_trayRelabelHooked) return;
+            _trayRelabelHooked = true;
+            EventHandler onLanguage = (_, _) => global::Avalonia.Threading.Dispatcher.UIThread.Post(RelabelTray);
+            EventHandler<ConditioningControlPanel.Models.ModPackage> onMod = (_, _) => global::Avalonia.Threading.Dispatcher.UIThread.Post(RelabelTray);
+            LocalizationManager.Instance.LanguageChanged += onLanguage;
+            CoreMods.ModChanged += onMod;
+            Closed += (_, _) => { LocalizationManager.Instance.LanguageChanged -= onLanguage; CoreMods.ModChanged -= onMod; };
+        }
+
+        internal static void RelabelTray()
+        {
+            foreach (var (item, key) in TrayLabels)
+            {
+                try { item.Header = Loc.Get(key()); } catch { /* a label never breaks the tray */ }
+            }
+        }
+
+        /// <summary>The tray's panic item (WPF's tray has none). Hard rule 6: never more permissive than the
+        /// panic key, so it answers to the same rule the 6-blink stop does (Core BlinkStopGate): refused
+        /// under Lockdown (with the WPF Stop message), with the panic key switched off and under Strict Lock.
+        /// Cut leash, the item above it, is never gated. Saved flags stay as the user set them.</summary>
         internal static void StopEverything()
         {
             Serilog.Log.Information("Tray: Stop everything");
+            // IA7: decided BEFORE the Lockdown refusal runs (it returns early with its own dialog).
+            var block = TrayStopBlock();
+            ParkLeashOnRefusedStop(block);
             if (RefuseStopUnderLockdown()) return;   // WPF refuses every Stop under Lockdown (StartStop.cs:45)
-            PanicSurfaces.StopAll("tray");   // decision C: the only panic control on Windows, camera included
+            if (block != ConditioningControlPanel.Services.Safety.BlinkStopGate.Block.None)
+            {
+                Serilog.Log.Information("Tray: Stop everything refused ({Reason})", block);
+                // Owner, 10 Oct 2026: a refusal says why, in one line. Nothing else changes.
+                if (TrayStopNoticeKey(block) is { } why)
+                {
+                    try { TrayNotice(Loc.Get("app_title"), Loc.Get(why)); }
+                    catch (Exception ex) { Serilog.Log.Debug("Tray: refusal notice failed: {E}", ex.Message); }
+                }
+                return;
+            }
+            PanicSurfaces.StopAll("tray");   // the same stop pass as the key, camera included (decision C)
+        }
+
+        /// <summary>The one line a refused tray stop shows (null: nothing to say; Lockdown has its own message).</summary>
+        internal static string? TrayStopNoticeKey(ConditioningControlPanel.Services.Safety.BlinkStopGate.Block block) => block switch
+        {
+            ConditioningControlPanel.Services.Safety.BlinkStopGate.Block.NoEscape => "tray_stop_refused_panic_off",
+            ConditioningControlPanel.Services.Safety.BlinkStopGate.Block.StrictLock => "tray_stop_refused_strict",
+            _ => null,
+        };
+
+        /// <summary>How the tray says one line (the OS toast, as the tray balloon; tests listen here).</summary>
+        internal static Action<string, string> TrayNotice = (title, body) => Platform.OsNotifications.Show(title, body);
+
+        /// <summary>Why the tray stop is refused right now; None when the panic key would run too.</summary>
+        /// <summary>Test seams for <see cref="ParkLeashOnRefusedStop"/>: is a leash on, and the park itself.</summary>
+        internal static Func<bool> RefusedStopLeashed = () => Platform.LeashHead.IsLeashed;
+        internal static Action RefusedStopPark = () => Platform.LeashTaskHost.OnPanicPress(panicRuns: false);
+
+        /// <summary>IA7, WPF LeashPanicKeyWhilePanicOff: a stop the panic cannot run (Lockdown holding it,
+        /// or the panic key switched off) still PARKS a running leash task, exactly as the refused key
+        /// (Platform/Win32Input.cs OnPanicPress) and the refused safe word (VoicePanic) do. Nothing else
+        /// stops, no setting changes; a Strict Lock refusal parks nothing, as on the key.</summary>
+        internal static bool ParkLeashOnRefusedStop(ConditioningControlPanel.Services.Safety.BlinkStopGate.Block block)
+        {
+            if (block is not (ConditioningControlPanel.Services.Safety.BlinkStopGate.Block.Lockdown
+                    or ConditioningControlPanel.Services.Safety.BlinkStopGate.Block.NoEscape)) return false;
+            try
+            {
+                if (!RefusedStopLeashed()) return false;
+                RefusedStopPark();
+                return true;
+            }
+            catch (Exception ex) { Serilog.Log.Debug("Tray: leash park on a refused stop failed: {E}", ex.Message); return false; }
+        }
+
+        internal static ConditioningControlPanel.Services.Safety.BlinkStopGate.Block TrayStopBlock()
+        {
+            var s = CoreSettings.Current;
+            return ConditioningControlPanel.Services.Safety.BlinkStopGate.Check(
+                blinkTrainerRunning: false,
+                lockdownActive: LockdownActive,
+                panicKeyEnabled: s.PanicKeyEnabled,
+                strictLockEnabled: s.StrictLockEnabled);
         }
 
         /// <summary>TrayIconService.ShowWindow + MainWindow's OnShowRequested (ShowAvatarTube).</summary>
@@ -127,14 +226,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 base.OnClosing(e);
                 return;
             }
-            // WPF WindowChrome.cs:140: closing (real exit OR minimize-to-tray) always ends a Chaos run.
-            try { Views.Chaos.ChaosRunHost.ForceShutdown(); } catch { }
             if (Tray is not null && !_exitRequested && e.CloseReason == WindowCloseReason.WindowClosing
                 && TrayHostPresent())
             {
                 e.Cancel = true;
                 Hide();
                 HideAvatarTube();
+                ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("minimizedToTray");   // WPF WindowChrome.cs:362: the X to tray branch only
                 if (!_shownFirstMinimizeNotification)
                 {
                     _shownFirstMinimizeNotification = true;

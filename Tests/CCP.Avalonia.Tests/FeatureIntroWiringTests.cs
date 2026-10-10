@@ -64,16 +64,37 @@ public sealed class FeatureIntroWiringTests
         return Task.CompletedTask;
     });
 
-    private static void ClickLockdown(MainShellWindow shell) => ClickNav(shell, "BtnNavLockdown");
-
-    private static void ClickNav(MainShellWindow shell, string button)
+    // 7.1.5 nav: Lockdown is a hidden Play tab (no pill, no rail row); its door is the Play card,
+    // whose handler is exactly ShowTab("lockdown") (PlayTabView.BtnPlayLockdown_Click).
+    private static void ClickLockdown(MainShellWindow shell)
     {
-        // Each click is a fresh offer: forget the ladder's one-passive-at-a-time settle and the
-        // card's pacing, so only the gate under test can refuse it.
+        FreshOffer();
+        shell.ShowTab("lockdown");
+        Dispatcher.UIThread.RunJobs();
+    }
+
+    /// <summary>A rail section row (DoorStudio, DoorSocial, ...), as a click raises it.</summary>
+    private static void ClickDoor(MainShellWindow shell, string door)
+    {
+        FreshOffer();
+        shell.Named<Button>(door)!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Dispatcher.UIThread.RunJobs();
+    }
+
+    /// <summary>A pill on the section strip ("NavPill_" + key), as a click raises it.</summary>
+    private static void ClickPill(MainShellWindow shell, string key)
+    {
+        FreshOffer();
+        shell.NavStrip!.ChooseForTests(key);
+        Dispatcher.UIThread.RunJobs();
+    }
+
+    // Each click is a fresh offer: forget the ladder's one-passive-at-a-time settle and the
+    // card's pacing, so only the gate under test can refuse it.
+    private static void FreshOffer()
+    {
         StartupLadder.ResetForTests();
         FeatureIntroPopup.ResetForTests();
-        shell.Named<Button>(button)!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-        Dispatcher.UIThread.RunJobs();
     }
 
     private static string? CardTitle(List<Window> opened) =>
@@ -123,12 +144,16 @@ public sealed class FeatureIntroWiringTests
     public Task StudioDoorOpensStudioRackAndRemoteControlOpensNothing() => Run((opened, shell) =>
     {
         // WPF MainWindow.TabNavigation.cs:505: the rack card rides case "studio"; case
-        // "remotecontrol" (a Play-door tab) calls nothing.
-        ClickNav(shell, "BtnNavRemoteControl");
+        // "remotecontrol" (a Social pill since the nav rework) calls nothing.
+        ClickDoor(shell, "DoorSocial");
+        ClickPill(shell, "remotecontrol");
+        Assert.Equal("remotecontrol", shell.CurrentTab);
         Assert.Empty(opened.OfType<FeatureIntroPopup>());
         Assert.DoesNotContain("studio-rack", CoreSettings.Current.SeenFeatureIntros);
 
-        ClickNav(shell, "BtnNavStudio");
+        ClickDoor(shell, "DoorStudio");
+        ClickPill(shell, "studio");
+        Assert.Equal("studio", shell.CurrentTab);
         Assert.Equal(FeatureIntros.All["studio-rack"].Title, CardTitle(opened));
         Assert.Contains("studio-rack", CoreSettings.Current.SeenFeatureIntros);
     }, "studio-rack");

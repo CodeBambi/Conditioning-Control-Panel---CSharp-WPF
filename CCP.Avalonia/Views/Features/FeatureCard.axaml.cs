@@ -41,6 +41,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
         private const double TeaseBlurRadius = 26;
         private const double TeaseBorderThickness = 2;
         private const double ContentClipRadius = 11;
+        /// <summary>WPF LockedContentOpacity: the lock veil's rest opacity.</summary>
+        private const double LockedContentOpacity = 0.35;
+        /// <summary>WPF InactiveContentOpacity: a switched-OFF tile that opted into
+        /// <see cref="DimWhenInactive"/>. Deep enough that lit tiles win the eye, clear of the lock veil.</summary>
+        private const double InactiveContentOpacity = 0.62;
+        /// <summary>WPF MutedTitleOpacity: chrome follows the art, a grey picture with a bright label half-says "on".</summary>
+        private const double MutedTitleOpacity = 0.72;
 
         public static readonly StyledProperty<string> TitleProperty =
             AvaloniaProperty.Register<FeatureCard, string>(nameof(Title), "Feature");
@@ -60,6 +67,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             AvaloniaProperty.Register<FeatureCard, string?>(nameof(TierBadge));
         public static readonly StyledProperty<int> TeaseTierProperty =
             AvaloniaProperty.Register<FeatureCard, int>(nameof(TeaseTier));
+        public static readonly StyledProperty<bool> DimWhenInactiveProperty =
+            AvaloniaProperty.Register<FeatureCard, bool>(nameof(DimWhenInactive));
 
         public static readonly RoutedEvent<RoutedEventArgs> ClickEvent =
             RoutedEvent.Register<FeatureCard, RoutedEventArgs>(nameof(Click), RoutingStrategies.Bubble);
@@ -80,26 +89,36 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
         public string? TierBadge { get => GetValue(TierBadgeProperty); set => SetValue(TierBadgeProperty, value); }
         /// <summary>0 = normal card, 1 = gold tease livery, 2+ = diamond. Blurs the art, veils it, wears a "?".</summary>
         public int TeaseTier { get => GetValue(TeaseTierProperty); set => SetValue(TeaseTierProperty, value); }
+        /// <summary>WPF DimWhenInactive (owner, 2026-10-09: "the buttons on dashboard for the features
+        /// should be dimmed when off"): an OFF tile rests at 62% and drains to grey. Opt-in, because
+        /// IsActive only means something on the feature toggles; navigation tiles never get it.</summary>
+        public bool DimWhenInactive { get => GetValue(DimWhenInactiveProperty); set => SetValue(DimWhenInactiveProperty, value); }
+
+        /// <summary>WPF DashboardDepth: the Home mosaic tile sits in a sunken socket and takes the
+        /// shared lamp (DashboardCardDepth); the hover scale stands down so travel is the one motion.</summary>
+        public bool DashboardDepth { get; set; }
 
         public event EventHandler<RoutedEventArgs> Click { add => AddHandler(ClickEvent, value); remove => RemoveHandler(ClickEvent, value); }
         /// <summary>Raised on right-click so the dashboard can quick-toggle the feature without opening its popup.</summary>
         public event EventHandler<RoutedEventArgs> ToggleRequested { add => AddHandler(ToggleRequestedEvent, value); remove => RemoveHandler(ToggleRequestedEvent, value); }
 
-        private readonly Border _rootBorder, _imgIconHost, _glyphHost, _rimLight, _activeBorder, _lockedOverlay, _tierBadgeHost;
+        private readonly Border _rootBorder, _imgIconHost, _imgIconMute, _glyphHost, _rimLight, _activeBorder, _lockedOverlay, _tierBadgeHost;
         private readonly Grid _contentRoot, _teaseHost;
         private readonly TextBlock _txtTitle, _txtGlyph, _txtTeaseGlyph, _txtLockLabel, _txtTierBadge;
         private readonly Button _btnHelp;
-        private readonly DropShadowEffect _activeGlow;
+        private readonly Border _activeGlow;   // the GlowLayer sibling (CardGlow)
         private readonly ScaleTransform _rootScale = new(1, 1);
         private CancellationTokenSource? _breath;
         private IDisposable? _visibilityWatch;
         private bool _hovered;
+        private readonly global::ConditioningControlPanel.Avalonia.Controls.Depth.DashboardCardDepth _depth;
 
         public FeatureCard()
         {
             AvaloniaXamlLoader.Load(this);
             _rootBorder = this.FindControl<Border>("RootBorder")!;
             _imgIconHost = this.FindControl<Border>("ImgIconHost")!;
+            _imgIconMute = this.FindControl<Border>("ImgIconMute")!;
             _glyphHost = this.FindControl<Border>("GlyphHost")!;
             _rimLight = this.FindControl<Border>("RimLight")!;
             _activeBorder = this.FindControl<Border>("ActiveBorder")!;
@@ -113,7 +132,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             _txtLockLabel = this.FindControl<TextBlock>("TxtLockLabel")!;
             _txtTierBadge = this.FindControl<TextBlock>("TxtTierBadge")!;
             _btnHelp = this.FindControl<Button>("BtnHelp")!;
-            _activeGlow = (DropShadowEffect)_rootBorder.Effect!;
+            _activeGlow = this.FindControl<Border>("GlowLayer")!;
+            CardGlow.Bind(_activeGlow, () => CardGlow.BlurRadius);
+            var depthSocket = this.FindControl<Border>("DepthSocket")!;
+            _depth = new global::ConditioningControlPanel.Avalonia.Controls.Depth.DashboardCardDepth(this,
+                this.FindControl<Panel>("PressFace")!, this.FindControl<Border>("DepthBevel")!,
+                () => DashboardDepth, () => IsActive && !IsLocked,
+                e => !IsLocked && !(e.Source is Visual src && (src == _btnHelp || _btnHelp.IsVisualAncestorOf(src))));
+            Loaded += (_, _) => depthSocket.IsVisible = DashboardDepth;
 
             // Hover lift (WPF: MotionFx.HoverLift) as a transition on the root scale (the art pop is
             // Controls/HoverPop, driven from ApplyHover as WPF does); the 6px margin on RootBorder is the headroom the lift paints into.
@@ -158,17 +184,22 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             else if (change.Property == IsActiveProperty) ApplyActiveState();
             else if (change.Property == HelpSectionIdProperty) RefreshHelpTooltip();
             else if (change.Property == TierBadgeProperty) ApplyTierBadge();
-            else if (change.Property == TeaseTierProperty) ApplyTeaseState();
+            else if (change.Property == TeaseTierProperty) { ApplyTeaseState(); ApplyMute(0); }
+            else if (change.Property == DimWhenInactiveProperty) ApplyActiveState();
         }
 
         private void ApplyArt()
         {
             var src = Icon;
             _txtGlyph.Text = Glyph ?? "";
-            _imgIconHost.Background = src is null
-                ? null
-                : new ImageBrush(src) { Stretch = Stretch.UniformToFill, AlignmentY = AlignmentY.Center };
+            // A direct draw, never an ImageBrush: the mosaic repaints every frame over its ambient
+            // layer and a brush fill re-rendered its tile into a fresh surface each time (ArtFill).
+            ConditioningControlPanel.Avalonia.Controls.Fx.ArtFill.Paint(_imgIconHost, src, Stretch.UniformToFill, AlignmentY.Center);
             _imgIconHost.IsVisible = src is not null;
+            // The grey twin rides on top; no twin (not a bitmap) falls back to the opacity dim alone.
+            var grey = src is null ? null : ArtDesaturate.Of(src);
+            ConditioningControlPanel.Avalonia.Controls.Fx.ArtFill.Paint(_imgIconMute, grey, Stretch.UniformToFill, AlignmentY.Center);
+            _imgIconMute.IsVisible = grey is not null;
             _glyphHost.IsVisible = src is null && !string.IsNullOrEmpty(Glyph);
         }
 
@@ -243,30 +274,76 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             {
                 _lockedOverlay.IsVisible = true;
                 _txtLockLabel.Text = LockLevel > 0 ? $"Lvl {LockLevel}" : "Locked";
-                _contentRoot.Opacity = 0.35;
             }
             else
             {
                 _lockedOverlay.IsVisible = false;
-                _contentRoot.Opacity = 1.0;
             }
+            ApplyActiveState();
+        }
+
+        private bool _tutorialPreviewActive;
+        private bool PaintActive => IsActive || _tutorialPreviewActive;
+        /// <summary>Test seam: the card is painted as on (really on, or lit by the welcome show).</summary>
+        internal bool PaintsActive => PaintActive && !IsLocked;
+
+        /// <summary>WPF SetTutorialPreview (FeatureCard.xaml.cs:535). Appearance only: tutorial emphasis
+        /// never toggles a feature or overwrites its binding. IN = lit as an on card, OUT = back to its truth.</summary>
+        internal void SetTutorialPreview(bool active)
+        {
+            if (_tutorialPreviewActive == active) return;
+            _tutorialPreviewActive = active;
             ApplyActiveState();
         }
 
         private void ApplyActiveState()
         {
             // A locked feature can't really be "on" even if the underlying setting is true.
-            var showActive = IsActive && !IsLocked;
+            var showActive = PaintActive && !IsLocked;
             _activeBorder.IsVisible = showActive;
+            ApplyRestOpacity();
+            ApplyMute(CardMuteRule.TransitionMs(Env.AllowTransitions, IsLoaded));
             ApplyActiveBreath(showActive);
+            _depth?.Refresh();
         }
+
+        /// <summary>
+        /// WPF ApplyRestOpacity (FeatureCard.xaml.cs:563): the ONE writer for ContentRoot.Opacity.
+        /// Lock, inactive-dim and hover all want that channel, so they are resolved here in priority
+        /// order. A plain static assignment: the tile's face stays a cached bitmap.
+        /// </summary>
+        private void ApplyRestOpacity()
+        {
+            _contentRoot.Opacity =
+                IsLocked ? LockedContentOpacity
+                : DimWhenInactive && !PaintActive && (DashboardDepth || !_hovered) ? InactiveContentOpacity
+                : 1.0;
+        }
+
+        /// <summary>WPF ApplyMute (:586): the ONE writer for the grey layer and the title's muted
+        /// weight, on <see cref="CardMuteRule"/>'s verdict. A one-shot fade, or a snap.</summary>
+        private void ApplyMute(int ms)
+        {
+            bool mute = CardMuteRule.ShouldMute(DimWhenInactive, PaintActive, IsLocked, _hovered && !DashboardDepth, TeaseTier > 0);
+            _txtTitle.Opacity = mute ? MutedTitleOpacity : 1.0;
+            CardMuteRule.Fade(_imgIconMute, mute, ms);
+            IsMuted = mute;
+        }
+
+        /// <summary>Test seams: the resting face opacity, the title weight, the glow layer, and the
+        /// mute verdict (the grey layer may still be mid-fade).</summary>
+        internal double RestOpacity => _contentRoot.Opacity;
+        internal double TitleOpacity => _txtTitle.Opacity;
+        internal double GlowOpacity => _activeGlow.Opacity;
+        internal bool IsMuted { get; private set; }
+        internal bool HasGreyTwin => _imgIconMute.IsVisible;
 
         /// <summary>WPF FeatureCard.RefreshFx (:613): re-reads the motion/tier/focus gates. Called by
         /// the shell's ApplyDashboardFxLoops on a motion/performance change and window activation.</summary>
         internal void RefreshFx() => ApplyActiveState();
 
         /// <summary>True while the breath clock runs (test seam).</summary>
-        internal bool IsBreathing => _breath != null;
+        internal bool IsBreathing => _breathClock?.IsRunning == true;
 
         /// <summary>WPF AmbientAllowed (:622): visibility + window focus + motion + tier.</summary>
         private bool AmbientAllowed =>
@@ -280,43 +357,28 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
         {
             _breath?.Cancel();
             _breath = null;
-            if (!active)
+            _breathClock?.Stop();
+            if (!active || !IsEffectivelyVisible)
             {
                 _activeGlow.Opacity = 0;
                 _activeBorder.Opacity = 1;
                 return;
             }
-            var tier = Env.CurrentTier;
-            bool glow = Env.AllowGlow(tier) && Env.Level != Models.MotionLevel.Off;
-            if (glow) _activeGlow.BlurRadius = Math.Min(18, Env.MaxGlowBlurRadius(tier));
             if (!AmbientAllowed)
             {
-                _activeGlow.Opacity = glow ? ActiveGlowMaxOpacity : 0;
+                // Mich's funnel gate (WPF :643): minimised, unfocused, reduced motion or the
+                // Performance tier park both at PEAK (no glow at all where the tier forbids it).
+                var tier = Env.CurrentTier;
+                _activeGlow.Opacity = Env.AllowGlow(tier) && Env.Level != Models.MotionLevel.Off ? ActiveGlowMaxOpacity : 0;
                 _activeBorder.Opacity = ActiveRingMaxOpacity;
                 return;
             }
-            _breath = new CancellationTokenSource();
-            if (glow) _ = Breathe(_activeGlow, ActiveGlowMinOpacity, ActiveGlowMaxOpacity).RunAsync(_activeGlow, _breath.Token);
-            else _activeGlow.Opacity = 0;
-            _ = Breathe(_activeBorder, ActiveRingMinOpacity, ActiveRingMaxOpacity).RunAsync(_activeBorder, _breath.Token);
+            _breathClock ??= new BreathClock(this, ActiveBreathSeconds);
+            _breathClock.Start((_activeGlow, ActiveGlowMinOpacity, ActiveGlowMaxOpacity),
+                               (_activeBorder, ActiveRingMinOpacity, ActiveRingMaxOpacity));
         }
 
-        private static Animation Breathe(Animatable target, double min, double max)
-        {
-            var prop = target is Visual ? Visual.OpacityProperty : DropShadowEffect.OpacityProperty;
-            return new Animation
-            {
-                Duration = TimeSpan.FromSeconds(ActiveBreathSeconds),
-                IterationCount = IterationCount.Infinite,
-                PlaybackDirection = PlaybackDirection.Alternate,
-                Easing = new SineEaseInOut(),
-                Children =
-                {
-                    new KeyFrame { Cue = new Cue(0d), Setters = { new Setter(prop, min) } },
-                    new KeyFrame { Cue = new Cue(1d), Setters = { new Setter(prop, max) } },
-                },
-            };
-        }
+        private BreathClock? _breathClock;
 
         /// <summary>Rounded clip matching RootBorder's inner arc: a Border never clips its
         /// CHILDREN to its CornerRadius, so the full-bleed art would poke square corners past the frame.</summary>
@@ -332,10 +394,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
         {
             if (_hovered == on) return;
             _hovered = on;
+            // WPF OnCardMouseEnter/Leave: the hover hands the colour straight back (off the dashboard).
+            ApplyRestOpacity();
+            ApplyMute(CardMuteRule.TransitionMs(Env.AllowTransitions, IsLoaded));
             // A locked tile is not an affordance; lighting it up promises a click that does nothing.
             if (IsLocked) on = false;
-            _rootScale.ScaleX = _rootScale.ScaleY = on ? HoverLiftScale : 1;
-            if (on) HoverPop.Enter(_imgIconHost); else HoverPop.Leave(_imgIconHost);
+            _rootScale.ScaleX = _rootScale.ScaleY = on && !DashboardDepth ? HoverLiftScale : 1;
+            if (on && !DashboardDepth) HoverPop.Enter(_imgIconHost); else HoverPop.Leave(_imgIconHost);
             _rimLight.Opacity = on ? RimLightOpacity : 0;
         }
 

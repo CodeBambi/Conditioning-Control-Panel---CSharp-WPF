@@ -9,6 +9,19 @@ public class TubeDockMathTests
 {
     private static readonly Box Uhd = new(0, 0, 3840, 2160);
 
+    /// <summary>A mod tube whose art paints past the built-in glass (Infection Control: right edge
+    /// at 587/1024 vs the built-in 1129/2048) moves the seam out by that overhang; the built-in
+    /// art and narrower art keep the WPF seam.</summary>
+    [Fact]
+    public void ModTubeArtPastTheBuiltInGlassMovesTheSeamOut()
+    {
+        double builtIn = 1129 / 2048.0;
+        Assert.Equal(16.2, TubeWindowMath.ArtOverhangUnits(587 / 1024.0, 1, builtIn, 1), 1);
+        Assert.Equal(0, TubeWindowMath.ArtOverhangUnits(builtIn, 1, builtIn, 1));
+        Assert.Equal(0, TubeWindowMath.ArtOverhangUnits(0.5, 1, builtIn, 1));
+        Assert.Equal(120, TubeWindowMath.ArtOverhangUnits(1, 1, 0.2, 1));
+    }
+
     [Fact]
     public void LeftFits_UsesWpfFormula()
     {

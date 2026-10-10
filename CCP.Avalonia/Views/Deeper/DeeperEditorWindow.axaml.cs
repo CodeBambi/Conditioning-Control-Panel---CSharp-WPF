@@ -108,9 +108,32 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         private bool _isDirty;
         private bool _suppressDirty;
 
-        // ponytail: the waveform peaks still need a decoder (WPF AudioWaveformCache, NAudio). Local
+        // The waveform peaks come from DeeperWaveform (LibVLC transcode, cached per file). Local
         // audio PLAYBACK is real (_localAudio); remote AND local video poll the page's media element.
         private double[]? _waveformPeaks;
+        private System.Threading.CancellationTokenSource? _waveCts;
+
+        /// <summary>Tests: the peaks the strip is drawn from (null until decoded).</summary>
+        internal double[]? WaveformPeaks => _waveformPeaks;
+
+        /// <summary>WPF InitializeAudioAsync's AudioWaveformCache.LoadAsync (:1197), off the UI thread. A swap of
+        /// the clip or the window closing cancels it; a result for another clip is dropped.</summary>
+        private async Task LoadWaveformAsync(string path)
+        {
+            try { _waveCts?.Cancel(); } catch { }
+            var cts = _waveCts = new System.Threading.CancellationTokenSource();
+            try
+            {
+                var data = await DeeperWaveform.LoadAsync(path, cts.Token);
+                if (data == null || cts.IsCancellationRequested || !ReferenceEquals(_waveCts, cts) || _playbackDisposed) return;
+                if (!string.Equals(_enhancement.MediaSource, path, StringComparison.Ordinal)) return;
+                _waveformPeaks = Array.ConvertAll(data.Peaks, p => (double)p);
+                // Drawn once per load, resize or zoom into a cached bitmap, never per frame.
+                WaveformPath.CacheMode ??= new BitmapCache();
+                UpdateWaveformPath();
+            }
+            catch (Exception ex) { Log.Debug("DeeperEditor: waveform decode failed: {Error}", ex.Message); }
+        }
         private IDeeperLocalAudio? _localAudio;
 
         /// <summary>Open editors (UI thread): the panic sweep and the player's one-editor-per-file
@@ -231,6 +254,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             Closed += (_, _) => { try { (Owner as Window)?.Activate(); } catch { } };
             Opened += (_, _) => s_open.Add(this);
             Closed += (_, _) => s_open.Remove(this);
+            // Page zoom, Ctrl+wheel and HTML5 fullscreen on the browser preview: DeeperPageBridge.
+            _previewBridge = new DeeperPageBridge(BrowserPreview, this);
+            Closed += (_, _) => _previewBridge.Dispose();
 
             Loaded += DeeperEditorWindow_Loaded;
             KeyDown += DeeperEditorWindow_KeyDown;
@@ -553,6 +579,24 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
 
             _ = InitializePreviewAsync();
 
+            // WPF xaml.cs:282: the bus event, then the interactive tutorial's Part 2 queued by the
+            // New Enhancement dialog, started ~800 ms later so the spotlight bounds are laid out.
+            CoreTutorialEvents.Emit("WindowLoaded:DeeperEditorWindow");
+            if (CoreTutorialEvents.PendingPart2Tutorial is { } pendingPart2)
+            {
+                CoreTutorialEvents.PendingPart2Tutorial = null;
+                DispatcherTimer.RunOnce(() =>
+                {
+                    try
+                    {
+                        if (CoreTutorial.IsActive) CoreTutorial.Skip();
+                        CoreTutorial.Start(pendingPart2);
+                        if (CoreTutorial.IsActive) new global::ConditioningControlPanel.Avalonia.Views.Windows.TutorialOverlay(this).Show();
+                    }
+                    catch (Exception ex) { Log.Warning(ex, "DeeperEditor: tutorial Part 2 failed to start"); }
+                }, TimeSpan.FromMilliseconds(800));
+            }
+
             // ponytail: the WPF Loaded handler dispatched the interactive tutorial's Part 2 (queued
             // by the New Enhancement dialog) and, failing that, auto-launched the first-run editor
             // coachmarks once. THREE of the four things that note used to name have arrived and are
@@ -563,9 +607,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             //      step lists live in ConditioningControlPanel/Services/TutorialService.cs, so
             //      CoreTutorial.Start(name) is a silent no-op and a live overlay would open a dim
             //      sheet over a blank card. See StartEditorTutorial for the shape to restore.
-            //   2. The Part 2 hand-off needs TutorialEventBus.PendingPart2Tutorial
-            //      (ConditioningControlPanel/Services/TutorialEventBus.cs) and CoreTutorial
-            //      deliberately carries no event bus, so there is no seam to read it from.
+            //   2. The Part 2 hand-off is wired above (CoreTutorialEvents.PendingPart2Tutorial); it
+            //      waits on (1) and on the New Enhancement dialog setting it after Part 1.
             // The first-run auto-launch's "shown once" flag is NOT a blocker: WPF used
             // AppSettings.HasSeenDeeperEditorIntro and that is in Core (AppSettings.cs:7938).
         }
@@ -576,28 +619,22 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         }
 
         /// <summary>
-        /// ponytail: the "?" button is present and hit-testable and opens nothing. The old note here
-        /// said this waits on "App.Tutorial + TutorialOverlay, wired when the tutorial service moves
-        /// to Core" and BOTH halves of that are now wrong: <c>CoreTutorial</c> is the seam and
-        /// <c>CCP.Avalonia/Views/Windows/TutorialOverlay.axaml.cs</c> is the ported overlay, with a
-        /// live <c>TutorialOverlay(Window)</c> constructor that walks whatever tour the seam runs.
-        ///
-        /// <para>The single blocker is that NOTHING SEEDS the seam on this head - see
-        /// <c>CCP.Avalonia/App.axaml.cs:71</c>. The twenty-two step lists are sentences about WPF
-        /// controls and stay in <c>ConditioningControlPanel/Services/TutorialService.cs</c>, so
-        /// <c>CoreTutorial.Start("DeeperEditorTutorial")</c> is a silent no-op today. Showing the
-        /// overlay anyway is the failure to avoid: it would dim the editor behind an empty card.
-        /// The four lines to write once a tour exists, WPF's shape with that one guard added:</para>
-        /// <code>
-        /// if (CoreTutorial.IsActive) CoreTutorial.Skip();
-        /// CoreTutorial.Start("DeeperEditorTutorial");
-        /// if (!CoreTutorial.IsActive) return;   // unseeded seam: do not dim over nothing
-        /// new TutorialOverlay(this).Show();
-        /// </code>
+        /// The "?" button: WPF DeeperEditorWindow.StartEditorTutorial. Tours/TutorialHead.cs seeds
+        /// CoreTutorial with the "DeeperEditor" tour, so this starts it and shows the ported
+        /// TutorialOverlay over this window. The IsActive check stays: an unseeded seam (a test
+        /// that never ran the head seed) must not dim the editor behind an empty card.
         /// </summary>
         private void StartEditorTutorial()
         {
-            Log.Debug("DeeperEditor: editor tutorial requested; CoreTutorial is unseeded on this head");
+            // WPF DeeperEditorWindow.StartEditorTutorial: the coachmarks, over THIS window.
+            try
+            {
+                if (CoreTutorial.IsActive) CoreTutorial.Skip();
+                CoreTutorial.Start("DeeperEditor");
+                if (!CoreTutorial.IsActive) return;
+                new global::ConditioningControlPanel.Avalonia.Views.Windows.TutorialOverlay(this).Show();
+            }
+            catch (Exception ex) { Log.Warning(ex, "DeeperEditor: the editor tutorial failed to start"); }
         }
 
         private void LoadEnhancement(Enhancement enhancement, string? filePath)
@@ -942,15 +979,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         }
 
         /// <summary>WPF DeeperEditorWindow.xaml.cs:1189. Playback, duration, seek and end-of-clip
-        /// are real through <see cref="DeeperLocalAudio"/>. ponytail: the waveform peak extractor
-        /// (AudioWaveformCache) is not; wiring peaks in later is one assignment to
-        /// <c>_waveformPeaks</c>.</summary>
+        /// are real through <see cref="DeeperLocalAudio"/>; the peaks are <see cref="LoadWaveformAsync"/>.</summary>
         private async Task InitializeAudioAsync(string path)
         {
             BrowserPreview.IsVisible = false;
             VideoPreview.IsVisible = false;
             PreviewPlaceholder.IsVisible = false;
             WaveformCanvas.IsVisible = true;
+            _ = LoadWaveformAsync(path);
 
             IDeeperLocalAudio? audio = null;
             try { audio = await DeeperLocalAudio.Open(path); }
@@ -1244,18 +1280,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         private void BtnPreviewZoomIn_Click(object? sender, RoutedEventArgs e) => AdjustPreviewZoom(+0.10);
         private void BtnPreviewZoomOut_Click(object? sender, RoutedEventArgs e) => AdjustPreviewZoom(-0.10);
 
-        /// <summary>
-        /// ponytail: NativeWebView genuinely has no zoom factor - one of the three CoreWebView2
-        /// members with no counterpart at all, and NOT a missing script channel, since
-        /// InvokeScriptAsync works and everything else in this region uses it. CSS <c>zoom</c>
-        /// through that channel is the obvious substitute and is not one: it is per-document, so it
-        /// is lost on the next navigation, and it does not scale a fullscreened video. So WPF's
-        /// +/-10% clamped to [0.25, 5.0] stays lost, and these two buttons only log.
-        /// </summary>
-        private void AdjustPreviewZoom(double delta)
-        {
-            Log.Debug("DeeperEditor: preview zoom {Delta:+0.00;-0.00} ignored; NativeWebView has no zoom", delta);
-        }
+        /// <summary>WPF AdjustPreviewZoom: +/-10 % clamped to [0.25, 5.0]. NativeWebView has no zoom factor, so
+        /// DeeperPageBridge sets a CSS zoom on the document and puts it back after every navigation.</summary>
+        private void AdjustPreviewZoom(double delta) => _previewBridge.Adjust(delta);
+
+        private readonly DeeperPageBridge _previewBridge;
+
+        /// <summary>Tests: the preview's page bridge (zoom factor, fullscreen state).</summary>
+        internal DeeperPageBridge PreviewBridge => _previewBridge;
 
         private void TimelineScroll_PointerWheelChanged(object? sender, PointerWheelEventArgs e)
         {
@@ -1948,7 +1980,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
                 Cursor = new Cursor(StandardCursorType.Hand),
                 Tag = region,
             };
-            ToolTip.SetTip(rect, string.IsNullOrEmpty(region.Label) ? region.Id : $"{region.Id} — {region.Label}");
+            ToolTip.SetTip(rect, string.IsNullOrEmpty(region.Label) ? region.Id : $"{region.Id} - {region.Label}");
             Canvas.SetLeft(rect, startX);
             Canvas.SetTop(rect, laneTop);
             rect.PointerPressed += RegionRect_PointerPressed;
@@ -2511,14 +2543,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
                 // Avalonia's deferred TextChanged handlers fire and the flag stays clear.
                 UpdateTitle();
 
-                // ponytail: WPF also set TutorialEventBus.LastSavedEnhancementPath and emitted
-                // "FileSaved" so the HT walkthrough could advance to its follow-up card. Still
-                // blocked, and the blocker is NOT "the tutorial has not been ported" - the overlay
-                // has been (CCP.Avalonia/Views/Windows/TutorialOverlay.axaml.cs) and CoreTutorial is
-                // the seam. It is that CoreTutorial deliberately carries NO event bus: the
-                // OnEvent advance trigger crosses as an enum only, and the publisher side stays in
-                // ConditioningControlPanel/Services/TutorialEventBus.cs. Nothing here can emit, and
-                // with the seam unseeded on this head nothing would be listening either.
+                // WPF xaml.cs:4509: the HT walkthrough advances to its follow-up card on this.
+                CoreTutorialEvents.LastSavedEnhancementPath = path;
+                CoreTutorialEvents.Emit("FileSaved");
             }
             catch (Exception ex)
             {
@@ -2630,7 +2657,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             var name = string.IsNullOrEmpty(_enhancement.Metadata.Name)
                 ? Loc.Get("deeper_editor_untitled") : _enhancement.Metadata.Name;
             TxtTitle.Text = name;
-            Title = $"Deeper — {name}";
+            Title = $"{Loc.Get("tab_deeper")} - {name}";
             // Linked-files strip shows the file path; keep it in sync.
             RefreshLinkedFilesUi();
             // Metadata drawer subtitle ("Metadata · {name}") shown when collapsed.
@@ -3167,6 +3194,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             _playbackDisposed = true;
             DisposeLocalAudio();
             _isPlaying = false;
+            try { _waveCts?.Cancel(); } catch { }
             _waveformPeaks = null;
         }
 
@@ -3213,6 +3241,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         /// it has no AddScriptToExecuteOnDocumentCreatedAsync to install the sender, and both of the
         /// three messages' destinations (the fullscreen exit, the page zoom) are themselves stubs -
         /// so a bridge would carry messages nobody could act on.</summary>
+        // Now real, in DeeperPageBridge: the sender is installed after NavigationCompleted, the zoom is a CSS
+        // zoom, and fullscreen is this window's own state (no reparent, so the four members below stay empty).
         private void OnPreviewWebMessageReceived(object? sender, EventArgs e) { }
 
         /// <summary>ponytail: needs ContainsFullScreenElementChanged, which NativeWebView does not

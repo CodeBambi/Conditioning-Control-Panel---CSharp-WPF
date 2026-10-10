@@ -29,7 +29,7 @@
      bite the XAML buttons; the follow-up buttons, whose text comes from step data, get a TextBlock
      in code-behind for exactly that reason. -->
 <Window xmlns="https://github.com/avaloniaui"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="ConditioningControlPanel.Avalonia.Views.Windows.TutorialOverlay"
         Title="Tutorial"
         SystemDecorations="None"
@@ -217,7 +217,7 @@
                 <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,12">
                     <TextBlock x:Name="TxtIcon" Text="~" FontSize="24" Foreground="{DynamicResource PinkBrush}" FontWeight="Bold" Margin="0,0,10,0" VerticalAlignment="Center"/>
                     <TextBlock x:Name="TxtTitle"
-                               Text="Welcome!"
+                               Text="Welcome"
                                Foreground="{DynamicResource PinkBrush}"
                                FontSize="18"
                                FontWeight="Bold"
@@ -288,14 +288,14 @@
 
                     <Button x:Name="BtnPrevious"
                             Grid.Column="3"
-                            Content="Previous"
+                            Content="{loc:Str btn_previous}"
                             Theme="{StaticResource TutorialOutlineButton}"
                             Margin="0,0,10,0"
                             IsVisible="False"/>
 
                     <Button x:Name="BtnNext"
                             Grid.Column="4"
-                            Content="Next"
+                            Content="{loc:Str btn_next}"
                             Theme="{StaticResource TutorialPrimaryButton}"/>
                 </Grid>
             </Grid>

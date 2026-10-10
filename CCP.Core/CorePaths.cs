@@ -34,12 +34,20 @@ namespace ConditioningControlPanel
             {
                 // A sandbox never reaches a real server. Outside any catch on purpose: a guard that
                 // failed must fail loudly, never fall back quietly to the real profile.
-                Services.SandboxNet.Install();
+                // CCP_SANDBOX_ONLINE=1 is the owner-approved desk-run exception (2026-10-09: sign in,
+                // marquee, board): the profile stays sandboxed, the network does not. Tests never set it.
+                if (!SandboxOnline()) Services.SandboxNet.Install();
                 return overrideDir;
             }
             return Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "ConditioningControlPanel");
+        }
+
+        private static bool SandboxOnline()
+        {
+            try { return Environment.GetEnvironmentVariable("CCP_SANDBOX_ONLINE") == "1"; }
+            catch { return false; }
         }
 
         /// <summary>

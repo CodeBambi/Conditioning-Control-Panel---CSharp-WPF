@@ -61,10 +61,38 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion.Runtime
             // running (the player buys it at the Prize Counter in another window), so the whole cell
             // is re-read on every reveal rather than seeded once at startup.
             SyncFromSettings();
+            // WPF MainWindow.Patreon.cs:2214: the tube menu's "Pause browser" and this switch are one state.
+            // The shell owns it (BrowserPaused); the switch follows it from wherever it was flipped.
+            _pauseShell = global::Avalonia.LogicalTree.LogicalExtensions.FindLogicalAncestorOfType<Views.Windows.MainShellWindow>(this)
+                          ?? Views.Windows.MainShellWindow.Current;
+            if (_pauseShell != null)
+            {
+                _pauseShell.BrowserPausedChanged += OnShellBrowserPaused;
+                SetPauseBrowser(_pauseShell.BrowserPaused);
+            }
+        }
+
+        private Views.Windows.MainShellWindow? _pauseShell;
+
+        private void OnShellBrowserPaused(bool paused)
+        {
+            if (Dispatcher.UIThread.CheckAccess()) SetPauseBrowser(paused);
+            else Dispatcher.UIThread.Post(() => SetPauseBrowser(paused));
+        }
+
+        /// <summary>Shows the browser-pause state without raising <see cref="PauseBrowserChanged"/>.</summary>
+        internal void SetPauseBrowser(bool paused)
+        {
+            if (ChkPauseBrowserCompanion.IsChecked == paused) return;
+            var was = _isLoading;
+            _isLoading = true;
+            try { ChkPauseBrowserCompanion.IsChecked = paused; }
+            finally { _isLoading = was; }
         }
 
         protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
         {
+            if (_pauseShell != null) { _pauseShell.BrowserPausedChanged -= OnShellBrowserPaused; _pauseShell = null; }
             if (CoreSettings.Service is { } svc) svc.CurrentReplaced -= OnCurrentReplaced;
             base.OnDetachedFromVisualTree(e);
         }
@@ -95,19 +123,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion.Runtime
                 // the cell is on screen would show every user the default whatever they had bound.
                 RefreshChatShortcutLabel();
 
-                // TxtCameraShortcutLabel keeps its XAML literal on purpose: the combo it would
-                // report drives WebcamTrackingService, which does not exist on this head, so there
-                // is no live binding for it to be honest about. Same call as the camera pill's.
-
-                // ChkPauseBrowserCompanion is deliberately NOT seeded: WPF restores it only from a
-                // session snapshot (MainWindow.Patreon.cs:1923), never from settings.
+                // The camera shortcut row and the browser pause row are hidden in the markup:
+                // this head has no webcam hotkey and no browser mute hook for them to drive.
 
                 // Paint the midnight-glass row from the two facts that govern it: does the player own
                 // tube_midnight, and did they ask for it. Ownership failing to read answers "no",
                 // which greys the row - the honest state for a prize we cannot prove was sold.
-                // ponytail: needs ArcademyHostService.WalletOwnsSku (ConditioningControlPanel/Services/
-                // Arcademy/ArcademyHostService.cs), still in the WPF head; the SKU itself is in Core.
-                bool owned = false;
+                // WPF :32: the Arcademy ticket wallet (live when the Arcademy is open, the saved file otherwise; never throws).
+                bool owned = ConditioningControlPanel.Services.Arcademy.ArcademyHostService.WalletOwnsSku(ConditioningControlPanel.Services.Arcademy.ArcademyEconomy.SkuTubeMidnight);
                 ChkTubeMidnightGlass.IsEnabled = owned;
                 ChkTubeMidnightGlass.IsChecked = owned && s.TubeMidnightGlass;
             }
@@ -125,8 +148,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion.Runtime
         /// TextBlock. The literal in the markup is a placeholder, not a binding, so assigning
         /// .Text here is safe (nothing on this control carries {loc:Str}).
         /// </summary>
-        internal void RefreshChatShortcutLabel() =>
+        internal void RefreshChatShortcutLabel()
+        {
             TxtChatShortcutLabel.Text = AvatarTube.AvatarTubeWindow.FormatChatShortcut();
+            RefreshCameraShortcutLabel();
+        }
+
+        /// <summary>WPF RefreshCameraShortcutLabel (MainWindow.SessionIO.cs:1466), the same pill.</summary>
+        internal void RefreshCameraShortcutLabel() =>
+            TxtCameraShortcutLabel.Text = Views.Windows.MainShellWindow.FormatCameraShortcut();
 
         private void SliderIdleInterval_ValueChanged(object? sender, RangeBaseValueChangedEventArgs e)
         {
@@ -135,11 +165,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion.Runtime
             TxtIdleIntervalCompanion.Text = $"{value}s";
             CoreSettings.Current.IdleGiggleIntervalSeconds = value;
             CoreSettings.Save();
-            // ponytail: WPF also restarts the tube's idle timer. This head's tube IS ported
-            // (CCP.Avalonia/Views/AvatarTube/AvatarTubeWindow.axaml.cs) but has no idle-giggle
-            // timer to restart - its ctor deliberately starts none of WPF's four loops, because
-            // each calls into a Reactions/Speech partial that has not been ported. The new
-            // interval is on CoreSettings either way, so it applies whenever that loop lands.
+            // The tube restarts its own idle timer on this setting's PropertyChanged
+            // (AvatarTubeWindow.Speech.cs), so saving is the whole job here.
         }
 
         private void SliderBubbleDuration_ValueChanged(object? sender, RangeBaseValueChangedEventArgs e)
@@ -159,11 +186,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion.Runtime
             // part of the prescribed dose and is locked while one runs.
             CoreSettings.Current.SubAudioMuted = ChkMuteWhispersCompanion.IsChecked == true;
             CoreSettings.Save();
-            // ponytail: WPF also refreshes the tube's quick menu. AvatarTubeWindow.UpdateQuickMenuState
-            // exists on this head and is private AND deliberately inert - it needs App.Engine and
-            // App.Companion for the item titles, which have no seam, so retitling from settings
-            // alone would print a menu that disagrees with the engine. Calling it would change
-            // nothing; it is not called for that reason, not because the tube is missing.
+            // As WPF: the open tube's quick menu re-reads the mute (it also does on every open).
+            AvatarTube.AvatarTubeWindow.Live?.UpdateQuickMenuState();
         }
 
         // #846: mute only the spoken voicelines - the bubble, its text and the giggle cues stay.

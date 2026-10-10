@@ -22,6 +22,7 @@ public sealed class PanicCancelsAiScanTests
         var start = src.IndexOf(signature, System.StringComparison.Ordinal);
         Assert.True(start >= 0, $"{signature} not found in {file}");
         var end = src.IndexOf("\n        }\n", start, System.StringComparison.Ordinal);
+        Assert.True(end > start, $"the end of {signature} not found in {file}");
         Assert.Contains(call, src.Substring(start, end - start));
     }
 

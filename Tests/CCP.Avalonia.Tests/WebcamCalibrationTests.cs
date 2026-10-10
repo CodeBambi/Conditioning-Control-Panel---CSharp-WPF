@@ -245,16 +245,21 @@ public sealed class WebcamCalibrationTests
         var gazeField = typeof(WebcamTracker).GetField("OnGazeMove", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
         Action<global::Avalonia.Point>? Gazes() => (Action<global::Avalonia.Point>?)gazeField.GetValue(tracker);
 
-        Assert.Null(Gazes());
+        // Focus Gaze (lane u1) also listens while a calibrated tracker runs and a gaze option is on;
+        // stand it down so the field holds the verify cursor's subscription alone.
+        var focus = ConditioningControlPanel.Avalonia.Platform.GazeFocusHead.Instance;
+        focus.CanRunOverride = () => false;
+        focus.EvaluateDesiredState();
+        try { Assert.Null(Gazes()); } finally { focus.CanRunOverride = null; }
         win.FindControl<Button>("BtnVerifyAccuracy")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-        Assert.Equal("Move your eyes around — the pink dot should track them. 15s left.", status.Text);
+        Assert.Equal("Move your eyes around - the pink dot should track them. 15s left.", status.Text);
         Gazes()!(new global::Avalonia.Point(400, 300));   // what the tracker raises for a projected gaze
         Assert.True(cursor.IsVisible);
         Assert.Equal(400 - cursor.Width / 2, Canvas.GetLeft(cursor));
         Assert.Equal(300 - cursor.Height / 2, Canvas.GetTop(cursor));
 
         Clock.Advance(1000); Dispatcher.UIThread.RunJobs();
-        Assert.Equal("Move your eyes around — the pink dot should track them. 14s left.", status.Text);
+        Assert.Equal("Move your eyes around - the pink dot should track them. 14s left.", status.Text);
         for (int i = 0; i < 14; i++) { Clock.Advance(1000); Dispatcher.UIThread.RunJobs(); }
         Assert.False(cursor.IsVisible);
         Assert.Null(Gazes());
@@ -338,15 +343,24 @@ public sealed class WebcamCalibrationTests
         finally { src.Release.Set(); shell.Close(); }
     });
 
+    /// <summary>WPF App.ApplyCalibrationScreenPlacement: the gaze windows open on the tracking monitor
+    /// picked in Settings > Devices (Primary by default); a saved display that is gone falls back to Primary.</summary>
     [Fact]
-    public void QuickRecal_OpensOnTheCalibratedMonitor() => WithTracker(start: false, (tracker, _) =>
+    public void QuickRecal_OpensOnTheTrackingMonitor() => WithTracker(start: false, (tracker, _) =>
     {
-        var screen = new global::Avalonia.Controls.Window().Screens.All[0];
-        tracker.Calibration = new WebcamCalibrationData { MonitorBounds = new MonitorBoundsRecord { X = screen.Bounds.X, Y = screen.Bounds.Y } };
-        var win = new WebcamQuickRecalWindow();
-        Assert.Equal(WindowStartupLocation.Manual, win.WindowStartupLocation);
-        Assert.Equal(screen.Bounds.Position, win.Position);
-        tracker.Calibration = new WebcamCalibrationData { MonitorBounds = new MonitorBoundsRecord { X = -99999, Y = 7 } };
-        Assert.Equal(WindowStartupLocation.CenterScreen, new WebcamQuickRecalWindow().WindowStartupLocation);   // unknown monitor: left alone
+        var s = ConditioningControlPanel.CoreSettings.Current;
+        var old = s.WebcamCalibrationScreen;
+        try
+        {
+            var screens = new global::Avalonia.Controls.Window().Screens;
+            var primary = screens.Primary ?? screens.All[0];
+            s.WebcamCalibrationScreen = "Primary";
+            var win = new WebcamQuickRecalWindow();
+            Assert.Equal(WindowStartupLocation.Manual, win.WindowStartupLocation);
+            Assert.Equal(primary.Bounds.Position, win.Position);
+            s.WebcamCalibrationScreen = "A display that was unplugged";
+            Assert.Equal(primary.Bounds.Position, new WebcamQuickRecalWindow().Position);
+        }
+        finally { s.WebcamCalibrationScreen = old; }
     });
 }

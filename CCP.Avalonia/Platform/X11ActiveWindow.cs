@@ -87,6 +87,77 @@ internal static class X11ActiveWindow
         finally { XFree(prop); }
     }
 
+    // ---- the awareness observer's two extra questions (WPF Win32ForegroundProbe.CoversMonitor and
+    // Win32InputProbe's GetLastInputInfo), asked of the same display this file already holds ----
+
+    private const string LibXss = "libXss.so.1";
+    [DllImport(LibXss)] private static extern IntPtr XScreenSaverAllocInfo();
+    [DllImport(LibXss)] private static extern int XScreenSaverQueryInfo(IntPtr display, IntPtr drawable, IntPtr info);
+
+    private static IntPtr _netWmState, _netWmStateFullscreen;
+    private static bool _noXss;
+
+    /// <summary>True when the active window carries _NET_WM_STATE_FULLSCREEN. False when unknown.</summary>
+    public static bool IsActiveWindowFullscreen()
+    {
+        if (Disabled) return false;
+        try
+        {
+            if (!_tried) ReadTitle();   // opens the display and interns the shared atoms once
+            if (_display == IntPtr.Zero) return false;
+
+            var previous = XSetErrorHandler(IgnoreErrors);
+            try
+            {
+                if (_netWmState == IntPtr.Zero)
+                {
+                    _netWmState = XInternAtom(_display, "_NET_WM_STATE", false);
+                    _netWmStateFullscreen = XInternAtom(_display, "_NET_WM_STATE_FULLSCREEN", false);
+                }
+                var window = ReadWindow(_root, _active);
+                if (window == IntPtr.Zero) return false;
+
+                if (XGetWindowProperty(_display, window, _netWmState, 0, 64, false, IntPtr.Zero, out _, out var format,
+                        out var n, out _, out var prop) != 0 || prop == IntPtr.Zero) return false;
+                try
+                {
+                    if (format != 32) return false;
+                    for (int i = 0; i < (int)n; i++)
+                        if (Marshal.ReadIntPtr(prop, i * IntPtr.Size) == _netWmStateFullscreen) return true;
+                    return false;
+                }
+                finally { XFree(prop); }
+            }
+            finally { XRestoreErrorHandler(previous); }
+        }
+        catch { return false; }
+    }
+
+    /// <summary>Milliseconds since the last keyboard or pointer input (XScreenSaver extension), or -1
+    /// when it cannot be read (no X, no libXss, Wayland-native).</summary>
+    public static long IdleMilliseconds()
+    {
+        if (Disabled || _noXss) return -1;
+        try
+        {
+            if (!_tried) ReadTitle();
+            if (_display == IntPtr.Zero) return -1;
+
+            var info = XScreenSaverAllocInfo();
+            if (info == IntPtr.Zero) return -1;
+            try
+            {
+                if (XScreenSaverQueryInfo(_display, _root, info) == 0) return -1;
+                // XScreenSaverInfo: Window window; int state; int kind; unsigned long til_or_since;
+                // unsigned long idle; unsigned long eventMask.
+                int offset = IntPtr.Size + 4 + 4 + IntPtr.Size;
+                return IntPtr.Size == 8 ? Marshal.ReadInt64(info, offset) : (uint)Marshal.ReadInt32(info, offset);
+            }
+            finally { XFree(info); }
+        }
+        catch { _noXss = true; return -1; }   // no libXss on this machine: idle reads as unknown
+    }
+
     private static string? ReadString(IntPtr window, IntPtr property, IntPtr type)
     {
         if (XGetWindowProperty(_display, window, property, 0, 1024, false, type, out _, out var format,

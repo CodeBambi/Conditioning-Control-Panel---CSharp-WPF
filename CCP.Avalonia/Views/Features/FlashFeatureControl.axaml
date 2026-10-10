@@ -25,7 +25,7 @@
         <Border Height="72" CornerRadius="16" Background="{DynamicResource SurfaceBgBrush}"
                 BorderBrush="{StaticResource SectionHueStudioBorderBrush}" BorderThickness="2" Margin="0,0,0,10">
             <Grid>
-                <Border CornerRadius="0,16,16,0" Width="240" HorizontalAlignment="Right"
+                <Border x:Name="HeroArt" CornerRadius="0,16,16,0" Width="240" HorizontalAlignment="Right"
                         Background="{StaticResource SectionHueStudioWashBrush}">
                     <Border.OpacityMask>
                         <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
@@ -160,6 +160,36 @@
                                           Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
                             </Grid>
 
+                            <!-- Stay until popped (FlashStayUntilPopped). Needs clicking on, so it greys out with it. -->
+                            <Grid Height="34" Background="Transparent" ToolTip.Tip="{loc:Str tooltip_flash_stay_until_popped}"
+                                  IsEnabled="{Binding #ChkClickable.IsChecked}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_flash_stay_until_popped}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <CheckBox Grid.Column="1" x:Name="ChkStayUntilPopped"
+                                          Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
+                            </Grid>
+
+                            <!-- Leave animation (FlashExitStyle): how a clicked flash goes. Rows built in code. -->
+                            <Grid Height="36" Background="Transparent" ToolTip.Tip="{loc:Str tooltip_flash_exit}"
+                                  IsEnabled="{Binding #ChkClickable.IsChecked}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_flash_exit}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <ComboBox Grid.Column="1" x:Name="CmbExit" Width="170"
+                                          VerticalAlignment="Center" Theme="{StaticResource DarkComboBoxStyle}"/>
+                            </Grid>
+                            <!-- #1386: while an owned Shatter is on it decides the leave, so the picker greys out. -->
+                            <TextBlock x:Name="TxtExitShatterNote" Text="{loc:Str flash_exit_shatter_note}" IsVisible="False"
+                                       FontSize="11.5" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap"
+                                       Margin="0,-2,0,6"/>
+
                             <Grid Height="34" Background="Transparent" ToolTip.Tip="{loc:Str tooltip_hydra_mode_clicking_an_image_spawns_two_more}">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
@@ -194,12 +224,12 @@
                             </Grid>
 
                             <!-- Solid mode: shared-host renderer, mirrors the Bubble Pop toggle -->
-                            <Grid Height="34" Background="Transparent" ToolTip.Tip="Draws flashes on one shared overlay instead of a new window per image, so fullscreen games stop reacting to the window churn. Flashes become click-through (no mouse pop or hydra clicks) — gaze pop and stare-to-keep still work. Applies to the next flash.">
+                            <Grid Height="34" Background="Transparent" ToolTip.Tip="Draws flashes on one shared overlay instead of a new window per image, so fullscreen games stop reacting to the window churn. Flashes become click-through (no mouse pop or hydra clicks) - gaze pop and stare-to-keep still work. Applies to the next flash.">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="Solid mode (game friendly)" FontSize="13" FontWeight="SemiBold"
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_flash_solid_mode}" FontSize="13" FontWeight="SemiBold"
                                            Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
                                 <CheckBox Grid.Column="1" x:Name="ChkSolidMode"
                                           Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
@@ -235,8 +265,9 @@
                             </Grid>
 
                             <!-- Flashes v2 (Back Room prizes). Collapsed while nothing v2 is owned; ownership
-                                 is PrizeOwnership's word, never a setting. Only the motion rows are here yet:
-                                 V2GetItRow, rounded corners, draggable, shatter and Jackpot Remix are not. -->
+                                 is PrizeOwnership's word, never a setting. The box also stays up while the
+                                 Get it row (the standalone purchase) has something to offer. Jackpot Remix
+                                 is not here. -->
                             <Border x:Name="BoxFlashV2" IsVisible="False" Margin="0,10,0,2"
                                     CornerRadius="10" Padding="12,8,12,6" BorderThickness="1"
                                     Background="#14FFE08A" BorderBrush="#33FFE08A"
@@ -253,6 +284,10 @@
                                                    FontWeight="SemiBold" Foreground="#FFE08A" Opacity="0.92"
                                                    VerticalAlignment="Center"/>
                                     </StackPanel>
+
+                                    <!-- The standalone way in (owner decision, 2026-09-19). It hides
+                                         itself once the prize lands. -->
+                                    <sessionLock:V2GetItRow x:Name="RowGetFlashesV2"/>
 
                                     <Grid x:Name="RowMotion" Height="36" Background="Transparent" IsVisible="False"
                                           ToolTip.Tip="{loc:Str tooltip_flash_motion}">
@@ -284,6 +319,45 @@
                                                    VerticalAlignment="Center" Foreground="{DynamicResource PinkBrush}"
                                                    FontSize="13" FontWeight="Bold"/>
                                     </Grid>
+
+                                    <!-- Rounded corners, Draggable GIFs and Shatter (wave 2). All three ride the
+                                         motion grants, like the picker above them. WPF's Jackpot Remix row is not
+                                         here: nothing in this head reads JackpotRemixEnabled yet. -->
+                                    <Grid x:Name="RowRoundedCorners" Height="34" Background="Transparent" IsVisible="False"
+                                          ToolTip.Tip="{loc:Str tooltip_flash_rounded_corners}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{loc:Str setting_flash_rounded_corners}" FontSize="13" FontWeight="SemiBold"
+                                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                        <CheckBox Grid.Column="1" x:Name="ChkFlashRoundedCorners"
+                                                  Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
+                                    </Grid>
+
+                                    <Grid x:Name="RowDraggable" Height="34" Background="Transparent" IsVisible="False"
+                                          ToolTip.Tip="{loc:Str tooltip_flash_draggable}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{loc:Str setting_flash_draggable}" FontSize="13" FontWeight="SemiBold"
+                                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                        <CheckBox Grid.Column="1" x:Name="ChkFlashDraggable"
+                                                  Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
+                                    </Grid>
+
+                                    <Grid x:Name="RowShatter" Height="34" Background="Transparent" IsVisible="False"
+                                          ToolTip.Tip="{loc:Str tooltip_flash_shatter}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{loc:Str setting_flash_shatter}" FontSize="13" FontWeight="SemiBold"
+                                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                        <CheckBox Grid.Column="1" x:Name="ChkFlashShatter"
+                                                  Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
+                                    </Grid>
                                 </StackPanel>
                             </Border>
                         </StackPanel>
@@ -298,7 +372,7 @@
                         <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
                                 Background="{StaticResource SectionHueStudioBrush}"/>
                         <StackPanel Margin="16,8,16,8">
-                            <TextBlock Text="Gaze interaction" FontSize="13" FontWeight="SemiBold"
+                            <TextBlock Text="{loc:Str label_gaze_interaction}" FontSize="13" FontWeight="SemiBold"
                                        Foreground="{StaticResource TextLightBrush}" Margin="0,2,0,4"/>
 
                             <Grid Height="34" Background="Transparent" ToolTip.Tip="Look at a flash for ~1s to dismiss it (same effect as clicking, including hydra).">
@@ -306,7 +380,7 @@
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="Stare to pop" FontSize="13" FontWeight="SemiBold"
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_stare_to_pop}" FontSize="13" FontWeight="SemiBold"
                                            Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
                                 <CheckBox Grid.Column="1" x:Name="ChkFlashGazePop"
                                           Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
@@ -317,7 +391,7 @@
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="Stare to keep" FontSize="13" FontWeight="SemiBold"
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_stare_to_keep}" FontSize="13" FontWeight="SemiBold"
                                            Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
                                 <CheckBox Grid.Column="1" x:Name="ChkFlashGazeLinger"
                                           Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
@@ -329,7 +403,7 @@
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto" MinWidth="56"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="Linger boost" FontSize="13" FontWeight="SemiBold"
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_linger_boost}" FontSize="13" FontWeight="SemiBold"
                                            Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
                                 <Slider Grid.Column="1" x:Name="SliderFlashLingerMs" Minimum="500" Maximum="5000" Value="1500"
                                         TickFrequency="250" IsSnapToTickEnabled="True"
@@ -344,7 +418,7 @@
             </StackPanel>
 
             <!-- SIDE ART. On WPF an ImageBrush background; the wash stands in. Scrim kept verbatim. -->
-            <Border Grid.Column="1" Margin="10,0,0,0" CornerRadius="14"
+            <Border x:Name="SideArt" Grid.Column="1" Margin="10,0,0,0" CornerRadius="14"
                     BorderThickness="2" BorderBrush="{StaticResource VelvetCardBorderBrush}"
                     Background="{StaticResource SectionHueStudioWashBrush}"
                     VerticalAlignment="Stretch" MinHeight="200">

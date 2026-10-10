@@ -29,8 +29,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
     /// FX plumbing is deliberately copied from <see cref="FeatureCard"/> rather than shared
     /// through a base class, as in WPF. Motion/tier/window-focus/visibility gates read
     /// <see cref="Env"/> (the head's MotionFx/PerformanceProfile twin).
-    /// ponytail: DashboardCardDepth (face/bevel/socket, inverted clicks) and the greyscale
-    /// HalfMute (ArtDesaturate) are not ported; off halves only dim.
+    /// ponytail: DashboardCardDepth (face/bevel/socket, inverted clicks) is not ported. An off half
+    /// dims to 62% and drains to grey (HalfMuteA/B, CardMute.cs), as in WPF since 6.9.4.
     /// </summary>
     public partial class SplitFeatureCard : UserControl
     {
@@ -122,11 +122,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
         public event EventHandler<RoutedEventArgs> ToggleA { add => AddHandler(ToggleAEvent, value); remove => RemoveHandler(ToggleAEvent, value); }
         public event EventHandler<RoutedEventArgs> ToggleB { add => AddHandler(ToggleBEvent, value); remove => RemoveHandler(ToggleBEvent, value); }
 
-        private readonly Border _rootBorder, _halfHostA, _halfHostB, _titlePillA, _titlePillB, _rimLight;
+        private readonly Border _rootBorder, _halfHostA, _halfHostB, _halfMuteA, _halfMuteB, _titlePillA, _titlePillB, _rimLight;
         private readonly Grid _contentRoot;
         private readonly Path _hoverWashA, _hoverWashB, _peekScrimA, _peekScrimB, _seamLine, _activeRingA, _activeRingB;
         private readonly TextBlock _txtTitleA, _txtTitleB;
-        private readonly DropShadowEffect _activeGlow;
+        private readonly Border _activeGlow;   // the GlowLayer sibling (CardGlow)
         private readonly ScaleTransform _rootScale = new(1, 1), _titleScaleA = new(1, 1), _titleScaleB = new(1, 1);
         /// <summary>Drives SplitProgress. ONE instance, mutated per sweep: replacing it mid-flight
         /// drops the animated value and the seam snaps to the old target before the new sweep.</summary>
@@ -145,6 +145,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             _rootBorder = this.FindControl<Border>("RootBorder")!;
             _halfHostA = this.FindControl<Border>("HalfHostA")!;
             _halfHostB = this.FindControl<Border>("HalfHostB")!;
+            _halfMuteA = this.FindControl<Border>("HalfMuteA")!;
+            _halfMuteB = this.FindControl<Border>("HalfMuteB")!;
+            _halfA = this.FindControl<Panel>("HalfA")!;
+            _halfB = this.FindControl<Panel>("HalfB")!;
             _titlePillA = this.FindControl<Border>("TitlePillA")!;
             _titlePillB = this.FindControl<Border>("TitlePillB")!;
             _rimLight = this.FindControl<Border>("RimLight")!;
@@ -158,7 +162,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             _activeRingB = this.FindControl<Path>("ActiveRingB")!;
             _txtTitleA = this.FindControl<TextBlock>("TxtTitleA")!;
             _txtTitleB = this.FindControl<TextBlock>("TxtTitleB")!;
-            _activeGlow = (DropShadowEffect)_rootBorder.Effect!;
+            _activeGlow = this.FindControl<Border>("GlowLayer")!;
+            CardGlow.Bind(_activeGlow, () => CardGlow.BlurRadius);
             _btnHelpA = this.FindControl<Button>("BtnHelpA")!;
             _btnHelpB = this.FindControl<Button>("BtnHelpB")!;
 
@@ -201,7 +206,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
         internal void RefreshFx() => ApplyActiveState();
 
         /// <summary>True while the breath clock runs (test seam).</summary>
-        internal bool IsBreathing => _breath != null;
+        internal bool IsBreathing => _breathClock?.IsRunning == true;
 
         private void HookWindow(Window? window)
         {
@@ -261,8 +266,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
         /// <summary>An OFF half rests dim unless the pointer has committed a non-dashboard card to it.</summary>
         private void ApplyHalfRestOpacity()
         {
-            _halfHostA.Opacity = IsActiveA || (!DashboardDepth && _halfHover == true) ? 1.0 : InactiveHalfOpacity;
-            _halfHostB.Opacity = IsActiveB || (!DashboardDepth && _halfHover == false) ? 1.0 : InactiveHalfOpacity;
+            _halfA.Opacity = IsActiveA || (!DashboardDepth && _halfHover == true) ? 1.0 : InactiveHalfOpacity;
+            _halfB.Opacity = IsActiveB || (!DashboardDepth && _halfHover == false) ? 1.0 : InactiveHalfOpacity;
+            ApplyHalfMute(CardMuteRule.TransitionMs(Env.AllowTransitions, IsLoaded));
         }
 
         /// <summary>WPF SweepAllowed: the sweep costs a geometry per frame, so it wants Full motion
@@ -291,19 +297,36 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             if (_rootBorder is null) return; // fired before the XAML loaded
             if (change.Property == TitleAProperty) _txtTitleA.Text = TitleA ?? "";
             else if (change.Property == TitleBProperty) _txtTitleB.Text = TitleB ?? "";
-            else if (change.Property == IconAProperty) ApplyIcon(_halfHostA, IconA);
-            else if (change.Property == IconBProperty) ApplyIcon(_halfHostB, IconB);
+            else if (change.Property == IconAProperty) { ApplyIcon(_halfHostA, IconA); ApplyIcon(_halfMuteA, ArtDesaturate.Of(IconA)); }
+            else if (change.Property == IconBProperty) { ApplyIcon(_halfHostB, IconB); ApplyIcon(_halfMuteB, ArtDesaturate.Of(IconB)); }
             else if (change.Property == IsActiveAProperty || change.Property == IsActiveBProperty) ApplyActiveState();
             else if (change.Property == HelpSectionIdAProperty || change.Property == HelpSectionIdBProperty) RefreshHelp();
             else if (change.Property == SplitProgressProperty) RebuildGeometry();
             else if (change.Property == IsVisibleProperty && !IsVisible) ResetSplit();
         }
 
+        private readonly Panel _halfA, _halfB;
+
+        /// <summary>WPF ApplyHalfMute (SplitFeatureCard.xaml.cs:757): the ONE writer for the two grey
+        /// layers, on <see cref="CardMuteRule.ShouldMuteHalf"/>'s per-half verdict.</summary>
+        private void ApplyHalfMute(int ms)
+        {
+            bool a = CardMuteRule.ShouldMuteHalf(IsActiveA, !DashboardDepth && _halfHover == true);
+            bool b = CardMuteRule.ShouldMuteHalf(IsActiveB, !DashboardDepth && _halfHover == false);
+            CardMuteRule.Fade(_halfMuteA, a, ms);
+            CardMuteRule.Fade(_halfMuteB, b, ms);
+            HalfMuted = (a, b);
+        }
+
+        /// <summary>Test seams: each half's resting opacity and its mute verdict (the grey layer may
+        /// still be mid-fade).</summary>
+        internal (double A, double B) HalfRestOpacity => (_halfA.Opacity, _halfB.Opacity);
+        internal (bool A, bool B) HalfMuted { get; private set; }
+
         private static void ApplyIcon(Border host, IImageBrushSource? src)
         {
-            host.Background = src == null
-                ? null
-                : new ImageBrush(src) { Stretch = Stretch.UniformToFill, AlignmentY = AlignmentY.Center };
+            // Direct draw, never an ImageBrush (see ArtFill): the mosaic repaints every frame.
+            ConditioningControlPanel.Avalonia.Controls.Fx.ArtFill.Paint(host, src, Stretch.UniformToFill, AlignmentY.Center);
         }
 
         // ============================== geometry ==============================
@@ -337,8 +360,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             var regionA = RegionGeometry(true, k, w, h, 0);
             var regionB = RegionGeometry(false, k, w, h, 0);
 
-            _halfHostA.Clip = regionA;
-            _halfHostB.Clip = regionB;
+            _halfA.Clip = regionA;
+            _halfB.Clip = regionB;
             _hoverWashA.Data = regionA;
             _hoverWashB.Data = regionB;
 
@@ -542,35 +565,28 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
         {
             _breath?.Cancel();
             _breath = null;
+            _breathClock?.Stop();
             _activeRingA.Opacity = ActiveRingMaxOpacity;
             _activeRingB.Opacity = ActiveRingMaxOpacity;
             if (!active) { _activeGlow.Opacity = 0; return; }
 
             var tier = Env.CurrentTier;
             bool glow = Env.AllowGlow(tier) && Env.Level != MotionLevel.Off;
-            if (glow) _activeGlow.BlurRadius = Math.Min(18, Env.MaxGlowBlurRadius(tier));
+            if (glow) CardGlow.SetBlur(_activeGlow, Math.Min(CardGlow.BlurRadius, Env.MaxGlowBlurRadius(tier)));
             // Visibility + window focus + motion + tier, exactly WPF's AmbientAllowed: parked at peak.
             if (!AmbientAllowed) { _activeGlow.Opacity = glow ? ActiveGlowMaxOpacity : 0; return; }
 
-            _breath = new CancellationTokenSource();
-            if (glow) _ = Breathe(DropShadowEffect.OpacityProperty, ActiveGlowMinOpacity, ActiveGlowMaxOpacity).RunAsync(_activeGlow, _breath.Token);
-            else _activeGlow.Opacity = 0;
-            if (IsActiveA) _ = Breathe(OpacityProperty, ActiveRingMinOpacity, ActiveRingMaxOpacity).RunAsync(_activeRingA, _breath.Token);
-            if (IsActiveB) _ = Breathe(OpacityProperty, ActiveRingMinOpacity, ActiveRingMaxOpacity).RunAsync(_activeRingB, _breath.Token);
+            // On the shared 30 fps beat, not an Animation (see BreathClock in CardGlow.cs).
+            if (!glow) _activeGlow.Opacity = 0;
+            var targets = new List<(Visual, double, double)>();
+            if (glow) targets.Add((_activeGlow, ActiveGlowMinOpacity, ActiveGlowMaxOpacity));
+            if (IsActiveA) targets.Add((_activeRingA, ActiveRingMinOpacity, ActiveRingMaxOpacity));
+            if (IsActiveB) targets.Add((_activeRingB, ActiveRingMinOpacity, ActiveRingMaxOpacity));
+            _breathClock ??= new BreathClock(this, ActiveBreathSeconds);
+            if (targets.Count > 0) _breathClock.Start(targets.ToArray());
         }
 
-        private static Animation Breathe(AvaloniaProperty prop, double min, double max) => new()
-        {
-            Duration = TimeSpan.FromSeconds(ActiveBreathSeconds),
-            IterationCount = IterationCount.Infinite,
-            PlaybackDirection = PlaybackDirection.Alternate,
-            Easing = new SineEaseInOut(),
-            Children =
-            {
-                new KeyFrame { Cue = new Cue(0d), Setters = { new Setter(prop, min) } },
-                new KeyFrame { Cue = new Cue(1d), Setters = { new Setter(prop, max) } },
-            },
-        };
+        private BreathClock? _breathClock;
 
         private bool AmbientAllowed =>
             IsEffectivelyVisible

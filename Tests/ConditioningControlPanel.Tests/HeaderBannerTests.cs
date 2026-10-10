@@ -128,8 +128,9 @@ public class HeaderBannerTests
         Assert.Contains("RetireWebBannerBeat()", link.Value);
 
         var tabNav = ReadSource("MainWindow", "MainWindow.TabNavigation.cs");
-        var door = Regex.Match(tabNav, @"void DoorWebApp_Click\(.*?\n        \}", RegexOptions.Singleline);
-        Assert.True(door.Success, "DoorWebApp_Click has moved or changed shape");
+        // Nav rework (2026-10-06): the rail door left; its launcher is OpenWebAppFromNav.
+        var door = Regex.Match(tabNav, @"void OpenWebAppFromNav\(.*?\n        \}", RegexOptions.Singleline);
+        Assert.True(door.Success, "OpenWebAppFromNav has moved or changed shape");
         Assert.Contains("BrowserLauncher", door.Value);
         Assert.Contains("RetireWebBannerBeat()", door.Value);
 
@@ -141,31 +142,32 @@ public class HeaderBannerTests
     }
 
     // =====================================================================================
-    //  2. the new slot - header row, between the version text and the right-hand chrome
+    //  2. the new slot - header row, between the streak pill and the right-hand chrome
+    //     (the version text that used to anchor it was cut in nav polish wave 4)
     // =====================================================================================
 
     [Fact]
-    public void TheBannerSitsBetweenTheVersionTextAndTheRightHandChrome()
+    public void TheBannerSitsBetweenTheStreakPillAndTheRightHandChrome()
     {
         var xaml = MainWindowXaml();
 
-        var version = xaml.IndexOf("x:Name=\"TxtHeaderVersion\"", StringComparison.Ordinal);
+        var streak = xaml.IndexOf("x:Name=\"StreakFirePill\"", StringComparison.Ordinal);
         var host = xaml.IndexOf("x:Name=\"HeaderBannerHost\"", StringComparison.Ordinal);
         // The update button anchors the right-hand chrome: the language pill that used to sit
         // ahead of it was demoted 0911 (Settings > General owns the picker now).
         var chrome = xaml.IndexOf("x:Name=\"BtnUpdateAvailable\"", StringComparison.Ordinal);
 
-        Assert.True(version >= 0, "TxtHeaderVersion is gone from the header");
+        Assert.True(streak >= 0, "StreakFirePill is gone from the header");
         Assert.True(host >= 0, "HeaderBannerHost is gone - the banner has no home in the header");
         Assert.True(chrome >= 0, "BtnUpdateAvailable is gone from the header");
 
-        Assert.True(version < host && host < chrome,
-            "the banner host left the header slot between the version text and the right-hand chrome");
+        Assert.True(streak < host && host < chrome,
+            "the banner host left the header slot between the streak pill and the right-hand chrome");
 
         // Both beats live inside that host, not loose in the header.
-        var block = Regex.Match(xaml, "<Border Grid.Column=\"5\" x:Name=\"HeaderBannerHost\".*?</Border>\\s*</Grid>",
+        var block = Regex.Match(xaml, "<Border Grid.Column=\"3\" x:Name=\"HeaderBannerHost\".*?</Border>\\s*</Grid>",
                                 RegexOptions.Singleline);
-        Assert.True(block.Success, "HeaderBannerHost is no longer the header cluster's column-5 host");
+        Assert.True(block.Success, "HeaderBannerHost is no longer the header cluster's column-3 host");
         Assert.Contains("x:Name=\"TxtBannerPrimary\"", block.Value);
         Assert.Contains("x:Name=\"TxtBannerSecondary\"", block.Value);
         Assert.Contains("x:Name=\"TxtBannerWeb\"", block.Value);
@@ -180,16 +182,16 @@ public class HeaderBannerTests
     public void TheBannerCannotGrowTheHeaderRowOrShoveTheChromeOut()
     {
         var xaml = MainWindowXaml();
-        var block = Regex.Match(xaml, "<Border Grid.Column=\"5\" x:Name=\"HeaderBannerHost\".*?>",
+        var block = Regex.Match(xaml, "<Border Grid.Column=\"3\" x:Name=\"HeaderBannerHost\".*?>",
                                 RegexOptions.Singleline);
         Assert.True(block.Success, "HeaderBannerHost is gone");
 
-        // 28 is what this row was authored against (the mod capsule that sat here until 0911). A
-        // banner taller than that grows the header and gives back the row this change reclaimed.
+        // The header row is Auto; its tallest residents are the 34px profile bubble and the scaled
+        // wallet. 26 until nav polish wave 6 grew the banner 20% to 31 (owner); past the bubble it grows the header.
         var height = Regex.Match(block.Value, "Height=\"(\\d+)\"");
         Assert.True(height.Success, "HeaderBannerHost lost its explicit Height - it now sizes to its text");
-        Assert.True(int.Parse(height.Groups[1].Value) <= 28,
-            "HeaderBannerHost is taller than the 28px capsule already in the header row");
+        Assert.True(int.Parse(height.Groups[1].Value) <= 34,
+            "HeaderBannerHost is taller than the 34px profile bubble already in the header row");
 
         // Capped and centred in a star column, so it takes leftover width and nothing else.
         Assert.Contains("MaxWidth=", block.Value);
@@ -198,7 +200,7 @@ public class HeaderBannerTests
         // Trim, never wrap: a wrapping beat is the other way this row grows. Asserted per beat
         // rather than by a count, so a new beat has to trim like its siblings instead of just
         // moving the number. Four since the banner pool beat.
-        var body = Regex.Match(xaml, "<Border Grid.Column=\"5\" x:Name=\"HeaderBannerHost\".*?</Border>\\s*</Grid>",
+        var body = Regex.Match(xaml, "<Border Grid.Column=\"3\" x:Name=\"HeaderBannerHost\".*?</Border>\\s*</Grid>",
                                RegexOptions.Singleline).Value;
         var beats = Regex.Matches(body, "<TextBlock x:Name=\"(TxtBanner\\w+)\"[^>]*>").ToArray();
         Assert.Equal(new[] { "TxtBannerPrimary", "TxtBannerSecondary", "TxtBannerWeb", "TxtBannerPool" },

@@ -67,6 +67,8 @@ namespace ConditioningControlPanel
 
             public StepPosition TextPosition { get; init; } = StepPosition.Bottom;
             public AdvanceTrigger Advance { get; init; } = AdvanceTrigger.Manual;
+            /// <summary>WPF TutorialStep.AdvanceEventName: the bus event an OnEvent step waits for.</summary>
+            public string? AdvanceEventName { get; init; }
 
             /// <summary>The card offers "Skip step" as well as waiting for the trigger.</summary>
             public bool AllowManualSkip { get; init; }

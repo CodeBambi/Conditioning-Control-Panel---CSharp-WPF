@@ -70,13 +70,30 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private void OnQuestProgressChanged(object? sender, QuestProgressEventArgs e) =>
             Dispatcher.UIThread.Post(() => { if (IsVisible) RefreshQuestUI(); });
 
-        /// <summary>MainWindow.Quests.cs:40. ponytail: no flash voice line (App.Flash.PlayRandomSound
-        /// - FlashService audio is not on this head; the service's own chime still plays) and no header
-        /// stamps (MainWindow.QuestStamps.cs).</summary>
+        /// <summary>WPF App.Flash.PlayRandomSound on a quest completion: the next clip of the flash voice pool
+        /// (the active mod's RECORDED lines, ModAudioPolicy applied) at the flash volume curve. An empty pool, a
+        /// missing file or a muted voice stays silent: never synthetic speech. Tests swap the player.</summary>
+        internal static Action<string, float> PlayQuestVoice = (path, volume) => CoreAudio.PlayOneShot(path, volume, "quest-complete");
+
+        internal static void PlayQuestCompleteVoice()
+        {
+            try
+            {
+                var s = CoreSettings.Current;
+                if (Services.Flash.FlashVoicePool.Silenced(s)) return;
+                var path = Services.Flash.FlashVoicePool.Next(s);
+                if (string.IsNullOrEmpty(path) || !System.IO.File.Exists(path)) return;
+                PlayQuestVoice(path, Services.Flash.FlashVoicePool.Volume(s.MasterVolume));
+            }
+            catch (Exception ex) { Serilog.Log.Debug("Failed to play quest voice line: {Error}", ex.Message); }
+        }
+
+        /// <summary>MainWindow.Quests.cs:40. ponytail: no header stamps (MainWindow.QuestStamps.cs).</summary>
         private void OnQuestCompleted(object? sender, QuestCompletedEventArgs e) => Dispatcher.UIThread.Post(() =>
         {
             // Perk-announcement opt-out: the popup goes, the in-tab banner stays (WPF :47).
             bool announce = !CoreSettings.Current.SuppressPerkNotifications;
+            if (announce) PlayQuestCompleteVoice();   // WPF :52, before the popup
             try { _questCompletePopup?.Close(); } catch { }
             _questCompletePopup = null;
             if (announce)
@@ -134,9 +151,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 IsCompleted = quest.IsCompleted,
                 XpText = $"\U0001f381 {xp} XP",
                 BonusText = bonus,
-                // ponytail: no quest art - GetModeAwareQuestImagePath resolves pack:// resources this
-                // head does not ship; the card draws its icon instead.
-                Art = null,
+                Art = GetQuestArt(def),
                 CanReroll = canReroll,
                 RerollText = canReroll ? Loc.GetF("btn_reroll_with_count", rerollsLeft) : Loc.Get("btn_reroll_none"),
                 RerollTooltip = canReroll ? Loc.Get("quest_card_reroll_tip") : Loc.Get("quest_card_reroll_tip_none"),
@@ -183,6 +198,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             if (weeklyDef != null && weekly != null)
             {
                 TxtWeeklyQuestIcon.Text = weeklyDef.Icon;
+                if (GetQuestArt(weeklyDef) is { } weeklyArt) ImgWeeklyQuest.Source = weeklyArt;
                 TxtWeeklyQuestName.Text = CoreMods.MakeModAware(weeklyDef.Name);
                 TxtWeeklyQuestDesc.Text = CoreMods.MakeModAware(weeklyDef.Description);
                 TxtWeeklyProgress.Text = $"{weekly.CurrentProgress} / {weeklyDef.TargetValue}";
@@ -238,7 +254,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private void PaintMonth(QuestService quests)
         {
             double width = StreakCalendarCanvas.Bounds.Width;
-            if (width <= 0) return;
+            if (width <= 0) { PaintFixButton(StreakFix.HasMissedDays(quests.Progress, DateTime.Today)); return; }   // not laid out yet
             var completed = new HashSet<DateTime>(quests.Progress.DailyQuestCompletionDates.Select(d => d.Date));
             var shielded = new HashSet<DateTime>(CoreSettings.Current.StreakShieldUsedDates.Select(d => d.Date));
             IBrush accent;
@@ -251,10 +267,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             double spacing = width / days, centerY = 25, prevX = 0;
             bool prevDone = false;
             const string letters = "SMTWTFS";
+            bool hasMissedDays = false;
+            _fixRings.Clear();
             for (int i = 0; i < days; i++)
             {
                 var day = new DateTime(today.Year, today.Month, i + 1);
                 bool done = completed.Contains(day), future = day > today, isToday = day == today;
+                bool missed = !done && day < today;
+                if (missed) hasMissedDays = true;
                 double size = day.DayOfWeek == DayOfWeek.Sunday ? 26 : 20, x = spacing * i + spacing / 2;
                 if (i > 0)
                     StreakCalendarCanvas.Children.Add(new Line
@@ -284,9 +304,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                     Canvas.SetTop(shield, centerY - size / 2 - 12);
                     StreakCalendarCanvas.Children.Add(shield);
                 }
+                if (_isStreakFixMode && missed) AddFixRing(day, x, centerY, size, accent);   // WPF :694
                 prevX = x;
                 prevDone = done;
             }
+            PaintFixButton(hasMissedDays);
         }
     }
 }

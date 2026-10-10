@@ -33,6 +33,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+        xmlns:emi="clr-namespace:ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk"
         x:Class="ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk.EmiDeskWindow"
         Title="EMI"
 
@@ -122,14 +123,7 @@
                      THE GAZE LEAN (ALIVE wave A): the face glyph slides up to three DIPs toward the
                      cursor on its OWN transform, so the lean composes with the body's CRT scale,
                      click squash and drag wobble instead of fighting them. -->
-                <TextBlock x:Name="FaceView"
-                           Text="0_0"
-                           FontFamily="Noto Sans Mono,DejaVu Sans Mono,Consolas,monospace"
-                           FontWeight="Bold"
-                           Foreground="#FF69B4"
-                           TextAlignment="Center"
-                           HorizontalAlignment="Center"
-                           VerticalAlignment="Center"/>
+                <emi:EmiFace x:Name="FaceView"/>
                 <Canvas x:Name="GlassCanvas" IsHitTestVisible="False"/>
             </Canvas>
 
@@ -160,9 +154,8 @@
                  no face art may bury a skin; a held object is not face art and it is not a skin -
                  it is nearer the camera than she is. The chrome below still draws over it.
 
-                 WPF gave it a private PropTilt / PropRise transform pair. Dropped here with the
-                 layout code that drove them: LayoutProp lives in EmiDeskWindow.Props.cs, which is
-                 not part of this port. -->
+                 Its PropTilt / PropRise transform pair is built in EmiDeskWindow.Props.cs, which
+                 also owns the layout (LayoutProp), the rise in and the slide back out. -->
             <Image x:Name="PropImage"
                    HorizontalAlignment="Right" VerticalAlignment="Bottom"
                    Stretch="Fill"

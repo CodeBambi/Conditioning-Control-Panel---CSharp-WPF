@@ -1,222 +1,291 @@
-// PORTED from ConditioningControlPanel/MainWindow/MainWindow.DashboardBillboard.cs (296 lines).
-// One full-size promo slide in the row the folded browser gives back (Core DashboardBillboard roster,
-// one slot). The 12 s clock runs only while the billboard is on screen, motion allows ambient loops,
-// and it is neither paused, hovered nor keyboard-focused; manual navigation works at every motion level.
-
 using System;
+using System.Collections.Generic;
 using System.Linq;
-using System.Threading;
-using Avalonia;
-using Avalonia.Animation;
-using Avalonia.Animation.Easings;
-using Avalonia.Automation;
+using System.Net.Http;
+using System.Threading.Tasks;
 using Avalonia.Controls;
-using Avalonia.Media.Imaging;
-using Avalonia.Platform;
-using Avalonia.Styling;
+using Avalonia.Input.Platform;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
+using ConditioningControlPanel.Avalonia.Controls;
+using ConditioningControlPanel.Avalonia.Controls.Billboard;
+using ConditioningControlPanel.Avalonia.Views.Tabs;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
+using ConditioningControlPanel.Services.Billboard;
+using ConditioningControlPanel.Services.Billboard.Board;
+using ConditioningControlPanel.Services.Billboard.Providers;
+using ConditioningControlPanel.Services.Invites;
 using Serilog;
-using Env = ConditioningControlPanel.Avalonia.Controls.AmbientFxCanvas.Env;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
+    /// <summary>
+    /// The Tonight Board on Home (WPF 7.1.5 MainWindow.DashboardBillboard.cs). This file only hosts
+    /// it: the first time the Home slot joins this window it makes the deck and the card host,
+    /// keeps the snoozes, runs a card's button and polls the marquee for the board's version. The
+    /// rules are <see cref="DashboardBillboard"/> (Core), the drawing and the juice are
+    /// <see cref="BillboardDeckView"/>, the provider list is <see cref="BillboardWiring"/>.
+    ///
+    /// <para>Differences from 7.1.5, all because the port lacks the thing: snoozes live in board/snoozes.json (no
+    /// AppSettings.BillboardSnoozedUntil yet); the Showcase clip decodes through the silent
+    /// FlashClipPlayer (no MediaElement here), and the Back Room house card waits for a Back Room
+    /// launcher destination. Live joins sit at the table (JoinFromBoard); a card with no key opens the Lobby. The board stays silent, as 7.1.5 shipped it.</para>
+    /// </summary>
     public partial class MainShellWindow
     {
-        private const int BillboardFadeMs = 220;   // WPF :73
+        private BillboardDeckView? _billboardHost;
+        private DispatcherTimer? _billboardMarquee;
+        private bool _billboardMarqueeBusy;
 
-        private DispatcherTimer? _billboardTimer;
-        private int _billboardIndex;
-        private bool _billboardPointerOver;
-        private bool _billboardWired;
-        private bool _billboardPaused;
-        private CancellationTokenSource? _billboardFade;
+        private static readonly object BillboardWireGate = new();
+        private static bool _billboardWired;
+        private static WeakReference<MainShellWindow>? _billboardShell;
+        private static readonly HttpClient BillboardHttp = new() { Timeout = TimeSpan.FromSeconds(15) };
 
-        /// <summary>The roster index on screen (test seam).</summary>
-        internal int BillboardIndex => _billboardIndex;
+        /// <summary>The card host once the board is up (tests read it).</summary>
+        internal BillboardDeckView? DashboardBillboardHost => _billboardHost;
 
-        /// <summary>True while the rotation clock runs (test seam).</summary>
-        internal bool BillboardClockRunning => _billboardTimer != null;
-
-        private Tabs.SettingsTabView? Dash => Named<Tabs.SettingsTabView>("SettingsTab");
-
-        /// <summary>WPF ApplyBillboard (:89): the fold's hook - the billboard exists only while the
-        /// browser is shut.</summary>
-        private void ApplyBillboard(bool show)
+        /// <summary>
+        /// The slot's one call (<see cref="BillboardHomeSlot"/>): start the providers, make the deck
+        /// over the saved snoozes, drop the card host in, show the board if the browser is folded
+        /// (MainShellWindow.DashboardFold.cs owns that from then on) and show the first card. Once per window; the host pauses itself whenever Home is off screen.
+        /// </summary>
+        internal void AttachDashboardBillboard(BillboardHomeSlot slot)
         {
-            var host = Dash?.FindControl<Border>("DashBillboard");
-            if (host == null) return;
-            host.IsVisible = show;
-            if (!show) { StopBillboardClock(); return; }
-            EnsureBillboardWired();
-            RestartBillboardClock();
-        }
+            if (_billboardHost != null) return;
+            var tab = slot.FindAncestorOfType<SettingsTabView>();
+            var frame = tab?.FindControl<Border>("DashBillboard");
+            if (frame == null) return;
 
-        /// <summary>WPF EnsureBillboardWired (:110): the slide, the dots, navigation and every
-        /// reason the clock stops (pointer, keyboard focus, pause, visibility, motion gate).</summary>
-        private void EnsureBillboardWired()
-        {
-            if (_billboardWired) return;
-            var dash = Dash;
-            var host = dash?.FindControl<Border>("DashBillboard");
-            var dots = dash?.FindControl<StackPanel>("BillboardDots");
-            if (dash == null || host == null || dots == null) return;
-            _billboardWired = true;
+            _billboardShell = new WeakReference<MainShellWindow>(this);
+            WireBillboardOnce();
+            BillboardWiring.Start();
 
-            for (int i = 0; i < DashboardBillboard.Roster.Count; i++)
+            var store = BillboardSnoozeStore.ForUserData();
+            var snoozes = store.Load();
+            if (DashboardBillboard.PruneSnoozes(snoozes, DateTime.UtcNow)) store.Save(snoozes);
+            var deck = new BillboardDeck(
+                () => BillboardWiring.Providers,
+                BillboardWiring.Context,
+                snoozes,
+                () => store.Save(snoozes));
+
+            var host = new BillboardDeckView(deck);
+            host.ActionRequested += RunBillboardAction;
+            slot.Children.Clear();
+            slot.Children.Add(host);
+            _billboardHost = host;
+
+            // The board lives in the row the folded browser gives back (parity lane E3, WPF 7.1.5):
+            // shown only while the card is folded, the logo dial keeps the centre cell.
+            frame.IsVisible = BrowserFoldRule.BillboardShown(BrowserFolded);
+
+            // Providers may raise from any thread; the deck only listens on the UI thread.
+            EventHandler dirty = (_, _) =>
             {
-                int index = i;
-                var dot = new RadioButton { GroupName = "DashboardSlides", Classes = { "dot" } };
-                var key = DashboardBillboard.CardAt(i).TitleKey;
-                BindLoc(dot, ToolTip.TipProperty, key);
-                BindLoc(dot, AutomationProperties.NameProperty, key);
-                dot.Click += (_, _) => StepBillboard(index - _billboardIndex, automatic: false);
-                dots.Children.Add(dot);
-            }
-            FillBillboard();
-            dash.FindControl<Button>("BillboardPrevious")!.Click += (_, _) => StepBillboard(-1, automatic: false);
-            dash.FindControl<Button>("BillboardNext")!.Click += (_, _) => StepBillboard(1, automatic: false);
-            dash.FindControl<Button>("BillboardCard")!.Click += (_, _) => OpenBillboardCard();
-            var pause = dash.FindControl<Button>("BillboardPause")!;
-            pause.Click += (_, _) =>
-            {
-                _billboardPaused = !_billboardPaused;
-                dash.FindControl<TextBlock>("TxtBillboardPause")!.Text = _billboardPaused ? "▶" : "Ⅱ";
-                var key = _billboardPaused ? "btn_program_resume" : "btn_program_pause";
-                BindLoc(pause, ToolTip.TipProperty, key);
-                BindLoc(pause, AutomationProperties.NameProperty, key);
-                RestartBillboardClock();
+                try { Dispatcher.UIThread.Post(() => _billboardHost?.MarkDirty()); }
+                catch (Exception ex) { Log.Debug("Billboard dirty mark failed: {E}", ex.Message); }
             };
-            host.PointerEntered += (_, _) => { _billboardPointerOver = true; StopBillboardClock(); };
-            host.PointerExited += (_, _) => { _billboardPointerOver = false; RestartBillboardClock(); };
-            host.PropertyChanged += (_, e) =>
+            BillboardWiring.ProvidersChanged += dirty;
+            Closed += (_, _) =>
             {
-                if (e.Property == IsKeyboardFocusWithinProperty) RestartBillboardClock();
+                BillboardWiring.ProvidersChanged -= dirty;
+                _billboardMarquee?.Stop();
+                _billboardMarquee = null;
+                _billboardHost?.Shutdown();
+                slot.Children.Clear();
             };
-            // Tab hidden / shown (P01): the shell hides the whole tab with IsVisible.
-            dash.PropertyChanged += (_, e) => { if (e.Property == IsVisibleProperty) RestartBillboardClock(); };
+
+            HookBillboardInvites();
+            host.Begin();
+            StartBillboardMarquee();
         }
 
-        private static void BindLoc(AvaloniaObject target, AvaloniaProperty property, string key) =>
-            target.Bind(property, new global::Avalonia.Data.Binding($"[{key}]")
-                { Source = LocalizationManager.Instance, Mode = global::Avalonia.Data.BindingMode.OneWay });
-
-        private bool BillboardMayAdvance(Border host) =>
-            IsVisible && host.IsEffectivelyVisible && !_billboardPaused && !host.IsKeyboardFocusWithin && Env.AllowAmbientLoops
-            && DashboardBillboard.ShouldAdvance(_billboardPointerOver, onScreen: true);
-
-        /// <summary>WPF RestartBillboardClock (:172).</summary>
-        private void RestartBillboardClock()
+        /// <summary>The static half, once per process: tier, head providers, shell hooks.</summary>
+        private static void WireBillboardOnce()
         {
-            StopBillboardClock();
-            var host = Dash?.FindControl<Border>("DashBillboard");
-            if (host == null || !BillboardMayAdvance(host)) return;
-            _billboardTimer = new DispatcherTimer(DispatcherPriority.Background)
+            lock (BillboardWireGate)
             {
-                Interval = TimeSpan.FromSeconds(DashboardBillboard.RotateSeconds),
+                if (_billboardWired) return;
+                _billboardWired = true;
+            }
+
+            BillboardWiring.TierReader = () =>
+                CoreAccount.HasLabAccess ? BillboardTier.Prime
+                : CoreAccount.HasPremiumAccess ? BillboardTier.Basic
+                : BillboardTier.Free;
+
+            // Every hook finds the live shell at click time (a closed window never answers).
+            var hooks = new BillboardShellHooks
+            {
+                ShowTab = key => BillboardShell()?.ShowBillboardTab(key),
+                OpenInvites = () => BillboardShell()?.OpenInvitesCard(),
+                StartSession = id => BillboardShell()?.StartBillboardSession(id) == true,
             };
-            _billboardTimer.Tick += (_, _) => BillboardTick();
-            _billboardTimer.Start();
-        }
-
-        private void StopBillboardClock()
-        {
-            _billboardTimer?.Stop();
-            _billboardTimer = null;
-        }
-
-        /// <summary>One clock tick (the timer's handler; tests step it directly).</summary>
-        internal void BillboardTick() => StepBillboard(1, automatic: true);
-
-        /// <summary>WPF StepBillboardRack (:195): one slide step; an automatic step re-checks every
-        /// gate first, a manual one restarts the clock.</summary>
-        private void StepBillboard(int direction, bool automatic)
-        {
-            try
+            BillboardWiring.HeadProviders = () => new IBillboardProvider[]
             {
-                var host = Dash?.FindControl<Border>("DashBillboard");
-                if (host?.IsEffectivelyVisible != true) return;
-                if (automatic && !BillboardMayAdvance(host)) { StopBillboardClock(); return; }
-                _billboardIndex = DashboardBillboard.SlideIndex(_billboardIndex, direction, DashboardBillboard.Roster.Count);
-                FillBillboard();
-                FadeBillboard();
-                if (!automatic) RestartBillboardClock();
-            }
-            catch (Exception ex) { Log.Warning(ex, "Dashboard billboard: step failed"); }
-        }
-
-        /// <summary>WPF FillBillboardSlot + UpdateBillboardPosition (:221/:228).</summary>
-        private void FillBillboard()
-        {
-            var dash = Dash;
-            if (dash == null) return;
-            var card = DashboardBillboard.CardAt(_billboardIndex);
-            BindLoc(dash.FindControl<TextBlock>("BillboardEyebrow")!, TextBlock.TextProperty, card.EyebrowKey);
-            BindLoc(dash.FindControl<TextBlock>("BillboardTitle")!, TextBlock.TextProperty, card.TitleKey);
-            BindLoc(dash.FindControl<TextBlock>("BillboardLine")!, TextBlock.TextProperty, card.LineKey);
-            var button = dash.FindControl<Button>("BillboardCard")!;
-            var tip = Loc.Get(card.TitleKey) + "  ·  " + Loc.Get(card.LineKey);
-            ToolTip.SetTip(button, tip);
-            AutomationProperties.SetName(button, tip);
-
-            bool plate = card.Art == BillboardArt.Plate;
-            var art = LoadBillboardArt(card);
-            dash.FindControl<Image>("BillboardCover")!.IsVisible = !plate;
-            dash.FindControl<Grid>("BillboardPlate")!.IsVisible = plate;
-            dash.FindControl<Image>("BillboardCover")!.Source = art;
-            dash.FindControl<Image>("BillboardPlateGround")!.Source = art;
-            dash.FindControl<Image>("BillboardPlateMark")!.Source = art;
-
-            var dots = dash.FindControl<StackPanel>("BillboardDots")!;
-            for (int i = 0; i < dots.Children.Count; i++)
-                ((RadioButton)dots.Children[i]).IsChecked = i == _billboardIndex;
-        }
-
-        /// <summary>Missing art leaves the words readable over the shade, never a throw (WPF :241).</summary>
-        private static Bitmap? LoadBillboardArt(BillboardCard card)
-        {
-            try { return new Bitmap(AssetLoader.Open(new Uri("avares://CCP.Avalonia/Resources/" + card.Poster))); }
-            catch (Exception ex)
-            {
-                Log.Debug("Billboard art {Poster} did not load: {E}", card.Poster, ex.Message);
-                return null;
-            }
-        }
-
-        /// <summary>WPF FadeBillboardSlot (:259): only when the motion gate allows transitions.</summary>
-        private void FadeBillboard()
-        {
-            var button = Dash?.FindControl<Button>("BillboardCard");
-            if (button == null || !Env.AllowTransitions) return;
-            _billboardFade?.Cancel();
-            _billboardFade = new CancellationTokenSource();
-            _ = new Animation
-            {
-                Duration = TimeSpan.FromMilliseconds(BillboardFadeMs),
-                Easing = new CubicEaseOut(),
-                Children =
+                new WaitingProvider(hooks),
+                new ResumeProvider(hooks),
+                new EventProvider(() => Platform.ChasterHead.Service),
+                // WPF LiveProvider over App.Lobby: the shell's one LobbyService (the Social badge
+                // and the Lobby page keep its snapshot fresh while the panel is on screen).
+                new LiveProvider(() => Lobby, (game, key) => BillboardShell()?.JoinFromBoard(game, key)),
+            };
+            // WPF 7.1.5 called MainWindow.LaunchPlayBackRoom. The Daily Daze card joins the deck only
+            // once this head hosts the Back Room (a launcher destination), so it is never a dead button.
+            if (LauncherWindow.Destinations.ContainsKey("backroom"))
+                HouseProvider.OpenBackRoom = () =>
                 {
-                    new KeyFrame { Cue = new Cue(0d), Setters = { new Setter(OpacityProperty, 0d) } },
-                    new KeyFrame { Cue = new Cue(1d), Setters = { new Setter(OpacityProperty, 1d) } },
-                },
-            }.RunAsync(button, _billboardFade.Token);
+                    if (BillboardShell() is { } w) LauncherWindow.LaunchGame(w, "backroom");
+                };
         }
 
-        /// <summary>WPF BillboardCard_Click (:278): a Link leaves through the one opener, a Tab is
-        /// an in-app navigation.</summary>
-        private void OpenBillboardCard()
+        /// <summary>
+        /// The Live card's Join (WPF LiveProvider.Invoke): signed out asks to sign in, a gate refusal
+        /// shows the sign-in, else each game's own door (the Lobby row's own: chess sits at the table,
+        /// Goon opens straight into joining it).
+        /// </summary>
+        private void JoinFromBoard(global::ConditioningControlPanel.Services.Lobby.LobbyGame game, string key)
+        {
+            var gates = CurrentLobbyGates();
+            if (!gates.SignedIn || !gates.CanJoin(game)) { _ = OpenUnifiedLoginDialog(); return; }
+            if (string.IsNullOrEmpty(key)) { ShowBillboardTab("availablesubjects"); return; }
+            if (game == global::ConditioningControlPanel.Services.Lobby.LobbyGame.Chess) LobbyJoinChess(key);
+            else if (game == global::ConditioningControlPanel.Services.Lobby.LobbyGame.Goon) LobbyJoinGoon(key);
+            else ShowBillboardTab("availablesubjects");
+        }
+
+        private static MainShellWindow? BillboardShell() =>
+            _billboardShell != null && _billboardShell.TryGetTarget(out var w) ? w : null;
+
+        // HA4: through ShowTab, which knows every door: the classic tab panels, the lane pages (friends,
+        // leash, permissions, personality, companionai, companionlinks) and the moved / redirect keys
+        // (exclusives, together, patreon). An unknown key logs there and keeps the current page.
+        internal void ShowBillboardTab(string key)
+        {
+            if (string.IsNullOrWhiteSpace(key)) return;
+            ShowTab(key);
+        }
+
+        /// <summary>WPF StartSessionFromCompanion: the Sessions page's Start (it asks first).
+        /// False = a session is running or the id is gone; the card then opens the Sessions page.</summary>
+        private bool StartBillboardSession(string id)
+        {
+            if (CoreSession.IsSessionRunning || string.IsNullOrEmpty(id)) return false;
+            var session = Session.GetAllSessions().FirstOrDefault(s => s != null && s.IsAvailable && s.Id == id);
+            if (session == null) return false;
+            BtnStartSession_Click(session);
+            return true;
+        }
+
+        /// <summary>
+        /// The invite card hears every invites read the shell makes: the header ticket's server
+        /// read (wrapped, so the reader itself is unchanged), the invites card's own reads, and the
+        /// ticket hiding (account change, unreachable).
+        /// </summary>
+        private void HookBillboardInvites()
         {
             try
             {
-                var card = DashboardBillboard.CardAt(_billboardIndex);
-                if (card.Kind == BillboardTargetKind.Link) BillboardOpenUrl(card.Target);
-                else ShowTab(card.Target);
+                var inner = InviteTicketApi;
+                InviteTicketApi = () => new NotingInviteApi(inner());
+                if (InvitesCard is { } card) card.Read += WaitingSignals.NoteInvites;
+                if (Named<Button>("BtnInviteTicket") is { } ticket)
+                {
+                    ticket.PropertyChanged += (_, e) =>
+                    {
+                        if (e.Property == IsVisibleProperty && e.NewValue is false)
+                            WaitingSignals.NoteInvites(InviteMine.Unreachable);
+                    };
+                }
             }
-            catch (Exception ex) { Log.Warning(ex, "Dashboard billboard: card click failed"); }
+            catch (Exception ex) { Log.Debug("Billboard invite hooks failed: {E}", ex.Message); }
         }
 
-        /// <summary>The link opener (seam: tests never launch a browser).</summary>
-        internal static Action<string> BillboardOpenUrl = url => Platform.ExternalOpener.Open(url);
+        /// <summary>
+        /// A card's one button. A Link opens in the browser (no browser: the address goes to the
+        /// clipboard and a dialog says so, as WPF BrowserLauncher.OpenUrlOrPrompt did); a Tab is
+        /// in-app navigation; Launch goes through the launcher's own LaunchGame; a Callback goes
+        /// back to the provider that issued it. The deck already refused anything outside its rules.
+        /// </summary>
+        private void RunBillboardAction(DeckCard card)
+        {
+            try
+            {
+                var action = card.Action;
+                switch (action.Kind)
+                {
+                    case BillboardActionKind.Tab:
+                        ShowBillboardTab(action.Target);
+                        break;
+                    case BillboardActionKind.Link:
+                        _ = OpenBillboardLinkAsync(action.Target, card.Spec.Title);
+                        break;
+                    case BillboardActionKind.Launch:
+                        if (!LauncherWindow.LaunchGame(this, action.Target))
+                            Log.Information("Billboard: launch of {Id} was refused", action.Target);
+                        break;
+                    case BillboardActionKind.Callback:
+                        card.Provider?.Invoke(action.Target);
+                        break;
+                }
+            }
+            catch (Exception ex) { Log.Warning(ex, "Dashboard billboard: card action failed ({Id})", card.Spec.Id); }
+        }
+
+        private async Task OpenBillboardLinkAsync(string url, string what)
+        {
+            try
+            {
+                if (await Platform.ExternalOpener.OpenAsync(this, url)) return;
+                try { if (Clipboard is { } cb) await cb.SetTextAsync(url); } catch { /* clipboard may be unavailable */ }
+                await Dialogs.MessageDialog.ShowAsync(this, Loc.Get("title_open_link_in_browser"),
+                    Loc.GetF("msg_browser_no_default_for", what) + Loc.GetF("msg_browser_link_copied", url));
+            }
+            catch (Exception ex) { Log.Warning(ex, "Billboard link failed"); }
+        }
+
+        /// <summary>
+        /// The board's version rides the marquee config (WPF polled /config/marquee every 5 min and
+        /// handed the body to BoardService). The port's banner does not fetch it yet, so the board
+        /// polls on its own: first read 8 s after Home shows, then every 5 min (never in a headless
+        /// test host). Offline is silent:
+        /// the deck simply has no Board card.
+        /// </summary>
+        private void StartBillboardMarquee()
+        {
+            if (_billboardMarquee != null) return;
+            // Only in a running app: a headless test host (no lifetime) never reaches the network.
+            if (global::Avalonia.Application.Current?.ApplicationLifetime is not global::Avalonia.Controls.ApplicationLifetimes.IControlledApplicationLifetime) return;
+            _billboardMarquee = new DispatcherTimer { Interval = TimeSpan.FromSeconds(8) };
+            _billboardMarquee.Tick += async (_, _) =>
+            {
+                if (_billboardMarquee != null) _billboardMarquee.Interval = TimeSpan.FromMinutes(5);
+                await PollBoardMarqueeAsync();
+            };
+            _billboardMarquee.Start();
+        }
+
+        private async Task PollBoardMarqueeAsync()
+        {
+            if (_billboardMarqueeBusy) return;
+            _billboardMarqueeBusy = true;
+            try
+            {
+                var json = await BillboardHttp.GetStringAsync(BoardService.ServerBase + "/config/marquee").ConfigureAwait(false);
+                BoardService.Shared.OnMarquee(json);
+            }
+            catch (Exception ex) { Log.Debug("Billboard marquee read failed: {E}", ex.GetType().Name); }
+            finally { _billboardMarqueeBusy = false; }
+        }
+
+        /// <summary>Test seam: forget the once-per-process wiring.</summary>
+        internal static void ResetBillboardWiringForTests()
+        {
+            lock (BillboardWireGate) _billboardWired = false;
+            _billboardShell = null;
+        }
     }
 }

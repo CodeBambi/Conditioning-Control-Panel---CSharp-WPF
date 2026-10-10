@@ -420,7 +420,15 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>Everything off NOW, bypassing throttles and unchanged-send suppression.</summary>
-        public void PanicStop() => _mixer.PanicStop();
+        public void PanicStop()
+        {
+            _mixer.PanicStop();
+            // A per-toy test drives the provider AROUND the mixer, so the mixer's stop cannot end it:
+            // cancel it here (its finally zeroes the toy).
+            try { System.Threading.Interlocked.Exchange(ref _aroundMixerCts, new CancellationTokenSource()).Cancel(); } catch { }
+        }
+
+        private CancellationTokenSource _aroundMixerCts = new();
 
         /// <summary>Play a rendered pattern with an explicit priority (the DtRH director's tiers).</summary>
         public async Task PlayPatternAsync(double intensity, int durationMs, VibrationMode mode,
@@ -591,6 +599,8 @@ namespace ConditioningControlPanel.Services
             var device = _deviceManager.Find(deviceKey);
             if (device == null || !device.IsConnected || !device.Enabled) return false;
 
+            using var panicLinked = CancellationTokenSource.CreateLinkedTokenSource(token, _aroundMixerCts.Token);
+            token = panicLinked.Token;
             durationMs = Math.Clamp(durationMs, 100, 8000);
             // Same contract as TestAsync: works with the master toggle off (AllowTestWindow only
             // waives Settings.Enabled), but premium is still required.

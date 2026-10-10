@@ -1127,7 +1127,7 @@ public class BubbleService : IDisposable
         // id when it is owned AND switched on. It is added here rather than stored in
         // BubbleTriggerVariants so ownership stays live - a synced profile cannot smuggle it in,
         // and losing the grant removes it without rewriting the user's chosen variant list.
-        bool v2Owned = AmbientBubbleMotion.AnyV2Owned;
+        bool v2Owned = AmbientBubbleMotionApp.AnyV2Owned;
         var ids = BrainDrainBubble.RollPool(s.BubbleTriggerVariants, v2Owned, s.BubbleBrainDrainEnabled);
         // Pull is retired, including ids retained by older saved selections.
         ids = ids.Where(id => id != MagnetBubble.VariantId).ToArray();
@@ -1216,7 +1216,7 @@ public class BubbleService : IDisposable
             spec = null;
         if (spec == null)
             return new Bubble(screen, _bubbleImage, _random, OnPop, OnMiss, OnDestroy, isClickable,
-                              ambientMotion: AmbientBubbleMotion.RollForSpawn(_random));
+                              ambientMotion: AmbientBubbleMotionApp.RollForSpawn(_random));
         // Trigger bubbles ride the shared ambient host like plain bubbles (hook-based pops via the
         // UsesHost/HostHitClickable snapshots). forceWindowMode was a relic of the host being
         // chaos-run-only: the per-pop layered-window Show/Close it forced was the residual "small

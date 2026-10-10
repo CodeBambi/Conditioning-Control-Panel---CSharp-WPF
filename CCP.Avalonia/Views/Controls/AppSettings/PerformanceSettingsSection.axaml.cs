@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 using ConditioningControlPanel.Localization;
@@ -41,17 +42,43 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
         {
             base.OnAttachedToVisualTree(e);
             if (CoreSettings.Service is { } svc) svc.CurrentReplaced += OnCurrentReplaced;
+            HookSettings();
             SyncFromSettings();
         }
 
         protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
         {
             if (CoreSettings.Service is { } svc) svc.CurrentReplaced -= OnCurrentReplaced;
+            UnhookSettings();
             base.OnDetachedFromVisualTree(e);
         }
 
         // A cloud restore or a factory reset swaps the instance; repaint from it, on the UI thread.
-        private void OnCurrentReplaced() => Dispatcher.UIThread.Post(SyncFromSettings);
+        private void OnCurrentReplaced() => Dispatcher.UIThread.Post(() => { HookSettings(); SyncFromSettings(); });
+
+        private Models.AppSettings? _hooked;
+
+        private void HookSettings()
+        {
+            UnhookSettings();
+            _hooked = CoreSettings.Current;
+            _hooked.PropertyChanged += OnSettingsPropertyChanged;
+        }
+
+        private void UnhookSettings()
+        {
+            if (_hooked != null) _hooked.PropertyChanged -= OnSettingsPropertyChanged;
+            _hooked = null;
+        }
+
+        /// <summary>WPF 7.1.5 review fix: Settings is one scrolling page, and
+        /// VideoForceHardwareDecoding has a second live editor on it (Monitors). This box follows
+        /// that one the way Monitors follows this box.</summary>
+        private void OnSettingsPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(Models.AppSettings.VideoForceHardwareDecoding))
+                Dispatcher.UIThread.Post(SyncFromSettings);
+        }
 
         internal void SyncFromSettings()
         {
@@ -166,7 +193,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
         }
 
         /// <summary>The picker's source (X11 window owners). A seam so tests never read the desktop.</summary>
-        internal static Func<List<string>> RunningApps = Platform.X11Windows.RunningWindowedProcesses;
+        internal static Func<List<string>> RunningApps = OperatingSystem.IsWindows()
+            ? Platform.DoNotDisturbGuard.RunningWindowedProcesses   // user32 main windows
+            : Platform.X11Windows.RunningWindowedProcesses;
 
         /// <summary>
         /// WPF BtnDndPickApp_Click (:172): a menu of every process that owns a window; already-listed
@@ -218,7 +247,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
 
         /// <summary>Appends one picked process and repaints the box. Re-parses the BOX, not the stored
         /// list, so an edit not yet blurred out of is kept (WPF AddDndProcess :223).</summary>
-        private void AddDndProcess(string processName)
+        internal void AddDndProcess(string processName)
         {
             var list = DndProcessList.Parse(TxtDndProcesses.Text);
             var name = DndProcessList.Normalize(processName);

@@ -34,7 +34,9 @@ public sealed partial class FriendsDrawer
     {
         if (_svc?.Available != true)
         {
-            var off = FriendsLook.Label(Loc.Get("friends_signed_out"), 12, FriendsLook.MutedBrush);
+            // A short status, not the sign-in block's sentence: the page and the drawer both show
+            // that block below, and the same line twice read as a stutter (nav polish 2026-10-06).
+            var off = FriendsLook.Label(Loc.Get("friends_me_signed_out"), 12, FriendsLook.MutedBrush);
             off.Tag = "friends-me-status";
             return off;
         }

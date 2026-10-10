@@ -28,7 +28,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
     /// ponytail: GIF/animated webp show their first frame (no animated decoder on this head); mix mode
     /// prefers same-aspect images only among those already shown (WPF warms the aspect cache in the
     /// background); the explicit "Tracking monitor" pick is not offered on this head, so placement is
-    /// always the app-wide convention; SeasonRecapService.TrackFeature is head-side on WPF.
+    /// always the app-wide convention.
     /// </summary>
     internal static class BlinkTrainerSession
     {
@@ -132,6 +132,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                 _duration.Tick += (_, _) => { Log.Information("BlinkTrainer: duration elapsed — auto-stopping"); Stop(); };
                 _duration.Start();
                 IsRunning = true;
+                global::ConditioningControlPanel.Services.SeasonFeatureTracker.TrackFeature(global::ConditioningControlPanel.Models.SeasonFeatureKeys.BlinkTrainer);   // WPF BlinkTrainerService:177
                 LastError = "";
                 Log.Information("BlinkTrainer: started — pool={Count} assets, duration={Mins}m, opacity={Opacity}%, screens={Screens}",
                     pool.Paths.Count, s.BlinkTrainerDurationMinutes, s.BlinkTrainerOpacity, Overlays.Count);
@@ -208,6 +209,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                     catch (Exception ex) { Log.Debug(ex, "BlinkTrainer: blink haptic failed"); }
                 });
             try { App.Quests?.TrackBlinkTrainerBlink(); } catch (Exception ex) { Log.Debug("blink quest credit: {E}", ex.Message); }
+            try { App.Achievements?.TrackBlinkTrainerBlink(); } catch (Exception ex) { Log.Debug("blink count: {E}", ex.Message); }   // WPF GamificationBridge.cs:481
         }
 
         private static void ShowRandom()

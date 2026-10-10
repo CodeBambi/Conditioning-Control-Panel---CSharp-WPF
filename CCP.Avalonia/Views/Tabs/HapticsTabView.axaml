@@ -505,10 +505,9 @@
                                 </Border>
 
                                 <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="18,0,10,0">
-                                    <TextBlock Text="{loc:Str tab_haptics}" FontSize="17" FontWeight="Bold"
-                                               Foreground="{StaticResource TextLightBrush}"/>
+                                    <TextBlock Theme="{StaticResource Type.CardTitle}" Text="{loc:Str tab_haptics}"/>
                                     <TextBlock Text="{loc:Str desc_haptics}" FontSize="11.5"
-                                               Foreground="{StaticResource TextMutedBrush}" Margin="0,1,0,0"
+                                               Foreground="{StaticResource TextSecondaryBrush}" Margin="0,1,0,0"
                                                TextTrimming="CharacterEllipsis"/>
                                 </StackPanel>
 
@@ -517,9 +516,13 @@
                                     <Button x:Name="HelpBtnHaptics"
                                             Theme="{StaticResource HelpButtonStyle}" VerticalAlignment="Center"
                                             Margin="0,0,12,0" Tag="Haptics"/>
-                                    <Ellipse x:Name="HapticStatusDot"
-                                             Width="10" Height="10" Margin="0,0,7,0"
-                                             VerticalAlignment="Center" Fill="#FF6B6B"/>
+                                    <!-- the breathing status glow: a sibling BoxShadow (MainShellWindow SetStatusPulse), never an Effect on the dot -->
+                                    <Panel Margin="0,0,7,0" VerticalAlignment="Center">
+                                        <Border Tag="StatusGlow" Width="10" Height="10" CornerRadius="5"
+                                                Opacity="0" IsHitTestVisible="False"/>
+                                        <Ellipse x:Name="HapticStatusDot"
+                                                 Width="10" Height="10" Fill="#FF6B6B"/>
+                                    </Panel>
                                     <TextBlock x:Name="TxtHapticStatus"
                                                Text="{loc:Str label_disconnected}" Foreground="#FF6B6B"
                                                FontSize="12" VerticalAlignment="Center" Margin="0,0,12,0"/>

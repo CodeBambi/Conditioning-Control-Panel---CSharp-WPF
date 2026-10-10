@@ -236,6 +236,19 @@ namespace ConditioningControlPanel.Services
 
         public bool IsEnabled => _enabled;
         public DateTime NextRandomFire => _nextRandom;
+        private double _lastRandomIntervalSeconds;
+
+        /// <summary>WPF AutonomyService.NextRandomFireFraction (:257): 1 = just scheduled, 0 = about to
+        /// fire, null when no random fire is scheduled. Drives the tube's Takeover countdown bar.</summary>
+        public double? NextRandomFireFraction
+        {
+            get
+            {
+                if (!_enabled || _nextRandom == DateTime.MaxValue || _lastRandomIntervalSeconds <= 0) return null;
+                var frac = (_nextRandom - Clock()).TotalSeconds / _lastRandomIntervalSeconds;
+                return frac < 0 ? 0 : frac > 1 ? 1 : frac;
+            }
+        }
 
         /// <summary>WPF Start: refuses without enable + consent + entitlement; idempotent.</summary>
         public bool Start(bool withTimer = true)
@@ -287,6 +300,7 @@ namespace ConditioningControlPanel.Services
             _nextRandom = _enabled && s.AutonomyRandomTriggerEnabled
                 ? now.AddSeconds(NextRandomSeconds(s, retry, false, now.Hour, Rng.NextDouble()))
                 : DateTime.MaxValue;
+            _lastRandomIntervalSeconds = _nextRandom == DateTime.MaxValue ? 0 : (_nextRandom - now).TotalSeconds;
         }
 
         /// <summary>WPF CanTakeAction: on, entitled (a lapse mid-run stops her acting), not busy, past the cooldown.</summary>

@@ -107,12 +107,11 @@ public class Phase8RedirectContractTests
     {
         // Three separate maps have to agree or code-driven navigation lands with the active
         // indicator inside a door nobody opened.
-        Assert.Contains("\"progression\"", StripComments(ReadSource("MainWindow", "MainWindow.ChromeFx.cs")),
-                        StringComparison.Ordinal);
         Assert.Contains("\"progression\"", StripComments(ReadSource("Services", "ChromeFxNav.cs")),
                         StringComparison.Ordinal);
-        // The door map: the Home door owns both "settings" and "progression".
-        Assert.Matches(new Regex(@"""settings""\s*,\s*""progression"""), StripComments(TabNavigation()));
+        // Nav rework (2026-10-06): the section table is the one map; ChromeFx paints the section
+        // row through RefreshSectionRail, so its own tab map is gone.
+        Assert.Equal("home", ConditioningControlPanel.Nav.NavSections.SectionForTab("progression"));
     }
 
     [Fact]
@@ -224,6 +223,15 @@ public class Phase8RedirectContractTests
                         StringComparison.Ordinal);
         Assert.Contains("CardSystem_Click", ReadSource("MainWindow", "MainWindow.Presets.cs"),
                         StringComparison.Ordinal);
+
+        // Nav rework (2026-10-06): the System popup retired; the handler keeps its name and now
+        // opens Settings > Monitors, still firing the System bark from the pill.
+        var presets = ReadSource("MainWindow", "MainWindow.Presets.cs");
+        var body = presets.Substring(presets.IndexOf("internal void CardSystem_Click", StringComparison.Ordinal));
+        body = body.Substring(0, body.IndexOf("internal void", 30, StringComparison.Ordinal));
+        Assert.Contains("OpenAppSettingsSection(\"monitors\")", body, StringComparison.Ordinal);
+        Assert.Contains("NotifyFeatureOpened(\"System\")", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("SystemFeatureControl", body, StringComparison.Ordinal);
     }
 
     // =====================================================================================

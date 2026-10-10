@@ -13,9 +13,9 @@
        whitespace between <Run>s     -> moved inside the Run text (Avalonia drops it) -->
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:ctl="clr-namespace:ConditioningControlPanel.Avalonia.Controls"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="ConditioningControlPanel.Avalonia.Views.Dialogs.MicConsentDialog"
-        Title="Microphone — Privacy and Consent"
+        Title="{loc:Str mic_consent_title}"
         Width="640" Height="620"
         WindowStartupLocation="CenterOwner"
         CanResize="False"
@@ -120,85 +120,85 @@
         <!-- ─── STEP 1 — What this enables ─── -->
         <ScrollViewer x:Name="PanelStep1" Grid.Row="1" VerticalScrollBarVisibility="Auto">
             <StackPanel>
-                <TextBlock Theme="{StaticResource DlgHeader}" Text="Voice — &quot;say it for me&quot;"/>
-                <TextBlock Theme="{StaticResource DlgSub}" Text="Optional. Off by default. Lets her hear you say things back."/>
+                <TextBlock Theme="{StaticResource DlgHeader}" Text="{loc:Str mic_consent_header}"/>
+                <TextBlock Theme="{StaticResource DlgSub}" Text="{loc:Str mic_consent_sub}"/>
 
                 <TextBlock Theme="{StaticResource DlgBody}" Margin="0,24,0,0"
-                           Text="With this on, during Takeover she can ask you to repeat a phrase out loud — and actually listen for it. She knows the phrase already, so all the app checks is whether you said it, and loudly enough. Recognition runs entirely on your computer using a small offline model bundled with the app — no internet is used."/>
+                           Text="{loc:Str mic_consent_intro}"/>
 
                 <TextBlock Theme="{StaticResource DlgBody}" Margin="0,16,0,0" FontWeight="SemiBold" Foreground="{StaticResource PinkBrush}"
-                           Text="How the mic is used:"/>
+                           Text="{loc:Str mic_consent_how_used}"/>
 
                 <TextBlock Theme="{StaticResource DlgBody}" Margin="14,8,0,0">
-                    <Run FontWeight="Bold">• Only when she asks (default)</Run>
+                    <Run FontWeight="Bold" Text="{loc:Str mic_consent_use1_title}"/>
                     <LineBreak/>
-                    <Run>The mic opens for a few seconds right after she prompts you, then closes again. It is not listening the rest of the time.</Run>
+                    <Run Text="{loc:Str mic_consent_use1_body}"/>
                 </TextBlock>
 
                 <TextBlock Theme="{StaticResource DlgBody}" Margin="14,12,0,0">
-                    <Run FontWeight="Bold">• Always-on wake word (separate opt-in)</Run>
+                    <Run FontWeight="Bold" Text="{loc:Str mic_consent_use2_title}"/>
                     <LineBreak/>
-                    <Run>A &quot;Hey Bambi&quot;-style trigger that keeps the mic open is available later as its own setting — it is NOT enabled by this consent.</Run>
+                    <Run Text="{loc:Str mic_consent_use2_body}"/>
                 </TextBlock>
 
                 <TextBlock Theme="{StaticResource DlgBody}" Margin="0,28,0,0" Foreground="#9090A8" FontStyle="Italic"
-                           Text="The next screen explains exactly what happens to the audio — and what never does. Read it carefully."/>
+                           Text="{loc:Str mic_consent_next_screen}"/>
             </StackPanel>
         </ScrollViewer>
 
         <!-- ─── STEP 2 — Privacy contract ─── -->
         <ScrollViewer x:Name="PanelStep2" Grid.Row="1" VerticalScrollBarVisibility="Auto" IsVisible="False">
             <StackPanel>
-                <TextBlock Theme="{StaticResource DlgHeader}" Text="Your voice stays on this computer."/>
-                <TextBlock Theme="{StaticResource DlgSub}" Text="Always. Read each line."/>
+                <TextBlock Theme="{StaticResource DlgHeader}" Text="{loc:Str mic_consent_promise_header}"/>
+                <TextBlock Theme="{StaticResource DlgSub}" Text="{loc:Str consent_always_read}"/>
 
                 <Border Margin="0,24,0,0" Padding="20" CornerRadius="6" Background="#1F1F38" BorderBrush="{StaticResource PinkBrush}" BorderThickness="0,0,0,3">
                     <StackPanel>
                         <TextBlock Theme="{StaticResource DlgPromise}">
                             <Run FontWeight="Bold" Foreground="{StaticResource PinkBrush}">• </Run>
-                            <Run>Audio is </Run>
-                            <Run FontWeight="Bold">never transmitted</Run>
-                            <Run> — not to our server, not to Patreon, not to any third party.</Run>
+                            <Run Text="{loc:Str mic_consent_p1_a}"/>
+                            <Run FontWeight="Bold" Text="{loc:Str mic_consent_p1_b}"/>
+                            <Run Text="{loc:Str consent_p_not_to}"/>
                         </TextBlock>
                         <TextBlock Theme="{StaticResource DlgPromise}">
                             <Run FontWeight="Bold" Foreground="{StaticResource PinkBrush}">• </Run>
-                            <Run>Audio is processed in memory and </Run>
-                            <Run FontWeight="Bold">immediately discarded. </Run>
-                            <Run>No recording, no clip, no file is ever written to disk.</Run>
+                            <Run Text="{loc:Str mic_consent_p2_a}"/>
+                            <Run FontWeight="Bold" Text="{loc:Str mic_consent_p2_b}"/>
+                            <Run Text="{loc:Str mic_consent_p2_c}"/>
                         </TextBlock>
                         <TextBlock Theme="{StaticResource DlgPromise}">
                             <Run FontWeight="Bold" Foreground="{StaticResource PinkBrush}">• </Run>
-                            <Run>Only a </Run>
-                            <Run FontWeight="Bold">match score </Run>
-                            <Run>(did you say the phrase, and how loud) is used — never the raw audio.</Run>
+                            <Run Text="{loc:Str mic_consent_p3_a}"/>
+                            <Run FontWeight="Bold" Text="{loc:Str mic_consent_p3_b}"/>
+                            <Run Text="{loc:Str mic_consent_p3_c}"/>
                         </TextBlock>
                         <TextBlock Theme="{StaticResource DlgPromise}">
                             <Run FontWeight="Bold" Foreground="{StaticResource PinkBrush}">• </Run>
-                            <Run>Recognition runs </Run>
-                            <Run FontWeight="Bold">offline </Run>
-                            <Run>with a model bundled in the app. </Run>
-                            <Run FontWeight="Bold">No internet connection is used or required.</Run>
+                            <Run Text="{loc:Str mic_consent_p4_a}"/>
+                            <Run FontWeight="Bold" Text="{loc:Str consent_p_offline}"/>
+                            <Run Text="{loc:Str mic_consent_p4_c}"/>
+                            <Run FontWeight="Bold" Text="{loc:Str consent_p_no_internet}"/>
                         </TextBlock>
                         <TextBlock Theme="{StaticResource DlgPromise}">
                             <Run FontWeight="Bold" Foreground="{StaticResource PinkBrush}">• </Run>
-                            <Run>By default the mic opens </Run>
-                            <Run FontWeight="Bold">only during a prompt</Run>
-                            <Run>, for a few seconds — not continuously.</Run>
+                            <Run Text="{loc:Str mic_consent_p5_a}"/>
+                            <Run FontWeight="Bold" Text="{loc:Str mic_consent_p5_b}"/>
+                            <Run Text="{loc:Str mic_consent_p5_c}"/>
                         </TextBlock>
                         <TextBlock Theme="{StaticResource DlgPromise}">
                             <Run FontWeight="Bold" Foreground="{StaticResource PinkBrush}">• </Run>
-                            <Run>You can disable this </Run>
-                            <Run FontWeight="Bold">instantly </Run>
-                            <Run>with the panic key, the in-app toggle, or by closing the app.</Run>
+                            <Run Text="{loc:Str consent_p_disable_a}"/>
+                            <Run FontWeight="Bold" Text="{loc:Str consent_p_disable_b}"/>
+                            <Run Text="{loc:Str consent_p_disable_c}"/>
                         </TextBlock>
                     </StackPanel>
                 </Border>
 
                 <TextBlock Theme="{StaticResource DlgBody}" Margin="0,18,0,0" Foreground="#B8B8C8"
-                           Text="Want to verify? The source code for this feature is public."/>
+                           Text="{loc:Str consent_verify_source}"/>
                 <ctl:SafeHyperlinkButton x:Name="LnkSource" Padding="0" Foreground="{StaticResource PinkBrush}"
                                  NavigateUri="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/blob/main/ConditioningControlPanel/Services/Speech/SpeechService.cs">
-                    <TextBlock Text="View on GitHub →" FontSize="14"/>
+                    <TextBlock Text="{loc:Str consent_view_github}" FontSize="14"/>
                 </ctl:SafeHyperlinkButton>
             </StackPanel>
         </ScrollViewer>
@@ -206,26 +206,26 @@
         <!-- ─── STEP 3 — Explicit consent ─── -->
         <ScrollViewer x:Name="PanelStep3" Grid.Row="1" VerticalScrollBarVisibility="Auto" IsVisible="False">
             <StackPanel>
-                <TextBlock Theme="{StaticResource DlgHeader}" Text="Confirm consent"/>
-                <TextBlock Theme="{StaticResource DlgSub}" Text="Each box must be checked. None are pre-checked."/>
+                <TextBlock Theme="{StaticResource DlgHeader}" Text="{loc:Str consent_confirm_header}"/>
+                <TextBlock Theme="{StaticResource DlgSub}" Text="{loc:Str consent_boxes_hint}"/>
 
                 <CheckBox x:Name="ChkConsent1" Theme="{StaticResource DlgCheckbox}" Margin="0,24,0,0">
-                    <TextBlock TextWrapping="Wrap" Text="I understand my voice stays on this device and is never transmitted."/>
+                    <TextBlock TextWrapping="Wrap" Text="{loc:Str mic_consent_chk1}"/>
                 </CheckBox>
                 <CheckBox x:Name="ChkConsent2" Theme="{StaticResource DlgCheckbox}">
-                    <TextBlock TextWrapping="Wrap" Text="I understand audio is processed in memory and never saved to disk."/>
+                    <TextBlock TextWrapping="Wrap" Text="{loc:Str mic_consent_chk2}"/>
                 </CheckBox>
                 <CheckBox x:Name="ChkConsent3" Theme="{StaticResource DlgCheckbox}">
-                    <TextBlock TextWrapping="Wrap" Text="I consent to the microphone opening while Takeover is running and prompting me to speak."/>
+                    <TextBlock TextWrapping="Wrap" Text="{loc:Str mic_consent_chk3}"/>
                 </CheckBox>
 
                 <TextBlock Theme="{StaticResource DlgBody}" Margin="0,28,0,8" FontWeight="SemiBold"
-                           Text="Type ENABLE in capitals to confirm:"/>
+                           Text="{loc:Str consent_type_enable}"/>
                 <TextBox x:Name="TxtConfirm" FontSize="14" Padding="10,8" Background="#1F1F38" Foreground="White"
                          BorderBrush="#3A3A52" BorderThickness="1" CaretBrush="White"/>
 
                 <TextBlock x:Name="TxtConfirmHint" Theme="{StaticResource DlgBody}" Margin="0,8,0,0" Foreground="#8888A0" FontStyle="Italic"
-                           Text="Waiting for: 3 checkboxes + ENABLE typed."/>
+                           Text="{loc:Str consent_waiting_initial}"/>
             </StackPanel>
         </ScrollViewer>
 
@@ -238,16 +238,16 @@
             </Grid.ColumnDefinitions>
 
             <Button x:Name="BtnCancel" Grid.Column="0" Theme="{StaticResource DlgSecondaryButton}" HorizontalAlignment="Left"
-                    Content="Cancel"/>
+                    Content="{loc:Str btn_cancel}"/>
 
             <Button x:Name="BtnBack" Grid.Column="1" Theme="{StaticResource DlgSecondaryButton}" Margin="0,0,8,0"
-                    Content="← Back" IsVisible="False"/>
+                    Content="{loc:Str consent_back}" IsVisible="False"/>
 
             <Button x:Name="BtnNext" Grid.Column="2" Theme="{StaticResource DlgPrimaryButton}"
-                    Content="I want to know more →"/>
+                    Content="{loc:Str consent_know_more}"/>
 
             <Button x:Name="BtnEnable" Grid.Column="2" Theme="{StaticResource DlgPrimaryButton}"
-                    Content="Enable Voice" IsEnabled="False" IsVisible="False"/>
+                    Content="{loc:Str mic_consent_enable}" IsEnabled="False" IsVisible="False"/>
         </Grid>
     </Grid>
 </Window>

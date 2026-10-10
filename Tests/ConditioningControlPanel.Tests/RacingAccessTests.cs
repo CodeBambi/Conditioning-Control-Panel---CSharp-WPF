@@ -67,7 +67,8 @@ public class RacingAccessTests
         while (dir != null && !File.Exists(Path.Combine(dir.FullName, "ConditioningControlPanel", "ConditioningControlPanel.csproj")))
             dir = dir.Parent;
         Assert.NotNull(dir);
-        var source = File.ReadAllText(Path.Combine(dir!.FullName, "ConditioningControlPanel", "Services", "Race", "RacingAccess.cs"));
+        // The door lives once, in CCP.Core, since the WPF copy was retired (parity m4).
+        var source = SourceRoots.ReadProductFile("Services", "Race", "RacingAccess.cs");
         Assert.Contains("private const bool PurchaseDoorArmed = true;", source, StringComparison.Ordinal);
     }
 

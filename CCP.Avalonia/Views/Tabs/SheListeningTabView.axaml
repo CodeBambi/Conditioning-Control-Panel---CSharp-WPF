@@ -65,10 +65,9 @@
                         </Border>
 
                         <StackPanel VerticalAlignment="Center" Margin="18,0,0,0">
-                            <TextBlock Text="She's Listening" FontSize="17" FontWeight="Bold"
-                                       Foreground="{StaticResource TextLightBrush}"/>
-                            <TextBlock Text="The mic is open. She hears every word." FontSize="11.5"
-                                       Foreground="{StaticResource TextMutedBrush}" Margin="0,1,0,0"/>
+                            <TextBlock Theme="{StaticResource Type.CardTitle}" Text="{loc:Str tab_shelistening}"/>
+                            <TextBlock Text="{loc:Str shelisten_hero_sub}" FontSize="11.5"
+                                       Foreground="{StaticResource TextSecondaryBrush}" Margin="0,1,0,0"/>
                         </StackPanel>
 
                         <Border HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,16,0"
@@ -78,8 +77,8 @@
                                     Theme="{StaticResource OutlineButton}"
                                     BorderThickness="0" Foreground="#90EE90"
                                     FontWeight="Bold" FontSize="13" Padding="14,6"
-                                    ToolTip.Tip="Turn the offline mic on or off — wake word (&quot;Hey Bambi&quot;) + voice commands. Works whether or not Takeover is running.">
-                                <TextBlock Text="▶  Start listening"/>
+                                    ToolTip.Tip="{loc:Str shelisten_toggle_tip}">
+                                <TextBlock Text="{loc:Str shelisten_btn_start}"/>
                             </Button>
                         </Border>
                     </Grid>
@@ -104,13 +103,13 @@
                                 <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
                                         Background="{StaticResource SectionHueStudioBrush}"/>
                                 <StackPanel Margin="16,10,16,12">
-                                    <TextBlock Text="WHAT IS THIS" Foreground="{StaticResource SectionHueStudioBrush}"
+                                    <TextBlock Text="{loc:Str shelisten_what_title}" Foreground="{StaticResource SectionHueStudioBrush}"
                                                FontSize="10" FontWeight="Bold" Margin="0,0,0,6"/>
                                     <TextBlock Foreground="{StaticResource TextLightBrush}" FontSize="13" TextWrapping="Wrap"
                                                LineHeight="20" Margin="0,0,0,6"
-                                               Text="Control the app with your voice — and let her hear you obey. Call her name, ask for an effect, and she does it. She can also prompt you to say things back to her. Everything runs offline on your device: nothing is recorded, nothing is sent."/>
+                                               Text="{loc:Str shelisten_what_body1}"/>
                                     <TextBlock Foreground="{StaticResource TextMutedBrush}" FontSize="12" TextWrapping="Wrap" LineHeight="18"
-                                               Text="Hit Start listening and she's on — works whether or not Takeover is running. The safety word stops everything at any time."/>
+                                               Text="{loc:Str shelisten_what_body2}"/>
                                 </StackPanel>
                             </Grid>
                         </Border>
@@ -131,13 +130,16 @@
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
                                     <Grid Grid.Column="0" Width="64" Height="64" VerticalAlignment="Center">
+                                        <!-- the breathing status glow: a sibling BoxShadow (MainShellWindow SetStatusPulse), never an Effect on the dot -->
+                                        <Border Tag="StatusGlow" Width="64" Height="64" CornerRadius="32"
+                                                Opacity="0" IsHitTestVisible="False"/>
                                         <Ellipse x:Name="SL_StatusDot" Width="64" Height="64" Fill="#3A3A52"
                                                  Stroke="{StaticResource SectionHueStudioBorderBrush}" StrokeThickness="2"/>
                                         <TextBlock Text="🎤" FontSize="24"
                                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                     </Grid>
                                     <StackPanel Grid.Column="2" VerticalAlignment="Center">
-                                        <TextBlock x:Name="SL_StatusTitle" Text="Checking microphone…"
+                                        <TextBlock x:Name="SL_StatusTitle" Text="{loc:Str shelisten_status_checking}"
                                                    Foreground="{StaticResource TextLightBrush}" FontSize="15" FontWeight="Bold"/>
                                         <TextBlock x:Name="SL_StatusSub" Text=""
                                                    Foreground="{StaticResource TextMutedBrush}" FontSize="12" TextWrapping="Wrap" Margin="0,2,0,0"/>
@@ -164,7 +166,7 @@
                                 <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
                                         Background="{StaticResource SectionHueStudioBrush}"/>
                                 <StackPanel Margin="16,10,16,10">
-                                    <TextBlock Text="Voice controls" Foreground="{StaticResource SectionHueStudioBrush}"
+                                    <TextBlock Text="{loc:Str shelisten_controls_title}" Foreground="{StaticResource SectionHueStudioBrush}"
                                                FontSize="10" FontWeight="Bold" Margin="0,0,0,8"/>
 
                                     <!-- Hardware + voice-mode summary. READ-ONLY: Settings > Devices has owned
@@ -198,7 +200,7 @@
                                                 </StackPanel>
                                                 <TextBlock x:Name="TxtSL_MicDeviceChip"
                                                            HorizontalAlignment="Right" VerticalAlignment="Center"
-                                                           Text="System default" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"
+                                                           Text="{loc:Str set2_mic_system_default}" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"
                                                            TextTrimming="CharacterEllipsis" MaxWidth="280"/>
                                             </Grid>
                                             <Grid Margin="0,2">
@@ -237,13 +239,13 @@
                                     <!-- Mic sensitivity (the loudness gate for commands and mantras; NOT the
                                          wake word). 36px row - the second line of prose it used to carry is
                                          the tooltip, verbatim. -->
-                                    <Grid Height="36" Background="Transparent" ToolTip.Tip="How softly you can speak and still be heard for voice COMMANDS and MANTRAS. Higher = picks up quieter speech (but may react more to background noise); lower = you must speak up. This does NOT affect the 'Hey Bambi' wake word — use Calibrate for that.">
+                                    <Grid Height="36" Background="Transparent" ToolTip.Tip="{loc:Str shelisten_sensitivity_tip}">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto" MinWidth="120"/>
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto" MinWidth="56"/>
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="🔉 Mic sensitivity" FontSize="13" FontWeight="SemiBold"
+                                        <TextBlock Grid.Column="0" Text="{loc:Str shelisten_sensitivity}" FontSize="13" FontWeight="SemiBold"
                                                    Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
                                         <Slider x:Name="SldSL_MicSensitivity" Grid.Column="1" VerticalAlignment="Center"
                                                 Theme="{StaticResource PinkSlider}" Margin="14,0"
@@ -251,23 +253,23 @@
                                         <TextBlock x:Name="TxtSL_MicSensitivity" Grid.Column="2"
                                                    HorizontalAlignment="Right" VerticalAlignment="Center"
                                                    FontSize="13" FontWeight="Bold" Foreground="{DynamicResource PinkBrush}"
-                                                   TextAlignment="Right" Text="—"/>
+                                                   TextAlignment="Right" Text="-"/>
                                     </Grid>
 
                                     <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,6"/>
 
                                     <!-- Spoken mantras. SL_MantrasHint stays a live element (it is x:Named), so
                                          this row is a two-line label rather than a bare 34px toggle row. -->
-                                    <Grid MinHeight="34" Background="Transparent" ToolTip.Tip="She speaks an in-theme line asking you to repeat a phrase, listens for it offline, then gives a custom response. First time on asks for mic consent.">
+                                    <Grid MinHeight="34" Background="Transparent" ToolTip.Tip="{loc:Str shelisten_mantras_tip}">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
                                         <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,10,0">
-                                            <TextBlock Text="🎤 Spoken mantras" FontSize="13" FontWeight="SemiBold"
+                                            <TextBlock Text="{loc:Str shelisten_mantras}" FontSize="13" FontWeight="SemiBold"
                                                        Foreground="{StaticResource TextLightBrush}"/>
                                             <TextBlock x:Name="SL_MantrasHint"
-                                                       Text="She asks you to repeat a phrase; the mic opens only when she prompts you."
+                                                       Text="{loc:Str shelisten_mantras_sub}"
                                                        FontSize="11" Foreground="{DynamicResource TextMutedBrush}" TextWrapping="Wrap"/>
                                         </StackPanel>
                                         <CheckBox Grid.Column="1" x:Name="ChkSL_Mantras"
@@ -279,29 +281,29 @@
                                     <!-- Reliable wake (sherpa-onnx KWS) - open-source, offline, no key; far
                                          better at the OOV name "Bambi". TxtSL_WakeEngineStatus is code-painted
                                          (status + live calibration progress). -->
-                                    <Grid Background="Transparent" ToolTip.Tip="Optional but recommended. Drop the open-source sherpa-onnx keyword-spotting model into Resources\Models\sherpa-kws\ to use a purpose-built wake-word engine — much more reliable than the built-in recognizer for her name, fully offline, no account or key. Without it, the built-in recognizer is used. See the README in that folder.">
+                                    <Grid Background="Transparent" ToolTip.Tip="{loc:Str shelisten_reliable_tip}">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
                                         <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,10,0">
                                             <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="✨ Reliable wake" FontSize="13" FontWeight="SemiBold"
+                                                <TextBlock Text="{loc:Str shelisten_reliable}" FontSize="13" FontWeight="SemiBold"
                                                            Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
-                                                <TextBlock Text="open-source, offline, no key" FontSize="9"
+                                                <TextBlock Text="{loc:Str shelisten_reliable_badge}" FontSize="9"
                                                            Foreground="{DynamicResource TextDimBrush}" VerticalAlignment="Center" Margin="8,0,0,0"/>
                                             </StackPanel>
                                             <TextBlock x:Name="TxtSL_WakeEngineStatus" FontSize="11"
                                                        Foreground="{DynamicResource TextMutedBrush}" Margin="0,3,0,0" TextWrapping="Wrap"
-                                                       Text="Drop the sherpa-onnx KWS model into Resources\Models\sherpa-kws\ to enable (see the README there)."/>
+                                                       Text="{loc:Str shelisten_reliable_sub}"/>
                                         </StackPanel>
                                         <Button x:Name="BtnSL_Calibrate" Grid.Column="1"
                                                 FontSize="11" Padding="10,4" VerticalAlignment="Center"
                                                 Theme="{StaticResource OutlineButton}"
                                                 BorderBrush="{StaticResource SectionHueStudioBorderBrush}"
                                                 Foreground="{StaticResource SectionHueStudioBrush}"
-                                                ToolTip.Tip="Tune the wake word to your own voice and mic — say 'Hey Bambi' a few times and it finds the right sensitivity. Re-run any time (new mic, noisy room).">
-                                            <TextBlock Text="🎚 Calibrate"/>
+                                                ToolTip.Tip="{loc:Str shelisten_calibrate_tip}">
+                                            <TextBlock Text="{loc:Str shelisten_calibrate_btn}"/>
                                         </Button>
                                     </Grid>
                                 </StackPanel>
@@ -324,17 +326,17 @@
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
                                         <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,10,0">
-                                            <TextBlock Text="Try it" Foreground="{StaticResource TextLightBrush}"
+                                            <TextBlock Text="{loc:Str shelisten_try_title}" Foreground="{StaticResource TextLightBrush}"
                                                        FontSize="13" FontWeight="SemiBold"/>
-                                            <TextBlock Text="Fire a spoken mantra now (needs a mic + the offline model)."
+                                            <TextBlock Text="{loc:Str shelisten_try_sub}"
                                                        Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap"/>
                                         </StackPanel>
                                         <Button x:Name="BtnSL_TestMantra" Grid.Column="1"
                                                 Theme="{StaticResource OutlineButton}"
                                                 BorderBrush="{StaticResource SectionHueStudioBorderBrush}" Foreground="#90EE90"
                                                 FontWeight="Bold" FontSize="12" Padding="14,7" VerticalAlignment="Center"
-                                                ToolTip.Tip="Fire a spoken mantra now.">
-                                            <TextBlock Text="🎤 Test mantra"/>
+                                                ToolTip.Tip="{loc:Str shelisten_try_tip}">
+                                            <TextBlock Text="{loc:Str shelisten_try_btn}"/>
                                         </Button>
                                     </Grid>
 
@@ -350,18 +352,18 @@
                                                     <ColumnDefinition Width="Auto"/>
                                                 </Grid.ColumnDefinitions>
                                                 <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
-                                                    <TextBlock Text="Privacy" Foreground="{StaticResource TextLightBrush}"
+                                                    <TextBlock Text="{loc:Str shelisten_privacy_title}" Foreground="{StaticResource TextLightBrush}"
                                                                FontSize="13" FontWeight="SemiBold"/>
-                                                    <TextBlock Text="Take back your mic consent — every voice feature turns off and she asks again next time."
+                                                    <TextBlock Text="{loc:Str shelisten_privacy_sub}"
                                                                Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap"/>
                                                 </StackPanel>
                                                 <Button x:Name="BtnSL_RevokeConsent" Grid.Column="1"
-                                                        ToolTip.Tip="Stops the mic, turns off wake word, push-to-talk, spoken mantras and voice lock cards, and clears your consent. You'll be re-prompted next time you enable a voice feature."
+                                                        ToolTip.Tip="{loc:Str shelisten_revoke_tip}"
                                                         Theme="{StaticResource OutlineButton}"
                                                         Foreground="{DynamicResource DangerBrush}" BorderBrush="{DynamicResource DangerBrush}"
                                                         Padding="11,6" VerticalAlignment="Center"
                                                         FontSize="11" FontWeight="SemiBold">
-                                                    <TextBlock Text="Revoke consent"/>
+                                                    <TextBlock Text="{loc:Str blink_trainer_consent_revoke}"/>
                                                 </Button>
                                             </Grid>
                                         </StackPanel>
@@ -380,22 +382,22 @@
                                 <StackPanel Margin="16,10,16,12">
                                     <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
                                         <TextBlock Text="💡" FontSize="12" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                        <TextBlock Text="How it works" Foreground="{StaticResource SectionHueStudioBrush}"
+                                        <TextBlock Text="{loc:Str shelisten_how_title}" Foreground="{StaticResource SectionHueStudioBrush}"
                                                    FontSize="10" FontWeight="Bold" VerticalAlignment="Center"/>
                                     </StackPanel>
 
-                                    <TextBlock Text="1. Start listening" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,2"/>
-                                    <TextBlock Text="Tap Start listening (here or the dashboard Voice chip) to turn the mic on. No need to start Takeover."
+                                    <TextBlock Text="{loc:Str shelisten_how_1_title}" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,2"/>
+                                    <TextBlock Text="{loc:Str shelisten_how_1_body}"
                                                Foreground="{DynamicResource TextMutedBrush}"
                                                FontSize="12" TextWrapping="Wrap" LineHeight="17" Margin="0,0,0,10"/>
 
-                                    <TextBlock Text="2. Call her, then ask" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,2"/>
-                                    <TextBlock Text="Say your wake word (or press push-to-talk), then a command — like 'show me some bubbles'."
+                                    <TextBlock Text="{loc:Str shelisten_how_2_title}" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,2"/>
+                                    <TextBlock Text="{loc:Str shelisten_how_2_body}"
                                                Foreground="{DynamicResource TextMutedBrush}"
                                                FontSize="12" TextWrapping="Wrap" LineHeight="17" Margin="0,0,0,10"/>
 
-                                    <TextBlock Text="3. She obeys" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,2"/>
-                                    <TextBlock Text="If she doesn't catch a command, she gives you a mantra to say instead."
+                                    <TextBlock Text="{loc:Str shelisten_how_3_title}" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,2"/>
+                                    <TextBlock Text="{loc:Str shelisten_how_3_body}"
                                                Foreground="{DynamicResource TextMutedBrush}"
                                                FontSize="12" TextWrapping="Wrap" LineHeight="17" Margin="0,0,0,4"/>
 
@@ -403,11 +405,11 @@
 
                                     <Border Background="#22FF69B4" CornerRadius="6" Padding="10,8">
                                         <TextBlock Foreground="{DynamicResource PinkBrush}" FontSize="12" TextWrapping="Wrap" LineHeight="17"
-                                                   Text="🛟 Safety word: say &quot;red&quot; (or &quot;stop everything&quot;) any time to stop all effects."/>
+                                                   Text="{loc:Str shelisten_safety_line}"/>
                                     </Border>
 
                                     <TextBlock Margin="0,10,0,0" Foreground="{DynamicResource TextDimBrush}" FontSize="11" TextWrapping="Wrap" LineHeight="16" FontStyle="Italic"
-                                               Text="Fully offline. Audio is processed on your device and never recorded or sent anywhere."/>
+                                               Text="{loc:Str shelisten_offline_line}"/>
                                 </StackPanel>
                             </Grid>
                         </Border>
@@ -441,17 +443,17 @@
                         <Border Width="3" HorizontalAlignment="Left" Margin="0,12" CornerRadius="0,2,2,0"
                                 Background="{StaticResource SectionHueStudioBrush}"/>
                         <StackPanel Margin="20,14,20,16">
-                            <TextBlock Text="WHAT YOU CAN SAY" Foreground="{StaticResource SectionHueStudioBrush}" FontSize="10" FontWeight="Bold" Margin="0,0,0,5"/>
+                            <TextBlock Text="{loc:Str shelisten_say_title}" Foreground="{StaticResource SectionHueStudioBrush}" FontSize="10" FontWeight="Bold" Margin="0,0,0,5"/>
                             <TextBlock Foreground="{DynamicResource TextMutedBrush}" FontSize="12" Margin="0,0,0,4" TextWrapping="Wrap"
-                                       Text="Call her with your wake word (or push-to-talk), then say a command. Each line shows a few ways to say the same thing — any of them work:"/>
+                                       Text="{loc:Str shelisten_say_intro}"/>
                             <TextBlock Foreground="{DynamicResource TextDimBrush}" FontSize="11" Margin="0,0,0,14" TextWrapping="Wrap"
-                                       Text="Tip: most effects also take a plain “&lt;name&gt; on” / “&lt;name&gt; off” (e.g. “spiral on”, “bubbles off”)."/>
+                                       Text="{loc:Str shelisten_say_tip}"/>
 
                             <!-- Safety word, up top where it belongs -->
                             <Border Background="#22FF69B4" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
                                     CornerRadius="8" Padding="14,10" Margin="0,0,0,16">
                                 <StackPanel>
-                                    <TextBlock Text="🛟  Safety word — stops every effect, instantly" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <TextBlock Text="{loc:Str shelisten_cmd_safety}" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
                                     <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="20"
                                                Text="“red”  ·  “stop everything”  ·  “make it stop”  ·  “all stop”"/>
                                 </StackPanel>
@@ -467,26 +469,26 @@
                                 <!-- Left column -->
                                 <StackPanel Grid.Column="0">
 
-                                    <TextBlock Text="🫧  Bubbles" Tag="voice:bubbles_on|bubbles_off" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <TextBlock Text="{loc:Str shelisten_cmd_bubbles}" Tag="voice:bubbles_on|bubbles_off" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
                                     <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21" Margin="0,0,0,14"><Run Foreground="{DynamicResource TextDimBrush}" Text="on "/><Run Text="“show me some bubbles” · “bubbles on” · “give me bubbles”"/><LineBreak/><Run Foreground="{DynamicResource TextDimBrush}" Text="off "/><Run Text="“stop the bubbles” · “no more bubbles” · “bubbles off”"/></TextBlock>
 
-                                    <TextBlock Text="📺  Video" Tag="voice:video_on|video_off|video_pause" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <TextBlock Text="{loc:Str shelisten_cmd_video}" Tag="voice:video_on|video_off|video_pause" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
                                     <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21" Margin="0,0,0,14"><Run Foreground="{DynamicResource TextDimBrush}" Text="play "/><Run Text="“show me a video” · “play a video” · “put on a video”"/><LineBreak/><Run Foreground="{DynamicResource TextDimBrush}" Text="stop "/><Run Text="“stop the video” · “no more videos” · “video off”"/><LineBreak/><Run Foreground="{DynamicResource TextDimBrush}" Text="pause "/><Run Text="“pause the video” · “resume the video” · “keep playing”"/></TextBlock>
 
-                                    <TextBlock Text="✨  Flash" Tag="voice:flash_once" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <TextBlock Text="{loc:Str shelisten_cmd_flash}" Tag="voice:flash_once" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
                                     <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21" Margin="0,0,0,14"
                                                Text="“flash me” · “one flash” · “give me a flash”"/>
 
-                                    <TextBlock Text="🌀  Spiral" Tag="voice:spiral_on|spiral_off" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <TextBlock Text="{loc:Str shelisten_cmd_spiral}" Tag="voice:spiral_on|spiral_off" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
                                     <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21" Margin="0,0,0,14"><Run Foreground="{DynamicResource TextDimBrush}" Text="on "/><Run Text="“show me the spiral” · “spiral on” · “bring up the spiral”"/><LineBreak/><Run Foreground="{DynamicResource TextDimBrush}" Text="off "/><Run Text="“stop the spiral” · “hide the spiral” · “spiral off”"/></TextBlock>
 
-                                    <TextBlock Text="🩷  Pink filter" Tag="voice:pink_on|pink_off" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <TextBlock Text="{loc:Str shelisten_cmd_pink}" Tag="voice:pink_on|pink_off" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
                                     <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21" Margin="0,0,0,14"><Run Foreground="{DynamicResource TextDimBrush}" Text="on "/><Run Text="“make it pink” · “go pink” · “pink filter on”"/><LineBreak/><Run Foreground="{DynamicResource TextDimBrush}" Text="off "/><Run Text="“make it normal” · “stop the pink filter” · “pink filter off”"/></TextBlock>
 
-                                    <TextBlock Text="💬  Subliminals" Tag="voice:subliminals_on|subliminals_off" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <TextBlock Text="{loc:Str shelisten_cmd_subliminals}" Tag="voice:subliminals_on|subliminals_off" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
                                     <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21" Margin="0,0,0,14"><Run Foreground="{DynamicResource TextDimBrush}" Text="on "/><Run Text="“show me subliminals” · “subliminals on” · “start the subliminals”"/><LineBreak/><Run Foreground="{DynamicResource TextDimBrush}" Text="off "/><Run Text="“stop the subliminals” · “no more subliminals” · “subliminals off”"/></TextBlock>
 
-                                    <TextBlock Text="🔤  Bouncing text" Tag="voice:bouncing_on|bouncing_off" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <TextBlock Text="{loc:Str shelisten_cmd_bouncing}" Tag="voice:bouncing_on|bouncing_off" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
                                     <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21"><Run Foreground="{DynamicResource TextDimBrush}" Text="on "/><Run Text="“show me bouncing text” · “bouncing text on” · “start the bouncing text”"/><LineBreak/><Run Foreground="{DynamicResource TextDimBrush}" Text="off "/><Run Text="“stop the bouncing text” · “no more bouncing text” · “bouncing text off”"/></TextBlock>
 
                                 </StackPanel>
@@ -494,29 +496,29 @@
                                 <!-- Right column -->
                                 <StackPanel Grid.Column="2">
 
-                                    <TextBlock Text="🧠  Mind wipe" Tag="voice:wipe_once" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <TextBlock Text="{loc:Str shelisten_cmd_mindwipe}" Tag="voice:wipe_once" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
                                     <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21" Margin="0,0,0,14"
                                                Text="“wipe my mind” · “empty my head” · “blank my mind”"/>
 
-                                    <TextBlock Text="🔒  Lock card" Tag="voice:lock_once" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <TextBlock Text="{loc:Str shelisten_cmd_lock}" Tag="voice:lock_once" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
                                     <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21" Margin="0,0,0,14"
                                                Text="“lock me” · “give me a lock card” · “lock me up”"/>
 
-                                    <TextBlock Text="📝  Pop quiz" Tag="voice:quiz_once" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <TextBlock Text="{loc:Str shelisten_cmd_quiz}" Tag="voice:quiz_once" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
                                     <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21" Margin="0,0,0,14"
                                                Text="“quiz me” · “test me” · “ask me a question”"/>
 
-                                    <TextBlock Text="⚡  Keyword triggers" Tag="voice:keyword_on|keyword_off" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <TextBlock Text="{loc:Str shelisten_cmd_keywords}" Tag="voice:keyword_on|keyword_off" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
                                     <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21" Margin="0,0,0,14"><Run Foreground="{DynamicResource TextDimBrush}" Text="on "/><Run Text="“trigger words on” · “keyword triggers on” · “start the keyword triggers”"/><LineBreak/><Run Foreground="{DynamicResource TextDimBrush}" Text="off "/><Run Text="“trigger words off” · “stop the keyword triggers”"/></TextBlock>
 
-                                    <TextBlock Text="🎯  Quick toys" Tag="voice:freeze_once|shake_once|count_once" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <TextBlock Text="{loc:Str shelisten_cmd_toys}" Tag="voice:freeze_once|shake_once|count_once" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
                                     <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21" Margin="0,0,0,14"><Run Foreground="{DynamicResource TextDimBrush}" Text="freeze "/><Run Text="“freeze” · “freeze me” · “hold still”"/><LineBreak/><Run Foreground="{DynamicResource TextDimBrush}" Text="shake "/><Run Text="“shake the screen” · “shake it” · “make it shake”"/><LineBreak/><Run Foreground="{DynamicResource TextDimBrush}" Text="count "/><Run Text="“count for me” · “counting game” · “make me count”"/></TextBlock>
 
-                                    <TextBlock Text="🌊  Go deeper" Tag="voice:deeper" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <TextBlock Text="{loc:Str shelisten_cmd_deeper}" Tag="voice:deeper" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
                                     <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21" Margin="0,0,0,14"
                                                Text="“deeper” · “take me deeper” · “drop me down”"/>
 
-                                    <TextBlock Text="🎀  Takeover" Tag="voice:takeover_on|takeover_off" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <TextBlock Text="{loc:Str shelisten_cmd_takeover}" Tag="voice:takeover_on|takeover_off" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
                                     <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21"><Run Foreground="{DynamicResource TextDimBrush}" Text="on "/><Run Text="“take over” · “take control” · “you’re in charge”"/><LineBreak/><Run Foreground="{DynamicResource TextDimBrush}" Text="off "/><Run Text="“give me control back” · “stop the takeover” · “release control”"/></TextBlock>
 
                                 </StackPanel>
@@ -533,29 +535,29 @@
                                 </Grid.ColumnDefinitions>
 
                                 <StackPanel Grid.Column="0">
-                                    <TextBlock Text="⏸  Session" Tag="voice:pause" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <TextBlock Text="{loc:Str shelisten_cmd_session}" Tag="voice:pause" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
                                     <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21" Margin="0,0,0,14"
                                                Text="“pause” · “resume” · “keep going”"/>
 
-                                    <TextBlock Text="🔊  Volume" Tag="voice:louder" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <TextBlock Text="{loc:Str shelisten_cmd_volume}" Tag="voice:louder" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
                                     <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21" Margin="0,0,0,14"
                                                Text="“louder” · “quieter” · “mute”"/>
 
-                                    <TextBlock Text="💗  Mantra" Tag="voice:mantra" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <TextBlock Text="{loc:Str shelisten_cmd_mantra}" Tag="voice:mantra" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
                                     <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21"
                                                Text="“give me a mantra” · “say a mantra” · “give me something to say”"/>
                                 </StackPanel>
 
                                 <StackPanel Grid.Column="2">
-                                    <TextBlock Text="🔁  Again" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <TextBlock Text="{loc:Str shelisten_cmd_again}" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
                                     <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21" Margin="0,0,0,14"
                                                Text="“again” · “one more” · “harder”  (repeats the last thing)"/>
 
-                                    <TextBlock Text="❓  Help" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <TextBlock Text="{loc:Str shelisten_cmd_help}" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
                                     <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21" Margin="0,0,0,14"
                                                Text="“what can I say” · “what can you do” · “commands”"/>
 
-                                    <TextBlock Text="🎤  Stop the mic" Tag="voice:stop_listening" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <TextBlock Text="{loc:Str shelisten_cmd_stop_mic}" Tag="voice:stop_listening" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
                                     <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="21"
                                                Text="“stop listening” · “mic off” · “you can stop listening”"/>
                                 </StackPanel>
@@ -564,7 +566,7 @@
                             <Border Background="{DynamicResource ElevatedSurfaceBrush}" BorderBrush="{DynamicResource GlassBorderBrush}"
                                     BorderThickness="1" CornerRadius="8" Padding="12,8" Margin="0,16,0,0">
                                 <TextBlock Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap" LineHeight="16"
-                                           Text="Short, plain phrases recognize best. You can stack commands in one breath — say one, then another without calling her name again. If she mishears, she’ll give you a mantra to say instead."/>
+                                           Text="{loc:Str shelisten_say_footer}"/>
                             </Border>
                         </StackPanel>
                     </Grid>
@@ -583,13 +585,13 @@
                     CornerRadius="16" IsHitTestVisible="True">
                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,120,0,0">
                     <TextBlock Text="🔒" FontSize="44" HorizontalAlignment="Center"/>
-                    <TextBlock Text="Premium feature" FontSize="22"
+                    <TextBlock Text="{loc:Str blink_trainer_gate_headline}" FontSize="22"
                                FontWeight="Bold" Foreground="{StaticResource TextLightBrush}" HorizontalAlignment="Center"/>
-                    <TextBlock Text="Support to unlock voice control." FontSize="14"
+                    <TextBlock Text="{loc:Str shelisten_gate_sub}" FontSize="14"
                                Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Center" Margin="0,4,0,12"/>
                     <Button x:Name="BtnSL_GateUnlock" Padding="20,8" Background="{DynamicResource FxGlowBrush}"
                             Foreground="White" FontWeight="Bold" Cursor="Hand" BorderThickness="0">
-                        <TextBlock Text="🔓 Unlock with Patreon"/>
+                        <TextBlock Text="{loc:Str shelisten_gate_btn}"/>
                     </Button>
                 </StackPanel>
             </Border>

@@ -87,6 +87,9 @@ public sealed class TubeChatParityTests
         try
         {
             AvApp.SeedCompanionTubeSeams();
+            // No games on offer: the parity trunk's launcher opens games, so the activity list would
+            // carry them and the Game card would win over the Session fallback this test pins.
+            CompanionBrain.ActivitiesProvider = () => Array.Empty<CompanionActivity>();
             CoreDispatch.PostProvider = a => Dispatcher.UIThread.Post(a);
             Assert.NotNull(PromptAssembler.NoticeSurface?.Invoke());       // the oversize toast has a surface
             CompanionAskService.RequestDelay = TimeSpan.Zero;
@@ -166,6 +169,7 @@ public sealed class TubeChatParityTests
             CompanionAskService.BusyProvider, CompanionAskService.SessionOptions, CompanionAskService.StartSession,
             CompanionAskService.OpenLink, CompanionAskService.RequestDelay, ConversationDelivery.AskCardsShown,
             PromptAssembler.NoticeSurface, CoreDispatch.PostProvider);
+        var activities = CompanionBrain.ActivitiesProvider;
         return () =>
         {
             CompanionAskService.Instance.Stop();
@@ -173,6 +177,7 @@ public sealed class TubeChatParityTests
              CompanionAskService.BusyProvider, CompanionAskService.SessionOptions, CompanionAskService.StartSession,
              CompanionAskService.OpenLink, CompanionAskService.RequestDelay, ConversationDelivery.AskCardsShown,
              PromptAssembler.NoticeSurface, CoreDispatch.PostProvider) = saved;
+            CompanionBrain.ActivitiesProvider = activities;
         };
     }
 
@@ -206,6 +211,7 @@ public sealed class TubeChatParityTests
         try
         {
             AvApp.SeedCompanionTubeSeams();
+            CompanionBrain.ActivitiesProvider = () => Array.Empty<CompanionActivity>();   // no games, as below
             const string ask = "what can I do";
             // No launcher here: no games, no sessions -> nothing to build -> no promise.
             Assert.False(ConversationDelivery.AskCardsShown!(ask));

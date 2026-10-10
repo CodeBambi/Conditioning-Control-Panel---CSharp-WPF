@@ -90,6 +90,6 @@ public class V2BadgesTests
         Assert.False(V2Badges.ChipWearsV2Pill("tab.studio"));
 
         // And the bubbles read the mosaic already used now forwards to the same rule.
-        Assert.Equal(V2Badges.BubbleOwned(), AmbientBubbleMotion.AnyV2Owned);
+        Assert.Equal(V2Badges.BubbleOwned(), AmbientBubbleMotionApp.AnyV2Owned);
     }
 }

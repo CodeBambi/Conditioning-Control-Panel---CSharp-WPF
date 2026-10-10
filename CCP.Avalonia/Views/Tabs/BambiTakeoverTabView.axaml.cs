@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -146,6 +147,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// </summary>
         private void ApplyFeatureArt()
         {
+            // WPF MainWindow.xaml.cs:2334 (LoadTakeoverImage): the mod's own name for the takeover.
+            try { TxtTakeoverUnlocked.Text = "\U0001F916 " + (App.Mods?.GetTakeoverLabel() ?? Loc.Get("label_takeover")); }
+            catch (Exception ex) { Log.Debug("takeover label: {E}", ex.Message); }
             var art = Helpers.ModArt.TryLoad(TakeoverArtPath);
             if (art == null) return;
 
@@ -544,14 +548,34 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             s.WallpaperEnabled = keep;
             CoreSettings.Save();
             PanelWallpaperDuration.IsVisible = !keep;
-            // ponytail: WPF also puts the original wallpaper straight back when this goes off
-            // (App.Wallpaper.Deactivate) and warns on an empty library when it goes on
-            // (MainWindow.StartStop.cs WarnIfWallpaperLibraryEmpty). Needs
-            // ConditioningControlPanel/Services/WallpaperService.cs, which is Win32.
+            // WPF MainWindow.Autonomy.cs:429: turning it off puts the original wallpaper straight back,
+            // so the toggle doubles as the manual undo.
+            try { if (!keep && Platform.WallpaperHead.Service.IsActive) Platform.WallpaperHead.Restore(); }
+            catch (Exception ex) { Log.Debug("Wallpaper restore: {E}", ex.Message); }
+            // Arming it with nothing to show used to be silent (WPF WarnIfWallpaperLibraryEmpty).
+            if (keep) WarnIfWallpaperLibraryEmpty();
         }
 
-        /// <summary>WPF MainWindow.Autonomy.cs:329. The folder is saved for Takeover's wallpaper
-        /// action, which this head does not perform yet (no wallpaper service), so it is inert here.</summary>
+        /// <summary>WPF MainWindow.StartStop.cs:253: jpg / png / bmp only (the desktop will not take a webp
+        /// or a gif). WPF raises a toast with two buttons; this head has no actionable toast, so it is a
+        /// dialog with the same text. It asks whatever the media source is: this head has no online wallpaper pool.</summary>
+        private void WarnIfWallpaperLibraryEmpty()
+        {
+            try
+            {
+                var dir = ConditioningControlPanel.Services.WallpaperService.SourceFolder();
+                var exts = new[] { ".jpg", ".jpeg", ".png", ".bmp" };
+                if (System.IO.Directory.Exists(dir)
+                    && System.IO.Directory.EnumerateFiles(dir).Any(f => exts.Contains(System.IO.Path.GetExtension(f).ToLowerInvariant()))) return;
+                Log.Information("[empty-state] Wallpaper armed with an empty local wallpapers folder");
+                if (TopLevel.GetTopLevel(this) is Window owner)
+                    _ = Dialogs.MessageDialog.ShowAsync(owner, Loc.Get("label_autonomy_wallpaper"),
+                        string.Format(Loc.Get("msg_no_wallpaper_images"), Loc.Get("nav_door_library"), Loc.Get("tab_assets")));
+            }
+            catch (Exception ex) { Log.Debug(ex, "[empty-state] wallpaper library check failed"); }
+        }
+
+        /// <summary>WPF MainWindow.Autonomy.cs:329: the folder Takeover's wallpaper action pulls from.</summary>
         private async void BtnWallpaperFolder_Click(object? sender, RoutedEventArgs e)
         {
             if (TopLevel.GetTopLevel(this) is not Window owner) return;
@@ -598,8 +622,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             if (s.MantraChantEnabled == on) return;
             s.MantraChantEnabled = on;
             CoreSettings.Save();
-            // ponytail: WPF then calls App.MantraChant.Start()/Stop() and re-reads the hint. Needs
-            // ConditioningControlPanel/Services/MantraChantService.cs.
+            var chant = Platform.MantraChantService.Instance;
+            if (on) chant.Start(); else chant.Stop();
+            TxtMantraChantHint.Text = Loc.Get(chant.CanChant() ? "desc_mantra_chant" : "desc_mantra_chant_none");
         }
 
         private void SldMantraChantVolume_Changed(object? sender, RangeBaseValueChangedEventArgs e)
@@ -608,7 +633,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             if (_isLoading) return;
             CoreSettings.Current.MantraChantVolume = e.NewValue;
             CoreSettings.Save();
-            // ponytail: WPF also live-applies to a clip already playing (App.MantraChant.ApplyVolume).
+            Platform.MantraChantService.Instance.ApplyVolume();   // live, to a clip that is already playing
         }
 
         private void SldMantraChantGap_Changed(object? sender, RangeBaseValueChangedEventArgs e)

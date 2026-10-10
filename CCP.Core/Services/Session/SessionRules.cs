@@ -96,6 +96,7 @@ namespace ConditioningControlPanel.Services
                     pending.Start();
                     Log.Information("Session: {Feature} started at {Minutes:F1} minutes (target was {Target})",
                         pending.Name, elapsedMinutes, pending.StartMinute);
+                    ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("sessionFeatureArrived", new { target = pending.Name?.ToLowerInvariant(), n = (int)pending.StartMinute });   // WPF SessionEngine.cs:841
                 }
                 catch (Exception ex)
                 {

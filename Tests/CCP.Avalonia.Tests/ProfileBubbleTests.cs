@@ -146,6 +146,58 @@ public sealed class ProfileBubbleTests
         return Task.CompletedTask;
     });
 
+    /// <summary>H12: the equipped preset bust beats initials, an unknown one falls back to them quietly; a flash
+    /// wobbles the bubble (2.5 s throttle) and a subliminal shimmers it (4 s throttle); Motion Off does neither.</summary>
+    [Fact]
+    public Task BustBeatsInitialsAndFlashAndSubliminalReact() => AvaloniaTestDispatcher.RunAsync(() =>
+    {
+        Setup();
+        var saved = (CoreSettings.ServiceProvider, CoreAccount.IsLoggedInProvider, CoreAccount.DisplayNameProvider);
+        var service = new SettingsService();
+        CoreSettings.ServiceProvider = () => service;
+        var s = service.Current;
+        s.MotionLevel = MotionLevel.Full;
+        s.ShareProfilePicture = false;
+        CoreAccount.IsLoggedInProvider = () => true;
+        CoreAccount.DisplayNameProvider = () => "Bambi Doll";
+        var shell = new MainShellWindow();
+        try
+        {
+            shell.Show();
+            Dispatcher.UIThread.RunJobs();
+            var initials = shell.FindControl<TextBlock>("ProfileBubbleInitials")!;
+            var fill = shell.FindControl<Ellipse>("ProfileBubbleFill")!;
+
+            s.ProfileCosmetics.AvatarId = CosmeticsPool.AvatarIds.First();
+            shell.RefreshProfileBubble();
+            Assert.True(shell.ProfileBubbleShowsBust);
+            Assert.False(initials.IsVisible);
+            Assert.IsType<ImageBrush>(fill.Fill);
+
+            s.ProfileCosmetics.AvatarId = "no-such-avatar";
+            shell.RefreshProfileBubble();
+            Assert.False(shell.ProfileBubbleShowsBust);
+            Assert.True(initials.IsVisible);
+            Assert.Equal(LeaderboardEntryData.BuildInitials("Bambi Doll"), initials.Text);
+
+            CoreTubeEvents.RaiseFlashAboutToDisplay();
+            CoreTubeEvents.RaiseFlashAboutToDisplay();
+            CoreTubeEvents.RaiseSubliminalDisplayed();
+            CoreTubeEvents.RaiseSubliminalDisplayed();
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(1, shell.ProfileBubbleWobbles);    // the second flash is inside the throttle
+            Assert.Equal(1, shell.ProfileBubbleShimmers);
+            Assert.InRange(shell.FindControl<Grid>("ProfileBubbleVisual")!.Opacity, 0.0, 1.0);
+        }
+        finally
+        {
+            shell.Close();
+            Dispatcher.UIThread.RunJobs();
+            (CoreSettings.ServiceProvider, CoreAccount.IsLoggedInProvider, CoreAccount.DisplayNameProvider) = saved;
+        }
+        return Task.CompletedTask;
+    });
+
     [Fact]
     public Task OgBorderSpinsOnlyWhileShownAndSearchGlows() => AvaloniaTestDispatcher.RunAsync(() =>
     {
@@ -176,12 +228,14 @@ public sealed class ProfileBubbleTests
             Dispatcher.UIThread.RunJobs();
             Assert.False(shell.OgBorderLoopRunning);
             shell.ShowTab("discord");
-            Dispatcher.UIThread.RunJobs();
-            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
-            Assert.True(shell.OgBorderLoopRunning);
+            // Read at the show, before the dispatcher pumps: the stagger runs on the wall clock (460 ms at
+            // most), and a cold or loaded run spent longer than that inside RunJobs, so the fade had finished.
             var cards = page.FindControl<StackPanel>("ProfileColumnStack")!.Children.Where(c => c.IsVisible).ToList();
             Assert.True(cards.Count > 1);
             Assert.True(cards[^1].Opacity < 1, "the entrance stagger did not hold the last card back");
+            Dispatcher.UIThread.RunJobs();
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+            Assert.True(shell.OgBorderLoopRunning);
             page.FindControl<Grid>("ProfileCardWrapper")!.IsVisible = false;   // a search found no one
             Dispatcher.UIThread.RunJobs();
             Assert.False(shell.OgBorderLoopRunning);

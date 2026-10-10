@@ -29,6 +29,10 @@ namespace ConditioningControlPanel.Avalonia.Platform
         private IVoice? _oneShot, _loop;
         private bool _running;
         private double _frequency = 6, _volume = 0.5;
+        // WPF _sessionMode / _sessionBaseFrequency / _sessionStartTime (MindWipeService.cs:46-48).
+        private bool _sessionMode;
+        private int _sessionBase;
+        private DateTime _sessionStart;
 
         /// <summary>Raised with the loop's length in seconds once it has played 60 s (WPF Clean Slate).</summary>
         internal Action<double>? CleanSlate;
@@ -52,6 +56,7 @@ namespace ConditioningControlPanel.Avalonia.Platform
         {
             CoreMindWipe.StartProvider = Start;
             CoreMindWipe.StopProvider = Stop;
+            CoreMindWipe.StartSessionProvider = StartSession;
             CoreMindWipe.IsRunningProvider = () => IsRunning;
             CoreMindWipe.TriggerOnceProvider = TriggerOnce;
             CoreMindWipe.StartLoopProvider = StartLoop;
@@ -75,6 +80,7 @@ namespace ConditioningControlPanel.Avalonia.Platform
                 if (!_running)
                 {
                     _running = true;
+                    _sessionMode = false;   // WPF Start: normal mode
                     var every = MindWipeSchedule.TickInterval;
                     _tick = _time.CreateTimer(_ => Tick(), null, every, every);
                 }
@@ -82,6 +88,24 @@ namespace ConditioningControlPanel.Avalonia.Platform
             UpdateSettings(frequencyPerHour, volume);
             Log.Information("MindWipe: Started (frequency: {Freq}/hour, volume: {Vol}%, files: {Count})",
                 frequencyPerHour, volume * 100, ClipCount);
+        }
+
+        /// <summary>WPF Volume setter + StartSession (MindWipeService.cs:253): escalating session mode,
+        /// a no-op while already running.</summary>
+        internal void StartSession(int baseFrequency, double volume)
+        {
+            lock (_lock)
+            {
+                _volume = MindWipeSchedule.ClampVolume(volume);
+                if (_running) return;
+                _running = true;
+                _sessionMode = true;
+                _sessionBase = baseFrequency;
+                _sessionStart = _time.GetLocalNow().DateTime;
+                var every = MindWipeSchedule.TickInterval;
+                _tick = _time.CreateTimer(_ => Tick(), null, every, every);
+            }
+            Log.Information("MindWipe: Started in session mode (base multiplier: {Base})", baseFrequency);
         }
 
         /// <summary>Everything off, running or not: panic reaches a test clip played with the service stopped.</summary>
@@ -117,7 +141,10 @@ namespace ConditioningControlPanel.Avalonia.Platform
             lock (_lock)
             {
                 if (!_running || _loop != null || _clips.Length == 0) return;
-                if (_roll() >= MindWipeSchedule.Probability(_frequency)) return;
+                var p = _sessionMode
+                    ? MindWipeSchedule.SessionProbability(_sessionBase, _time.GetLocalNow().DateTime - _sessionStart)
+                    : MindWipeSchedule.Probability(_frequency);
+                if (_roll() >= p) return;
             }
             PlayOnce();
         }
@@ -145,6 +172,7 @@ namespace ConditioningControlPanel.Avalonia.Platform
             lock (_lock) { displaced = _oneShot; _oneShot = voice; }
             displaced?.Dispose();
             Log.Debug("MindWipe: Playing {File} at volume {Vol}%", Path.GetFileName(clip), volume * 100);
+            CoreTubeEvents.RaiseMindWipeTriggered();   // WPF MindWipeService.MindWipeTriggered (tube#T5)
         }
 
         internal void StartLoop(double volume)

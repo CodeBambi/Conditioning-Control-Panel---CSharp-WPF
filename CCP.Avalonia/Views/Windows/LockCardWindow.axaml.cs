@@ -563,9 +563,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (_completedRepeats >= _requiredRepeats) CompleteCard();
         }
 
+        /// <summary>WPF LockCardService.NotifyCompleted :65: {n} = tries, the mistakes plus the one that
+        /// landed. A clean card has no number worth saying, so it carries no ctx and the one line that
+        /// asks for {n} is skipped by the engine.</summary>
+        internal static object? SolvedCtx(int mistakes) => mistakes > 0 ? new { n = mistakes + 1 } : null;
+
         private void CompleteCard()
         {
             var completionTime = (DateTime.Now - _startTime).TotalSeconds;
+            if (!_isTest) ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("lockCardSolved", SolvedCtx(_totalErrors));   // WPF LockCardService.cs:65
 
             // The XP award, WPF's body verbatim including the !_isTest gate and the strict 1.5x
             // multiplier. App.Progression is CoreProgression here; the WPF call is already a
@@ -579,8 +585,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 var xpAmount = (50 * _requiredRepeats) + 200;
                 if (_strictMode) xpAmount = (int)(xpAmount * 1.5);
                 CoreProgression.AddXP(xpAmount, "LockCard");
-                // WPF AchievementService.TrackLockCardCompletion:544, the quest half (programs-3a decision).
-                App.Quests?.TrackLockCardCompleted();
+                // WPF AchievementService.TrackLockCardCompletion's quest call (:759), same !_isTest gate (progression#41).
+                try { App.Quests?.TrackLockCardCompleted(); } catch (Exception ex) { Log.Debug("lock card quest credit: {E}", ex.Message); }
+                Platform.ChasterHead.NoteLockCard(_totalErrors);   // WPF AchievementService.cs:763, same !_isTest gate
+                // WPF LockCardWindow.xaml.cs:905 TrackLockCardCompletion: the count, typing_tutor, obedience_reflex.
+                try { App.Achievements?.TrackLockCardCompletion(completionTime, _totalErrors, _requiredRepeats); }
+                catch (Exception ex) { Log.Debug("lock card count: {E}", ex.Message); }
+                try { Completed?.Invoke(); } catch (Exception ex) { Log.Debug("lock card completed handler: {E}", ex.Message); }   // WPF TotalLockCardsCompleted, read by the leash task host
             }
 
             // ponytail: the rest stays stubbed and has no Core seam to reach through.
@@ -666,8 +677,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         /// <summary>Also false while the listener's key resolved to no keycode: a strict card must not
         /// lose Esc to a panic key that can never fire.</summary>
-        private static bool PanicHookIsInstalled =>
-            Platform.X11PanicKey.IsListening && Platform.X11PanicKey.BoundKeycode != 0;
+        private static bool PanicHookIsInstalled => Platform.PanicListeners.Live;   // X11 listener or the Windows hook
 
         /// <summary>
         /// #875: does Esc close THIS card? Non-strict cards: yes. Strict cards: only while a panic
@@ -701,9 +711,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 }
                 else
                 {
-                    // Refused. The gate is live, so repaint the hint now that the user has told us
-                    // they are looking for the exit.
-                    RefreshEscHint();
+                    // Refused. The gate is live, so repaint the hint on EVERY card (WPF repaints
+                    // the mirrors too) now that the user has told us they are looking for the exit.
+                    foreach (var w in new List<LockCardWindow>(_allWindows))
+                    {
+                        try { w.RefreshEscHint(); } catch { }
+                    }
                 }
             }
 
@@ -1140,7 +1153,29 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         /// <summary>The CoreLockCard surface (seeded in App): draw the next phrase and resolve its repeat
         /// count through the three modes exactly as WPF LockCardService.ShowLockCard does.</summary>
-        internal static void ShowNext(bool isTest)
+        /// <remarks>SAFETY: <paramref name="origin"/> decides strict through
+        /// <see cref="LockCardStrictRule"/>. A leash or remote card is never strict, whatever the
+        /// player's own setting says (a participant can never raise restraint).</remarks>
+        internal static void ShowNext(bool isTest) => ShowNext(isTest, LockCardOrigin.Local);
+
+        /// <summary>SAFETY (hunt3 IC1): who a scheduled card belongs to. A leash task running (lines,
+        /// or the session a holder started) makes it the holder's; a schedule a controller switched on
+        /// makes it the controller's; neither is ever strict. Otherwise the player's own.</summary>
+        internal static LockCardOrigin ScheduledOrigin() =>
+            LeashTaskRunning() ? LockCardOrigin.Leash
+            : LockCardScheduler.Instance.StartedByRemote ? LockCardOrigin.Remote
+            : LockCardOrigin.Local;
+
+        /// <summary>Test seam: a leash task is running on this machine.</summary>
+        internal static Func<bool> LeashTaskRunning { get; set; } = () => Platform.LeashTaskHost.Runner?.IsRunning == true;
+
+        /// <summary>The CoreLockCard seam's entry (schedule, Test button, autonomy, voice): the Test
+        /// button is always the player's own; anything else asks <see cref="ScheduledOrigin"/>.</summary>
+        internal static void ShowScheduled(bool isTest) =>
+            ShowNext(isTest, isTest ? LockCardOrigin.Local : ScheduledOrigin());
+
+        /// <inheritdoc cref="ShowNext(bool)"/>
+        internal static void ShowNext(bool isTest, LockCardOrigin origin)
         {
             var phrase = LockCardScheduler.Instance.PickPhrase(LockCardScheduler.EnabledPhrases());
             if (phrase is null) return;   // no enabled phrases: nothing to lock behind
@@ -1149,11 +1184,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 s.LockCardRandomRepeats, s.LockCardRepeatsMin, s.LockCardRepeats,
                 s.LockCardTargetLengthEnabled, s.LockCardTargetLength,
                 s.LockCardTargetLengthVariance, Random.Shared.NextDouble());
-            ShowOnAllMonitors(phrase, repeats, s.LockCardStrict, isTest, s.LockCardVoiceMode);
+            ShowOnAllMonitors(phrase, repeats, LockCardStrictRule.Resolve(origin, s.LockCardStrict), isTest, s.LockCardVoiceMode);
         }
 
         /// <summary>The card that owns the keyboard, and what it has counted. Tests read these.</summary>
         internal int RequiredRepeats => _requiredRepeats;
+        /// <summary>Whether this card refuses to close unsolved. Tests pin it for leash / remote cards.</summary>
+        internal bool IsStrict => _strictMode;
         internal static LockCardWindow? Primary => _allWindows.FirstOrDefault(w => w._isPrimary);
         internal int TotalErrors => _totalErrors;
         internal int CompletedRepeats => _completedRepeats;
@@ -1162,6 +1199,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         /// <summary>The last card left the screen: a pop quiz deferred behind it replays (#763).</summary>
         public static event Action? AllClosed;
+
+        /// <summary>A real (non-test) card was completed: the leash lines task counts these (WPF TotalLockCardsCompleted).</summary>
+        internal static event Action? Completed;
 
         private static Action? _heldForQuiz;
 

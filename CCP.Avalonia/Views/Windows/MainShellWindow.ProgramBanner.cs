@@ -14,8 +14,8 @@
 // 2. THE REST IS WPF STORYBOARD MOTION WITH NO EQUIVALENT WRITTEN HERE. A still card that reads
 //    as finished beats a moving one that is wrong, so these are named rather than faked:
 //      StartProgramBannerFx / StopProgramBannerFx - two looping DoubleAnimations (fog drift) and a
-//        repeating sheen sweep, started and stopped by hand. Avalonia's twin is a keyframe
-//        Animation with IterationCount.Infinite: a real port, not a mapping.
+//        repeating sheen sweep, started and stopped by hand. The port goes on the shared 30 fps
+//        beat (Helpers.VisibleBeat), never an infinite Avalonia Animation: a real port, not a mapping.
 //      BuildProgramBannerSparkles / PositionProgramBannerSparkles / StartProgramBannerSparkles -
 //        ellipses added to the ProgramTodaySparkles Canvas at fractions of the card width, each on
 //        its own staggered twinkle clock.

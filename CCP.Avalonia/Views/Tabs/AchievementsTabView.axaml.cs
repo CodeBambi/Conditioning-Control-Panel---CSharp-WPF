@@ -78,6 +78,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             AttachedToVisualTree += (_, _) => { engine.Unlocked -= OnUnlocked; engine.Unlocked += OnUnlocked; };
             DetachedFromVisualTree += (_, _) => engine.Unlocked -= OnUnlocked;
             DetachedFromVisualTree += (_, _) => FinishFx();
+            // The lock title's glow: a BoxShadow line behind the text in the mod's pink (was a DropShadowEffect).
+            if (this.FindControl<Border>("PatronTitleGlow") is { } glow)
+                glow.Bind(Border.BoxShadowProperty, glow.GetResourceObservable("PinkColor",
+                    c => (object?)new BoxShadows(new BoxShadow { Blur = 20, Spread = 6, Color = c is Color pink ? pink : Colors.HotPink })));
             PropertyChanged += (_, e) =>
             {
                 if (e.Property != IsVisibleProperty) return;
@@ -85,6 +89,22 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 RefreshAll();
                 StaggerTiles();
             };
+        }
+
+        /// <summary>WPF MainWindow.Patreon.cs BtnVisitPatreon_Click: the patron lock opens the Patreon page.</summary>
+        internal const string PatreonUrl = "https://www.patreon.com/CodeBambi";
+
+        /// <summary>Tests only: takes the link in place of the browser.</summary>
+        internal Func<string, System.Threading.Tasks.Task<bool>>? OpenLink;
+
+        private async void BtnVisitPatreon_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            try
+            {
+                if (OpenLink != null) await OpenLink(PatreonUrl);
+                else await Platform.ExternalOpener.OpenAsync(TopLevel.GetTopLevel(this), PatreonUrl);
+            }
+            catch (Exception ex) { Serilog.Log.Error(ex, "Failed to open Patreon page"); }
         }
 
         /// <summary>The live engine; on the headless render path a read-only load of the same file

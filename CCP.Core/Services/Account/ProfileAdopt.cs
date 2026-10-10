@@ -163,6 +163,10 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public static void ApplySyncResponse(AppSettings settings, JObject response, DateTime nowUtc)
         {
+            // WPF ProfileSyncService.cs:2017-2046: the admin skills reset, its acknowledgement, else the
+            // take-higher wallet adopt.
+            ApplySkillsResetOrAdopt(settings, response);
+            AdoptConditioningMinutes(settings, response["total_conditioning_minutes"], "V2 sync");   // WPF :2296
             if (response["user"] is not JObject node) return;
             var user = node.ToObject<V2User>()!;
             ApplyCurveEpoch(settings, user.CurveEpoch);
@@ -198,6 +202,114 @@ namespace ConditioningControlPanel.Services
                 }
             }
             RecordAgreedServerXp(settings, user.Xp, TotalXp(settings), "V2 sync");
+        }
+
+        /// <summary>
+        /// <c>force_skills_reset</c> on a sync reply (WPF ProfileSyncService.cs:2017-2046 and
+        /// ApplyForceSkillsReset, the admin <c>/admin/reset-skills</c>), in WPF's three branches:
+        /// <list type="number">
+        /// <item>flag set and not yet acknowledged: the tree is cleared, the refund lands and
+        /// <see cref="AppSettings.PendingSkillsResetAck"/> is armed (it is on disk, so a crash cannot apply the
+        /// reset twice). The next push carries <c>force_skills_reset: false</c> (<c>SyncPush.Body</c>).</item>
+        /// <item>acknowledgement pending and the flag gone: the server took the ack, the flag is dropped.</item>
+        /// <item>otherwise the plain take-higher adopt (<see cref="AdoptSkillPoints"/>).</item>
+        /// </list>
+        /// The refund is the reply's <c>skill_points</c>, or one point per level when the reply names none.
+        /// DEVIATION from WPF, on purpose: WPF writes the refund outright; here it only RAISES the wallet
+        /// (the wallet rule: only a debited receipt or a balance refusal may lower Sparkles, and a sync
+        /// reply is a snapshot). A refund is the spent points coming back, so it is higher in every real
+        /// case. True when anything moved (the caller saves).
+        /// </summary>
+        public static bool ApplySkillsResetOrAdopt(AppSettings settings, JObject response)
+        {
+            var flagged = response["force_skills_reset"]?.Type == JTokenType.Boolean && response.Value<bool>("force_skills_reset");
+            if (flagged && !settings.PendingSkillsResetAck)
+            {
+                var named = response["skill_points"] is { Type: JTokenType.Integer } sp
+                    ? (int)Math.Clamp(sp.Value<long>(), 0, SparklePoints.Cap)
+                    : (int?)null;
+                var refund = named ?? settings.PlayerLevel * SkillPointsBank.PointsPerLevel;
+                var next = SparklePoints.MergeMax(refund, settings.SkillPoints);
+                Log.Information("Applying force skills reset: clearing {Count} skills, points {Local} -> {Points} (refund {Refund})",
+                    settings.UnlockedSkills?.Count ?? 0, settings.SkillPoints, next, refund);
+                settings.UnlockedSkills = new System.Collections.Generic.List<string>();
+                settings.SkillPoints = next;
+                settings.PendingSkillsResetAck = true;
+                return true;
+            }
+            if (settings.PendingSkillsResetAck && !flagged)
+            {
+                // Server flag was cleared by our acknowledgment.
+                settings.PendingSkillsResetAck = false;
+                return true;
+            }
+            return AdoptSkillPoints(settings, response["skill_points"], "V2 sync");
+        }
+
+        /// <summary>
+        /// Total conditioning time, take-higher (WPF ProfileSyncService.cs:2296 and :3417): hours earned on
+        /// another install are adopted BEFORE this one pushes its own total, so a fresh install never
+        /// reports less than the account holds. Raises only. A running tracker's baseline moves with the
+        /// lift (WPF :2308), or the stop would credit the gap a second time. Only a JSON number counts.
+        /// </summary>
+        public static bool AdoptConditioningMinutes(AppSettings settings, JToken? serverMinutes, string site)
+        {
+            if (serverMinutes is null || (serverMinutes.Type != JTokenType.Integer && serverMinutes.Type != JTokenType.Float)) return false;
+            var server = serverMinutes.Value<double>();
+            var local = settings.TotalConditioningMinutes;
+            if (double.IsNaN(server) || double.IsInfinity(server) || !(server > local)) return false;
+            Log.Information("{Site}: conditioning minutes server={Server:F1} > local={Local:F1}, adopting", site, server, local);
+            settings.TotalConditioningMinutes = server;
+            ConditioningTime.OnTotalLifted(server - local);
+            return true;
+        }
+
+        /// <summary>
+        /// Sparkles earned elsewhere (web Back Room, phone, another install) reach this one: WPF
+        /// ProfileSyncService.cs:2040-2046 and :3382, the higher of server and local.
+        /// WALLET RULE: a snapshot only RAISES <see cref="AppSettings.SkillPoints"/>. It never lowers it:
+        /// only a debited receipt may (SkillPurchase, V2WalletAdoption), plus the one adoption after a
+        /// balance refusal (<see cref="SparklePoints.AdoptAfterRefusal"/>), and neither runs here.
+        /// Only a JSON integer counts. True when the balance rose (the caller saves).
+        /// </summary>
+        public static bool AdoptSkillPoints(AppSettings settings, JToken? serverSkillPoints, string site)
+        {
+            if (serverSkillPoints is null || serverSkillPoints.Type != JTokenType.Integer) return false;
+            var server = (int)Math.Clamp(serverSkillPoints.Value<long>(), 0, SparklePoints.Cap);
+            var local = settings.SkillPoints;
+            var max = SparklePoints.MergeMax(server, local);
+            if (max <= local) return false;
+            Log.Information("{Site}: Skill points server={Server}, local={Local}, taking max ({Max})", site, server, local, max);
+            settings.SkillPoints = max;
+            return true;
+        }
+
+        /// <summary>
+        /// Consent, read before write. <c>/v2/user/profile</c> returns two of the six consent values
+        /// (<c>allow_discord_dm</c>, <c>show_online_status</c>); the account's value replaces the local one
+        /// BEFORE the first push, so a local default never shares more than the account holds. Skipped while a
+        /// change made here is still waiting for its sync (that change is newer than what the server holds).
+        /// Only JSON booleans count. True when a setting moved (the caller saves).
+        /// </summary>
+        public static bool AdoptConsent(AppSettings settings, JObject? userNode)
+        {
+            if (userNode == null) return false;
+            if (settings.ConsentPushPending && string.Equals(settings.ConsentOwnedAccount, settings.UnifiedId, StringComparison.Ordinal))
+                return false;
+            var changed = false;
+            if (userNode["allow_discord_dm"] is { Type: JTokenType.Boolean } dm && dm.Value<bool>() != settings.AllowDiscordDm)
+            {
+                settings.AllowDiscordDm = dm.Value<bool>();
+                changed = true;
+            }
+            if (userNode["show_online_status"] is { Type: JTokenType.Boolean } online && online.Value<bool>() != settings.ShowOnlineStatus)
+            {
+                settings.ShowOnlineStatus = online.Value<bool>();
+                changed = true;
+            }
+            if (changed) Log.Information("Profile load: adopted the account's consent values (allow DM {Dm}, show online {Online})",
+                settings.AllowDiscordDm, settings.ShowOnlineStatus);
+            return changed;
         }
 
         /// <summary>

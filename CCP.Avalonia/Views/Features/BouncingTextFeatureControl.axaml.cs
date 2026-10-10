@@ -38,6 +38,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
         public BouncingTextFeatureControl()
         {
             InitializeComponent(); // generated: loads the XAML and fills the x:Name fields
+            // WPF ApplyFeatureArt: hero + side plates from features/bouncing_text.png, mod override first, repainted on a mod switch.
+            Helpers.ModArt.BindFeaturePlates(this, "features/bouncing_text.png", HeroArt, SideArt);
 
             ChkEnable.IsCheckedChanged += ChkEnable_Changed;
             SliderSpeed.ValueChanged += SliderSpeed_Changed;
@@ -369,7 +371,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
         /// WPF calls <c>Helpers.FontPickerHelper.Populate(CmbFont, s.BouncingTextFont, "Segoe UI")</c>
         /// - a WinForms-era enumeration of installed families plus the bundled Fredoka pack:// face.
         /// <see cref="FontManager"/> is cross-platform, so the installed half is real here; the
-        /// Fredoka sentinel is not, because that face ships as a WPF pack resource.
+        /// Fredoka sentinel leads the list and draws in the face packed with the app (Helpers/FontPicker).
         ///
         /// <para>Built once, as WPF's cheap path is: <see cref="LoadFromSettings"/> re-runs on every
         /// property in the chain (a slider drag included), and rebuilding several hundred items each
@@ -401,8 +403,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
                 }
                 if (names.Length == 0) names = new[] { FontFallback };
 
+                // WPF GetInstalledFontNames: the bundled Fredoka leads the list (it is installed nowhere)
+                names = new[] { Helpers.FontPicker.BundledFredoka }
+                    .Concat(names.Where(n => !string.Equals(n, Helpers.FontPicker.BundledFredoka, StringComparison.OrdinalIgnoreCase))).ToArray();
                 foreach (var n in names)
-                    CmbFont.Items.Add(new ComboBoxItem { Content = n, Tag = n, FontFamily = new FontFamily(n), FontSize = 14 });
+                    CmbFont.Items.Add(new ComboBoxItem { Content = n, Tag = n, FontFamily = Helpers.FontPicker.Resolve(n, FontFallback), FontSize = 14 });
                 _fontsPopulated = true;
             }
 

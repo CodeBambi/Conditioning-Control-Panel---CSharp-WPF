@@ -37,6 +37,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         /// OverlayService, #1180). MainShellWindow.Autonomy.cs sets and releases it.</summary>
         internal static bool PulseHold;
 
+        /// <summary>A Deeper overlay band holds the tint up at this opacity (0..1) with the user's
+        /// switch untouched (WPF OverlayService.ShowOverlaySustained). Null = no band. Set and
+        /// cleared by Views/Deeper/RealActionDispatcher, which calls <see cref="Refresh"/> after.</summary>
+        internal static double? BandHold;
+
         private static bool _refused;
 
         /// <summary>Whether a tint can actually reach the screen: X11 with click-through, a
@@ -51,7 +56,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         private static readonly List<TintOverlayWindow> Windows = new();
 
         /// <summary>WPF AchievementService:239 - quest minutes while the tint is on screen.</summary>
-        internal static readonly OverlayQuestMinutes QuestMinutes = new(m => App.Quests?.TrackPinkFilterMinutes(m));
+        internal static readonly OverlayQuestMinutes QuestMinutes = new(m =>
+        {
+            App.Achievements?.TrackPinkFilterMinutes(m);   // WPF :414 the lifetime minutes (rose_tinted_reality)
+            App.Quests?.TrackPinkFilterMinutes(m);
+        });
 
         /// <summary>The tint is on screen now.</summary>
         internal static bool IsShowing => Windows.Count > 0;
@@ -75,7 +84,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         public static void Refresh(Visual host)
         {
             var s = CoreSettings.Current;
-            if (!s.PinkFilterEnabled || !ShouldShow()) { CloseAll(); return; }
+            if (!(s.PinkFilterEnabled || BandHold.HasValue) || !ShouldShow()) { CloseAll(); return; }
 
             var screens = ScreenList.Enumerate(host);
             var primary = -1;
@@ -83,7 +92,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
 
             var want = ResolveScreenIndices(s.PinkFilterTargetMonitor, s.DualMonitorEnabled, screens.Count, primary);
             var (r, g, b) = EffectiveColor();
-            var opacity = (App.Sessions?.PinkOpacity ?? s.PinkFilterOpacity) / 100.0;   // a session ramps it without writing it (#471)
+            var opacity = BandHold ?? (App.Sessions?.PinkOpacity ?? s.PinkFilterOpacity) / 100.0;   // a session ramps it without writing it (#471)
 
             // Same monitors as last time: repaint the brushes and leave the windows alone. This is
             // the whole reason the slider does not tear down a full-screen window per tick.
@@ -169,7 +178,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         /// <para>A session counts as running (WPF ResumeSession's App.Overlay.Start() after a panic) and a
         /// paused one hides the tint (PauseSession's App.Overlay.Stop()).</para>
         private static bool ShouldShow()
-            => PulseHold || (App.Sessions?.IsPaused != true
+            => PulseHold || global::ConditioningControlPanel.Avalonia.Views.Windows.MainShellWindow.VoicePinkHold || BandHold.HasValue || global::ConditioningControlPanel.Services.RemoteCommands.OverlayHold || (App.Sessions?.IsPaused != true
                && (CoreSession.IsEngineRunningProvider is null || CoreSession.IsEngineRunning || App.Sessions?.IsRunning == true));
 
         // Start (MainShellWindow.StartEngine) is what restores a tint left enabled - WPF OverlayService.Start().

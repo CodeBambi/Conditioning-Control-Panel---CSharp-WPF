@@ -1,0 +1,1258 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using Serilog;
+using ConditioningControlPanel.Models.Deeper;
+
+namespace ConditioningControlPanel.Services.Deeper
+{
+    /// <summary>
+    /// Runtime brain for a loaded Enhancement. Walks <see cref="Enhancement.TimelineItems"/>
+    /// to compile the firing schedule: Effect items synthesize their dispatcher action
+    /// at <c>Start</c>; Rule items with a <see cref="TimeReachedTrigger"/> are added
+    /// to the sorted point timeline; other Rule items are evaluated reactively against
+    /// webcam events and region transitions, gated by the band's
+    /// <c>[Start, Start+Duration)</c> firing window (which replaces v1's
+    /// <c>region_constraint</c>).
+    ///
+    /// Lifecycle: eager construct (cheap, no subscriptions), call Start to bind the
+    /// time source + webcam subscriptions, Stop to release. Safe to Start/Stop
+    /// repeatedly.
+    /// </summary>
+    public sealed class EnhancementEngine : IDisposable
+    {
+        private readonly Enhancement _enhancement;
+        private readonly IPlaybackTimeSource _source;
+        private readonly IActionDispatcher _dispatcher;
+        private readonly IEnhancementWebcam? _webcam;
+        private readonly Action<string>? _diag;
+
+        private List<TimelineEntry> _timeline = new();
+        private List<TimelineItem> _reactiveRules = new();
+        private List<BandEffect> _bandEffects = new();
+        private readonly HashSet<string> _activeBandIds = new();
+        private int _lastFiredIndex = -1;
+        private double _lastTickTime = -1;
+        private string? _currentRegionId;
+
+        // Per-item last-fired timestamps for cooldown enforcement.
+        private readonly Dictionary<TimelineItem, DateTime> _itemLastFired = new();
+
+        // Per-entry latch: items that have already fired since the playhead
+        // last entered their band. Without this, a webcam trigger with
+        // cooldown_ms <= 0 re-fires on every blink/face/gaze event while the
+        // playhead sits inside the band. Cleared when the playhead exits the
+        // band, on seek-back, and on Start/Stop.
+        private readonly HashSet<TimelineItem> _firedInCurrentEntry = new();
+
+        // Gaze dwell state — keyed by item so target/avoid each get their own clock.
+        private readonly Dictionary<TimelineItem, DateTime> _gazeDwellSince = new();
+
+        // Attention-lost dwell — single clock since attention_lost has no per-item state.
+        private DateTime? _faceLostSince;
+
+        // Attention-lost rules that already fired during the current face-lost
+        // gap. Firing happens on playback ticks while the face is absent (each
+        // rule fires once its own MinDurationMs is exceeded); the set keeps
+        // that to once per gap. Cleared when the face is lost (new gap) and
+        // when it returns.
+        private readonly HashSet<TimelineItem> _attentionFiredThisGap = new();
+
+        private bool _running;
+        private bool _disposed;
+
+        // True once any haptic action (band or one-shot) was dispatched this run.
+        // Stop() uses it to silence the device: one-shot patterns run on the haptic
+        // mixer's own clock and are invisible to the band flush.
+        private bool _hapticDispatched;
+
+        /// <summary>
+        /// #1045 - true once this run dispatched a POINT-FIRED visual. Those are not bands, so
+        /// FlushActiveBands cannot reach them: they run out their own authored duration on the
+        /// flash/subliminal services' clocks, which is routinely longer than what is left of the
+        /// media, and their loaders are <c>async void</c> so one dispatched on the last tick
+        /// materialises AFTER Stop. Mirrors <see cref="_hapticDispatched"/>: if this run put any
+        /// up, Stop() cancels that service's one-shot layer.
+        ///
+        /// Tracked per SERVICE, not as one flag: the services' one-shot retirement is service-wide
+        /// (see FlashService.StopOneShotFlashes), so an enhancement that only ever showed subliminal
+        /// or Speak cue cards must not also retire whatever point-fired FLASH some other feature
+        /// (keyword trigger, Autonomy, chaos) happens to have on screen.
+        /// </summary>
+        private bool _flashDispatched;
+
+        /// <summary><see cref="_flashDispatched"/>'s subliminal half. Speak counts here: its cue and
+        /// feedback cards go out through SubliminalService.FlashSubliminalCustom.</summary>
+        private bool _subliminalDispatched;
+
+        // -- Per-play gamification stats (read by the host on PlaybackCompleted) --
+        // Webcam trigger type strings, used to flag "webcam-trigger-used".
+        private static readonly HashSet<string> WebcamTriggerTypes = new()
+        {
+            TriggerTypes.GazeTarget, TriggerTypes.GazeAvoid, TriggerTypes.AttentionLost,
+            TriggerTypes.BlinkDetected, TriggerTypes.MouthOpen
+        };
+        private readonly HashSet<string> _firedTriggerTypes = new();
+        private bool _webcamTriggerUsed;
+        private bool _faceLostDuringPlay;
+        private bool _completedFired;
+        // Highest playback position reached this play. Used by the stop-time fallback
+        // to credit duration-less sources (streamed/embedded video that never reports a
+        // duration, so the normal end-of-media completion path can't fire).
+        private double _maxPlaybackTime;
+        private const double MinFallbackPlaySeconds = 60.0;
+
+        /// <summary>Distinct trigger TYPES that have fired during the current play.</summary>
+        public int DistinctTriggerTypesFired => _firedTriggerTypes.Count;
+        /// <summary>True if any gaze/blink/face/mouth trigger fired during this play.</summary>
+        public bool WebcamTriggerUsed => _webcamTriggerUsed;
+        /// <summary>True if a webcam enhancement was played without the face ever being lost.</summary>
+        public bool GazeHeldFull => _webcamTriggerUsed && !_faceLostDuringPlay;
+
+        /// <summary>
+        /// Fires once when playback reaches the media's natural end (elapsed >= duration).
+        /// Covers audio and video uniformly via the time source. Raised from the playback
+        /// tick while the engine is still alive, so stat getters are readable in the handler.
+        /// </summary>
+        public event Action? PlaybackCompleted;
+
+        private void RecordTriggerFired(EnhancementTrigger? trigger)
+        {
+            if (trigger == null) return;
+            _firedTriggerTypes.Add(trigger.Type);
+            if (WebcamTriggerTypes.Contains(trigger.Type)) _webcamTriggerUsed = true;
+        }
+
+        // Token source canceled by Stop so in-flight DispatchSafely calls
+        // (haptic patterns, audio playback chains) can short-circuit instead
+        // of running on after the user pressed stop.
+        private CancellationTokenSource? _runCts;
+
+        public bool IsRunning => _running;
+        public Enhancement Enhancement => _enhancement;
+
+        public EnhancementEngine(
+            Enhancement enhancement,
+            IPlaybackTimeSource source,
+            IActionDispatcher dispatcher,
+            IEnhancementWebcam? webcam = null,
+            Action<string>? diag = null)
+        {
+            _enhancement = enhancement ?? throw new ArgumentNullException(nameof(enhancement));
+            _source = source ?? throw new ArgumentNullException(nameof(source));
+            _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
+            _webcam = webcam;
+            _diag = diag;
+        }
+
+        private void Diag(string line)
+        {
+            try { _diag?.Invoke(line); } catch { /* never let a diag subscriber kill the engine */ }
+        }
+
+        // -- Compile -----------------------------------------------------------
+
+        private void Compile()
+        {
+            var entries = new List<TimelineEntry>();
+            var reactive = new List<TimelineItem>();
+            var bands = new List<BandEffect>();
+            // Trigger references already represented by a TimelineItem so we
+            // can skip the legacy fallback for items that round-tripped
+            // through the loader's projection.
+            var seenTriggers = new HashSet<EnhancementTrigger>();
+
+            foreach (var item in _enhancement.TimelineItems)
+            {
+                if (item == null) continue;
+
+                if (item.Kind == TimelineItemKind.Effect)
+                {
+                    // Region-mode effects (band-active) route through the
+                    // reconciler in OnPlaybackTime; they don't fire one-shot
+                    // at item.Start. Duration-mode keeps the legacy point-fire.
+                    var activation = EffectActivationHelpers.Resolve(item.EffectActivation, item.EffectType);
+                    if (activation == EffectActivation.Region && item.Duration > 0)
+                    {
+                        var band = BandEffect.FromTimelineItem(item);
+                        if (band != null) bands.Add(band);
+                        else Diag($"timeline effect '{item.Label ?? item.Id}' has no resolvable pattern — skipped");
+                    }
+                    else
+                    {
+                        var action = SynthesizeEffectAction(item);
+                        if (action != null)
+                            entries.Add(new TimelineEntry(item.Start, action, ownerItem: item));
+                    }
+                }
+                else if (item.Kind == TimelineItemKind.Rule
+                         && item.Enabled
+                         && item.Trigger != null
+                         && item.Action != null)
+                {
+                    if (item.Trigger is TimeReachedTrigger tr)
+                        entries.Add(new TimelineEntry(tr.Time, item.Action, ownerItem: item));
+                    else
+                        reactive.Add(item);
+                    seenTriggers.Add(item.Trigger);
+                }
+            }
+
+            // Editor preview path: rules added via right-click → AddRuleAt land
+            // in _enhancement.Rules (legacy) without a matching TimelineItem
+            // (back-projection only happens at save). Synthesize transient
+            // TimelineItems for any unseen rules so preview compiles them too.
+            foreach (var rule in _enhancement.Rules)
+            {
+                if (rule == null || !rule.Enabled) continue;
+                if (rule.Trigger == null || rule.Action == null) continue;
+                if (seenTriggers.Contains(rule.Trigger)) continue;
+
+                var synth = SynthesizeLegacyRuleItem(rule);
+                if (synth == null) continue;
+
+                if (synth.Trigger is TimeReachedTrigger tr)
+                    entries.Add(new TimelineEntry(tr.Time, synth.Action!, ownerItem: synth));
+                else
+                    reactive.Add(synth);
+            }
+
+            // Legacy HapticTracks: never enumerated by the original Compile()
+            // (v5.9.10 fix for Mort's silent-preview bug). Each HapticEvent
+            // routes to the band reconciler in Region mode (default) or to a
+            // one-shot point fire in Duration mode.
+            int hapticIdx = 0;
+            foreach (var track in _enhancement.HapticTracks)
+            {
+                if (track == null) continue;
+                foreach (var ev in track.Events)
+                {
+                    if (ev == null) continue;
+                    bool hasPattern = !string.IsNullOrEmpty(ev.PatternName)
+                                      || (ev.CustomPattern != null && ev.CustomPattern.Count > 0);
+                    if (!hasPattern)
+                    {
+                        Diag($"haptic event at {ev.Start:0.00}s has no pattern — skipped");
+                        hapticIdx++;
+                        continue;
+                    }
+
+                    var activation = EffectActivationHelpers.Resolve(ev.Activation, EffectTypes.Haptic);
+                    var effectId = $"haptic:{track.Id}:{hapticIdx}";
+                    if (activation == EffectActivation.Region && ev.Duration > 0)
+                    {
+                        bands.Add(BandEffect.FromHapticEvent(ev, effectId));
+                    }
+                    else
+                    {
+                        entries.Add(new TimelineEntry(ev.Start, new TriggerHapticAction
+                        {
+                            PatternName = ev.PatternName,
+                            CustomPattern = ev.CustomPattern,
+                            Intensity = ev.Intensity,
+                            DurationMs = (int)Math.Max(50, ev.Duration * 1000),
+                            Target = ev.Target
+                        }, ownerItem: null));
+                    }
+                    hapticIdx++;
+                }
+            }
+
+            entries.Sort((a, b) => a.Time.CompareTo(b.Time));
+            bands.Sort((a, b) => a.Start.CompareTo(b.Start));
+            _timeline = entries;
+            _reactiveRules = reactive;
+            _bandEffects = bands;
+            _lastFiredIndex = -1;
+        }
+
+        /// <summary>Build a transient Rule TimelineItem from a legacy
+        /// EnhancementRule. RegionConstraint is resolved against
+        /// <see cref="Enhancement.Regions"/> so band-style rules fire inside
+        /// their region span like a saved-and-reloaded file would.</summary>
+        private TimelineItem? SynthesizeLegacyRuleItem(EnhancementRule rule)
+        {
+            double start = 0;
+            double duration = double.MaxValue;
+            string id = TimelineItem.NewId();
+
+            if (rule.Trigger is TimeReachedTrigger tr)
+            {
+                start = Math.Max(0, tr.Time);
+                duration = 0;
+            }
+            else if (!string.IsNullOrEmpty(rule.RegionConstraint))
+            {
+                var region = _enhancement.Regions.FirstOrDefault(r => r.Id == rule.RegionConstraint);
+                if (region != null)
+                {
+                    start = region.Start;
+                    duration = Math.Max(0, region.End - region.Start);
+                    id = region.Id;
+                }
+            }
+
+            return new TimelineItem
+            {
+                Id = id,
+                Kind = TimelineItemKind.Rule,
+                Start = start,
+                Duration = duration,
+                Trigger = rule.Trigger,
+                Action = rule.Action,
+                CooldownMs = rule.CooldownMs,
+                Enabled = rule.Enabled
+            };
+        }
+
+        private static EnhancementAction? SynthesizeEffectAction(TimelineItem item)
+        {
+            int durationMs = item.Duration > 0
+                ? (int)Math.Max(50, item.Duration * 1000)
+                : Math.Max(50, item.EffectDurationMs);
+
+            return item.EffectType switch
+            {
+                EffectTypes.Haptic => new TriggerHapticAction
+                {
+                    PatternName = item.EffectPatternName,
+                    CustomPattern = item.EffectCustomPattern,
+                    Intensity = item.EffectIntensity,
+                    DurationMs = durationMs
+                },
+                EffectTypes.Flash => new TriggerEffectAction
+                {
+                    EffectType = EffectTypes.Flash,
+                    // Defense in depth: validator already rejects UNC paths in
+                    // shared files, but if a hand-edited file slips through,
+                    // strip the path to avoid the NTLM-leak / arbitrary-host
+                    // probe at flash dispatch time.
+                    ImagePath = IsSafeImagePath(item.EffectImagePath) ? item.EffectImagePath : null,
+                    PlaySound = item.EffectPlaySound,
+                    SuppressHaptic = item.EffectSuppressHaptic,
+                    DurationMs = durationMs,
+                    Intensity = item.EffectIntensity
+                },
+                EffectTypes.Bubble => new TriggerEffectAction
+                {
+                    EffectType = EffectTypes.Bubble,
+                    MaxBubbles = item.EffectMaxBubbles,
+                    DurationMs = durationMs,
+                    Intensity = item.EffectIntensity
+                },
+                EffectTypes.Subliminal => new TriggerEffectAction
+                {
+                    EffectType = EffectTypes.Subliminal,
+                    Text = item.EffectText,
+                    SuppressHaptic = item.EffectSuppressHaptic,
+                    DurationMs = durationMs,
+                    Intensity = item.EffectIntensity
+                },
+                EffectTypes.Overlay => new TriggerEffectAction
+                {
+                    EffectType = EffectTypes.Overlay,
+                    OverlayKind = item.EffectOverlayKind,
+                    Opacity = item.EffectOpacity,
+                    OpacityStart = item.EffectOpacityStart,
+                    OpacityEnd = item.EffectOpacityEnd,
+                    DurationMs = durationMs,
+                    Intensity = item.EffectIntensity
+                },
+                // Duration-mode (point-fired) speak prompt — rare, since speak defaults to
+                // Region activation. The session self-scopes to the band's width.
+                EffectTypes.Speak => new TriggerEffectAction
+                {
+                    EffectType = EffectTypes.Speak,
+                    SpeakTarget = item.EffectSpeakTarget,
+                    SpeakCue = item.EffectSpeakCue,
+                    SpeakCueMode = item.EffectSpeakCueMode,
+                    SpeakCueIntervalMs = item.EffectSpeakCueIntervalMs,
+                    SpeakRequiredReps = item.EffectSpeakRequiredReps,
+                    SpeakCompletion = item.EffectSpeakCompletion,
+                    SpeakHoldMode = item.EffectSpeakHoldMode,
+                    SpeakCorrectMessage = item.EffectSpeakCorrectMessage,
+                    SpeakIncorrectMessage = item.EffectSpeakIncorrectMessage,
+                    SpeakRegionStartSec = item.Start,
+                    SpeakRegionEndSec = item.Duration > 0 ? item.Start + item.Duration : (double?)null,
+                    DurationMs = durationMs
+                },
+                _ => null
+            };
+        }
+
+        private static bool IsSafeImagePath(string? path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return true; // null is fine — flash falls back to default
+            if (path.StartsWith("stock:", System.StringComparison.OrdinalIgnoreCase)) return true;
+            if (path.StartsWith("\\\\", System.StringComparison.Ordinal)) return false;
+            if (path.StartsWith("//", System.StringComparison.Ordinal)) return false;
+            return true;
+        }
+
+        // -- Lifecycle ---------------------------------------------------------
+
+        public void Start()
+        {
+            if (_disposed) throw new ObjectDisposedException(nameof(EnhancementEngine));
+            if (_running) return;
+
+            Compile();
+            _itemLastFired.Clear();
+            _firedInCurrentEntry.Clear();
+            _gazeDwellSince.Clear();
+            _activeBandIds.Clear();
+            _faceLostSince = null;
+            _attentionFiredThisGap.Clear();
+            _firedTriggerTypes.Clear();
+            _webcamTriggerUsed = false;
+            _faceLostDuringPlay = false;
+            _completedFired = false;
+            _maxPlaybackTime = 0;
+            _hapticDispatched = false;
+            _flashDispatched = false;
+            _subliminalDispatched = false;
+            _runCts = new CancellationTokenSource();
+
+            // Prime the cursor to the current playback position so events that
+            // already passed before Start don't fire in a burst on the first tick.
+            var t0 = _source.GetCurrentTimeSeconds();
+            RewindCursor(t0);
+            _lastTickTime = t0;
+            _currentRegionId = FindRegionAt(t0);
+
+            _source.PlaybackTimeChanged += OnPlaybackTime;
+
+            // Only subscribe to webcam events that an enabled rule actually needs.
+            if (_webcam != null)
+            {
+                if (HasActiveTrigger<BlinkDetectedTrigger>())
+                    _webcam.OnBlink += OnBlink;
+                if (HasActiveTrigger<MouthOpenTrigger>())
+                    _webcam.OnMouthOpen += OnMouthOpen;
+                if (HasActiveTrigger<GazeTargetTrigger>() || HasActiveTrigger<GazeAvoidTrigger>())
+                    _webcam.OnGazeMove += OnGazeMove;
+                // Subscribe face events whenever ANY webcam trigger is active (not just
+                // attention_lost) so the "gaze held the full duration" achievement can
+                // observe look-aways. With no attention_lost rule, OnFaceFoundCore simply
+                // finds zero eligible rules and fires nothing — behaviour is unchanged.
+                if (HasActiveTrigger<AttentionLostTrigger>() || HasActiveTrigger<BlinkDetectedTrigger>()
+                    || HasActiveTrigger<MouthOpenTrigger>() || HasActiveTrigger<GazeTargetTrigger>()
+                    || HasActiveTrigger<GazeAvoidTrigger>())
+                {
+                    _webcam.OnFaceLost += OnFaceLost;
+                    _webcam.OnFaceFound += OnFaceFound;
+                }
+            }
+
+            _running = true;
+            Log.Information("EnhancementEngine started: {Name} ({Tl} timeline entries, {Rules} reactive rules)",
+                _enhancement.Metadata?.Name, _timeline.Count, _reactiveRules.Count);
+
+            int blinkRules = _reactiveRules.Count(i => i.Trigger is BlinkDetectedTrigger);
+            int gazeRules = _reactiveRules.Count(i => i.Trigger is GazeTargetTrigger or GazeAvoidTrigger);
+            int mouthRules = _reactiveRules.Count(i => i.Trigger is MouthOpenTrigger);
+            int attentionRules = _reactiveRules.Count(i => i.Trigger is AttentionLostTrigger);
+            int webcamRules = blinkRules + gazeRules + mouthRules + attentionRules;
+            if (webcamRules > 0 && _webcam == null)
+            {
+                Diag($"⚠ {webcamRules} webcam rule(s) but App.Webcam is null — they will never fire.");
+            }
+            else if (webcamRules > 0)
+            {
+                Diag($"engine ready: {_timeline.Count} timeline entries, {_reactiveRules.Count} reactive rule(s) ({blinkRules} blink, {gazeRules} gaze, {mouthRules} mouth, {attentionRules} attention)");
+            }
+            else
+            {
+                Diag($"engine ready: {_timeline.Count} timeline entries, {_reactiveRules.Count} reactive rule(s)");
+            }
+        }
+
+        public void Stop()
+        {
+            if (!_running) return;
+
+            // Fallback completion for duration-less sources (streamed/embedded web video
+            // that never reports a duration): the normal end-of-media path can't fire, so
+            // a genuinely-played enhancement would otherwise never credit any Deeper
+            // achievement. Fire here once a minimum amount was actually played. The
+            // _completedFired guard ensures normally-completing media never double-fires;
+            // the dur<=0 guard ensures duration-having media stopped early does NOT credit.
+            if (!_completedFired)
+            {
+                double dur = 0;
+                try { dur = _source.GetDurationSeconds(); } catch { /* unknown duration */ }
+                if (dur <= 0 && _maxPlaybackTime >= MinFallbackPlaySeconds)
+                {
+                    _completedFired = true;
+                    try { PlaybackCompleted?.Invoke(); }
+                    catch (Exception ex) { Log.Debug("EnhancementEngine fallback PlaybackCompleted error: {Error}", ex.Message); }
+                }
+            }
+
+            // Flush any band effects (overlays shown, haptic toy active) BEFORE
+            // clearing _running, so the dispatcher's Stop actions are not
+            // short-circuited by the running check.
+            try { FlushActiveBands(_lastTickTime >= 0 ? _lastTickTime : 0); }
+            catch (Exception ex) { Log.Debug("EnhancementEngine FlushActiveBands: {Error}", ex.Message); }
+
+            // Safety belt: FlushActiveBands issues a Stop for every open band (which balances the
+            // overlay z-order band depth), but if any Stop dispatch was dropped, hard-zero the depth so
+            // a leaked band can't strand overlays pinned above the next mandatory video.
+            try { (_dispatcher as IEnhancementRunCleanup)?.ResetOverlayBands(); }
+            catch { }
+
+            // One-shot (point-fired) haptics play out on the mixer's own clock and are
+            // not bands, so the flush above can't reach them — a 45s duration-mode
+            // pattern fired just before Stop would keep the toy running for its full
+            // authored length. If this run dispatched any haptic, silence the device.
+            if (_hapticDispatched)
+            {
+                try { _ = CoreHaptics.Service?.StopAsync(); }
+                catch (Exception ex) { Log.Debug("EnhancementEngine stop-haptics: {Error}", ex.Message); }
+            }
+
+            // Flip _running first so any in-flight tick / dispatch short-circuits
+            // before we start tearing down subscriptions.
+            _running = false;
+
+            // Same story for point-fired VISUALS (#1045): a flash or subliminal fired near the end
+            // carries the timeline segment's own duration and keeps rendering long after the video
+            // is gone, and the services' loaders are async void, so one dispatched on the last
+            // tick can materialise after this Stop returns. Both calls RETIRE the service's
+            // one-shot generation: a loader that arrives with a stale generation drops its work,
+            // and anything a retired generation already put on screen is taken down. The ambient
+            // schedulers are untouched, so a user running flashes or subliminals for real keeps
+            // their own rhythm either way.
+            //
+            // This runs AFTER the flag drops, unlike FlushActiveBands: neither call needs the engine
+            // to still be running, and going first left a window in which a PlaybackTimeChanged tick
+            // still passed the _running check and dispatched a flash under the NEW (post-bump)
+            // generation, so it survived the cancel and outlived the media.
+            if (_flashDispatched)
+            {
+                try { (_dispatcher as IEnhancementRunCleanup)?.StopOneShotFlashes(); }
+                catch (Exception ex) { Log.Debug("EnhancementEngine stop-flash: {Error}", ex.Message); }
+            }
+            if (_subliminalDispatched)
+            {
+                try { (_dispatcher as IEnhancementRunCleanup)?.StopOneShotSubliminals(); }
+                catch (Exception ex) { Log.Debug("EnhancementEngine stop-subliminal: {Error}", ex.Message); }
+            }
+
+            try { _source.PlaybackTimeChanged -= OnPlaybackTime; } catch { }
+
+            if (_webcam != null)
+            {
+                try { _webcam.OnBlink -= OnBlink; } catch { }
+                try { _webcam.OnMouthOpen -= OnMouthOpen; } catch { }
+                try { _webcam.OnGazeMove -= OnGazeMove; } catch { }
+                try { _webcam.OnFaceLost -= OnFaceLost; } catch { }
+                try { _webcam.OnFaceFound -= OnFaceFound; } catch { }
+            }
+
+            try { _runCts?.Cancel(); } catch { }
+            try { _runCts?.Dispose(); } catch { }
+            _runCts = null;
+
+            Log.Information("EnhancementEngine stopped: {Name}", _enhancement.Metadata?.Name);
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            Stop();
+            _disposed = true;
+        }
+
+        // -- Tick (driven by IPlaybackTimeSource.PlaybackTimeChanged) ----------
+
+        private void OnPlaybackTime(double t)
+        {
+            if (!_running) return;
+
+            // Browser sources can briefly forward NaN currentTime during
+            // reloads. NaN comparisons are false everywhere so the rest of the
+            // tick would silently no-op AND store NaN as _lastTickTime,
+            // breaking seek-back detection until the next clean tick.
+            if (double.IsNaN(t) || double.IsInfinity(t)) return;
+
+            // Suppress the metadata-load phantom tick from a WebView2 source.
+            // Browser pages emit a tick at t=0 the moment <video> metadata
+            // loads (currentTime is 0, but duration just became known) which
+            // would otherwise fire any entry at Time=0 before the user pressed
+            // play. After the first real tick has been processed (_lastTickTime
+            // set), normal flow resumes including legitimate t=0 entries on
+            // the first playing tick (where _source.IsPlaying becomes true).
+            if (_lastTickTime < 0 && t <= 0 && !_source.IsPlaying) return;
+
+            try
+            {
+                // Detect seek-back: rewind the cursor to the highest entry still
+                // strictly before t, so forward-progress fires re-arm correctly.
+                bool seekedBack = _lastTickTime >= 0 && t + 0.05 < _lastTickTime;
+                if (seekedBack)
+                    RewindCursor(t);
+
+                // Detect seek-FORWARD the same way Start() primes the cursor: a jump
+                // far past any source's tick cadence means the user scrubbed ahead,
+                // and draining the skipped point entries would fire every flash /
+                // subliminal / one-shot haptic of the span in a single burst. Skip
+                // them instead; the band reconciler below already handles jump-ins.
+                else if (_lastTickTime >= 0 && t > _lastTickTime + 3.0)
+                    RewindCursor(t);
+
+                // Clear the per-entry latch for items whose band the playhead
+                // has now left, so re-entering them re-arms a single fire.
+                if (_firedInCurrentEntry.Count > 0)
+                {
+                    _firedInCurrentEntry.RemoveWhere(item =>
+                        !(item.Duration > 0 && item.Duration < double.MaxValue
+                          && t >= item.Start && t < item.Start + item.Duration));
+                }
+
+                // Attention-lost: fire while the face is absent, once a rule's
+                // own MinDurationMs is exceeded (once per gap via the set).
+                // Tick-driven so the consequence lands DURING the look-away —
+                // firing on face-return both felt wrong and could land after
+                // the playhead had left the rule's band, silently dropping it.
+                if (_faceLostSince.HasValue)
+                {
+                    var gapMs = (DateTime.UtcNow - _faceLostSince.Value).TotalMilliseconds;
+                    FireWebcamRules<AttentionLostTrigger>(tr => gapMs >= tr.MinDurationMs, _attentionFiredThisGap);
+                    if (!_running) return; // a dispatched action may Stop() the engine
+                }
+
+                // Region transition (computed before firing so region_entered
+                // rules see the new region as "current").
+                var newRegionId = FindRegionAt(t);
+                if (newRegionId != _currentRegionId)
+                {
+                    var prev = _currentRegionId;
+                    _currentRegionId = newRegionId;
+                    if (prev != null)
+                        FireRegionRules<RegionExitedTrigger>(prev, t, tr => tr.RegionId);
+                    if (!_running) return;
+                    if (newRegionId != null)
+                        FireRegionRules<RegionEnteredTrigger>(newRegionId, t, tr => tr.RegionId);
+                    if (!_running) return;
+                }
+
+                // Fire any sorted-timeline entries whose time has been reached.
+                // Re-check _running between dispatches: a Stop() called by a
+                // dispatched action (or another thread) must short-circuit
+                // remaining fires for this tick.
+                while (_lastFiredIndex + 1 < _timeline.Count
+                       && _timeline[_lastFiredIndex + 1].Time <= t)
+                {
+                    if (!_running) break;
+                    _lastFiredIndex++;
+                    var entry = _timeline[_lastFiredIndex];
+                    if (entry.OwnerItem != null && !PassesRuleGate(entry.OwnerItem, t)) continue;
+                    DispatchSafely(entry.Action, t);
+                    RecordTriggerFired(entry.OwnerItem?.Trigger);
+                }
+
+                // Band-effect reconciliation: bring _activeBandIds in sync with
+                // what the playhead is now inside. Handles forward play
+                // (enter → Start, leave → Stop) and seek (jump-in → Start,
+                // jump-out → Stop). For backward seek that lands still inside an
+                // already-active band, dispatch Restart with the freshly-computed
+                // remaining-band time — required for haptics because Lovense's
+                // timeSec keeps counting from the original Start otherwise (see
+                // lovense_pattern_api_flat memory).
+                if (_running && (_bandEffects.Count > 0 || _activeBandIds.Count > 0))
+                {
+                    ReconcileBandEffects(t, seekedBack);
+                }
+
+                _lastTickTime = t;
+                if (t > _maxPlaybackTime) _maxPlaybackTime = t;
+
+                // One-shot natural-completion detection: the playhead reached the end
+                // of the media. Covers audio and video uniformly via the time source.
+                // Stats getters are read by the host's handler while the engine is alive.
+                if (!_completedFired && _running)
+                {
+                    var dur = _source.GetDurationSeconds();
+                    if (dur > 0 && t >= dur - 0.75)
+                    {
+                        _completedFired = true;
+                        try { PlaybackCompleted?.Invoke(); }
+                        catch (Exception ex) { Log.Debug("EnhancementEngine PlaybackCompleted subscriber error: {Error}", ex.Message); }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("EnhancementEngine tick error: {Error}", ex.Message);
+            }
+        }
+
+        private void ReconcileBandEffects(double t, bool seekedBack)
+        {
+            // Two passes so we never dispatch Start while a stale Stop is still
+            // pending for the same EffectId (overlap of different bands sharing
+            // an id isn't allowed by Compile, but ordering matters anyway —
+            // Stop dispatches first to release device state cleanly).
+
+            // Pass 1: Stop bands that are no longer active.
+            List<string>? toStop = null;
+            foreach (var id in _activeBandIds)
+            {
+                var band = FindBandById(id);
+                if (band == null || !(t >= band.Start && t < band.Start + band.Duration))
+                    (toStop ??= new List<string>()).Add(id);
+            }
+            if (toStop != null)
+            {
+                foreach (var id in toStop)
+                {
+                    var band = FindBandById(id);
+                    if (band != null) DispatchSafely(band.BuildStopAction(), t);
+                    _activeBandIds.Remove(id);
+                }
+            }
+
+            // Pass 2: Start bands the playhead is now inside.
+            // Pass 2b: Restart already-active bands that survived a seek-back, so
+            // device-side timers (Lovense timeSec) are recomputed against the new t.
+            foreach (var band in _bandEffects)
+            {
+                if (!_running) return;
+                if (band.Start > t) break; // sorted by Start, can short-circuit
+                bool inside = t >= band.Start && t < band.Start + band.Duration;
+                if (!inside) continue;
+
+                int remainingMs = (int)Math.Max(50, (band.Start + band.Duration - t) * 1000);
+
+                if (_activeBandIds.Contains(band.EffectId))
+                {
+                    if (seekedBack)
+                        DispatchSafely(band.BuildRestartAction(remainingMs), t);
+                }
+                else
+                {
+                    DispatchSafely(band.BuildStartAction(remainingMs), t);
+                    _activeBandIds.Add(band.EffectId);
+                }
+
+                // Opacity ramp: per-tick live update for active overlay bands. Driven
+                // by the playhead so it stays correct across loops, seeks and scrubs.
+                if (band.HasOpacityRamp)
+                    DispatchSafely(band.BuildUpdateAction(band.OpacityAt(t)), t);
+            }
+        }
+
+        private BandEffect? FindBandById(string id)
+        {
+            for (int i = 0; i < _bandEffects.Count; i++)
+                if (_bandEffects[i].EffectId == id) return _bandEffects[i];
+            return null;
+        }
+
+        private void FlushActiveBands(double t)
+        {
+            if (_activeBandIds.Count == 0) return;
+            // Bypass DispatchSafely's CancellationToken — Stop() cancels _runCts
+            // immediately after, which would otherwise abort the stop-overlay /
+            // stop-toy dispatches we're firing here and leave residual state.
+            var ctx = new EnhancementDispatchContext(_enhancement, _source, t, _currentRegionId);
+            foreach (var id in _activeBandIds.ToList())
+            {
+                var band = FindBandById(id);
+                if (band == null) continue;
+                try { _ = _dispatcher.DispatchAsync(band.BuildStopAction(), ctx, CancellationToken.None); }
+                catch (Exception ex) { Log.Debug("FlushActiveBands dispatch: {Error}", ex.Message); }
+            }
+            _activeBandIds.Clear();
+        }
+
+        private void RewindCursor(double t)
+        {
+            int idx = -1;
+            for (int i = 0; i < _timeline.Count; i++)
+            {
+                if (_timeline[i].Time < t) idx = i;
+                else break;
+            }
+            _lastFiredIndex = idx;
+            // Seek-back invalidates per-entry latches: a band the user just
+            // jumped back into should be able to fire its single shot again.
+            _firedInCurrentEntry.Clear();
+        }
+
+        private string? FindRegionAt(double t)
+        {
+            // Inclusive-start, exclusive-end. First match wins (overlapping bands
+            // are allowed in the new model, but only the first hit drives
+            // region-entered/exited semantics — by file order).
+            foreach (var item in _enhancement.TimelineItems)
+            {
+                if (item.Kind != TimelineItemKind.Rule) continue;
+                if (item.Duration <= 0 || double.IsInfinity(item.Duration)) continue;
+                if (item.Duration >= double.MaxValue) continue;
+                if (t >= item.Start && t < item.Start + item.Duration) return item.Id;
+            }
+            // Editor preview fallback: legacy regions live in _enhancement.Regions
+            // and only get projected into TimelineItems on save. Walk them so
+            // region_entered / region_exited triggers fire correctly during
+            // unsaved editor preview sessions.
+            foreach (var region in _enhancement.Regions)
+            {
+                if (region == null || string.IsNullOrEmpty(region.Id)) continue;
+                if (t >= region.Start && t < region.End) return region.Id;
+            }
+            return null;
+        }
+
+        // -- Editor preview injection ------------------------------------------
+        // Public entry points that mirror the webcam handlers so editor preview
+        // can drive the engine from keyboard / mouse without a real camera.
+        // Always invoked from the UI thread, so they bypass the marshal step.
+
+        public void InjectBlink() => OnBlinkCore();
+        public void InjectMouthOpen() => OnMouthOpenCore();
+        public void InjectGaze(PlaybackPoint screenPoint) => OnGazeMoveCore(screenPoint);
+
+        /// <summary>
+        /// Simulate an attention-lost gap of the given duration. Live rules
+        /// fire from the playback tick while the face is absent; a synthetic
+        /// injection compresses that into one direct evaluation against the
+        /// simulated gap.
+        /// </summary>
+        public void InjectAttentionLost(int gapMs)
+        {
+            if (!_running) return;
+            double gap = Math.Max(0, gapMs);
+            int fired = FireWebcamRules<AttentionLostTrigger>(tr => gap >= tr.MinDurationMs);
+            Diag($"• attention_lost injected (gap {gap:F0}ms, {fired} fired)");
+        }
+
+        // -- Webcam handlers ---------------------------------------------------
+        // WebcamTrackingService raises these on its capture thread. Engine
+        // state (Dictionary/HashSet, _faceLostSince, _itemLastFired, etc.) is
+        // not thread-safe and OnPlaybackTime mutates the same fields on the UI
+        // thread, so each handler marshals onto the dispatcher before touching
+        // anything. The Core methods assume UI-thread context.
+
+        private void OnBlink() => MarshalToUi(_onBlinkCore);
+        private void OnMouthOpen() => MarshalToUi(_onMouthOpenCore);
+        private void OnGazeMove(double x, double y)
+        {
+            // Capture by value to avoid sharing the struct across threads.
+            var p = new PlaybackPoint(x, y);
+            MarshalToUi(() => OnGazeMoveCore(p));
+        }
+        private void OnFaceLost() => MarshalToUi(_onFaceLostCore);
+        private void OnFaceFound() => MarshalToUi(_onFaceFoundCore);
+
+        // Cached delegates so the no-arg handlers don't allocate on every event.
+        private Action _onBlinkCore => OnBlinkCore;
+        private Action _onMouthOpenCore => OnMouthOpenCore;
+        private Action _onFaceLostCore => OnFaceLostCore;
+        private Action _onFaceFoundCore => OnFaceFoundCore;
+
+        private static void MarshalToUi(Action action)
+        {
+            CoreDispatch.Post(action);
+        }
+
+        private void OnBlinkCore()
+        {
+            if (!_running) return;
+            int eligible = _reactiveRules.Count(i => i.Trigger is BlinkDetectedTrigger);
+            int fired = FireWebcamRules<BlinkDetectedTrigger>(_ => true);
+            Diag($"• blink ({eligible} rule(s), {fired} fired)");
+        }
+
+        private void OnMouthOpenCore()
+        {
+            if (!_running) return;
+            int eligible = _reactiveRules.Count(i => i.Trigger is MouthOpenTrigger);
+            int fired = FireWebcamRules<MouthOpenTrigger>(_ => true);
+            Diag($"• mouth_open ({eligible} rule(s), {fired} fired)");
+        }
+
+        private void OnGazeMoveCore(PlaybackPoint screenPoint)
+        {
+            if (!_running) return;
+            var videoRect = _source.GetVideoRect();
+            if (videoRect.IsEmpty) return;
+
+            var now = DateTime.UtcNow;
+            foreach (var item in _reactiveRules)
+            {
+                if (item.Trigger is GazeTargetTrigger gt)
+                {
+                    var hit = HitsRect(screenPoint, videoRect, gt.Rect);
+                    EvaluateGazeDwell(item, hit, gt.MinDwellMs, now);
+                }
+                else if (item.Trigger is GazeAvoidTrigger ga)
+                {
+                    var inRect = HitsRect(screenPoint, videoRect, ga.Rect);
+                    // "Avoid" fires when the user keeps gaze OUTSIDE the rect for the dwell.
+                    EvaluateGazeDwell(item, !inRect, ga.MinDwellMs, now);
+                }
+            }
+        }
+
+        private void OnFaceLostCore()
+        {
+            if (!_running) return;
+            _faceLostSince = DateTime.UtcNow;
+            _attentionFiredThisGap.Clear(); // new gap, re-arm attention_lost rules
+            _faceLostDuringPlay = true; // breaks the "held gaze the whole time" achievement
+            Diag("• face_lost");
+        }
+
+        private void OnFaceFoundCore()
+        {
+            if (!_running) return;
+            // Attention-lost rules fire from the playback tick WHILE the face is
+            // absent (each once its MinDurationMs is exceeded — see OnPlaybackTime),
+            // so the user feels the consequence during the look-away, not after
+            // looking back. Here we only close the gap.
+            if (_faceLostSince.HasValue)
+            {
+                var gap = (DateTime.UtcNow - _faceLostSince.Value).TotalMilliseconds;
+                Diag($"• face_found (gap {gap:F0}ms, {_attentionFiredThisGap.Count} fired during gap)");
+                _faceLostSince = null;
+                _attentionFiredThisGap.Clear();
+            }
+            else
+            {
+                Diag("• face_found");
+            }
+        }
+
+        private void EvaluateGazeDwell(TimelineItem item, bool conditionMet, int minDwellMs, DateTime now)
+        {
+            if (conditionMet)
+            {
+                if (!_gazeDwellSince.TryGetValue(item, out var since))
+                {
+                    _gazeDwellSince[item] = now;
+                    return;
+                }
+                if ((now - since).TotalMilliseconds >= minDwellMs)
+                {
+                    var t = _source.GetCurrentTimeSeconds();
+                    if (PassesRuleGate(item, t))
+                    {
+                        DispatchSafely(item.Action!, t);
+                        RecordTriggerFired(item.Trigger);
+                        // Reset dwell window so we don't immediately re-fire next frame.
+                        _gazeDwellSince[item] = now;
+                    }
+                }
+            }
+            else
+            {
+                _gazeDwellSince.Remove(item);
+            }
+        }
+
+        private static bool HitsRect(PlaybackPoint screenPoint, PlaybackRect videoRect, double[] normalized)
+        {
+            if (normalized == null || normalized.Length < 4) return false;
+            var rx = videoRect.X + normalized[0] * videoRect.Width;
+            var ry = videoRect.Y + normalized[1] * videoRect.Height;
+            var rw = normalized[2] * videoRect.Width;
+            var rh = normalized[3] * videoRect.Height;
+            return screenPoint.X >= rx && screenPoint.X <= rx + rw
+                && screenPoint.Y >= ry && screenPoint.Y <= ry + rh;
+        }
+
+        // -- Rule firing helpers ----------------------------------------------
+
+        private int FireWebcamRules<TTrigger>(Func<TTrigger, bool> predicate,
+            HashSet<TimelineItem>? oncePerGap = null) where TTrigger : EnhancementTrigger
+        {
+            var t = _source.GetCurrentTimeSeconds();
+            int fired = 0;
+            foreach (var item in _reactiveRules)
+            {
+                if (item.Trigger is not TTrigger trig) continue;
+                if (oncePerGap != null && oncePerGap.Contains(item)) continue;
+                if (!predicate(trig)) continue;
+                if (!PassesRuleGate(item, t)) continue;
+                DispatchSafely(item.Action!, t);
+                RecordTriggerFired(item.Trigger);
+                oncePerGap?.Add(item);
+                fired++;
+            }
+            return fired;
+        }
+
+        private void FireRegionRules<TTrigger>(string regionId, double t, Func<TTrigger, string> idSelector)
+            where TTrigger : EnhancementTrigger
+        {
+            foreach (var item in _reactiveRules)
+            {
+                if (item.Trigger is not TTrigger trig) continue;
+                if (idSelector(trig) != regionId) continue;
+                if (!PassesRuleGate(item, t)) continue;
+                // Pin the band id explicitly so loop_region / seek with no
+                // RegionId still resolves on RegionExited (where the playhead
+                // has just left the band, so _currentRegionId is null).
+                DispatchSafely(item.Action!, t, regionId);
+                RecordTriggerFired(item.Trigger);
+            }
+        }
+
+        private bool PassesRuleGate(TimelineItem item, double t)
+        {
+            // Band window: rule only fires while the playhead is inside its
+            // [Start, Start+Duration) span. Duration <= 0 is point-style (only
+            // exact-time matches via the sorted timeline). Duration == double.MaxValue
+            // is "anywhere" (used by the loader projection for v1 rules with no
+            // RegionConstraint and a non-time-reached trigger).
+            bool finiteBand = item.Duration > 0 && item.Duration < double.MaxValue;
+            if (finiteBand)
+            {
+                if (t < item.Start || t >= item.Start + item.Duration) return false;
+            }
+
+            // Cooldown.
+            var now = DateTime.UtcNow;
+            if (_itemLastFired.TryGetValue(item, out var last))
+            {
+                if ((now - last).TotalMilliseconds < item.CooldownMs) return false;
+            }
+
+            // Per-entry latch: with cooldown_ms <= 0 on a finite band, fire at
+            // most once per band entry. Without this, high-frequency triggers
+            // (blink, gaze) would re-fire on every event while the playhead
+            // sits inside the band. The latch clears on band exit (see
+            // OnPlaybackTime) and on seek-back (see RewindCursor).
+            if (finiteBand && item.CooldownMs <= 0)
+            {
+                if (!_firedInCurrentEntry.Add(item)) return false;
+            }
+
+            _itemLastFired[item] = now;
+            return true;
+        }
+
+        private async void DispatchSafely(EnhancementAction action, double t, string? explicitRegionId = null)
+        {
+            // Snapshot the CTS once: Stop() may dispose _runCts on another
+            // thread between our null-check and .Token access. Reading the
+            // local reference and tolerating ObjectDisposedException keeps
+            // dispatch from crashing on a teardown race.
+            var cts = _runCts;
+            CancellationToken ct;
+            try { ct = cts?.Token ?? CancellationToken.None; }
+            catch (ObjectDisposedException) { ct = CancellationToken.None; }
+
+            if (action is TriggerHapticAction || action is TriggerEffectAction { EffectType: EffectTypes.Haptic })
+                _hapticDispatched = true;
+
+            // Flash and subliminal effects are always POINT-fired: unlike overlay/haptic effects the
+            // dispatcher ignores Phase for them and just shows one, so there is no band for
+            // FlushActiveBands to close on Stop. Latch either kind, whatever the authored phase.
+            // Speak lands on the subliminal side: it IS a band, but its cue and feedback cards go
+            // out through SubliminalService.FlashSubliminalCustom (SpeakPromptSession.FlashCue /
+            // FlashFeedback), so a cue fired on the last tick outlives the media exactly like a
+            // point-fired card unless the subliminal cancel is armed.
+            if (action is TriggerEffectAction { EffectType: EffectTypes.Flash })
+                _flashDispatched = true;
+            else if (action is TriggerEffectAction { EffectType: EffectTypes.Subliminal or EffectTypes.Speak })
+                _subliminalDispatched = true;
+
+            try
+            {
+                var ctx = new EnhancementDispatchContext(_enhancement, _source, t, explicitRegionId ?? _currentRegionId);
+                await _dispatcher.DispatchAsync(action, ctx, ct);
+            }
+            catch (OperationCanceledException) { /* engine stopped mid-dispatch */ }
+            catch (Exception ex)
+            {
+                Log.Debug("EnhancementEngine dispatch error: {Error}", ex.Message);
+            }
+        }
+
+        private bool HasActiveTrigger<TTrigger>() where TTrigger : EnhancementTrigger
+            => _reactiveRules.Any(item => item.Trigger is TTrigger);
+
+        // -- Compiled timeline entry ------------------------------------------
+
+        private sealed class TimelineEntry
+        {
+            public double Time { get; }
+            public EnhancementAction Action { get; }
+            public TimelineItem? OwnerItem { get; }
+
+            public TimelineEntry(double time, EnhancementAction action, TimelineItem? ownerItem)
+            {
+                Time = time;
+                Action = action;
+                OwnerItem = ownerItem;
+            }
+        }
+
+        /// <summary>
+        /// A band-mode effect (overlay or haptic) reconciled by OnPlaybackTime
+        /// rather than fired one-shot. Builds the dispatcher action for each
+        /// lifecycle phase (Start / Stop / Restart) on demand so the engine
+        /// doesn't have to know dispatcher internals.
+        /// </summary>
+        private sealed class BandEffect
+        {
+            public string EffectId = "";
+            public double Start;
+            public double Duration;
+            public bool IsHaptic;
+            public bool IsSpeak;
+            // Speak payload: the whole item (9 speak fields) is carried by reference so
+            // BuildAction can map it onto a TriggerEffectAction without copying each field.
+            public TimelineItem? SpeakItem;
+            // Overlay payload.
+            public string? OverlayKind;
+            public double Opacity = 0.5;
+            // Optional opacity ramp (overlay only): interpolate start→end across the band.
+            public double? OpacityStart;
+            public double? OpacityEnd;
+            public bool HasOpacityRamp => OpacityStart.HasValue && OpacityEnd.HasValue;
+            public double OpacityAt(double t)
+            {
+                if (!HasOpacityRamp) return Opacity;
+                double frac = Duration > 0 ? System.Math.Clamp((t - Start) / Duration, 0, 1) : 1.0;
+                return OpacityStart!.Value + (OpacityEnd!.Value - OpacityStart!.Value) * frac;
+            }
+            // Haptic payload.
+            public string? PatternName;
+            public List<double[]>? CustomPattern;
+            public double Intensity = 1.0;
+            public ConditioningControlPanel.Services.Haptics.Core.ToyRole? Target;
+
+            public static BandEffect? FromTimelineItem(TimelineItem item)
+            {
+                if (item.EffectType == EffectTypes.Overlay)
+                {
+                    return new BandEffect
+                    {
+                        EffectId = $"item:{item.Id}",
+                        Start = item.Start,
+                        Duration = item.Duration,
+                        IsHaptic = false,
+                        OverlayKind = item.EffectOverlayKind ?? OverlayKinds.PinkFilter,
+                        Opacity = item.EffectOpacity,
+                        OpacityStart = item.EffectOpacityStart,
+                        OpacityEnd = item.EffectOpacityEnd
+                    };
+                }
+                if (item.EffectType == EffectTypes.Haptic)
+                {
+                    bool hasPattern = !string.IsNullOrEmpty(item.EffectPatternName)
+                                      || (item.EffectCustomPattern != null && item.EffectCustomPattern.Count > 0);
+                    if (!hasPattern) return null;
+                    return new BandEffect
+                    {
+                        EffectId = $"item:{item.Id}",
+                        Start = item.Start,
+                        Duration = item.Duration,
+                        IsHaptic = true,
+                        PatternName = item.EffectPatternName,
+                        CustomPattern = item.EffectCustomPattern,
+                        Intensity = item.EffectIntensity
+                    };
+                }
+                if (item.EffectType == EffectTypes.Speak)
+                {
+                    if (string.IsNullOrWhiteSpace(item.EffectSpeakTarget)) return null;
+                    return new BandEffect
+                    {
+                        EffectId = $"item:{item.Id}",
+                        Start = item.Start,
+                        Duration = item.Duration,
+                        IsSpeak = true,
+                        SpeakItem = item
+                    };
+                }
+                return null;
+            }
+
+            public static BandEffect FromHapticEvent(HapticEvent ev, string effectId)
+            {
+                return new BandEffect
+                {
+                    EffectId = effectId,
+                    Start = ev.Start,
+                    Duration = ev.Duration,
+                    IsHaptic = true,
+                    PatternName = ev.PatternName,
+                    CustomPattern = ev.CustomPattern,
+                    Intensity = ev.Intensity,
+                    Target = ev.Target
+                };
+            }
+
+            public EnhancementAction BuildStartAction(int remainingMs) => BuildAction(EffectPhase.Start, remainingMs);
+            public EnhancementAction BuildStopAction()                 => BuildAction(EffectPhase.Stop, 0);
+            public EnhancementAction BuildRestartAction(int remainingMs) => BuildAction(EffectPhase.Restart, remainingMs);
+
+            // Per-tick overlay opacity update (ramp). Carries the freshly-interpolated
+            // value; the dispatcher routes it to OverlayService.SetSustainedOverlayOpacity.
+            public EnhancementAction BuildUpdateAction(double opacity) => new TriggerEffectAction
+            {
+                EffectType = EffectTypes.Overlay,
+                OverlayKind = OverlayKind,
+                Opacity = opacity,
+                Phase = EffectPhase.Update,
+                EffectId = EffectId
+            };
+
+            private EnhancementAction BuildAction(EffectPhase phase, int durationMs)
+            {
+                if (IsSpeak)
+                {
+                    var it = SpeakItem;
+                    return new TriggerEffectAction
+                    {
+                        EffectType = EffectTypes.Speak,
+                        SpeakTarget = it?.EffectSpeakTarget,
+                        SpeakCue = it?.EffectSpeakCue,
+                        SpeakCueMode = it?.EffectSpeakCueMode ?? Models.Deeper.SpeakCueMode.Intermittent,
+                        SpeakCueIntervalMs = it?.EffectSpeakCueIntervalMs ?? 250,
+                        SpeakRequiredReps = it?.EffectSpeakRequiredReps ?? 1,
+                        SpeakCompletion = it?.EffectSpeakCompletion ?? Models.Deeper.SpeakCompletion.UntilSatisfied,
+                        SpeakHoldMode = it?.EffectSpeakHoldMode ?? Models.Deeper.SpeakHoldMode.LoopRegion,
+                        SpeakCorrectMessage = it?.EffectSpeakCorrectMessage,
+                        SpeakIncorrectMessage = it?.EffectSpeakIncorrectMessage,
+                        // Region bounds drive the session's hold (loop/pause near the end).
+                        SpeakRegionStartSec = Start,
+                        SpeakRegionEndSec = Start + Duration,
+                        Phase = phase,
+                        EffectId = EffectId
+                    };
+                }
+                if (IsHaptic)
+                {
+                    return new TriggerHapticAction
+                    {
+                        PatternName = PatternName,
+                        CustomPattern = CustomPattern,
+                        Intensity = Intensity,
+                        DurationMs = Math.Max(50, durationMs),
+                        Target = Target,
+                        Phase = phase,
+                        EffectId = EffectId
+                    };
+                }
+                return new TriggerEffectAction
+                {
+                    EffectType = EffectTypes.Overlay,
+                    OverlayKind = OverlayKind,
+                    // On Start/Restart a ramped band begins at its start-opacity; the
+                    // per-tick Update dispatched right after corrects it to OpacityAt(t).
+                    Opacity = HasOpacityRamp ? OpacityStart!.Value : Opacity,
+                    DurationMs = Math.Max(50, durationMs),
+                    Phase = phase,
+                    EffectId = EffectId
+                };
+            }
+        }
+    }
+}

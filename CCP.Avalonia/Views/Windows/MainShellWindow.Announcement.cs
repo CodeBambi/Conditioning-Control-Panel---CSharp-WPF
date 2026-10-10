@@ -17,18 +17,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>The Core client; seeded by the app at startup only. Unseeded (every test that does not set it) = no check.</summary>
         internal static Func<V2AuthService>? AnnouncementClient;
 
-        private bool _announcementArmed;
-
-        private void InitializeServerAnnouncement()
-        {
-            Opened += (_, _) =>
-            {
-                if (_announcementArmed || AnnouncementClient == null) return;
-                _announcementArmed = true;
-                DispatcherTimer.RunOnce(() => _ = CheckServerAnnouncementAsync(), TimeSpan.FromSeconds(7));
-            };
-        }
-
         /// <summary>One check: fetch, skip the dismissed id, route through the startup ladder.</summary>
         internal async Task CheckServerAnnouncementAsync()
         {

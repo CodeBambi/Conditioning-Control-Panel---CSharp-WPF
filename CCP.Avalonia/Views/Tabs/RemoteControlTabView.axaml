@@ -118,10 +118,9 @@
 
                         <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="18,0,12,0"
                                     ToolTip.Tip="{loc:Str desc_remote_control}">
-                            <TextBlock Text="{loc:Str tab_remote_control}" FontSize="17" FontWeight="Bold"
-                                       Foreground="{StaticResource TextLightBrush}"/>
+                            <TextBlock Theme="{StaticResource Type.CardTitle}" Text="{loc:Str tab_remote_control}"/>
                             <TextBlock Text="{loc:Str desc_remote_control}" FontSize="11.5"
-                                       Foreground="{StaticResource TextMutedBrush}" Margin="0,1,0,0"
+                                       Foreground="{StaticResource TextSecondaryBrush}" Margin="0,1,0,0"
                                        TextTrimming="CharacterEllipsis"/>
                         </StackPanel>
 
@@ -162,9 +161,7 @@
                                 <Border Background="{StaticResource TabHueWashBrush}" CornerRadius="11"/>
                                 <StackPanel Margin="16,14">
                                     <TextBlock Text="✨" FontSize="22" HorizontalAlignment="Left"/>
-                                    <TextBlock Text="{loc:Str label_remote_tier_light}"
-                                               Foreground="{StaticResource TextLightBrush}"
-                                               FontSize="16" FontWeight="Bold" Margin="0,6,0,4"/>
+                                    <TextBlock Theme="{StaticResource Type.CardTitle}" Text="{loc:Str label_remote_tier_light}" Margin="0,6,0,4"/>
                                     <TextBlock Text="Visual triggers only"
                                                Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12.5"
                                                TextWrapping="Wrap"/>
@@ -183,9 +180,7 @@
                                 <Border Background="{StaticResource TabHueWashBrush}" CornerRadius="11"/>
                                 <StackPanel Margin="16,14">
                                     <TextBlock Text="🎯" FontSize="22" HorizontalAlignment="Left"/>
-                                    <TextBlock Text="{loc:Str label_remote_tier_standard}"
-                                               Foreground="{StaticResource TextLightBrush}"
-                                               FontSize="16" FontWeight="Bold" Margin="0,6,0,4"/>
+                                    <TextBlock Theme="{StaticResource Type.CardTitle}" Text="{loc:Str label_remote_tier_standard}" Margin="0,6,0,4"/>
                                     <TextBlock Text="Light + audio + overlays"
                                                Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12.5"
                                                TextWrapping="Wrap"/>
@@ -204,9 +199,7 @@
                                 <Border Background="{StaticResource TabHueWashBrush}" CornerRadius="11"/>
                                 <StackPanel Margin="16,14">
                                     <TextBlock Text="🔥" FontSize="22" HorizontalAlignment="Left"/>
-                                    <TextBlock Text="{loc:Str label_remote_tier_full}"
-                                               Foreground="{StaticResource TextLightBrush}"
-                                               FontSize="16" FontWeight="Bold" Margin="0,6,0,4"/>
+                                    <TextBlock Theme="{StaticResource Type.CardTitle}" Text="{loc:Str label_remote_tier_full}" Margin="0,6,0,4"/>
                                     <TextBlock Text="Everything including session control"
                                                Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12.5"
                                                TextWrapping="Wrap"/>
@@ -376,9 +369,9 @@
                     <!-- Hidden ComboBox keeps existing handler wiring intact -->
                     <ComboBox x:Name="CmbRemoteTier" IsVisible="False" SelectedIndex="0"
                               SelectionChanged="CmbRemoteTier_SelectionChanged">
-                        <ComboBoxItem Content="Light"/>
-                        <ComboBoxItem Content="Standard"/>
-                        <ComboBoxItem Content="Full"/>
+                        <ComboBoxItem Content="{loc:Str label_remote_tier_light}"/>
+                        <ComboBoxItem Content="{loc:Str label_remote_tier_standard}"/>
+                        <ComboBoxItem Content="{loc:Str label_remote_tier_full}"/>
                     </ComboBox>
 
                     <!-- Status row: controller info (left) + command log (right), two dense cards -->
@@ -428,6 +421,7 @@
                     </Grid>
 
                     <!-- Emote picker: 5 user-editable presets + 1 custom slot. -->
+                    <!-- Live: the port relay posts /v2/remote/emote (Core RemoteRelay.SendEmoteAsync). -->
                     <Border x:Name="EmotePickerPanel" Theme="{StaticResource SettingCardStyle}">
                         <Grid>
                             <Border Background="{StaticResource TabHueWashBrush}" CornerRadius="11"/>

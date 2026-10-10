@@ -788,3 +788,98 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
 - Tests: `Tests/CCP.Core.Tests/ProgramCanEnrollCapabilityTests.cs`, `Tests/CCP.Avalonia.Tests/ProgramCapabilitiesTests.cs`,
   `ProgramsBrowseTests.RefusedCardRendersTheMissingFeature`, `OverlayQuestMinutesTests`. Fail-proofs:
   ~/ccp-port/evidence/review-programs-signals/fail-proofs.log.
+
+## 2026-10-09: Programs 3a - the first Linux writes to programs.json (avalonia-port/programs-run-3a)
+- Context: CHECKPOINT B and the 3a prereq decision (oracle-deep via the supervisor, P44; ~/ccp-port/evidence/oracle/
+  programs-checkpoint-B.md, programs-3a-canenroll.md) cleared one commit that makes enrollments real on Linux.
+- Decisions applied:
+  - App startup builds `new ProgramService()` (timers, startup RepairSpuriousLapse + rollover, Dispose flush) and seeds
+    `CoreQuests.TrackProgramVerifierProvider` like WPF App.xaml.cs:413. `CreateReadOnly()` is deleted (no caller left; tests use the internal ctor).
+  - IsReadOnly (a newer SchemaVersion stamp) is honoured in Core AND on both heads: Enroll/Pause/Resume/Withdraw/Restart/
+    Dismiss/SubmitRitualTask return early, WPF greys its lifecycle buttons and the lapsed panel (`ApplyProgramsReadOnly`),
+    Avalonia greys Withdraw/Start and shows the existing read-only note. WPF output is unchanged for writable files.
+    The note's text ("only advance in the Windows app") predates the stamp; reused rather than adding a 9-language string.
+  - Rollover is skipped for an Active run whose program has a required task the head cannot raise
+    (`UnavailableTasks(program, CoreProgram.IsTaskAvailable)`); WPF never seeds the provider, so it is unaffected. Withdraw
+    stays enabled for that run.
+  - SessionRunner gained `Stopped(session, completed)`; `CCP.Avalonia/Platform/ProgramEngineBridge.cs` mirrors the WPF
+    bridge and is attached on every program-session start (WPF attaches in StartProgramSession too).
+  - Panic ENDS a program session (`program-session` surface before `engine`, SafetyCritical) instead of WPF's pause; a
+    foreign session still pauses. Lockdown refuses Enroll, Withdraw and Start (P05 rows); WPF has no gate there, so this is
+    an Avalonia-only refusal with the existing "no escape" text.
+  - Review fix: Withdraw and the panic end OUR session without the "ended early" recap (WPF SuppressNextSessionSummary,
+    ProgramsTab.cs:2111; `MainShellWindow.EndProgramSessionQuietly`). The session row repaints on the runner's real start
+    (inside StartSession's effect, after the portal bind) and on every engine stop (`OnEngineStopped`), not per tick.
+  - Locked premium cards stay disabled (no App Info route yet): no premium program is finishable on this head at 3a.
+  - ShareLevel: the Avalonia dialog has no picker, so enrollments use WPF's default (Private).
+- Risks: last-writer-wins on hand-synced profiles (30 s timer can overwrite a synced-in file); WPF releases older than 3-0
+  drop unknown fields; the session row has no live clock/progress bar yet; a capability the table claims may never fire at
+  runtime (e.g. Pink Filter minutes on Wayland without a tint).
+- Tests: `Tests/CCP.Core.Tests/ProgramRunLifecycleTests.cs`, `Tests/CCP.Avalonia.Tests/ProgramsRunLifecycleTests.cs`,
+  `ProgramServiceStartupTests`, `LockdownVeilTests`, `ProgramsRunViewTests`, `PanicSurfacesTests`. Fail-proofs:
+  ~/ccp-port/evidence/review-programs-run-3a/fail-proofs.log.
+
+## 2026-10-09: the media-source consent gates network media, awaited (avalonia-port/sync6-media-picker)
+- WPF parity (MainWindow.Assets.cs:2350-2400): switching the media source to Reddit or Both asks once, and
+  `MediaSource` is written only after Yes. WPF's MessageBox is synchronous; this head's MessageDialog is async, so
+  the picker puts the chips back on the old source BEFORE awaiting, ignores further source clicks while the ask is
+  open, and on Cancel/close changes nothing. Someone who already accepted the For You card is not asked again
+  (`HasRemoteMediaConsent`), as on WPF. The second button is the dialog's localized Cancel: there is no "No" key.
+- Every change re-deals online channels (`FypOnlineCoordinator.ResetAllChannels`) and saves. WPF's pool
+  invalidation has no target here: no flash/video service on this head consumes online media yet (open gap in
+  parity rows shell-assets / views-tab-assets); intake is the only consumer.
+- Tests: `Tests/CCP.Avalonia.Tests/AssetsMediaPickerTests.cs` (consent faked, probe faked; no network).
+## 2026-10-10: roadmap.json atomic save and corrupt-file backup (avalonia-port/roadmap-atomic-save)
+- Source: oracle-deep, ~/ccp-port/evidence/oracle/programs-roadmap-seed.md (Q1 "Two existing protections"). Core-only, so
+  WPF gets it too.
+- Decision:
+  - `RoadmapService.Save()` writes `roadmap.json.tmp` then `File.Move(tmp, path, overwrite: true)`. Same serializer, same
+    options (`WriteIndented = true`), same UTF-8 without BOM: the bytes on disk are unchanged. No format change.
+  - `LoadProgress` copies an unreadable file to `roadmap.json.corrupt-<yyyyMMdd_HHmmss>` (local time, never overwrites an
+    existing backup) and logs a warning before falling back to defaults. Before this, the next StartStep/SubmitPhoto saved
+    the defaults over the user's whole roadmap.
+  - Internal ctor `RoadmapService(progressPath, diaryFolderPath)`; the public ctor chains to it, so tests use temp dirs.
+  - If the unreadable file cannot be backed up either (e.g. locked or no read permission), saving is off for the session,
+    so the defaults never replace the only copy. The temp file is written through a FileStream and `Flush(true)` before
+    the rename, so the rename cannot publish data that has not reached the disk yet.
+- Not covered: a file that parses as JSON `null` still yields defaults without a backup (not a parse failure, matches
+  before). A failed Move can leave a stale `roadmap.json.tmp`; the next save overwrites it. Backups are never pruned.
+  The flush-to-disk is asserted only by reading the code, not fail-proven (a power cut cannot be observed in a test).
+- Tests: `Tests/CCP.Core.Tests/RoadmapServiceAtomicSaveTests.cs` (4 tests; the unreadable-file test returns early (passes without asserting) on Windows
+  and when running as root). Fail-proofs (break, red, restore) are logged at
+  ~/ccp-port/evidence/review-roadmap-atomic-save/fail-proofs.log.
+## 2026-10-10: Owner safety calls: remote Strict Lock, the safe word, keyword triggers on panic (parity/k20-calls)
+- Strict Lock from a remote controller is refused on the client, for every controller, on every tier, always
+  (it used to run outside Lockdown and a leash). `RemoteCommandGate.Screen` refuses `enable_strict_lock` beside
+  `disable_panic`; `RemoteCommands.Execute` has no case for it; any command naming `strict_lock` loses the key
+  before a head sees it (`DropsStrictLockFlag` / `WithoutStrictLock`). The "controller's strict lock" bookkeeping
+  is gone; a leave still hands the panic key back. Tests: `Tests/CCP.Core.Tests/RemoteStrictLockRuleTests.cs`
+  (one table over every verb the client knows, per tier, leashed or not; the waiver line pinned to the gate).
+- SUPERSEDES "2026-09-30: Panic and the mic" and the 2026-10-08 "safe word is the only exit under Lockdown" line:
+  the spoken safe word now answers to the same rule as the panic key, the tray stop and the 6-blink stop
+  (Core `BlinkStopGate`: Lockdown, panic key off, Strict Lock). Refused = a log line, nothing stopped, no Chaster
+  safety hold; a leash task still parks, as on a refused key press. Cutting the leash stays ungated and unpriced.
+  Tests: `PanicSafetyHoldTests` (TheSafeWord...), `VoiceCommandsTests.TheSpokenSafeWordIsRefusedUnderLockdownAndWorksOutsideIt`.
+- "Stop until re-enabled": every accepted panic press switches keyword triggers off
+  (`PanicSurfaces.SwitchOffKeywordTriggers`): the master goes off, the screen read goes off as a SAVED setting
+  (the master is per-session and never saved, so the saved switch is the one that matters next launch), the
+  reader stops, highlights come down. `PanicWatchdog`'s recovery finishes the switch-off instead of restarting
+  the reader (deliberate WPF deviation). A refused press and a palette-claimed Escape change nothing. The
+  Awareness tab repaints and shows `awareness_off_by_panic` until the user switches back on. Tests:
+  `PanicKeywordOffTests`.
+- The Lockdown dose keeper ships as on WPF, default on, pending one desk run. No code change.
+
+## 2026-10-10: cloud settings backup wired on Avalonia (parity lane k25, replaces the 2026-10-09 "stays unwired" entry)
+- The card on Settings > Account & Plans is live: `CCP.Core/Services/Settings/CloudSettingsBackup.cs` (same two routes and
+  body as WPF: `POST /v2/user/backup-settings`, `POST /v2/user/settings-backup`) and
+  `AccountSettingsSection.CloudBackup.cs`. Manual only: no automatic upload after a save and no startup restore prompt.
+- Cross-OS answer to the 2026-10-09 worry: `CustomAssetsPath` never rides a backup and this machine's value wins on a
+  restore; the per-file asset lists are relative paths, and an empty list in a restore keeps this machine's own.
+- Never in a backup: identity and progression, entitlement windows (by their JSON names too, which WPF's strip misses),
+  every `Chaster*` setting, anything named Token / ApiKey / Secret / Password / Webhook / Credential, presence sharing,
+  the mod personality picks, `LastSeenUtc`, `KeywordTriggersOffByPanic`. A backup that carries one anyway is stripped on
+  decode.
+- Safety floor on restore (port addition, WPF has none): no `*StrictLock*` flag can go from off to on, the panic key can
+  not go from on to off, and the screen read stays off while `KeywordTriggersOffByPanic` is set here.
+- Back Room options ride the backup like any other AppSettings value (as on WPF); they are still not part of profile sync.
+- Tests: `CloudSettingsBackupTests` (Core), `CloudBackupCardTests` (head).

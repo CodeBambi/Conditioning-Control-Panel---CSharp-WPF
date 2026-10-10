@@ -14,7 +14,7 @@ namespace ConditioningControlPanel.Services;
 /// <para><see cref="Unlocked"/> is raised synchronously on the caller's thread; the WPF wrapper
 /// marshals it to the UI thread exactly as it did before (DispatcherHelper.RunOnUI).</para>
 /// </summary>
-internal sealed class AchievementEngine
+internal sealed partial class AchievementEngine
 {
     private readonly AchievementStore _store;
     private volatile bool _isDirty;
@@ -130,6 +130,51 @@ internal sealed class AchievementEngine
             if (level >= milestone) TryUnlock(id);
     }
 
+    /// <summary>WPF AchievementService.BubbleSaveEveryNPops (#1071): the pop count flushes every 50 pops.</summary>
+    internal const int BubbleSaveEveryNPops = 50;
+
+    /// <summary>WPF AchievementService.TrackSkillPointsSpent: the lifetime spend (Prestige) and Window Shopping.</summary>
+    public void TrackSkillPointsSpent(int amount)
+    {
+        if (amount <= 0) return;
+        Progress.LifetimeSkillPointsSpent += amount;
+        _isDirty = true;
+        if (Progress.LifetimeSkillPointsSpent >= AchievementRules.WindowShoppingPointsSpent) TryUnlock("window_shopping");
+    }
+
+    /// <summary>WPF AchievementService.ReconcileLifetimePointsSpent: adopt the server total when it is ahead.
+    /// Never lowers the local value: Prestige is monotonic.</summary>
+    public void ReconcileLifetimePointsSpent(long serverValue)
+    {
+        if (serverValue <= Progress.LifetimeSkillPointsSpent) return;
+        Progress.LifetimeSkillPointsSpent = serverValue;
+        _isDirty = true;
+        if (Progress.LifetimeSkillPointsSpent >= AchievementRules.WindowShoppingPointsSpent) TryUnlock("window_shopping");
+    }
+
+    /// <summary>WPF AchievementService.TrackBubblePopped (AchievementService.cs:596): the lifetime count,
+    /// pop_the_thought, 1 Sparkle Point every 100 bubbles. Quest credit stays with the caller (the head
+    /// already calls QuestService.TrackBubblePopped beside this).
+    /// ponytail: no ShowBubbleMilestoneNotification popup.</summary>
+    public void TrackBubblePopped() => TrackBubblesPopped(1);
+
+    /// <summary>WPF TrackBubblesPopped (a whole run at once): every 100-boundary crossed pays in one save.</summary>
+    public void TrackBubblesPopped(int count)
+    {
+        if (count <= 0) return;
+        int before = Progress.TotalBubblesPopped;
+        Progress.TotalBubblesPopped += count;
+        int after = Progress.TotalBubblesPopped;
+        _isDirty = true;
+
+        if (after >= AchievementRules.PopTheThoughtBubbles) TryUnlock("pop_the_thought");
+
+        var s = CoreSettings.Current;
+        if (SkillPointsBank.CreditBubbleMilestones(s, before, after) > 0) CoreSettings.Save();
+
+        if (count > 1 || after % BubbleSaveEveryNPops == 0) Save();
+    }
+
     /// <summary>A bubble-count answer: the correct-answer streak (mathematicians_nightmare) and the totals.</summary>
     public void TrackBubbleCountResult(bool correct)
     {
@@ -242,6 +287,16 @@ internal sealed class AchievementEngine
     {
         if (++Progress.IntakeQuitStreak >= AchievementRules.HeldBackQuitStreak) TryUnlockExclusive("held_back");
         _isDirty = true;
+    }
+
+    /// <summary>One keyword trigger fired (WPF GamificationBridge.OnKeywordTriggerFired): the lifetime
+    /// counter, "magic_word" on the first, "pavlov" at <see cref="AchievementRules.PavlovKeywordTriggers"/>.</summary>
+    public void TrackKeywordTriggerFired()
+    {
+        Progress.KeywordTriggersFired++;
+        _isDirty = true;
+        TryUnlockExclusive("magic_word");
+        if (Progress.KeywordTriggersFired >= AchievementRules.PavlovKeywordTriggers) TryUnlockExclusive("pavlov");
     }
 
     /// <summary>

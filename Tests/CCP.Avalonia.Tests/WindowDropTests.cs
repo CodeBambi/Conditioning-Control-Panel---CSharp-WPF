@@ -60,12 +60,20 @@ public sealed class WindowDropTests
     });
 
     [Fact]
-    public Task EnhancementDropSaysTheLibraryIsNotReady() => Run(async (shell, root, _) =>
+    public Task EnhancementDropImportsIntoTheLibrary() => Run(async (shell, root, _) =>
     {
         var enh = Path.Combine(root, "wave.ccpenh.json");
         File.WriteAllText(enh, "{\"$schema\":\"" + ConditioningControlPanel.Models.Deeper.Enhancement.SchemaTag + "\"}");
-        Drop(shell, enh);
-        await WaitFor(() => Toast(shell, Loc.Get("deeper_import_library_not_ready")));
+        var import = MainShellWindow.DeeperDropImport;
+        string[]? got = null;
+        MainShellWindow.DeeperDropImport = files => { got = files.ToArray(); return null; };
+        try
+        {
+            Drop(shell, enh);
+            await WaitFor(() => got);
+            Assert.Equal(new[] { enh }, got);
+        }
+        finally { MainShellWindow.DeeperDropImport = import; }
     });
 
     [Fact]

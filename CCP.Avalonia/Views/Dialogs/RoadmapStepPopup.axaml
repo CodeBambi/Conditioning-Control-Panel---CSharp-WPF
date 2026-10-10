@@ -21,7 +21,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="ConditioningControlPanel.Avalonia.Views.Dialogs.RoadmapStepPopup"
-        Title="Step Complete!"
+        Title="Step Complete"
         Width="400" Height="180"
         SystemDecorations="None"
         TransparencyLevelHint="Transparent"
@@ -76,7 +76,7 @@
                 <!-- Star Icon + "Step Complete" -->
                 <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                     <TextBlock Text="✨" FontSize="16" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                    <TextBlock Text="STEP COMPLETE!" Foreground="#FFD700"
+                    <TextBlock Text="STEP COMPLETE" Foreground="#FFD700"
                                FontWeight="Bold" FontSize="12" VerticalAlignment="Center"/>
                 </StackPanel>
 

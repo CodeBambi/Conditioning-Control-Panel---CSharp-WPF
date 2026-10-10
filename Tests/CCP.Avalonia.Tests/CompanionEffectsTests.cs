@@ -24,9 +24,19 @@ public sealed class CompanionEffectsTests
             CompanionEffects.Seed();
             Assert.NotNull(CompanionBrain.CommandExecutor);
             Assert.NotNull(CompanionBrain.ActivitiesProvider);
-            Assert.Null(SpiralCommand.Surface);                     // no spiral overlay port
+            Assert.NotNull(SpiralCommand.Surface);                  // studio#16: the spiral surface is seeded
             // No main window / click-through here: the overlay surface refuses instead of claiming a flash.
             Assert.False(FlashImageCommand.Surface!(3, 1000, 100));
+            // No main window and no running engine here: the spiral is refused, never claimed.
+            var engine = CoreSession.IsEngineRunningProvider;
+            CoreSession.IsEngineRunningProvider = () => false;
+            var (was, opacity) = (CoreSettings.Current.SpiralEnabled, CoreSettings.Current.SpiralOpacity);
+            try { Assert.False(SpiralCommand.Surface!(true, 12)); }
+            finally
+            {
+                CoreSession.IsEngineRunningProvider = engine;
+                (CoreSettings.Current.SpiralEnabled, CoreSettings.Current.SpiralOpacity) = (was, opacity);
+            }
         });
     }
 
@@ -41,14 +51,20 @@ public sealed class CompanionEffectsTests
             CoreEntitlement.HasLabProvider = () => true;
             CoreAccount.IsLoggedInProvider = () => true;
             var all = CompanionEffects.Activities();
-            Assert.Equal(new[] { "game.intake", "page.studio", "page.presets", "page.quests", "page.assets" },
+            // WPF 7.1.5 CompanionActivities.Current: LauncherCatalogue.Games in launcher order, then the four
+            // pages. Race is listed but only offered once revealed (a track owned), as WPF's game.Revealed gate.
+            Assert.Equal(new[] { "game.backroom", "game.breakoutdemo", "game.breakout", "game.piecebypiece",
+                    "game.race", "game.dtrh", "game.arcademy", "game.goon", "game.intake",
+                    "page.studio", "page.presets", "page.quests", "page.assets" },
                 all.Select(a => a.Id));
-            Assert.True(all[0].Allowed);
+            Assert.False(all.Single(a => a.Id == "game.race").Allowed);   // fresh profile: no track, mystery card
+            var intake = all.Single(a => a.Id == "game.intake");
+            Assert.True(intake.Allowed);
             CoreAccount.IsLoggedInProvider = () => false;          // the tile would ask to sign in
-            Assert.False(all[0].Allowed);
+            Assert.False(intake.Allowed);
             CoreAccount.IsLoggedInProvider = () => true;
             service.Current.AudioOnlySession = true;
-            Assert.False(all[0].Allowed);
+            Assert.False(intake.Allowed);
         }
         finally
         {

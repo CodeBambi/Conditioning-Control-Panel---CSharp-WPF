@@ -12,7 +12,7 @@ using Xunit;
 
 namespace CCP.Avalonia.Tests;
 
-/// <summary>User bug: after leaving Play its rabbit-hole ember loop kept showing through other
+/// <summary>User bug: after leaving Play its ambient loops (the old ember hero, the tier badges and rims) kept showing through other
 /// pages. WPF's IsVisible folds in the ancestors (AmbientFxCanvas.cs:601/664); Avalonia's does
 /// not, so the canvas on the hidden tab kept ticking and invalidating. Leaving the tab must stop
 /// its clock and coming back must restart it. The ember canvas left with the descent hero (WPF
@@ -37,7 +37,7 @@ public sealed class PlaySpiralBleedTests
             w.ShowTab("play");
             Dispatcher.UIThread.RunJobs();
             var play = w.Named<global::ConditioningControlPanel.Avalonia.Views.Tabs.PlayTabView>("PlayTab")!;
-            var badge = play.FindControl<TierBadge>("PlayBadgeRemote")!;
+            var badge = play.FindControl<TierBadge>("PlayBadgeDtrh")!;
             Assert.True(badge.IsAnimating, "Play's tier badge never animated - the test proves nothing");
             // The lapping rim ("the spiral around the items") lives on the WINDOW's AdornerLayer.
             var rims = w.GetVisualDescendants().OfType<TierFxBorderAdorner>().Where(a => a.IsVisible).ToList();

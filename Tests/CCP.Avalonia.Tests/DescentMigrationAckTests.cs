@@ -53,7 +53,7 @@ public sealed partial class AccountSeedTests
         before = s.PlayerXP;
         ProgressionBank.Add(100, "Session");
         Assert.Equal(before + 110, s.PlayerXP, 3);
-        Assert.DoesNotContain(wire.Syncs, b => b.ContainsKey("descent_auto"));   // never claims to take offers
+        Assert.All(wire.Syncs, b => Assert.True((bool)b["descent_auto"]!));   // this head takes the offer silently (restore, no window)
     });
 
     [Fact]
@@ -75,7 +75,7 @@ public sealed partial class AccountSeedTests
             shell = new MainShellWindow();
             shell.Show();
             Dispatcher.UIThread.RunJobs();
-            shell.Named<Button>("BtnDiscordTab")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            shell.ShowTab("discord");   // You > Profile (the rail's BtnDiscordTab row is retired)
             for (var i = 0; i < 20; i++) { await Task.Yield(); Dispatcher.UIThread.RunJobs(); }
 
             var page = shell.ProfilePage!;

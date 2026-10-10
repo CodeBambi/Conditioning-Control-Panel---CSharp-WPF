@@ -18,17 +18,20 @@ namespace ConditioningControlPanel.Services
     /// Pop quiz follows WPF: the user-level AppSettings toggle, not the per-session PopQuiz* fields
     /// (dead in WPF too, BuiltInPrograms.cs:430).
     ///
-    /// ponytail: not driven here - video, bubbles, bubble count, mind wipe, brain drain, spiral,
-    /// corner GIF, ducking, phase events,
+    /// Spiral, Brain Drain, bubbles (+ bursts), videos, bubble count, the session's escalating Mind Wipe
+    /// and ducking: SessionRunner.Phases.cs.
+    ///
+    /// ponytail: not driven here - corner GIF, phase events,
     /// EMI Desk, Discord, friends, season recap and achievement tracking. No settings are written for them,
     /// so the snapshot restore writes their own values back; each arrives with its Core service.
     /// </summary>
-    public sealed class SessionRunner
+    public sealed partial class SessionRunner
     {
         private readonly DeferredStartQueue _deferred = new();
         private readonly Stopwatch _stopwatch = new();
         private Timer? _timer;
         private SessionSettingsSnapshot? _snapshot;
+        private bool _startPanicKey = true, _startStrictLock;
         private PhrasePoolCustody? _custody;
         private DateTime _startTime;
         private TimeSpan _lastElapsed;
@@ -52,6 +55,9 @@ namespace ConditioningControlPanel.Services
 
         /// <summary>After every live tick: WPF's ProgressUpdated, for the head's clock labels.</summary>
         public event Action? Ticked;
+
+        /// <summary>A session ended; the bool is completed. Raised after the runner is idle again.</summary>
+        public event Action<Session, bool>? Stopped;
 
         /// <summary>Seeds IsSessionRunning: one runner per head. The pool delegates are the head's
         /// (PhrasePoolCustody.Seed at startup, CCP.Avalonia/Program.cs).</summary>
@@ -77,8 +83,7 @@ namespace ConditioningControlPanel.Services
             if (IsRunning) throw new InvalidOperationException("A session is already running. Stop it first.");
             if (!CoreEngine.IsRunning) CoreEngine.Start();
             // SessionEngine.cs:223 (#1304): the session owns Mind Wipe, so the global one the engine
-            // just started does not play through it. ponytail: the session's own escalating Mind Wipe
-            // (StartSession) is not ported; a session plays none.
+            // just started does not play through it; the session's own starts in StartPhases.
             CoreMindWipe.Stop();
 
             var s = CoreSettings.Current;
@@ -88,6 +93,12 @@ namespace ConditioningControlPanel.Services
             IsPaused = false;
             PauseCount = 0;
             PinkOpacity = null;
+            ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("sessionStarted", new { target = session.Name?.ToLowerInvariant(), minutes = (int)session.DurationMinutes });   // WPF SessionEngine.cs:267
+            _emiSaidHalfway = _emiSaidLastMinute = false;
+            // WPF SessionEngine.cs:279-289, behind sessionStarted on purpose: the started count, relapse,
+            // and EMI's firstSessionEver when this is the account's first.
+            try { AchievementEngine.Current?.TrackSessionStart(); } catch (Exception ex) { Log.Debug(ex, "session start count"); }
+            _emiRampStep = 0;
             _pausedElapsed = _lastElapsed = TimeSpan.Zero;
             PinkStartMinute = RandomizedStart(session.Settings.PinkFilterEnabled, session.Settings.PinkFilterStartMinute, _random);
             _startTime = DateTime.Now;
@@ -98,13 +109,38 @@ namespace ConditioningControlPanel.Services
             try { s.RecordSessionStart(s.ActiveModId); } catch { }
             CoreSettings.SaveImmediate();
 
+            CaptureCornerGifUserState(s);   // the user's own Spiral master, before any override
             _snapshot = SessionSettingsSnapshot.Capture(s);
+            _startPanicKey = s.PanicKeyEnabled;      // WPF _sessionStartPanicKey / _sessionStartStrictLock:
+            _startStrictLock = s.StrictLockEnabled;  // the achievement reads the START state, not the restored one
             _custody = PhrasePoolCustody.Begin(s, session.Settings, CoreMods.ActiveModId, session);
             Apply(session.Settings, s);
+            StartPhases(session);
+            StartCornerGif(session.Settings);   // SessionEngine.cs:214
 
             _timer = new Timer(_ => CoreDispatch.Post(() => Tick(Elapsed)), null, 1000, 1000);
             SessionLog.BeginSession(session);
+            TrackSessionFeatures(session.Settings);
             Log.Information("Session started: {Name}", session.Name);
+        }
+
+        /// <summary>WPF SessionEngine.cs:297-308: which features this session engaged, once per session from
+        /// the enabled flags (pause / resume cannot double-count). Feeds the day log and the season bucket.</summary>
+        internal static void TrackSessionFeatures(SessionSettings ss)
+        {
+            try
+            {
+                if (ss.FlashEnabled) SeasonFeatureTracker.TrackFeature(SeasonFeatureKeys.Flash);
+                if (ss.MandatoryVideosEnabled) SeasonFeatureTracker.TrackFeature(SeasonFeatureKeys.Video);
+                if (ss.SubliminalEnabled) SeasonFeatureTracker.TrackFeature(SeasonFeatureKeys.Subliminal);
+                if (ss.SpiralEnabled || ss.PinkFilterEnabled) SeasonFeatureTracker.TrackFeature(SeasonFeatureKeys.Overlay);
+                if (ss.BubblesEnabled) SeasonFeatureTracker.TrackFeature(SeasonFeatureKeys.Bubbles);
+                if (ss.BubbleCountEnabled) SeasonFeatureTracker.TrackFeature(SeasonFeatureKeys.BubbleCount);
+                if (ss.BouncingTextEnabled) SeasonFeatureTracker.TrackFeature(SeasonFeatureKeys.BouncingText);
+                if (ss.LockCardEnabled) SeasonFeatureTracker.TrackFeature(SeasonFeatureKeys.LockCard);
+                if (ss.MindWipeEnabled) SeasonFeatureTracker.TrackFeature(SeasonFeatureKeys.MindWipe);
+            }
+            catch { }
         }
 
         private double RemainingMinutes =>
@@ -176,6 +212,7 @@ namespace ConditioningControlPanel.Services
             // SessionEngine.cs:1479: a delayed tint stays off until its randomised minute (Tick).
             s.PinkFilterEnabled = ss.PinkFilterEnabled && ss.PinkFilterStartMinute == 0;
             if (s.PinkFilterEnabled) s.PinkFilterOpacity = ss.PinkFilterStartOpacity;
+            ApplyPhases(ss, s);
         }
 
         /// <summary>SessionEngine.RandomizeStartTimes (SessionEngine.cs:966): a delayed start moves by up to 3 min either way.
@@ -199,7 +236,10 @@ namespace ConditioningControlPanel.Services
             LockCardScheduler.Instance.Stop();
             CoreEngine.PopQuiz?.Stop();   // SessionEngine.cs:527, closes an open quiz
             CoreBouncingText.Stop();
+            PausePhases();
+            PauseCornerGif();   // SessionEngine.cs:552: hidden, the corner stays claimed
             Log.Information("Session paused (pause #{Count}, -100 XP penalty)", PauseCount);
+            ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("sessionPaused", new { n = PauseCount });   // WPF SessionEngine.cs:517
         }
 
         /// <summary>SessionEngine.ResumeSession (SessionEngine.cs:554): restart only what has reached its
@@ -217,7 +257,10 @@ namespace ConditioningControlPanel.Services
             if (ss.LockCardEnabled && !_deferred.IsPending("lock cards")) LockCardScheduler.Instance.Start(Remaining.TotalMinutes);
             if (ss.BouncingTextEnabled && !_deferred.IsPending("bouncing text")) CoreBouncingText.Start();
             if (CoreSettings.Current.PopQuizEnabled) CoreEngine.PopQuiz?.Start();   // SessionEngine.cs:574
+            ResumePhases(ss);
+            ResumeCornerGif(ss);   // SessionEngine.cs:596
             Log.Information("Session resumed");
+            ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("sessionResumed", new { minutes = (int)Math.Round(Remaining.TotalMinutes) });   // WPF SessionEngine.cs:607
         }
 
         private void StartAt(string name, int minute, Action start, Action stop)
@@ -236,15 +279,19 @@ namespace ConditioningControlPanel.Services
             _lastElapsed = elapsed;
             var minutes = elapsed.TotalMinutes;
             if (minutes >= session.DurationMinutes) { Stop(true, elapsed); return; }
+            EmiSessionBeats(session.DurationMinutes, minutes);
 
             var phase = SessionTimeline.PhaseIndexAt(session.Phases, minutes);
             if (phase != CurrentPhaseIndex)
             {
                 CurrentPhaseIndex = phase;
                 Log.Information("Phase changed: {Phase}", session.Phases[phase].Name);
+                ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("sessionPhaseChanged", new { target = session.Phases[phase].Name?.ToLowerInvariant(), n = phase + 1 });   // WPF SessionEngine.cs:695
             }
             UpdateRamps(session, minutes);
             _deferred.FireDue(minutes);
+            TickPhases(session, minutes);
+            TickCornerGif(session.Settings, minutes);   // SessionEngine.cs:909-940
 
             // Pink delayed start at its randomised minute (SessionEngine.cs:849); the head shows it.
             var s = CoreSettings.Current;
@@ -254,6 +301,33 @@ namespace ConditioningControlPanel.Services
                 Log.Information("Pink filter activated at {Minutes:F1} minutes (target was {Target:F1})", minutes, PinkStartMinute);
             }
             Ticked?.Invoke();
+        }
+
+        private bool _emiSaidHalfway, _emiSaidLastMinute;
+        private int _emiRampStep;
+
+        /// <summary>The one genuine integer step in the ramp machinery: she never claims a number that is not real.</summary>
+        private void EmiRampStep(int steps)
+        {
+            if (steps <= _emiRampStep) return;
+            _emiRampStep = steps;
+            ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("rampStepUp", new { n = steps });
+        }
+
+        /// <summary>WPF SessionEngine.cs:637-655: the two beats inside a run, each once, off the engine clock.</summary>
+        private void EmiSessionBeats(double totalMinutes, double elapsedMinutes)
+        {
+            double left = totalMinutes - elapsedMinutes;
+            if (!_emiSaidHalfway && elapsedMinutes >= totalMinutes / 2.0)
+            {
+                _emiSaidHalfway = true;
+                ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("sessionHalfway", new { minutes = (int)Math.Round(left) });
+            }
+            if (!_emiSaidLastMinute && left <= 1.0)
+            {
+                _emiSaidLastMinute = true;
+                ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("sessionLastMinute");
+            }
         }
 
         /// <summary>SessionEngine.UpdateRampingValues (SessionEngine.cs:699), flash trio + pink.</summary>
@@ -300,6 +374,8 @@ namespace ConditioningControlPanel.Services
             var s = CoreSettings.Current;
             s.ClearSessionFlashRamp();   // SessionEngine.cs:390, ahead of the restore
             PinkOpacity = null;
+            StopPhases();
+            StopCornerGif();   // SessionEngine.cs:372: the corner goes back to the user's own slots
             _snapshot?.RestoreTo(s);
             _snapshot = null;
             _custody?.Restore(s);
@@ -318,12 +394,26 @@ namespace ConditioningControlPanel.Services
                 xp = (int)Math.Round(ProfileAdopt.TotalXp(s) - before);
                 Log.Information("Session completed: {Name}, XP: {XP} (banked {Banked}, paused {PauseCount}x, penalty: -{Penalty})",
                     session.Name, award, xp, PauseCount, XPPenalty);
+                // WPF SessionEngine.cs:442 TrackSessionComplete: the achievement half, then the quest half.
+                try { AchievementEngine.Current?.TrackSessionComplete(session.Name, elapsed.TotalMinutes, !_startPanicKey, _startStrictLock); }
+                catch (Exception ex) { Log.Debug(ex, "session complete count"); }
+                CoreProgression.TrackSessionCompleted();   // WPF SessionEngine.cs:442 -> AchievementService.cs:999
+                ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("sessionCompleted", new { target = session.Name?.ToLowerInvariant(), minutes = (int)elapsed.TotalMinutes, n = xp });   // WPF SessionEngine.cs:471
             }
-            else Log.Information("Session stopped early");
+            else {
+                Log.Information("Session stopped early");
+                // WPF SessionEngine.cs:411 + :490: the abandoned count, and the stop stamps the relapse window.
+                try { AchievementEngine.Current?.TrackSessionAbandoned(); AchievementEngine.Current?.TrackPanicPressed(); }
+                catch (Exception ex) { Log.Debug(ex, "session abandoned count"); }
+                ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("sessionAbandoned", new { minutes = (int)elapsed.TotalMinutes });   // WPF SessionEngine.cs:486
+            }
 
             try { SessionLog.EndSession(completed, elapsed, xp); }
             catch (Exception ex) { Log.Error(ex, "SessionLog.EndSession failed"); }
             CurrentSession = null;
+            // WPF SessionEngine.SessionStopped + SessionCompleted, as one call (ProgramEngineBridge).
+            try { Stopped?.Invoke(session, completed); }
+            catch (Exception ex) { Log.Warning(ex, "SessionRunner.Stopped handler failed"); }
         }
     }
 }

@@ -10,8 +10,9 @@ namespace ConditioningControlPanel
     // ============================================================================================
     // HIGH-DPI WORK-AREA FIT
     // ============================================================================================
-    // The window ships at a fixed 1563x943 DIP with 1131x620 floors (MainWindow.xaml). Those numbers
-    // were tuned against 100-150% scaling on a desktop monitor. On a TV at 300% the work area
+    // The window ships at a fixed 1954x1179 DIP (1563x943 until nav polish wave 7, 2026-10-06) with
+    // 1131x620 floors (MainWindow.xaml). Those numbers were tuned against 100-150% scaling on a
+    // desktop monitor; the size clamp below is uniform (WindowFitRule) so the canvas keeps its aspect. On a TV at 300% the work area
     // collapses to a third of its pixel size in DIP space (a 4K panel is 1280x672 DIP once the
     // taskbar is out; a 1080p panel is 640x312), so the window is taller than the screen and the
     // bottom bar - START, the status strip, the resize grip - is pushed off the desktop with no way
@@ -152,8 +153,9 @@ namespace ConditioningControlPanel
                 if (!GetWindowRect(hwnd, out var r)) return;
                 var w = Math.Max(1, r.Right - r.Left);
                 var h = Math.Max(1, r.Bottom - r.Top);
-                var newW = Math.Min(w, wa.Width);
-                var newH = Math.Min(h, wa.Height);
+                // Uniform: both axes shrink by one factor so the Stretch="Fill" canvas keeps its
+                // aspect (WindowFitRule). A window that fits is untouched.
+                var (newW, newH) = WindowFitRule.FitPx(w, h, wa.Width, wa.Height);
                 var newL = r.Left;
                 var newT = r.Top;
                 if (newL + newW > wa.Right) newL = wa.Right - newW;

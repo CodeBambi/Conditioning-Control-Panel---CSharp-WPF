@@ -52,12 +52,25 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             try
             {
-                if (FirstRunWizard.ShouldRunAndClaim()) Opened += OnFirstRunShellOpened;
+                HookEmiKnock();   // before any stamp of LastSeenVersion (MainShellWindow.EmiKnock.cs)
+                if (FirstRunWizard.ShouldRunAndClaim())
+                {
+                    EmiFirstRunBegan();   // WPF :563 firstLaunchEver hold
+                    Opened += OnFirstRunShellOpened;
+                    // WPF MainWindow.xaml.cs:566: a fresh install never needs "What moved".
+                    OfferWhatMovedIfNeeded(freshInstall: true);
+                    return;
+                }
+                // WPF MainWindow.xaml.cs:618: the one-time "What moved" card, upgrades only.
+                if (CoreSettings.Service != null) Opened += OnWhatMovedShellOpened;
                 // WPF's else branch (MainWindow.xaml.cs:602-612) no longer opens a mod picker:
                 // mods are offered by the first-run wizard and the Mod Manager only.
-                else if (CoreSettings.Service != null && CoreSettings.Current.Welcomed
+                if (CoreSettings.Service != null && CoreSettings.Current.Welcomed
                          && !CoreSettings.Current.HasAcceptedAgeVerification)
                     Opened += OnAgeGateShellOpened;
+                // WPF's else branch: a returning user on a new version gets What's New, once.
+                else if (CoreSettings.Service != null)
+                    Opened += OnWhatsNewShellOpened;
             }
             catch (Exception ex)
             {
@@ -71,21 +84,58 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// mid-wizard, or a WPF settings file in that state) is asked before anything else.
         /// "Yes" reads "OK" to match this head's buttons (docs/avalonia-decisions.md).
         /// </summary>
-        internal const string AgeGateBody =
-            "This application contains adult content intended for users aged 18 and older.\n\n" +
-            "By clicking \"OK\", you confirm that you are at least 18 years old and that viewing adult content is legal in your jurisdiction.\n\n" +
-            "Do you wish to continue?";
+        internal static string AgeGateBody => ConditioningControlPanel.Localization.Loc.Get("age_gate_body");
 
         private void OnAgeGateShellOpened(object? sender, EventArgs e)
         {
             Opened -= OnAgeGateShellOpened;
             Dispatcher.UIThread.Post(async () =>
             {
-                var ok = IsVisible && await Dialogs.MessageDialog.ConfirmAsync(this, "Age Verification", AgeGateBody, defaultToCancel: true);
+                var ok = IsVisible && await Dialogs.MessageDialog.ConfirmAsync(this, ConditioningControlPanel.Localization.Loc.Get("age_gate_title"), AgeGateBody, defaultToCancel: true);
                 if (!ok) { ExitWithoutBill(); return; }   // WPF App.xaml.cs:3835 Shutdown, no bill
                 CoreSettings.Current.HasAcceptedAgeVerification = true;
                 CoreSettings.Save();
             }, DispatcherPriority.Normal);
+        }
+
+        private void OnWhatsNewShellOpened(object? sender, EventArgs e)
+        {
+            Opened -= OnWhatsNewShellOpened;
+            Dispatcher.UIThread.Post(() => _ = ShowWhatsNewIfNeededAsync(), DispatcherPriority.Normal);
+        }
+
+        /// <summary>Test seam: stands in for the dialog (title, notes).</summary>
+        internal Func<string, string, System.Threading.Tasks.Task>? WhatsNewPresenter;
+
+        /// <summary>WPF ShowWhatsNewIfNeeded (MainWindow.Marquee.cs:290): a fresh install is stamped and
+        /// told nothing; a changed version shows the notes once, then is stamped. No tour button: the
+        /// tour service is not on this head. An unseeded version ("0.0.0") or empty notes never open
+        /// a window (a render or a test run), and never stamp either.</summary>
+        internal async System.Threading.Tasks.Task ShowWhatsNewIfNeededAsync()
+        {
+            try
+            {
+                var current = CoreReleaseContent.AppVersion;
+                if (string.IsNullOrEmpty(current) || current == "0.0.0") return;
+                var s = CoreSettings.Current;
+                var last = s.LastSeenVersion ?? "";
+                if (last == current) return;
+                if (last.Length > 0)
+                {
+                    var notes = CoreReleaseContent.PatchNotes;
+                    if (string.IsNullOrWhiteSpace(notes)) return;
+                    Log.Information("Version changed from {Old} to {New}, showing What's New", last, current);
+                    ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("afterUpdate", new { target = current });   // WPF MainWindow.Marquee.cs:325, before the stamp
+                    var title = $"What's New in v{current}";
+                    if (WhatsNewPresenter != null) await WhatsNewPresenter(title, notes);
+                    else if (IsVisible) await new Dialogs.WhatsNewDialog(title, notes).ShowDialogSafe(this);
+                    else return;   // never on screen: ask again next launch
+                }
+                else Log.Information("Fresh install (no last-seen version): stamping v{Version} without What's New", current);
+                s.LastSeenVersion = current;
+                CoreSettings.Save();
+            }
+            catch (Exception ex) { Log.Warning(ex, "ShowWhatsNewIfNeeded failed"); }
         }
 
         private void OnFirstRunShellOpened(object? sender, EventArgs e)
@@ -108,11 +158,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     }
 
                     await FirstRunWizard.Run(this);
+                    // WPF MainWindow.xaml.cs:581: EMI's welcome show follows the wizard on the same
+                    // one-launch path, only for a player who accepted the age gate.
+                    OfferWelcomeShowAfterFirstRun();
                 }
                 catch (Exception ex)
                 {
                     Log.Warning(ex, "[FirstRun] The first-run wizard failed to run");
                 }
+                finally { EmiFirstRunEnded(); }   // WPF :590-601 the hold comes off
             }, DispatcherPriority.Normal);
         }
     }

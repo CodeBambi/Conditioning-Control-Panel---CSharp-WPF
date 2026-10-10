@@ -51,9 +51,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
             _btnChip.Click += OnChipClick;
             // WPF EmiDock.xaml.cs:57-107: follow the service while loaded, let go when unloaded.
             var svc = Windows.EmiDesk.EmiDeskService.Instance;
-            Loaded += (_, _) => { svc.OutChanged += OnOutChanged; Refresh(svc.IsOut, svc.AvatarMuted); };
-            Unloaded += (_, _) => { svc.OutChanged -= OnOutChanged; MirrorFace(null); StopKnock(); };
+            Loaded += (_, _) => { svc.OutChanged += OnOutChanged; svc.KnockRequested += OnKnockRequested; Refresh(svc.IsOut, svc.AvatarMuted); };
+            Unloaded += (_, _) => { svc.OutChanged -= OnOutChanged; svc.KnockRequested -= OnKnockRequested; MirrorFace(null); StopKnock(); };
         }
+
+        /// <summary>WPF EmiDock.xaml.cs:231: she knocked, the ring pulses three times.</summary>
+        private void OnKnockRequested(object? sender, EventArgs e) =>
+            global::Avalonia.Threading.Dispatcher.UIThread.Post(StartKnock);
 
         private void OnOutChanged(object? sender, bool isOut) =>
             global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>

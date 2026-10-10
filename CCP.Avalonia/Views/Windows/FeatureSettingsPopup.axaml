@@ -15,7 +15,7 @@
      No {loc:Str} anywhere: the WPF original hardcodes every string in this view, so a key here
      would be an invented one. -->
 <UserControl xmlns="https://github.com/avaloniaui"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="ConditioningControlPanel.Avalonia.Views.Windows.FeatureSettingsPopup"
              Width="320" Background="Transparent">
 
@@ -61,9 +61,9 @@
 
             <!-- Buttons -->
             <Grid Grid.Row="3" Margin="0,15,0,0" ColumnDefinitions="Auto,*,Auto">
-                <Button x:Name="BtnDelete" Content="Delete"
+                <Button x:Name="BtnDelete" Content="{loc:Str btn_delete}"
                         Theme="{StaticResource DangerButton}" Padding="15,8" Cursor="Hand"/>
-                <Button Grid.Column="2" x:Name="BtnDone" Content="Done"
+                <Button Grid.Column="2" x:Name="BtnDone" Content="{loc:Str btn_done}"
                         Theme="{StaticResource ActionButton}" Padding="20,8" Cursor="Hand"/>
             </Grid>
         </Grid>

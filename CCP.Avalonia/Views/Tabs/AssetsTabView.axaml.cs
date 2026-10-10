@@ -1,10 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.IO;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
+using ConditioningControlPanel.Models;
 using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Tabs
@@ -24,10 +27,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     /// to is two Directory.CreateDirectory calls and a shell open, and CorePaths.EffectiveAssets is
     /// the path.
     ///
-    /// ponytail: the rest needs MainWindow (asset scan, pack install, preset CRUD, remote media
-    /// picker), wired when they move to Core. The wiring points, all named in the XAML:
-    ///   BtnRefreshAssets / BtnRefreshPacks / BtnGetPacks /
-    ///   BtnDeleteDownloadedPacks /
+    /// The asset browser (scan, selection, presets) is ported in AssetsTabView.Browser.cs.
+    /// The pack strip, Get Packs, Refresh/Delete packs and the card buttons are AssetsTabView.PackCards.cs
+    /// (Core ContentPackService). Older note, may be partly stale:
+    ///   BtnRefreshAssets /
     ///   BtnSelectAllAssets / BtnDeselectAllAssets / BtnSaveAssetPreset / BtnUpdateAssetPreset /
     ///   BtnDeleteAssetPreset / CmbAssetPresets.SelectionChanged / AssetTreeView.SelectionChanged /
     ///   FolderCheckBox / ThumbnailCheckBox / ThumbnailItem click + context menu /
@@ -44,7 +47,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             // (CLAUDE.md trap 7). Nothing here dereferences one yet; the handlers below take their
             // sender, and this is the ctor a reader will copy.
             InitializeComponent();
-            DataContext = new AssetsTabViewModel();
+            DataContext = Browser;
+            InitializeLibraryPicker();   // the media picker + Folders chip (AssetsTabView.MediaPicker.cs)
+            InitializeAssetBrowser();    // folder tree, thumbnails, presets (AssetsTabView.Browser.cs)
+            InitializePackCards();       // pack strip + Get Packs (AssetsTabView.PackCards.cs)
         }
 
         /// <summary>
@@ -57,6 +63,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         {
             try
             {
+                MarkMediaLogSeen();   // AssetsTabView.Fx.cs: opening the log ends the pulse
                 var win = new Views.Windows.MediaHistoryWindow();
                 if (TopLevel.GetTopLevel(this) is Window owner) win.Show(owner);
                 else win.Show();
@@ -94,134 +101,108 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     }
 
     /// <summary>
-    /// Placeholder content so the view DRAWS its templated regions. The real lists come from
-    /// MainWindow.Assets.cs (asset scan, ContentPackService, AppSettings.AssetPresets), which is
-    /// still in the WPF head; filling them is a separate change from proving the view renders.
+    /// The Library page's live state. Filled by <see cref="AssetsTabView"/> (AssetsTabView.Browser.cs,
+    /// the port of WPF 7.1.5 MainWindow.Assets.cs): the folder tree is built from the real assets
+    /// folder, the thumbnails from the selected folder. NO sample rows: a page with nothing in it
+    /// shows the empty line, never placeholder files (owner bug 2026-10-09: fake spiral_01.png tiles
+    /// and "Images (842)" leaked from the render-proof data that used to live here).
     /// </summary>
-    public sealed class AssetsTabViewModel
+    public sealed class AssetsTabViewModel : INotifyPropertyChanged
     {
-        // The packs section is IsVisible="False" in the original ("most packs live outside the app
-        // now"), so these never draw unless someone flips it - they exist so the card template is
-        // compiled against a real type and can be proved by temporarily un-hiding the section.
-        public IReadOnlyList<PackCardViewModel> Packs { get; } = new[]
+        public event PropertyChangedEventHandler? PropertyChanged;
+        private void Raise(string name) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+
+        /// <summary>The packs strip (IsVisible="False" on 7.1.5, PacksSectionEnabled). Filled by
+        /// AssetsTabView.PackCards.cs from the Core ContentPackService, never sample cards.</summary>
+        public ObservableCollection<PackCardViewModel> Packs { get; } = new();
+
+        public ObservableCollection<AssetTreeItem> Folders { get; } = new();
+
+        public ObservableCollection<AssetThumbnailViewModel> Thumbnails { get; } = new();
+
+        private string _emptyText = "";
+        /// <summary>The line over an empty grid (WPF TxtThumbnailsEmpty.Text).</summary>
+        public string EmptyText
         {
-            new PackCardViewModel { Name = "Starter Pack", Description = "A small first-run set: soft imagery and two short loops.", SizeDisplay = "42 MB", ImageCount = 120, VideoCount = 4, IsDownloaded = true },
-            new PackCardViewModel { Name = "Deep Focus", Description = "Slow spirals and long-form video for extended sessions.", SizeDisplay = "310 MB", ImageCount = 640, VideoCount = 22 },
-            new PackCardViewModel { Name = "Community Mix", Description = "Hosted off-site; download it yourself and drop it in.", SizeDisplay = "1.2 GB", ImageCount = 2100, VideoCount = 90, IsExternal = true },
-        };
-
-        public IReadOnlyList<AssetFolderViewModel> Folders { get; } = new[]
-        {
-            new AssetFolderViewModel("Assets", 0, isExpanded: true, isChecked: true, children: new[]
-            {
-                new AssetFolderViewModel("Images", 842, isChecked: true),
-                new AssetFolderViewModel("Videos", 37),
-                new AssetFolderViewModel("Starter Pack", 124, isChecked: true),
-            }),
-        };
-
-        public IReadOnlyList<AssetThumbnailViewModel> Thumbnails { get; } = new[]
-        {
-            new AssetThumbnailViewModel("spiral_01.png", isChecked: true),
-            new AssetThumbnailViewModel("spiral_02.png"),
-            new AssetThumbnailViewModel("loop_soft.mp4", isVideo: true),
-            new AssetThumbnailViewModel("drop_03.png", isChecked: true),
-            new AssetThumbnailViewModel("caption_long_filename_that_trims.png"),
-            new AssetThumbnailViewModel("loading_now.png", isLoading: true),
-        };
-
-        public bool HasNoThumbnails => Thumbnails.Count == 0;
-
-        public IReadOnlyList<AssetPresetViewModel> Presets { get; } = new[]
-        {
-            new AssetPresetViewModel("everything", "Everything"),
-            new AssetPresetViewModel("images-only", "Images only"),
-            new AssetPresetViewModel("starter", "Starter Pack"),
-        };
-    }
-
-    /// <summary>One card in the (hidden) content-packs strip.</summary>
-    public sealed class PackCardViewModel
-    {
-        public string Name { get; set; } = "";
-        public string Description { get; set; } = "";
-        public string SizeDisplay { get; set; } = "";
-        public int ImageCount { get; set; }
-        public int VideoCount { get; set; }
-        public bool IsDownloaded { get; set; }
-        public bool IsExternal { get; set; }
-        public bool IsDownloading { get; set; }
-        public double DownloadProgress { get; set; }
-
-        /// <summary>WPF used a MultiBinding with StringFormat "{0} images, {1} videos"; Avalonia has
-        /// no MultiBinding StringFormat, and the string was hardcoded English there too.</summary>
-        public string CountsDisplay => $"{ImageCount} images, {VideoCount} videos";
-
-        public bool ShowExternalButtons => IsExternal && !IsDownloaded;
-        public bool IsNotDownloading => !IsDownloading;
-        public string DownloadButtonText => IsDownloaded ? "Uninstall" : "Install";
-        public string ActivateButtonText => "Deactivate";
-
-        // IImage, not a URL string: Avalonia will not convert one, and pack:// is WPF-only. Null
-        // until the pack service (and its image cache) moves to Core - the "No Preview" branch
-        // is what draws meanwhile, which is also the honest state for a pack with no preview.
-        public IImage? CurrentPreviewImage => null;
-        public IImage? PreviewImage => null;
-        public bool HasPreviewImages => false;
-        public bool HasAnyPreview => false;
-    }
-
-    /// <summary>A folder row in the asset tree.</summary>
-    public sealed class AssetFolderViewModel
-    {
-        public AssetFolderViewModel(string name, int fileCount, bool isExpanded = false,
-            bool isChecked = false, IReadOnlyList<AssetFolderViewModel>? children = null)
-        {
-            Name = name;
-            FileCount = fileCount;
-            IsExpanded = isExpanded;
-            IsChecked = isChecked;
-            Children = children ?? System.Array.Empty<AssetFolderViewModel>();
+            get => _emptyText;
+            set { if (_emptyText != value) { _emptyText = value; Raise(nameof(EmptyText)); } }
         }
 
-        public string Name { get; }
-        public int FileCount { get; }
-        public bool IsExpanded { get; set; }
-        public bool IsChecked { get; set; }
-        public IReadOnlyList<AssetFolderViewModel> Children { get; }
-        public string FileCountDisplay => FileCount > 0 ? $"({FileCount})" : "";
-    }
-
-    /// <summary>One tile in the thumbnail grid.</summary>
-    public sealed class AssetThumbnailViewModel
-    {
-        public AssetThumbnailViewModel(string name, bool isVideo = false, bool isChecked = false, bool isLoading = false)
+        private bool _showEmpty = true;
+        /// <summary>WPF toggles TxtThumbnailsEmpty.Visibility by hand; same rules here.</summary>
+        public bool ShowEmpty
         {
-            Name = name;
-            IsVideo = isVideo;
-            IsChecked = isChecked;
-            IsLoadingThumbnail = isLoading;
+            get => _showEmpty;
+            set { if (_showEmpty != value) { _showEmpty = value; Raise(nameof(ShowEmpty)); } }
         }
 
-        public string Name { get; }
-        public bool IsVideo { get; }
-        public bool IsChecked { get; set; }
-        public bool IsLoadingThumbnail { get; }
-        /// <summary>Decoded off the file by MainWindow.Assets.cs; null here.</summary>
-        public IImage? Thumbnail => null;
+        private string _countsText = "0 images, 0 videos active";
+        /// <summary>WPF UpdateAssetCounts: "{active} images, {active} videos active" (English there too).</summary>
+        public string CountsText
+        {
+            get => _countsText;
+            set { if (_countsText != value) { _countsText = value; Raise(nameof(CountsText)); } }
+        }
     }
 
-    /// <summary>An entry in the preset combo. WPF used DisplayMemberPath/SelectedValuePath, which
-    /// Avalonia has neither of, so both live on the item.</summary>
-    public sealed class AssetPresetViewModel
+    /// <summary>One tile in the thumbnail grid (WPF AssetFileItem).</summary>
+    public sealed class AssetThumbnailViewModel : INotifyPropertyChanged
     {
-        public AssetPresetViewModel(string id, string displayText)
+        private static readonly string[] VideoExtensions = { ".mp4", ".avi", ".mkv", ".mov", ".wmv", ".webm" };
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+        private void Raise(string name) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+
+        public AssetThumbnailViewModel(string fullPath, string relativePath, bool isChecked)
         {
-            Id = id;
-            DisplayText = displayText;
+            FullPath = fullPath;
+            RelativePath = relativePath;
+            _isChecked = isChecked;
         }
 
-        public string Id { get; }
-        public string DisplayText { get; }
+        /// <summary>A file inside an encrypted content pack (WPF AssetFileItem IsPackFile): no path on
+        /// disk, keyed <c>pack:&lt;id&gt;/&lt;OriginalName&gt;</c>.</summary>
+        public AssetThumbnailViewModel(string packId, ConditioningControlPanel.Services.PackFileEntry file, bool isChecked)
+        {
+            FullPath = "";
+            RelativePath = ConditioningControlPanel.Services.ContentPackStore.SelectionKey(packId, file);
+            PackId = packId;
+            PackFile = file;
+            _isChecked = isChecked;
+        }
+
+        public string FullPath { get; }
+        /// <summary>The key in DisabledAssetPaths: path under the assets root, forward slashes.</summary>
+        public string RelativePath { get; }
+        public string? PackId { get; }
+        public ConditioningControlPanel.Services.PackFileEntry? PackFile { get; }
+        public bool IsPackFile => PackFile != null;
+        public string Name => PackFile?.OriginalName ?? Path.GetFileName(FullPath);
+        public bool IsVideo => PackFile != null
+            ? PackFile.FileType == ConditioningControlPanel.Services.ContentPackStore.VideoType
+            : Array.IndexOf(VideoExtensions, Path.GetExtension(FullPath).ToLowerInvariant()) >= 0;
+        public long SizeBytes { get; set; }
+
+        private bool _isChecked;
+        public bool IsChecked
+        {
+            get => _isChecked;
+            set { if (_isChecked != value) { _isChecked = value; Raise(nameof(IsChecked)); } }
+        }
+
+        private bool _isLoadingThumbnail;
+        public bool IsLoadingThumbnail
+        {
+            get => _isLoadingThumbnail;
+            set { if (_isLoadingThumbnail != value) { _isLoadingThumbnail = value; Raise(nameof(IsLoadingThumbnail)); } }
+        }
+
+        private IImage? _thumbnail;
+        /// <summary>Decoded off the UI thread at 100 px wide (WPF DecodePixelWidth = 100).</summary>
+        public IImage? Thumbnail
+        {
+            get => _thumbnail;
+            set { if (!ReferenceEquals(_thumbnail, value)) { _thumbnail = value; Raise(nameof(Thumbnail)); } }
+        }
     }
 }

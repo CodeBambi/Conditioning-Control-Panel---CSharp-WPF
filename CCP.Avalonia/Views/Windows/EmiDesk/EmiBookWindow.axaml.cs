@@ -339,6 +339,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         private static readonly FontFamily FaceFont =
             new("Noto Sans Mono, DejaVu Sans Mono, Consolas, monospace");
 
+        /// <summary>WPF BtnFirstShow: replay EMI's welcome show. Test seam.</summary>
+        internal Action ReplayShow = () => WelcomeShow.FirstShowService.Open();
+
         /// <summary>WPF BtnCompleteGuide: the website manual (EmiCodex.OpenManualInBrowser). Test seam.</summary>
         internal static Action OpenManual = ConditioningControlPanel.Avalonia.Views.Windows.Codex.OpenManualInBrowser;
 
@@ -346,6 +349,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         {
             _btnClose.Click += (_, _) => CloseBook();
             this.FindControl<Button>("BtnCompleteGuide")!.Click += (_, _) => OpenManual();
+            // WPF EmiBookWindow.xaml.cs:232: the book closes, then the welcome show opens.
+            this.FindControl<Button>("BtnFirstShow")!.Click += (_, _) => { _owner?.CloseBook(); ReplayShow(); };
             _btnPrev.Click += (_, _) => Step(-1);
             _btnNext.Click += (_, _) => Step(+1);
             _btnGo.Click += (_, _) => Go();
@@ -938,8 +943,24 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
             var cards = EmiBookCards.All;
             if (_index < 0 || _index >= cards.Count) return;
             var card = cards[_index];
-            if (card.Target != null) { EmiTargets.Find(card.Target)?.Open(); return; }
-            Log.Debug("[EmiDesk] book tour for {Card} is not wired on this head", card.Id);
+            if (card.Target != null)
+            {
+                if (EmiTargets.Find(card.Target) is not { } door) return;
+                door.Open();
+                EmiDeskService.Instance.Fire("effectFired", new { channel = "bookGo", target = card.Target });   // WPF :810
+                return;
+            }
+            if (card.Tour == null) return;
+            // WPF EmiBookWindow.Go: a NAME, never an ordinal. The book closes first: a book sitting on
+            // top of the coach marks is exactly the thing the coach marks point at.
+            if (!Enum.TryParse<global::ConditioningControlPanel.Avalonia.Tours.TutorialType>(card.Tour, out _))
+            {
+                Log.Warning("[EmiDesk] book card {Card} names an unknown tour {Tour}", card.Id, card.Tour);
+                return;
+            }
+            try { Close(); } catch { /* it is going away either way */ }
+            CoreTutorial.Start(card.Tour);
+            EmiDeskService.Instance.Fire("effectFired", new { channel = "bookTour", tour = card.Tour });   // WPF :829
         }
 
         private void RenderTabs()

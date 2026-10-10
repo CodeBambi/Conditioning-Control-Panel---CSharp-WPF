@@ -42,7 +42,10 @@ public sealed class HeaderLevelLiveTests
             Dispatcher.UIThread.RunJobs();
             string Text(string name) => shell.FindControl<TextBlock>(name)!.Text!;
 
-            Assert.Equal("Lvl 10", Text("TxtLevel"));
+            // eac44ef9f: one level readout - the header "Lvl N" pill and version tag are gone, the
+            // XP row's LVL chip is a filled pill that carries the label.
+            // (The parity header keeps TxtLevel / TxtHeaderVersion in the tree, hidden, for their writers:
+            // HeaderHudShellTests pins that they never show.)
             Assert.Equal("LVL 10", Text("TxtLevelLabel"));
             Assert.Equal($"5 / {(int)Need(10)} XP", Text("TxtXP"));
             var bar = shell.FindControl<Border>("XPBar")!;
@@ -53,14 +56,19 @@ public sealed class HeaderLevelLiveTests
             ProgressionBank.Add(Need(10), "Quest");   // crosses one level
             Dispatcher.UIThread.RunJobs();
             Assert.Equal(11, s.PlayerLevel);
-            Assert.Equal("Lvl 11", Text("TxtLevel"));
             Assert.Equal("LVL 11", Text("TxtLevelLabel"));
             Assert.Equal($"5 / {(int)Need(11)} XP", Text("TxtXP"));
             Assert.Equal($"{Loc.Get("label_level")} 11", Text("ProfileMenuLevel"));   // the bubble rail agrees
 
             s.MotionLevel = MotionLevel.Full;          // the fill tweens instead of snapping
-            ProgressionBank.Add(1, "Quest");
+            // weather, not a completion: a quest's pot is held for THE BANK's tokens (BankFxTests)
+            ProgressionBank.Add(1, "Flash");
             Dispatcher.UIThread.RunJobs();
+            // WPF MotionFx.Odometer: the readout counts 5 -> 6 over 0.7 s instead of snapping.
+            Assert.True(shell.XpOdometerRunning);
+            Assert.Equal($"5 / {(int)Need(11)} XP", Text("TxtXP"));
+            shell.SettleXpOdometerForTests();
+            Assert.False(shell.XpOdometerRunning);
             Assert.Equal($"6 / {(int)Need(11)} XP", Text("TxtXP"));
             Assert.NotNull(bar.Transitions);
         }
@@ -95,13 +103,11 @@ public sealed class HeaderLevelLiveTests
         {
             shell.Show();
             Dispatcher.UIThread.RunJobs();
-            Assert.Equal("Lvl 10", Text("TxtLevel"));
 
             // The cloud profile adopted a higher level (ProfileAdopt writes settings), then the
             // sign-in/restore path repaints the account surfaces.
             (s.PlayerLevel, s.PlayerXP) = (40, 12);
             shell.UpdateQuickLoginUI();
-            Assert.Equal("Lvl 40", Text("TxtLevel"));
             Assert.Equal("LVL 40", Text("TxtLevelLabel"));
 
             // Logout clears progression (ProgressionClear) and must repaint, not keep "Lvl 40".
@@ -109,7 +115,6 @@ public sealed class HeaderLevelLiveTests
             await Task.Delay(50);
             Dispatcher.UIThread.RunJobs();
             Assert.Equal(1, s.PlayerLevel);
-            Assert.Equal("Lvl 1", Text("TxtLevel"));
             Assert.Equal($"0 / {(int)XpCurve.GetXPForLevel(1, XpCurve.EpochOf(s))} XP", Text("TxtXP"));
         }
         finally

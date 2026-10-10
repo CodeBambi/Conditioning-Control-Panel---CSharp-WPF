@@ -38,10 +38,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private const double VaultCtaBreathSeconds = 2.2;  // WPF :201
 
         private bool _dashboardFxInitialized;
-        private CancellationTokenSource? _vaultCtaBreath;
+        private global::ConditioningControlPanel.Avalonia.Helpers.BeatLoop? _vaultCtaBreath;
+        private ScaleTransform? _vaultCtaScale;
 
         /// <summary>True while the vault CTA's breath clock runs (test seam).</summary>
-        internal bool VaultCtaBreathing => _vaultCtaBreath != null;
+        internal bool VaultCtaBreathing => _vaultCtaBreath?.IsRunning == true;
 
         /// <summary>WPF InitializeDashboardFx (:122), called once from the constructor.</summary>
         private void InitializeDashboardFx()
@@ -107,27 +108,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 StopVaultCtaBreath();
                 scale.ScaleX = scale.ScaleY = 1.0;
                 if (!run) return;
-                _vaultCtaBreath = new CancellationTokenSource();
-                _ = new Animation
+                // On the window's 30 fps beat (Helpers/BeatLoop): an Animation on the ScaleTransform
+                // threw (AGENTS.md TRANSFORM TRAP), so the stamp never breathed.
+                _vaultCtaScale = scale;
+                _vaultCtaBreath ??= new global::ConditioningControlPanel.Avalonia.Helpers.BeatLoop(cta, t =>
                 {
-                    Duration = TimeSpan.FromSeconds(VaultCtaBreathSeconds),
-                    IterationCount = IterationCount.Infinite,
-                    PlaybackDirection = PlaybackDirection.Alternate,
-                    Easing = new SineEaseInOut(),
-                    Children =
-                    {
-                        new KeyFrame { Cue = new Cue(0d), Setters = { new Setter(ScaleTransform.ScaleXProperty, 1.0), new Setter(ScaleTransform.ScaleYProperty, 1.0) } },
-                        new KeyFrame { Cue = new Cue(1d), Setters = { new Setter(ScaleTransform.ScaleXProperty, VaultCtaBreathTo), new Setter(ScaleTransform.ScaleYProperty, VaultCtaBreathTo) } },
-                    },
-                }.RunAsync(scale, _vaultCtaBreath.Token);
+                    if (_vaultCtaScale is not { } s) return;
+                    s.ScaleX = s.ScaleY = 1 + (VaultCtaBreathTo - 1) * global::ConditioningControlPanel.Avalonia.Helpers.BeatLoop.Breath(t, VaultCtaBreathSeconds);
+                });
+                _vaultCtaBreath.Start();
             }
             catch (Exception ex) { Log.Debug("ApplyVaultCtaBreath: {E}", ex.Message); }
         }
 
-        private void StopVaultCtaBreath()
-        {
-            _vaultCtaBreath?.Cancel();
-            _vaultCtaBreath = null;
-        }
+        private void StopVaultCtaBreath() => _vaultCtaBreath?.Stop();
     }
 }

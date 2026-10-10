@@ -125,10 +125,9 @@
                             </Border.OpacityMask>
                         </Border>
                         <StackPanel VerticalAlignment="Center" Margin="18,0,0,0">
-                            <TextBlock x:Name="TxtBambiTakeoverHeader" Text="{loc:Str tab_takeover}"
-                                       Foreground="{StaticResource TextLightBrush}" FontSize="17" FontWeight="Bold"/>
+                            <TextBlock Theme="{StaticResource Type.CardTitle}" x:Name="TxtBambiTakeoverHeader" Text="{loc:Str tab_takeover}"/>
                             <TextBlock Text="{loc:Str exclusives_tag_bambitakeover}" FontSize="11.5"
-                                       Foreground="{StaticResource TextMutedBrush}" Margin="0,1,0,0"/>
+                                       Foreground="{StaticResource TextSecondaryBrush}" Margin="0,1,0,0"/>
                         </StackPanel>
                         <Border HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,16,0" CornerRadius="99"
                                 Background="#8C131320" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" Padding="6,4">
@@ -711,7 +710,7 @@
                                                             VerticalAlignment="Center" Margin="14,0"
                                                             Minimum="0" Maximum="100" SmallChange="5" LargeChange="20" TickFrequency="10"/>
                                                     <TextBlock x:Name="TxtMantraChantVolume" Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right"
-                                                               FontSize="13" FontWeight="Bold" Foreground="{DynamicResource PinkBrush}" Text="—"/>
+                                                               FontSize="13" FontWeight="Bold" Foreground="{DynamicResource PinkBrush}" Text="-"/>
                                                 </Grid>
 
                                                 <Grid Height="36" Background="Transparent">
@@ -726,7 +725,7 @@
                                                             VerticalAlignment="Center" Margin="14,0"
                                                             Minimum="0" Maximum="60" SmallChange="1" LargeChange="5" TickFrequency="5"/>
                                                     <TextBlock x:Name="TxtMantraChantGap" Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right"
-                                                               FontSize="13" FontWeight="Bold" Foreground="{DynamicResource PinkBrush}" Text="—"/>
+                                                               FontSize="13" FontWeight="Bold" Foreground="{DynamicResource PinkBrush}" Text="-"/>
                                                 </Grid>
 
                                                 <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,6"/>

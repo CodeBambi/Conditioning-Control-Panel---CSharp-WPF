@@ -5,7 +5,7 @@ using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
-using ConditioningControlPanel.Avalonia.Controls;
+using ConditioningControlPanel.Avalonia.Controls.NavRail;
 using ConditioningControlPanel.Avalonia.Helpers;
 using ConditioningControlPanel.Avalonia.Views.Windows;
 using ConditioningControlPanel.Localization;
@@ -16,48 +16,82 @@ using Serilog;
 namespace ConditioningControlPanel.Avalonia.Views.Tabs
 {
     /// <summary>
-    /// PORTED from ConditioningControlPanel/Views/Tabs/PlayTabView.xaml.cs (the host) and
-    /// PlayTabView.Cards.cs (the shims).
+    /// PORTED from WPF 7.1.5 Views/Tabs/PlayTabView.xaml.cs (the host, ScrollToZone) and
+    /// PlayTabView.Cards.cs (the shims), plus the card half of MainWindow.PlayTab.cs
+    /// (RefreshPlayCards, LaunchPlay*).
     ///
-    /// <para>The Play door (tab key <c>play</c>): a card wall over the game-shaped features.</para>
+    /// <para>The Play door (tab key <c>play</c>): GAMES first (Breakout Demo, Breakout, Goon,
+    /// Piece by Piece, Back Room, Down the Rabbit Hole, Arcademy, Racing Thoughts, Web App), then
+    /// Together, Eyes, Sessions, More. 7.1.5 removed the DtRH hero (Fall In / Quick Drop and the two
+    /// Chaos boxes), the Goon perk lines and the Just Drop card (Studio > Creator Tools); none of
+    /// them are here.</para>
     ///
-    /// <para><b>This file is the host, the painter (WPF MainWindow.PlayTab.cs RefreshPlayCards)
-    /// and the shims.</b> Every click WPF answers with <c>ShowTab</c> is the shell's <c>ShowTab</c>
-    /// here. Motion budget: nothing, as on WPF since the 2026-09-18 relayout took the descent hero
-    /// (and its ember canvas) to the launcher.</para>
+    /// <para><b>Launch parity is the contract.</b> Every game button runs the launcher's own call
+    /// (<see cref="LauncherWindow.LaunchGame(MainShellWindow, string)"/>): the same sign-in ask, the
+    /// same leash gate, the same game host. The lockbands are decoration; the gate refuses.</para>
+    ///
+    /// <para><b>No ambient loop</b> since the Rabbit Hole hero left the wall (WPF 2026-09-18).</para>
     /// </summary>
     public partial class PlayTabView : UserControl
     {
-        /// <summary>The one cast every shim makes - the port of WPF's
-        /// <c>Window.GetWindow(this) as MainWindow</c>. Null while the view is being built and under
-        /// <c>--render-view</c>, where a card that fires simply does nothing, exactly as WPF's
-        /// designer case does.</summary>
         private MainShellWindow? Owner => TopLevel.GetTopLevel(this) as MainShellWindow;
 
         public PlayTabView()
         {
             // InitializeComponent, not AvaloniaXamlLoader.Load: only the generated one assigns the
-            // x:Name fields.
+            // x:Name fields, and Load leaves every one of them permanently null.
             InitializeComponent();
-
-            // WPF binds the two Breakout covers with x:Static BreakoutCardArt.Demo/Full.
+            // The two Breakout doors draw vector covers (WPF BreakoutCardArt, no media load).
             PlayBreakoutDemoArt.Source = BreakoutCardArt.Demo;
             PlayBreakoutArt.Source = BreakoutCardArt.Full;
-
-            // The hero plates, and the repaint that keeps them honest across a mod switch. Not
-            // deferred to attach: a card that draws its scrim first and its art a frame later flickers.
             RefreshHeroArt();
         }
 
-        // Subscribed ONCE PER ATTACH, off on every detach (P41). WPF repaints the wall on arrival
-        // (ShowTab "play"), on entitlement change (Patreon.cs) and on IntakePassService.PassStateChanged.
+        // The mod-switch repaint: once per attach, off on every detach.
         protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
         {
             base.OnAttachedToVisualTree(e);
+            CoreMods.ModChanged -= OnModChangedRepaintArt;
             CoreMods.ModChanged += OnModChangedRepaintArt;
             App.IntakePass.PassStateChanged += OnIntakePassStateChanged;
             LocalizationManager.Instance.LanguageChanged += OnIntakePassStateChanged;
+            Platform.WebcamTracker.Instance.StateChanged -= OnTrackerStateChanged;
+            Platform.WebcamTracker.Instance.StateChanged += OnTrackerStateChanged;
+            LocalizationManager.Instance.LanguageChanged += OnTrackerLanguageChanged;
+            Platform.GazeFocusHead.Instance.OnActiveChanged -= OnFocusGazeActiveChanged;
+            Platform.GazeFocusHead.Instance.OnActiveChanged += OnFocusGazeActiveChanged;
             RefreshPlayCards();
+            RefreshTrackerUi();
+            // WPF HookFocusGazeService: the box follows the saved intent, silently.
+            if (ChkPlayFocusGaze.IsChecked != CoreSettings.Current.FocusGazeEnabled)
+            {
+                _focusGazeSyncing = true;
+                try { ChkPlayFocusGaze.IsChecked = CoreSettings.Current.FocusGazeEnabled; }
+                finally { _focusGazeSyncing = false; }
+            }
+            RefreshFocusGazeStatus();
+        }
+
+        private void OnTrackerStateChanged() => Dispatcher.UIThread.Post(() => RefreshTrackerUi());
+        private void OnTrackerLanguageChanged(object? sender, EventArgs e) => Dispatcher.UIThread.Post(() => RefreshTrackerUi());
+
+        /// <summary>WPF MainWindow.LabTab.cs UpdateLabTrackerUi + UpdateWebcamStatusChips, the Play door's
+        /// share: the chip's dot and line, the two Eyes cards' dimming and their "start tracking" pills
+        /// follow the tracker. Display only. <paramref name="live"/> is for tests.</summary>
+        internal void RefreshTrackerUi(bool? live = null)
+        {
+            try
+            {
+                var on = live ?? Platform.WebcamTracker.Instance.IsRunning;
+                var brush = this.FindResource(on ? "SuccessGreenBrush" : "TextMutedBrush") as IBrush;
+                if (brush != null) WebcamStatusChipPlayDot.Fill = brush;
+                TxtWebcamStatusChipPlay.Text = Loc.Get(on ? "rf_webcam_tracking" : "rf_webcam_stopped");
+                PlayGazeCard.Opacity = on ? 1.0 : 0.62;
+                PlayFocusCard.Opacity = on ? 1.0 : 0.62;
+                PlayGazeNeedsTracker.IsVisible = !on;
+                PlayFocusNeedsTracker.IsVisible = !on;
+            }
+            catch (Exception ex) { Log.Debug("RefreshTrackerUi: {E}", ex.Message); }
         }
 
         protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
@@ -65,6 +99,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             CoreMods.ModChanged -= OnModChangedRepaintArt;
             App.IntakePass.PassStateChanged -= OnIntakePassStateChanged;
             LocalizationManager.Instance.LanguageChanged -= OnIntakePassStateChanged;
+            Platform.WebcamTracker.Instance.StateChanged -= OnTrackerStateChanged;
+            Platform.GazeFocusHead.Instance.OnActiveChanged -= OnFocusGazeActiveChanged;
+            LocalizationManager.Instance.LanguageChanged -= OnTrackerLanguageChanged;
             base.OnDetachedFromVisualTree(e);
         }
 
@@ -79,15 +116,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private void OnIntakePassStateChanged(object? sender, EventArgs e) =>
             Dispatcher.UIThread.Post(RefreshPlayCards);
 
-        /// <summary>
-        /// Every card hero, WPF's <c>PlayTabView.xaml</c> table restated: the Border that owns the
-        /// plate, the Resources-relative art, and the Stretch each one was authored with.
-        /// <c>lockdown_icon.png</c> sits at the RESOURCE ROOT, the path a mod keys its override against.
-        /// </summary>
-        private static readonly (string Plate, string Art, Stretch Fit)[] HeroPlates =
+        /// <summary>Every art plate on the wall: WPF's ImageSource for ImageSource.</summary>
+        internal static readonly (string Plate, string Art, Stretch Fit)[] HeroPlates =
         {
             ("PlayGoonHeroPlate",     "features/goon_game_tile.png",    Stretch.UniformToFill),
-            ("PlayChessHeroPlate",    "features/piecebypiece.png",      Stretch.UniformToFill),
+            ("PlayPbpHeroPlate",      "features/piecebypiece.png",      Stretch.UniformToFill),
+            ("PlayBackRoomHeroPlate", "features/backroom.png",          Stretch.UniformToFill),
+            ("PlayDtrhHeroPlate",     "features/dtrh.png",              Stretch.UniformToFill),
+            ("PlayArcademyHeroPlate", "features/arcademy.png",          Stretch.UniformToFill),
+            ("PlayRaceHeroPlate",     "features/race.png",              Stretch.UniformToFill),
+            ("PlayWebAppHeroPlate",   "billboard/webapp.png",           Stretch.UniformToFill),
             ("PlayRemoteHeroPlate",   "features/remote_control.png",    Stretch.UniformToFill),
             ("PlayGazeHeroPlate",     "features/lab_gaze_hero.png",     Stretch.UniformToFill),
             ("PlayFocusHeroPlate",    "features/lab_focusgaze_hero.png",Stretch.UniformToFill),
@@ -101,10 +139,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private void OnModChangedRepaintArt(object? sender, ModPackage? mod) =>
             Dispatcher.UIThread.Post(RefreshHeroArt);
 
-        /// <summary>
-        /// Paints each hero plate, mod override first (<see cref="ModArt.TryLoad"/>), this head's
-        /// shipped avares:// copy second. A null resolve LEAVES the plate as it is.
-        /// </summary>
         private void RefreshHeroArt()
         {
             foreach (var (plateName, art, fit) in HeroPlates)
@@ -122,15 +156,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             }
         }
 
-        /// <summary>WPF MainWindow.PlayTab.cs:83-120 RefreshPlayCards: the tier lockbands (same loc
-        /// keys as the refusal), the FREE TODAY stamps and the Graded Intake's four pass states.
-        /// Presentation only - TierGate refuses inside each door. Never throws.</summary>
+        /// <summary>WPF MainWindow.PlayTab.cs RefreshPlayCards: the tier bands (the same TierGate
+        /// verdicts the launch handlers consult), the FREE TODAY stamps and the Graded Intake's pass
+        /// states. Decoration only. Never throws.</summary>
         internal void RefreshPlayCards()
         {
             try
             {
-                // BreakoutAccess.FullAllowed (WPF Services/BackRoom/BreakoutAccess.cs:9).
                 PlayLockBreakout.IsVisible = !TierGate.RequiresLab(Loc.Get("launcher_game_breakout_title")).Allowed;
+                PlayLockDtrh.IsVisible = !TierGate.RequiresLab(Loc.Get("launcher_game_dtrh_title"), "dtrh").Allowed;
+                PlayLockArcademy.IsVisible = !TierGate.RequiresLab(Loc.Get("launcher_game_arcademy_title")).Allowed;
                 PlayLockGaze.IsVisible = !TierGate.RequiresLab(Loc.Get("label_gaze_minigame")).Allowed;
                 PlayLockFocusGaze.IsVisible = !TierGate.RequiresLab(Loc.Get("label_focus_gaze")).Allowed;
                 PlayLockRemote.IsVisible = !TierGate.RequiresPremium(Loc.Get("tab_remote_control"), "remote").Allowed;
@@ -142,6 +177,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 bool premium = CoreEntitlement.HasPremium;
                 PlayBadgeRemote.FreeToday = !premium && CoreEntitlement.IsFreeToday("remote");
                 PlayBadgeFyp.FreeToday = !premium && CoreEntitlement.IsFreeToday("fyp");
+                // The descent is a Prime feature, so it asks its own question (WPF :147).
+                PlayBadgeDtrh.FreeToday = !CoreEntitlement.HasLab && CoreEntitlement.IsFreeToday("dtrh");
 
                 RefreshPlayIntakeCard();
             }
@@ -168,18 +205,110 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             TxtPlayIntakeState.IsVisible = state != IntakePassState.Premium;
         }
 
+        // ---- zones (WPF PlayTabView.xaml.cs:43-90) ------------------------------------------
+
+        /// <summary>Zone keys the Play section strip reaches (nav rework contract 2).</summary>
+        public static readonly string[] ZoneKeys = { "games", "sessions", "eyes" };
+
+        /// <summary>Gap kept above a zone header after a zone scroll (header fully visible).</summary>
+        internal const double ZoneTopGap = 16;
+
+        /// <summary>The header element a zone key names, or null.</summary>
+        internal Control? ZoneHeader(string? zone) => (zone ?? "").Trim().ToLowerInvariant() switch
+        {
+            "games" => ZoneGames,
+            "sessions" => ZoneSessions,
+            "eyes" => ZoneEyes,
+            _ => null,
+        };
+
+        /// <summary>The scroll offset a zone lands on: 0 for Games (the intro line shows too), else
+        /// the header's top less <see cref="ZoneTopGap"/>. Null when the header is not laid out.</summary>
+        internal double? ZoneOffset(string zone)
+        {
+            var header = ZoneHeader(zone);
+            if (header == null) return null;
+            if (string.Equals(zone, "games", StringComparison.OrdinalIgnoreCase)) return 0;
+            if (WallScroll.Content is not Visual content) return null;
+            var p = header.TranslatePoint(new Point(0, 0), content);
+            return p is { } at ? Math.Max(0, at.Y - ZoneTopGap) : null;
+        }
+
+        /// <summary>
+        /// Brings a zone header to the top of the wall: "games" | "sessions" | "eyes". An unknown key
+        /// does nothing. The header glows once (NavGlow skips it under reduced or no motion).
+        /// </summary>
+        public void ScrollToZone(string zone)
+        {
+            var header = ZoneHeader(zone);
+            if (header == null) { Log.Debug("Play ScrollToZone({Zone}): unknown zone", zone); return; }
+            Dispatcher.UIThread.Post(() =>
+            {
+                try
+                {
+                    if (ZoneOffset(zone) is { } y) WallScroll.Offset = new Vector(WallScroll.Offset.X, y);
+                    else header.BringIntoView();
+                    Dispatcher.UIThread.Post(() =>
+                        NavGlow.Once(header, global::ConditioningControlPanel.Nav.NavStripRules.Accent(global::ConditioningControlPanel.Nav.NavSections.Play), why: "play." + zone),
+                        DispatcherPriority.Background);
+                }
+                catch (Exception ex) { Log.Debug("Play ScrollToZone({Zone}): {E}", zone, ex.Message); }
+            }, DispatcherPriority.Normal);
+        }
+
         // ==================================================================================
-        // Launch shims (WPF PlayTabView.Cards.cs). Every name below is the MainWindow handler the
-        // WPF card forwards to. The four GAMES cards (Breakout demo/full, Goon, Piece by Piece)
-        // have no host on this head: their buttons are disabled in the markup with the
-        // exclusives_not_on_this_build tooltip, so they carry no shim.
+        // Shims (WPF PlayTabView.Cards.cs). Nothing here re-implements a launch or decides a tier.
         // ==================================================================================
 
-        // ---- TOGETHER --------------------------------------------------------------------
+        // ---- GAMES -------------------------------------------------------------------------
+
+        private void BtnPlayBreakoutDemo_Click(object? sender, RoutedEventArgs e) => LaunchGame("breakoutdemo");
+        private void BtnPlayBreakout_Click(object? sender, RoutedEventArgs e) => LaunchGame("breakout");
+        private void BtnPlayGoon_Click(object? sender, RoutedEventArgs e) => LaunchGame("goon");
+        private void BtnPlayChess_Click(object? sender, RoutedEventArgs e) => LaunchGame("piecebypiece");
+        private void BtnPlayBackRoom_Click(object? sender, RoutedEventArgs e) => LaunchGame("backroom");
+        private void BtnPlayDtrh_Click(object? sender, RoutedEventArgs e) => LaunchGame("dtrh");
+        private void BtnPlayArcademy_Click(object? sender, RoutedEventArgs e) => LaunchGame("arcademy");
+        private void BtnPlayRacingThoughts_Click(object? sender, RoutedEventArgs e) => LaunchRace();
+        private void BtnPlayWebApp_Click(object? sender, RoutedEventArgs e) => Owner?.OpenPlayWebApp();
+
+        /// <summary>WPF LaunchPlay* / LaunchExclusiveGame: the launcher's own entry answers, so its
+        /// sign-in ask, leash gate, tier refusal and host are the ones the card gets.</summary>
+        private void LaunchGame(string id)
+        {
+            if (Owner is not { } shell) { Log.Information("[Play] {Id}: no shell", id); return; }
+            try
+            {
+                if (!shell.LaunchCardGame(id))
+                    Log.Information("[Play] {Id}: no game host on this head", id);
+            }
+            catch (Exception ex) { Log.Warning(ex, "[Play] launch {Id} failed", id); }
+        }
+
+        /// <summary>WPF LaunchPlayLauncherGame("race") -> LaunchExclusiveGame: signed out, the sign-in
+        /// dialog; else the race host itself (CaucusHostService.Launch), which refuses without a track.
+        /// The launcher's mystery card sends its Play to the Back Room counter; this card never does.</summary>
+        internal void LaunchRace()
+        {
+            if (Owner is not { } shell) { Log.Information("[Play] race: no shell"); return; }
+            try
+            {
+                if (RaceDoorOpen()) { shell.LaunchCardGame("race"); return; }
+                if (!CoreAccount.IsLoggedIn) { _ = shell.OpenUnifiedLoginDialog(); return; }
+                Games.RaceWindow.Launch();   // refuses and logs: no racing purchase
+            }
+            catch (Exception ex) { Log.Warning(ex, "[Play] launch race failed"); }
+        }
+
+        /// <summary>True when the launcher's own entry would open the race, not the counter.</summary>
+        internal static bool RaceDoorOpen(bool? signedIn = null, Func<string, bool>? owns = null) =>
+            (signedIn ?? CoreAccount.IsLoggedIn) && Games.RaceWindow.CanLaunch(owns);
+
+        // ---- TOGETHER ----------------------------------------------------------------------
 
         private void BtnPlayRemoteControl_Click(object? sender, RoutedEventArgs e) => Owner?.ShowTab("remotecontrol");
 
-        // ---- EYES ------------------------------------------------------------------------
+        // ---- EYES --------------------------------------------------------------------------
 
         /// <summary>WPF <c>mw.OpenDeviceSettings()</c>: Settings door, Devices section.</summary>
         private void BtnOpenDeviceSettings_Click(object? sender, RoutedEventArgs e) => Owner?.OpenDeviceSettings();
@@ -195,7 +324,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// </summary>
         private void BtnGazeMinigame_Click(object? sender, RoutedEventArgs e) => OpenGazeMinigame();
 
-        /// <summary>The Play wall button and the Exclusives card (main 2e9080399) share this door and its gate.</summary>
         internal void OpenGazeMinigame()
         {
             if (!TierGate.DemandLab(Loc.Get("label_gaze_minigame"))) return;
@@ -204,35 +332,132 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             new Lab.GazeMinigame.GazeMinigameWindow().Show(owner);
         }
 
-        /// <summary>The only Focus Gaze switch in the app. ponytail: needs
-        /// ConditioningControlPanel/Services/Tracking/GazeFocusService.cs and WebcamTrackingService.
-        /// The Tier 2 half is available now (TierGate is CCP.Core/Services/TierGate.cs), but
-        /// MainWindow.LabTab.cs:817 gates the ON edge on the tier AND on webcam consent before it
-        /// arms anything, and there is nothing safe to write without them. Turning the box
-        /// OFF is never gated on WPF either, but there is no consumer here to release.</summary>
-        private void ChkFocusGaze_Changed(object? sender, RoutedEventArgs e) { }
+        private bool _focusGazeSyncing;
 
-        /// <summary>WPF MainWindow.LabTab.cs:1061 is ShowTab("blinktrainer"); the page owns its gate.</summary>
+        /// <summary>Tests answer the consent prompt without a window. Null = the real dialog.</summary>
+        internal Func<System.Threading.Tasks.Task<bool>>? AskWebcamConsent;
+
+        /// <summary>WPF MainWindow.LabTab.cs:929 ChkFocusGaze_Changed: the Prime gate first (revert, then
+        /// tell), webcam consent, start the camera off the UI thread, then the engine. It stays on only
+        /// when the engine went active (tracking + a calibration). OFF is never gated.</summary>
+        private async void ChkFocusGaze_Changed(object? sender, RoutedEventArgs e)
+        {
+            try { await (LastFocusGazePress = FocusGazeChangedAsync()); }
+            catch (Exception ex) { Log.Warning(ex, "[Play] Focus Gaze switch failed"); }
+        }
+
+        /// <summary>Tests await the press the switch just started.</summary>
+        internal System.Threading.Tasks.Task<string>? LastFocusGazePress;
+
+        /// <returns>What the press met: "sync", "off", "tier", "consent", "camera", "calibrate" or "on".</returns>
+        internal async System.Threading.Tasks.Task<string> FocusGazeChangedAsync()
+        {
+            if (_focusGazeSyncing) return "sync";
+            var focus = Platform.GazeFocusHead.Instance;
+            if (ChkPlayFocusGaze.IsChecked != true)
+            {
+                focus.MasterEnabled = false;
+                SyncFocusGazeToggle(false);
+                return "off";
+            }
+            var verdict = TierGate.RequiresLab(Loc.Get("label_focus_gaze"));
+            if (!verdict.Allowed)
+            {
+                SyncFocusGazeToggle(false);
+                TierGate.ShowDenied(verdict);
+                return "tier";
+            }
+            if (!Services.Webcam.WebcamConsent.IsCurrent(CoreSettings.Current))
+            {
+                bool ok;
+                if (AskWebcamConsent != null) ok = await AskWebcamConsent();
+                else if (Owner is { } owner) { await new Dialogs.WebcamConsentDialog().ShowDialogSafe(owner); ok = true; }
+                else ok = false;
+                if (!ok || !Services.Webcam.WebcamConsent.IsCurrent(CoreSettings.Current))
+                {
+                    SyncFocusGazeToggle(false);
+                    TxtPlayFocusGazeStatus.Text = Loc.Get("label_focus_gaze_consent_required");
+                    return "consent";
+                }
+            }
+            var tracker = Platform.WebcamTracker.Instance;
+            if (focus.CanRunOverride == null && !tracker.IsRunning)
+            {
+                TxtPlayFocusGazeStatus.Text = Loc.Get("label_focus_gaze_starting_webcam");
+                if (!await tracker.StartAsync())
+                {
+                    SyncFocusGazeToggle(false);
+                    TxtPlayFocusGazeStatus.Text = Loc.GetF("label_focus_gaze_webcam_failed_format", Loc.Get(tracker.StateKey));
+                    return "camera";
+                }
+            }
+            focus.MasterEnabled = true;
+            if (focus.IsActive) { SyncFocusGazeToggle(true); return "on"; }
+            focus.MasterEnabled = false;
+            SyncFocusGazeToggle(false);
+            bool noCal = tracker.Calibration == null;
+            TxtPlayFocusGazeStatus.Text = noCal
+                ? Loc.Get("label_focus_gaze_calibrate_first")
+                : Loc.GetF("label_focus_gaze_webcam_failed_format", Loc.Get(tracker.StateKey));
+            return noCal ? "calibrate" : "camera";
+        }
+
+        /// <summary>WPF RefreshFocusGazeStatus: blank when off, else active / waiting for the camera.</summary>
+        internal void RefreshFocusGazeStatus()
+        {
+            if (!CoreSettings.Current.FocusGazeEnabled) { TxtPlayFocusGazeStatus.Text = ""; return; }
+            TxtPlayFocusGazeStatus.Text = Loc.Get(Platform.GazeFocusHead.Instance.IsActive ? "label_focus_gaze_active" : "label_focus_gaze_waiting");
+        }
+
+        private void OnFocusGazeActiveChanged(bool _) => global::Avalonia.Threading.Dispatcher.UIThread.Post(FollowFocusGazeIntent);
+
+        /// <summary>IA10: the box follows the saved intent whenever the engine changes state (the Camera
+        /// pill clears the intent from outside this page), silently, then the status line.</summary>
+        internal void FollowFocusGazeIntent()
+        {
+            bool intent = CoreSettings.Current.FocusGazeEnabled;
+            if (ChkPlayFocusGaze.IsChecked != intent)
+            {
+                _focusGazeSyncing = true;
+                try { ChkPlayFocusGaze.IsChecked = intent; }
+                finally { _focusGazeSyncing = false; }
+            }
+            RefreshFocusGazeStatus();
+        }
+
+        /// <summary>WPF OpenFocusGazeSwitch: the Premium card lands on the switch.</summary>
+        internal void ShowFocusGazeSwitch()
+        {
+            try { SlotFocusGaze.BringIntoView(); } catch (Exception ex) { Log.Debug("Focus Gaze bring-into-view: {E}", ex.Message); }
+        }
+
+        /// <summary>WPF SyncFocusGazeToggle: the setting is the intent, the box follows it silently.</summary>
+        private void SyncFocusGazeToggle(bool enabled)
+        {
+            if (CoreSettings.Current.FocusGazeEnabled != enabled) { CoreSettings.Current.FocusGazeEnabled = enabled; CoreSettings.Save(); }
+            if (ChkPlayFocusGaze.IsChecked != enabled)
+            {
+                _focusGazeSyncing = true;
+                try { ChkPlayFocusGaze.IsChecked = enabled; }
+                finally { _focusGazeSyncing = false; }
+            }
+            RefreshFocusGazeStatus();
+        }
+
         private void BtnLabBlinkTrainerOpenNew_Click(object? sender, RoutedEventArgs e) => Owner?.ShowTab("blinktrainer");
 
-        // ---- SESSIONS --------------------------------------------------------------------
+        // ---- SESSIONS ----------------------------------------------------------------------
 
-        // All four pass states navigate: the page's own gate is what explains a spent week or a
-        // missing login, so a locked click has to ARRIVE somewhere rather than be swallowed.
+        // All four pass states navigate: the page's own gate explains a spent week or a missing login.
         private void BtnPlayGradedIntake_Click(object? sender, RoutedEventArgs e) => Owner?.ShowTab("gradedintake");
 
-        /// <summary>"Where does a pass come from?" - the Home logo tile's flip ceremony hands them
-        /// out, and "settings" is Home's tab key (the Settings DOOR is "appsettings").</summary>
         private void BtnPlayIntakePassHome_Click(object? sender, RoutedEventArgs e) => Owner?.ShowTab("settings");
 
-        /// <summary>ShowTab("fyp"), never FypHostService.Launch() - that would be a second, ungated
-        /// launch path. ponytail: "fyp" is one of the shell's WindowKeys, so the call is a
-        /// documented no-op until OpenFypFeed exists (MainShellWindow.TabNavigation.cs).</summary>
         private void BtnPlayFyp_Click(object? sender, RoutedEventArgs e) => Owner?.ShowTab("fyp");
 
         private void BtnPlayLockdown_Click(object? sender, RoutedEventArgs e) => Owner?.ShowTab("lockdown");
 
-        // ---- MORE ------------------------------------------------------------------------
+        // ---- MORE --------------------------------------------------------------------------
 
         /// <summary>Loom NAVIGATES to the one editor: WPF OpenStudioModule("spiral").</summary>
         private void BtnPlayLoom_Click(object? sender, RoutedEventArgs e) => Owner?.OpenStudioModule("spiral");

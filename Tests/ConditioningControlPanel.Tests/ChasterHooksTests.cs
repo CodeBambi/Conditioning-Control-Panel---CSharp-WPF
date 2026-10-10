@@ -74,6 +74,9 @@ public class ChasterHooksTests
             .Where(id => !TabDayEnd.ServiceRows.Contains(id))
             .Where(id => !source.Contains("Note(\"" + id + "\"", StringComparison.Ordinal)
                       && !source.Contains("NoteSeconds(\"" + id + "\"", StringComparison.Ordinal)
+                      // A lost PvP time stake books through Core's seam (StakeSettlement.BookTime), which the
+                      // WPF app answers with App.Chaster.NoteSeconds (Services/CoreSeams.cs).
+                      && !source.Contains("BookTime?.Invoke(\"" + id + "\"", StringComparison.Ordinal)
                       && !source.Contains("NoteAt(\"" + id + "\"", StringComparison.Ordinal)
                       && !hooks.Contains("\"" + id + "\"", StringComparison.Ordinal))
             .OrderBy(id => id)

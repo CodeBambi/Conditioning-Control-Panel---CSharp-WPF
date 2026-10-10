@@ -1,7 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- <Version> lives in ..\Version.props, shared with Core and the Avalonia head. -->
-  <Import Project="..\Version.props" />
+  <!-- <Version> lives in ..\Version.Wpf.props: the WPF head keeps its own number, the released
+       7.1.5 line. ..\Version.props (7.2.0 "parity") is the Avalonia head and Core. -->
+  <Import Project="..\Version.Wpf.props" />
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -29,7 +30,7 @@
          properties and crash dumps. Properties/AssemblyInfo.cs now declares only what the SDK
          does not generate (Trademark, Culture, ComVisible, ThemeInfo, InternalsVisibleTo);
          re-adding Title/Description/Configuration/Company/Product/Copyright/Version there is a
-         CS0579 duplicate-attribute error. <Version> (Version.props) stays the single place the number lives. -->
+         CS0579 duplicate-attribute error. <Version> (Version.Wpf.props) stays the single place the number lives. -->
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
     <!-- The SDK would otherwise derive this from <AssemblyName> ("ConditioningControlPanel");
          keep the spaced display title the hand-written attribute used. -->
@@ -408,6 +409,9 @@
     <!-- Nav rail door art (2026-08-11 emoji purge): one emblem per door, referenced by
          MainWindow.xaml pack URIs - a missing file here crashes InitializeComponent. -->
     <Resource Include="..\Assets\nav\*.png" Link="Resources\nav\%(RecursiveDir)%(Filename)%(Extension)" />
+    <!-- Per-mod embedded twins of nav art (polish wave 11): ModResourceResolver tries
+         nav/mods/<mod-id>/<file> when the active mod's pack has no nav/<file> (Social door). -->
+    <Resource Include="..\Assets\nav\mods\**\*.png" Link="Resources\nav\mods\%(RecursiveDir)%(Filename)%(Extension)" />
     <!-- Home dashboard billboard posters (2026-09-12), one per roster card in
          Services/DashboardBillboard.cs. 688x384, 16:9, no text: the bottom third of each is
          dark and calm on purpose so the shade with the eyebrow, title and line sits there.

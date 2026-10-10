@@ -36,7 +36,6 @@ namespace ConditioningControlPanel
         // When a third tab needs this, that is the point to generalise.
         // -----------------------------------------------------------------------------------
 
-        private bool _programsPulseRunning;
 
         /// <summary>
         /// Grows the Programs tab button four times, then stops for good.
@@ -54,35 +53,9 @@ namespace ConditioningControlPanel
             // purpose: that fallback is the same loop one level up.
             if (!Services.MotionFx.AllowAmbientLoops) return;
 
-            // Phase 1 moved BtnPrograms into DoorPanelYou, a ClipToBounds panel parked at Height 0
-            // unless the You door is the open one - and the rail opens on Home, so on a first launch
-            // this scale would play entirely inside the clip. When the owning door is shut the
-            // announcement escalates to that door's header instead (see StartNavDoorHeaderPulse).
-            if (StartNavDoorHeaderPulse("programs")) return;
-
-            if (BtnProgramsScale == null || _programsPulseRunning) return;
-            _programsPulseRunning = true;
-            var anim = new DoubleAnimation
-            {
-                From = 1.0,
-                To = 1.12,
-                Duration = TimeSpan.FromMilliseconds(700),
-                AutoReverse = true,
-                RepeatBehavior = new RepeatBehavior(4),
-                EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut }
-            };
-            Timeline.SetDesiredFrameRate(anim, AmbientFrameRate);
-            anim.Completed += (_, _) =>
-            {
-                _programsPulseRunning = false;
-                if (BtnProgramsScale != null)
-                {
-                    BtnProgramsScale.ScaleX = 1.0;
-                    BtnProgramsScale.ScaleY = 1.0;
-                }
-            };
-            BtnProgramsScale.BeginAnimation(ScaleTransform.ScaleXProperty, anim);
-            BtnProgramsScale.BeginAnimation(ScaleTransform.ScaleYProperty, anim);
+            // Nav rework (2026-10-06): the Programs row left the rail; the announcement rides
+            // the You section row.
+            StartNavDoorHeaderPulse("programs");
         }
 
         /// <summary>
@@ -90,21 +63,7 @@ namespace ConditioningControlPanel
         /// is what releases the animation's hold on the property - without it the last animated value
         /// sticks, and a click landing mid-pulse would leave the tab button permanently oversized.
         /// </summary>
-        private void StopProgramsTabPulse()
-        {
-            // The announcement may be riding the You door's header rather than this button.
-            StopNavDoorHeaderPulse("programs");
-
-            if (!_programsPulseRunning && BtnProgramsScale == null) return;
-            _programsPulseRunning = false;
-            if (BtnProgramsScale != null)
-            {
-                BtnProgramsScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
-                BtnProgramsScale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
-                BtnProgramsScale.ScaleX = 1.0;
-                BtnProgramsScale.ScaleY = 1.0;
-            }
-        }
+        private void StopProgramsTabPulse() => StopNavDoorHeaderPulse("programs");
 
         // -----------------------------------------------------------------------------------
         // Wiring
@@ -572,6 +531,7 @@ namespace ConditioningControlPanel
                 tab.ProgramsLapsedPanel.Visibility = lapsed ? Visibility.Visible : Visibility.Collapsed;
                 tab.ProgramsGraduatedPanel.Visibility = graduated ? Visibility.Visible : Visibility.Collapsed;
                 tab.ProgramsRunPanel.Visibility = run ? Visibility.Visible : Visibility.Collapsed;
+                ApplyProgramsReadOnly(tab);
             }
 
             // The ignition rig's edge glow is a sibling of the WHOLE view, not a child of the run
@@ -610,7 +570,8 @@ namespace ConditioningControlPanel
                 if (svc != null)
                 {
                     // The service's reason strings are diagnostics, not UI copy - log, show our own.
-                    canEnroll = svc.CanEnroll(def, out var reason);
+                    // A newer build's programs.json loads read-only: nothing may enroll over it.
+                    canEnroll = svc.CanEnroll(def, out var reason) && !svc.IsReadOnly;
                     if (!canEnroll && !locked)
                         App.Logger?.Debug("Program {Program} not enrollable: {Reason}", def.Id, reason);
                 }
@@ -1434,6 +1395,17 @@ namespace ConditioningControlPanel
                 : $"{(int)span.TotalMinutes}:{span.Seconds:D2}";
         }
 
+        /// <summary>programs.json stamped by a newer build loads read-only (ProgramService.IsReadOnly,
+        /// docs/avalonia-decisions.md programs 3a): every lifecycle control greys, since Core refuses them.</summary>
+        private static bool ApplyProgramsReadOnly(ProgramsTabView tab)
+        {
+            if (App.Programs?.IsReadOnly != true) return false;
+            foreach (var b in new UIElement[] { tab.BtnProgramPauseResume, tab.BtnProgramWithdraw, tab.BtnStartTodaySession,
+                                                tab.BtnProgramRestart, tab.BtnProgramDismissGraduated, tab.ProgramsLapsedPanel })
+                if (b != null) b.IsEnabled = false;
+            return true;
+        }
+
         /// <summary>
         /// Repaints the Session row's live state: the glyph, the button and the progress strip.
         ///
@@ -1462,6 +1434,7 @@ namespace ConditioningControlPanel
                 // by the dispatcher check above.
                 var tab = ProgramsTab;
                 if (tab?.TodaySessionProgressRow == null) return;
+                if (ApplyProgramsReadOnly(tab)) return;   // the row below would re-enable Start/Pause
 
                 var svc = App.Programs;
                 var enrollment = svc?.ActiveEnrollment;

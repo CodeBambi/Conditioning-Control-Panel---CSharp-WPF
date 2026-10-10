@@ -24,7 +24,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
     /// renderer under XWayland that stalled the UI dispatcher ~1.7 s per burst (staggers and
     /// timers late). With the property the app renders each flash exactly once.</para>
     /// </summary>
-    internal sealed class FlashOverlayWindow : Window
+    internal sealed partial class FlashOverlayWindow : Window
     {
         private readonly Image _image;
 
@@ -49,7 +49,37 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             IsHitTestVisible = false;
             _image = new Image { Source = picture, Stretch = Stretch.Uniform };
             Content = _image;
-            Closed += (_, _) => picture.Dispose();
+            Closed += (_, _) => { _closed = true; picture.Dispose(); };
+        }
+
+        /// <summary>An animated flash (GIF / animated WebP): WPF's heartbeat frame-stepper, one
+        /// frame every <paramref name="frameDelay"/> (already scaled by the GIF speed setting),
+        /// looping for the flash's whole life. The window owns the frames and frees them on close.</summary>
+        public FlashOverlayWindow(System.Collections.Generic.List<Bitmap> frames, TimeSpan frameDelay)
+            : this(frames[0])
+        {
+            _frames = frames;
+            _frameTimer = new DispatcherTimer { Interval = frameDelay };
+            _frameTimer.Tick += (_, _) => StepFrame();
+            Opened += (_, _) => _frameTimer?.Start();
+            Closed += (_, _) =>
+            {
+                _frameTimer?.Stop();
+                _frameTimer = null;
+                for (var i = 1; i < frames.Count; i++) frames[i].Dispose();   // [0] goes with the base close
+            };
+        }
+
+        private readonly System.Collections.Generic.List<Bitmap>? _frames;
+        private DispatcherTimer? _frameTimer;
+        internal int FrameIndex { get; private set; }
+
+        /// <summary>One heartbeat step: next frame, wrapping to the first.</summary>
+        internal void StepFrame()
+        {
+            if (_frames == null || _frames.Count < 2) return;
+            FrameIndex = (FrameIndex + 1) % _frames.Count;
+            _image.Source = _frames[FrameIndex];
         }
 
         /// <summary>
@@ -59,8 +89,34 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         /// </summary>
         public void Run(double alpha, TimeSpan fade, TimeSpan lifetime)
         {
+            _alpha = alpha;
             Fade(0, alpha, fade);
-            DispatcherTimer.RunOnce(() => Fade(alpha, 0, fade, Close), lifetime);
+            ScheduleExpiry(alpha, fade, lifetime);   // FlashOverlayWindow.Fx.cs: a deadline gaze-linger can push
+        }
+
+        private double _alpha;
+        private bool _closed;
+        private bool _popped;
+
+        /// <summary>Raised once when a clickable flash is clicked (WPF FlashService.OnFlashClicked).</summary>
+        internal event Action<bool>? Popped;
+
+        /// <summary>WPF FlashClickable: the picture takes the click and pops; off = click-through.</summary>
+        internal void MakeClickable()
+        {
+            IsHitTestVisible = true;
+            _image.IsHitTestVisible = true;
+            Background = new SolidColorBrush(Color.FromArgb(1, 0, 0, 0));   // a hit surface over transparent letterbox
+            PointerPressed += (_, e) => { e.Handled = true; OnFlashPressed(e); };
+        }
+
+        /// <summary>Cut this flash's own lifetime short: a quick fade, then close. Other flashes live on.</summary>
+        internal void Pop(bool fromGaze = false)
+        {
+            if (_popped) return;
+            _popped = true;
+            Popped?.Invoke(fromGaze);
+            PlayExit();   // FlashOverlayWindow.Fx.cs: exit style, or the 180 ms fade
         }
 
         /// <summary>WPF's heartbeat ramp - linear, alpha written in 1/32 steps (FADE_ALPHA_EPSILON) -
@@ -75,7 +131,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             {
                 var v = from + (to - from) * i / steps;
                 var last = i == steps;
-                DispatcherTimer.RunOnce(() => { X11Overlay.SetOpacity(this, v); if (last) done?.Invoke(); }, span * i / steps + TimeSpan.FromMilliseconds(1));
+                DispatcherTimer.RunOnce(() => { if (_closed) return; X11Overlay.SetOpacity(this, v); if (last) done?.Invoke(); }, span * i / steps + TimeSpan.FromMilliseconds(1));
             }
         }
     }

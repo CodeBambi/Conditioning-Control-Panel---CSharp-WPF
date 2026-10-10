@@ -13,7 +13,11 @@
 ; - Store install path in registry for Velopack updates
 
 #define MyAppName "Conditioning Control Panel"
-#define MyAppVersion "7.0.5"
+; MyAppVersion can be overridden from the command line (ISCC /DMyAppVersion=...). The Avalonia head's
+; build script passes the number from Version.props, so that path has ONE version source.
+#ifndef MyAppVersion
+  #define MyAppVersion "7.1.5"
+#endif
 #define MyAppPublisher "CodeBambi"
 #define MyAppURL "https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF"
 #define MyAppExeName "ConditioningControlPanel.exe"
@@ -25,7 +29,30 @@
 ; ~131 chars deep, and a handful of builtin-sissyhypno audio files push past MAX_PATH (260)
 ; from there, aborting the ISCC compile. Staging to e.g. C:\ccpb\pub keeps every path short.
 #ifndef PublishDir
-  #define PublishDir "ConditioningControlPanel\bin\Release\net10.0-windows10.0.19041.0\win-x64\publish"
+  #ifdef AvaloniaHead
+    #define PublishDir "CCP.Avalonia\bin\publish\win-x64"
+  #else
+    #define PublishDir "ConditioningControlPanel\bin\Release\net10.0-windows10.0.19041.0\win-x64\publish"
+  #endif
+#endif
+
+; ---------------------------------------------------------------------------------------------
+; WHICH HEAD THIS PACKAGES. Default = the WPF app. ISCC /DAvaloniaHead packages the cross-platform
+; head (CCP.Avalonia) instead, as an IN-PLACE UPGRADE of a WPF install: same AppId, same AppMutex,
+; same registry keys, same shortcuts, and the exe laid down under the SAME NAME. The head builds as
+; CCP.Avalonia.exe (tests, scripts and the Linux tarball name it); the [Files] entry below renames
+; it to {#MyAppExeName} on install, because everything a 7.1.5 install left behind points at that
+; name: Start Menu / desktop / game shortcuts, the Windows startup entry, the "Open with CCP"
+; verbs, firewall rules, and the in-app updater's relaunch. Build with build-installer-avalonia.bat.
+; ---------------------------------------------------------------------------------------------
+#ifdef AvaloniaHead
+  #define HeadExeName "CCP.Avalonia.exe"
+#else
+  #define HeadExeName MyAppExeName
+#endif
+; The file name wears the label of an unreleased build (7.2.0-parity); a release passes none.
+#ifndef MyAppVersionLabel
+  #define MyAppVersionLabel MyAppVersion
 #endif
 
 [Setup]
@@ -65,7 +92,7 @@ UsePreviousPrivileges=yes
 
 ; Output settings
 OutputDir=.\installer-output
-OutputBaseFilename=ConditioningControlPanel-{#MyAppVersion}-Setup
+OutputBaseFilename=ConditioningControlPanel-{#MyAppVersionLabel}-Setup
 SetupIconFile=Assets\app.ico
 
 ; Compression
@@ -132,10 +159,15 @@ Source: "redist\VC_redist.x64.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall;
 Source: "redist\MicrosoftEdgeWebview2Setup.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall; Check: WebView2RuntimeNeeded
 
 ; Main executable
-Source: "{#PublishDir}\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#PublishDir}\{#HeadExeName}"; DestDir: "{app}"; DestName: "{#MyAppExeName}"; Flags: ignoreversion
 
 ; All other files from publish directory
+#ifdef AvaloniaHead
+; The head's exe went in above under its installed name; never a second copy under the build name.
+Source: "{#PublishDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "CCP.Avalonia.exe,*.pdb,cs\*,de\*,es\*,fr\*,it\*,ja\*,ko\*,pl\*,pt-BR\*,ru\*,tr\*,zh-Hans\*,zh-Hant\*"
+#else
 Source: "{#PublishDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "*.pdb,cs\*,de\*,es\*,fr\*,it\*,ja\*,ko\*,pl\*,pt-BR\*,ru\*,tr\*,zh-Hans\*,zh-Hant\*"
+#endif
 
 ; NOTE: Don't include user data files - those go to %APPDATA%
 
@@ -178,6 +210,13 @@ Source: "{#PublishDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
 ; are user data and are deliberately left alone - phase C re-stamps them from the downloaded
 ; pack instead.
 #include "installer-content-deletions.iss"
+
+; UPGRADE FROM WPF (owner, 2026-10-10): the head's installer removes the old WPF program files and
+; keeps all data. Explicit paths inside {app} only; the rules are at the top of the include and
+; pinned by Tests/CCP.Core.Tests/InstallerWpfCleanupTests. Never compiled into the WPF installer.
+#ifdef AvaloniaHead
+#include "installer-wpf-cleanup.iss"
+#endif
 
 ; RETIRED 2026-09-25 (not pack payload, so not in the generated list above): orphaned Bambi
 ; trigger clips from the Resources\sounds ROOT that no code read. Duplicates of Resources\sub_audio.

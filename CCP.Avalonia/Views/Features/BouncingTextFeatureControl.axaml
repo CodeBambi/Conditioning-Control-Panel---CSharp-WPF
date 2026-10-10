@@ -28,7 +28,7 @@
                     BorderBrush="{StaticResource SectionHueStudioBorderBrush}" BorderThickness="2"
                     ToolTip.Tip="{loc:Str tooltip_dvd_screensaver_style_bouncing_text_customiza}">
                 <Grid ClipToBounds="True">
-                    <Border Width="240" HorizontalAlignment="Right" CornerRadius="0,16,16,0"
+                    <Border x:Name="HeroArt" Width="240" HorizontalAlignment="Right" CornerRadius="0,16,16,0"
                             Background="{StaticResource SectionHueStudioWashBrush}">
                         <Border.OpacityMask>
                             <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
@@ -307,7 +307,7 @@
                 </StackPanel>
 
                 <!-- SIDE ART. On WPF an ImageBrush background; the wash stands in. Scrim kept verbatim. -->
-                <Border Grid.Column="1" Margin="10,0,0,0" CornerRadius="14"
+                <Border x:Name="SideArt" Grid.Column="1" Margin="10,0,0,0" CornerRadius="14"
                         BorderThickness="2" BorderBrush="{StaticResource VelvetCardBorderBrush}"
                         Background="{StaticResource SectionHueStudioWashBrush}"
                         VerticalAlignment="Stretch" MinHeight="200">

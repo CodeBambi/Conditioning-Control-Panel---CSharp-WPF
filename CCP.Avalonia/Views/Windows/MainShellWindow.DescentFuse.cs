@@ -31,9 +31,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             {
                 var fuse = App.DescentCountdown;
                 if (fuse is null) return;
-                fuse.PhaseChanged += (_, e) => ApplyFusePhase(e.Current);
-                fuse.Tick += (_, remaining) => OnFuseTick(remaining);
-                fuse.ZeroReached += (_, _) => _ = OpenLiveFuseShow();
+                EventHandler<DescentFusePhaseChangedEventArgs> onPhase = (_, e) => ApplyFusePhase(e.Current);
+                EventHandler<TimeSpan> onTick = (_, remaining) => OnFuseTick(remaining);
+                EventHandler onZero = (_, _) => _ = OpenLiveFuseShow();
+                fuse.PhaseChanged += onPhase;
+                fuse.Tick += onTick;
+                fuse.ZeroReached += onZero;
+                // The countdown outlives the shell: a closed shell must not stay rooted by it.
+                Closed += (_, _) =>
+                {
+                    fuse.PhaseChanged -= onPhase; fuse.Tick -= onTick; fuse.ZeroReached -= onZero;
+                    _fuseBreath?.Cancel();   // the spark's breath clock stops with the shell
+                    _fuseBreath = null;
+                };
                 ApplyFusePhase(fuse.LastAnnouncedPhase);
             }
             catch (Exception ex) { Log.Debug("[Fuse] Header surfaces could not be wired: {E}", ex.Message); }
@@ -63,17 +73,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     // WPF MotionFx.GlowBreath(glyph, 0.45, 1.0, 3.8): reduced motion parks it lit.
                     _fuseBreath = new System.Threading.CancellationTokenSource();
                     if (ConditioningControlPanel.Avalonia.Controls.AmbientFxCanvas.Env.AllowAmbientLoops)
-                        _ = new Animation
-                        {
-                            Duration = TimeSpan.FromSeconds(3.8),
-                            IterationCount = IterationCount.Infinite,
-                            PlaybackDirection = PlaybackDirection.Alternate,
-                            Children =
-                            {
-                                new KeyFrame { Cue = new Cue(0d), Setters = { new Setter(OpacityProperty, 0.45) } },
-                                new KeyFrame { Cue = new Cue(1d), Setters = { new Setter(OpacityProperty, 1.0) } },
-                            },
-                        }.RunAsync(glyph, _fuseBreath.Token);
+                    {
+                        // X7: the header fuse is up for hours, so its breath rides the shared 30 fps beat
+                        // (BreathClock), never an infinite Animation. Same curve: 0.45 to 1.0 over 3.8 s, back again.
+                        var breath = new Features.BreathClock(glyph, 3.8);
+                        _fuseBreath.Token.Register(breath.Stop);
+                        breath.Start((glyph, 0.45, 1.0));
+                    }
                 }
                 else if (!show && _fuseBreath != null)
                 {

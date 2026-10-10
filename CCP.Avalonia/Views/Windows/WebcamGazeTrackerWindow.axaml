@@ -14,9 +14,9 @@
      inventing keys here would be worse than keeping them. Both Close buttons hold a
      TextBlock rather than a string Content, per the access-key trap in CLAUDE.md. -->
 <Window xmlns="https://github.com/avaloniaui"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="ConditioningControlPanel.Avalonia.Views.Windows.WebcamGazeTrackerWindow"
-        Title="Gaze Tracker Test"
+        Title="{loc:Str webcam_gaze_test_title}"
         Background="#000000"
         SystemDecorations="None"
         WindowState="Maximized"
@@ -41,9 +41,9 @@
         </Canvas>
 
         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,40,0,0">
-            <TextBlock Text="Gaze Tracker Test" Foreground="White"
+            <TextBlock Text="{loc:Str webcam_gaze_test_title}" Foreground="White"
                        FontSize="22" FontWeight="Bold" HorizontalAlignment="Center"/>
-            <TextBlock Text="Look around the screen. The cyan dot should follow your gaze."
+            <TextBlock Text="{loc:Str webcam_gaze_test_desc}"
                        Foreground="{DynamicResource TextMutedBrush}" FontSize="13" Margin="0,8,0,0" HorizontalAlignment="Center"/>
             <TextBlock x:Name="TxtCoords" Text="" Foreground="#00B0FF" FontSize="12"
                        Margin="0,4,0,0" HorizontalAlignment="Center" FontFamily="Consolas, Courier New"/>
@@ -54,7 +54,7 @@
                     Background="#00B0FF" Foreground="Black" BorderThickness="0"
                     FontWeight="Bold" Cursor="Hand"
                     HorizontalAlignment="Center">
-                <TextBlock Text="✕ Close Test"/>
+                <TextBlock Text="{loc:Str webcam_gaze_test_close}"/>
             </Button>
         </StackPanel>
 
@@ -63,7 +63,7 @@
                 CornerRadius="10" Padding="24" HorizontalAlignment="Center" VerticalAlignment="Center"
                 MaxWidth="520">
             <StackPanel>
-                <TextBlock Text="Tracker test unavailable" Foreground="#FF8080" FontSize="18"
+                <TextBlock Text="{loc:Str webcam_gaze_test_unavailable}" Foreground="#FF8080" FontSize="18"
                            FontWeight="Bold" HorizontalAlignment="Center"/>
                 <TextBlock x:Name="TxtErrorDetail" Text="" Foreground="White" FontSize="13"
                            Margin="0,12,0,16" TextWrapping="Wrap" HorizontalAlignment="Center"/>
@@ -71,7 +71,7 @@
                         Background="#00B0FF" Foreground="Black" BorderThickness="0"
                         FontWeight="Bold" Cursor="Hand"
                         HorizontalAlignment="Center">
-                    <TextBlock Text="Close"/>
+                    <TextBlock Text="{loc:Str btn_close}"/>
                 </Button>
             </StackPanel>
         </Border>

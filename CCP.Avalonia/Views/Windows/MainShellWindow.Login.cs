@@ -29,6 +29,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <param name="accountChanged">A real sign-in/out: the lapse pass saves, as WPF's does.</param>
         internal void UpdateQuickLoginUI(bool accountChanged = false)
         {
+            // WPF MainWindow.Login.cs:128 / :368: the counter cache is per account.
+            if (accountChanged) App.V2Purchase?.Invalidate();
             try
             {
                 var s = CoreSettings.Current;
@@ -50,6 +52,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 // each (Login.cs:198 UpdateLevelDisplay, OnProfileLoaded).
                 UpdateLevelDisplay();
                 RefreshProfileBubble();   // WPF UpdateXPBarLoginState: the bubble paints the same identity
+                Named<Controls.FriendsRailChip>("FriendsChip")?.RefreshFace();   // the rail foot shows the same face
                 // WPF UpdatePatreonUI -> RefreshEntitlementVeils: an account change moves every veil.
                 RefreshEntitlementVeils(persist: accountChanged);
                 // WPF Patreon.cs:294: the pass is per-account, so sign-in/out moves the intake door.
@@ -80,6 +83,27 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 try { await dialog.ProfileLoad; } catch (Exception ex) { Serilog.Log.Debug("ProfileLoad: {E}", ex.Message); }
                 UpdateLevelDisplay();
             }
+        }
+
+        /// <summary>
+        /// Contract D's last step (WPF MergedAccountRecovery.RefreshAccountUi / OfferSignIn): the account id
+        /// changed under the app, so the account chrome is repainted; when no provider could re-sign in, the
+        /// sign-in dialog is offered once. Called from a pool thread.
+        /// </summary>
+        internal void InitializeAccountRecovery()
+        {
+            Action<string, bool> finished = (canonical, reauthed) => global::Avalonia.Threading.Dispatcher.UIThread.Post(async () =>
+            {
+                try
+                {
+                    UpdateQuickLoginUI(accountChanged: true);
+                    UpdateLevelDisplay();
+                    if (!reauthed) await OpenUnifiedLoginDialog();
+                }
+                catch (Exception ex) { Serilog.Log.Debug("Account recovery UI: {E}", ex.Message); }
+            });
+            AccountSeed.RecoveryFinished = finished;
+            Closed += (_, _) => { if (AccountSeed.RecoveryFinished == finished) AccountSeed.RecoveryFinished = null; };
         }
 
         /// <summary>WPF BtnQuickLogout_Click (AccountSeed.Logout carries the pre-logout sync and progression clear).</summary>

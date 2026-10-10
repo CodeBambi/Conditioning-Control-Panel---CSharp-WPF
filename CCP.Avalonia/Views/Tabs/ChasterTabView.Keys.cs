@@ -2,8 +2,9 @@
 // and RefreshPresets (:1075-1124), Stakes (ChasterTabView.Help.cs:52), on Core TabPresets.
 // A key rewrites the price list and requests the preset's limits, as WPF; it never touches the lock
 // itself (prices only book when an event happens), so it does not go through the import confirm.
-// ponytail: FxPreset/FxKeyTurned (Fx.cs) are not ported; the menu and limits rows the WPF click
-// also refreshes (ApplyPriceToggles, RefreshLimits) are not on this head yet.
+// The click also pushes the new set onto the menu rows and the limits card, as WPF.
+// A pressed key pops, throws sparks and a ring in its own colour, and the rows it opens light one
+// after another (FxPreset / FxKeyTurned, ChasterTabView.Fx.cs).
 using System;
 using System.Collections.Generic;
 using Avalonia.Controls;
@@ -26,10 +27,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         private void Preset_Click(object? sender, RoutedEventArgs e)
         {
-            if ((sender as ToggleButton)?.Tag is not string id) return;
+            if (sender is not ToggleButton tile || tile.Tag is not string id) return;
+            bool turned = false;
             // The fourth key mirrors a hand-built set; pressing it rewrites nothing.
             if (id != TabPresets.Custom && TabPresets.Apply(id) is { Count: > 0 } ids)
             {
+                turned = true;
                 var settings = CoreSettings.Current;
                 settings.ChasterPrices = new List<string>(ids);
                 // The preset sets the stakes too: a lower limit now, a higher one after its day.
@@ -37,9 +40,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                     (settings.ChasterDayLimit, settings.ChasterBacklogLimit) =
                         TabPresets.RequestLimits(preset, settings.ChasterDayLimit, settings.ChasterBacklogLimit, DateTime.UtcNow);
                 CoreSettings.Save();
+                ApplyPriceToggles();
+                RefreshLimits();
                 RefreshNumbers();
             }
             RefreshPresets();
+            // WPF :1100-1120: the mirror key only answers; a real key also lights its rows.
+            if (id == TabPresets.Custom) FxPreset(tile, CustomColour);
+            else if (turned)
+            {
+                FxPreset(tile, PresetColour(id));
+                FxKeyTurned(LitRows());
+            }
         }
 
         /// <summary>Light the key for the set that is on. The fourth key lights for a hand-built set.</summary>
@@ -54,6 +66,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             Stakes(TxtStakesStrict, TabPresets.Strict);
             Stakes(TxtStakesCirce, TabPresets.Circe);
             RefreshMood(ChasterHead.Service); // WPF :1123, the heat row may have just gone on or off
+            PaintMenuHelp(); // Natasha's row may have just gone on or off
         }
 
         private static void Stakes(TextBlock line, string presetId)

@@ -98,8 +98,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
                 if (shown) _owner.ResumeClocks();
                 else _owner.ParkClocks();
                 // WPF CompanionTabView.IsVisibleChanged -> MainWindow.OnCompanionTabVisibilityChanged:
-                // raised on a real edge only (the chain reports every ancestor on subscribe).
-                if (shown != _owner._shown) { _owner._shown = shown; _owner.TabVisibilityChanged?.Invoke(_owner, shown); }
+                // raised on a real edge only (the chain reports every ancestor on subscribe). The
+                // edge is the PAGE's: under companion v2 the room itself stays collapsed beneath the
+                // conversation (CompanionTabView), so its own flag must not hold the edge at false.
+                bool tabShown = (_owner.GetVisualParent() as Visual)?.IsEffectivelyVisible ?? shown;
+                if (tabShown != _owner._shown) { _owner._shown = tabShown; _owner.TabVisibilityChanged?.Invoke(_owner, tabShown); }
             }
         }
 
@@ -131,6 +134,22 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         /// <summary>WPF OnCompanionFxModChanged's UpdateCompanionCardsUI half: the roster's names,
         /// accent ring and supported set follow a mod switch made while the tab is open.</summary>
         internal void RefreshRoster() => (WorkshopZone.DataContext as Runtime.WorkshopRuntimeVm)?.Parts.Roster.Refresh();
+
+        /// <summary>
+        /// The data half of a show, no clocks: WPF SyncCompanionTabUI -> CompanionRoom.Sync() runs on
+        /// every ShowTab("companion"), so the zones re-read even while v2 keeps the room collapsed
+        /// (their cells are adopted by the Companion pages). The room's own show edge never fires
+        /// then, so the shell calls this from the tab's edge too.
+        /// </summary>
+        internal void SyncData()
+        {
+            ChatZone.ViewModel?.Sync();
+            MemoryZone.ViewModel?.Sync();
+            PersonalityZone.ViewModel.Sync();   // WPF CompanionRoomRuntimeVm.Sync -> PersonalityVm.Sync
+            AttentionZone.ViewModel?.Sync();
+            // WPF UpdateCompanionCardsUI runs on the same show: the roster's levels and ring.
+            RefreshRoster();
+        }
 
         // ponytail: ICompanionRoomVm (zone interfaces) lives in the WPF head; hero, chat and memory are
         // live, the other zones seed their own viewmodels until their runtime crosses.
@@ -164,13 +183,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
                 // park time would be a lie.
                 AwarenessZone.StartRefresh();   // WPF IsVisibleChanged -> StartRefresh (re-reads first)
                 AwarenessZone.SyncCursorBlink();
-                ChatZone.ViewModel?.Sync();
-                MemoryZone.ViewModel?.Sync();
-                AttentionZone.ViewModel?.Sync();
+                SyncData();
                 // The constellation's one-shot dormant sweep waits for the first time the tab is seen.
                 HeroZone.GetLogicalDescendants().OfType<RelationshipConstellation>().FirstOrDefault()?.PlayIntro();
-                // WPF UpdateCompanionCardsUI runs on the same show: the roster's levels and ring.
-                (WorkshopZone.DataContext as Runtime.WorkshopRuntimeVm)?.Parts.Roster.Refresh();
                 // ponytail: WPF also calls ChatZone.SyncThinking() here. This head's
                 // ChatThresholdView has no thinking clock to sync - WPF's dots are three
                 // RepeatBehavior=Forever Storyboards (CmpThinkingDotsStoryboard) and the port

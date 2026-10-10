@@ -1,11 +1,14 @@
 // PORTED (slice 1) from WPF LauncherWindow.xaml.cs/.Tiles.cs and LauncherHost.cs; rules are Core's
 // LauncherCards/LauncherRules; slice 2 adds the boot surface and the second-instance handoff (WPF App.xaml.cs
 // RouteBootSurface/RouteSurfaceHandoff, LauncherHost.OnBareRelaunch). Slice 3 adds the account chip, mod pill and panel-card status/stats (WPF LauncherWindow.xaml.cs:220-606).
-// Slice 5 (FX) lives in LauncherWindow.Fx.cs. ponytail: no game host exists on this head yet (slice 4 found none); game tiles land with their hosts.
+// Slice 5 (FX) lives in LauncherWindow.Fx.cs. Parity wave 1: the shelf shows every card WPF 7.1.5 shows (order, pills,
+// NEW, the Racing mystery card, the Breakout covers, whole-card press, grow-to-fit). Every card has a
+// destination (Racing Thoughts = Views/Games/RaceWindow, play#42); a card with none would flinch and say so.
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using Avalonia;
+using Avalonia.Collections;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
@@ -17,6 +20,7 @@ using Avalonia.Threading;
 using ConditioningControlPanel.Avalonia.Helpers;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services;
 using ConditioningControlPanel.Services.Launcher;
 using Serilog;
 
@@ -33,9 +37,56 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 // Graded Intake (WPF IntakePassService.CanStartIntake); locked still opens the tab's gate.
                 ["intake"] = (() => !(CoreEntitlement.HasLab || CoreEntitlement.IsIntakePassAvailable),
                               panel => panel.ShowTab("gradedintake")),
+                // The web games (Views/Games/GameWindow, WPF's per-game WebView2 hosts). The lock face is
+                // the same probe FaceLocks used; the window's own gate raises the refusal.
+                ["backroom"] = (() => false, _ => Games.GameWindow.Launch("backroom")),
+                ["breakoutdemo"] = (() => false, _ => Games.GameWindow.Launch("breakoutdemo")),
+                ["breakout"] = (() => FaceLocked("breakout"), _ => Games.GameWindow.Launch("breakout")),
+                ["piecebypiece"] = (() => false, _ => Games.GameWindow.Launch("piecebypiece")),
+                ["goon"] = (() => false, _ => Games.GameWindow.Launch("goon")),
+                ["dtrh"] = (() => FaceLocked("dtrh"), _ => Games.GameWindow.Launch("dtrh")),
+                ["arcademy"] = (() => FaceLocked("arcademy"), _ => Games.GameWindow.Launch("arcademy")),
+                // Racing Thoughts (WPF LauncherCatalogue.cs:243 -> CaucusHostService.Launch), its own
+                // window (Views/Games/RaceWindow.cs); revealed only once a track is owned.
+                ["race"] = (() => false, _ => Games.RaceWindow.Launch()),
             };
 
+        private static bool FaceLocked(string id) => FaceLocks.TryGetValue(id, out var probe) && probe();
+
+        /// <summary>Cards this head can open (a destination exists): boot/handoff routing and the companion's offers.</summary>
         internal static IEnumerable<LauncherCard> VisibleCards => LauncherCards.All.Where(c => Destinations.ContainsKey(c.Id));
+
+        /// <summary>Every card WPF 7.1.5 shows, in launcher order (WPF LauncherCatalogue.Games.Where(Available):
+        /// PieceByPieceAvailable and ArcademyHostService.DoorAvailable are both on), host or not.</summary>
+        internal static IEnumerable<LauncherCard> ShelfCards => LauncherCards.All;
+
+        /// <summary>WPF LauncherCatalogue's padlock probes for the cards with no destination here, so the face
+        /// matches WPF's (Prime pill, gold rim). A probe that throws reads as locked, as WPF LabOk.</summary>
+        private static readonly IReadOnlyDictionary<string, Func<bool>> FaceLocks =
+            new Dictionary<string, Func<bool>>(StringComparer.OrdinalIgnoreCase)
+            {
+                // WPF BreakoutAccess.FullAllowed.
+                ["breakout"] = () => !TierGate.RequiresLab(Loc.Get("launcher_game_breakout_title")).Allowed,
+                ["dtrh"] = () => !TierGate.RequiresLab(Loc.Get("launcher_game_dtrh_title"), "dtrh").Allowed,
+                ["arcademy"] = () => !TierGate.RequiresLab(Loc.Get("launcher_game_arcademy_title")).Allowed,
+            };
+
+        /// <summary>WPF LauncherEntry.Revealed: Racing Thoughts is the mystery card until a track is owned
+        /// (RacingAccess.CanLaunch with the purchase door armed: any rt.original.00..10 grant).</summary>
+        internal static bool Revealed(LauncherCard card)
+        {
+            if (!string.Equals(card.Id, "race", StringComparison.OrdinalIgnoreCase)) return true;
+            return Games.RaceWindow.CanLaunch();
+        }
+
+        /// <summary>The padlock as WPF draws it: the destination's probe, else the face probe, else free.</summary>
+        internal static bool LockedFor(LauncherCard card)
+        {
+            if (Destinations.TryGetValue(card.Id, out var dest)) return Locked(dest);
+            if (!FaceLocks.TryGetValue(card.Id, out var probe)) return false;
+            try { return probe(); }
+            catch (Exception ex) { Log.Debug(ex, "[Launcher] lock probe threw for {Id}", card.Id); return true; }
+        }
 
         private static LauncherWindow? _window;
 
@@ -49,7 +100,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>WPF _statusTimer: the status line and the stats, every second while shown.</summary>
         private readonly DispatcherTimer _statusTimer = new() { Interval = TimeSpan.FromSeconds(1) };
 
-        /// <summary>Each tile's reveal as drawn (WPF _revealedAtBuild); every card here is revealed.</summary>
+        /// <summary>Each tile's reveal as drawn (WPF _revealedAtBuild).</summary>
         private readonly Dictionary<string, bool> _revealedAtBuild = new(StringComparer.OrdinalIgnoreCase);
 
         public LauncherWindow()
@@ -74,7 +125,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             };
             BuildTiles();
             HookVeil();
+            HookOpenTables();
             HookFx();
+            PaintSoundButton();
+            HookLinks();
+            HookFeel();
         }
 
         /// <summary>WPF OnShown; its FX half is FxOnShown (LauncherWindow.Fx.cs).</summary>
@@ -283,7 +338,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>WPF StopLink_Click.</summary>
         private void StopLink_Click(object? sender, RoutedEventArgs e)
         {
-            // ponytail: no LockdownVeil on this head yet; this refusal stands in for it.
+            // Belt and braces under the Lockdown veil (LauncherWindow.Veil.cs): the handler refuses too.
             if (MainShellWindow.RefuseStopUnderLockdown()) return;
             try { MainShellWindow.StopEngine(); }
             catch (Exception ex) { Log.Warning(ex, "[Launcher] StopEngine failed"); }
@@ -291,7 +346,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         /// <summary>WPF RefreshStatus: running since HH:mm + Stop, or idle; the CTA reads Open or Launch.
-        /// ponytail: WPF also refreshes at once on EngineStopped; here the 1 s tick catches it.</summary>
+        /// Runs on the 1 s tick and at once when the engine stops (LauncherWindow.Feel.cs).</summary>
         private bool? _ctaRunning;
 
         internal void RefreshStatus()
@@ -303,6 +358,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     ? Loc.GetF("launcher_panel_running", (CoreEngine.StartedUtc ?? DateTime.UtcNow).ToLocalTime().ToString("HH:mm"))
                     : Loc.Get("launcher_panel_idle");
                 StopLink.IsVisible = running;
+                SyncEngineFx();   // LauncherWindow.ArtMotion.cs: the dot, the card's comet and rim
                 if (_ctaRunning == running) return;
                 _ctaRunning = running;
                 PanelCtaText.Bind(TextBlock.TextProperty,
@@ -335,22 +391,24 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 TierBadge.Source = badge == null ? null : ModArt.TryLoad(badge, 64);
                 TierBadge.IsVisible = TierBadge.Source != null;
                 if (TierBadge.Source == null) TierBadgePopup.IsOpen = false;
+                else EnsureTierBadgeFx();   // LauncherWindow.Feel.cs: the 8 s shake
                 RefreshSpReadout();
             }
             catch (Exception ex) { Log.Debug(ex, "[Launcher] RefreshAccount failed"); }
         }
 
-        /// <summary>WPF RefreshSpReadout: the chip's Sparkle Points while signed in.
-        /// ponytail: WPF odometers the number up; it snaps here until the launcher-fx slice.</summary>
+        /// <summary>WPF RefreshSpReadout: the chip's Sparkle Points while signed in, counted up
+        /// (LauncherWindow.Feel.cs ShowSp).</summary>
         private void RefreshSpReadout()
         {
             int sp = CoreSettings.Current.SkillPoints;
             SpChip.IsVisible = sp >= 0 && CoreAccount.IsLoggedIn;
-            if (SpChip.IsVisible) SpReadout.Text = sp.ToString("N0");
+            if (SpChip.IsVisible) ShowSp(sp);
+            else _spShown = double.NaN;
         }
 
-        /// <summary>WPF TierBadge_MouseEnter/Leave: the big copy in a popup under the badge.
-        /// ponytail: WPF's 8 s wobble and the popup's pop-in scale are launcher-fx.</summary>
+        /// <summary>WPF TierBadge_MouseEnter/Leave: the big copy in a popup under the badge; the 8 s
+        /// shake and the pop-in are LauncherWindow.Feel.cs.</summary>
         private void TierBadge_PointerEntered(object? sender, PointerEventArgs e)
         {
             if (TierBadge.Source is not { } src) return;
@@ -358,12 +416,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             double bigWidth = src.Size.Height > 0 ? TierBadgeBig.Height * src.Size.Width / src.Size.Height : TierBadgeBig.Height;
             TierBadgePopup.HorizontalOffset = (TierBadge.Bounds.Width - bigWidth) / 2 - TierBadgeBig.Margin.Left;
             TierBadgePopup.IsOpen = true;
+            TierBadgeBigPopIn();
         }
 
         private void TierBadge_PointerExited(object? sender, PointerEventArgs e) => TierBadgePopup.IsOpen = false;
 
-        /// <summary>WPF RefreshStats: level, Sparkle Points, time under and the XP bar.
-        /// ponytail: WPF odometers the numbers and tweens the bar; they snap here until launcher-fx.</summary>
+        /// <summary>WPF RefreshStats: level, Sparkle Points, time under and the XP bar. The numbers
+        /// odometer and the bar tweens (LauncherWindow.Feel.cs ShowStats).</summary>
         internal void RefreshStats()
         {
             try
@@ -375,13 +434,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 try { need = ConditioningControlPanel.Services.XpCurve.GetXPForLevel(level, ConditioningControlPanel.Services.XpCurve.EpochOf(s)); } catch { }
                 double minutes = Math.Max(0, s.TotalConditioningMinutes);
 
-                StatLevel.Text = level.ToString("0");
-                StatSparkles.Text = Math.Max(0, s.SkillPoints).ToString("N0");
                 int hours = (int)(minutes / 60), mins = (int)(minutes % 60);
                 StatTime.Text = hours > 0 ? $"{hours}h {mins:00}m" : $"{mins}m";
 
                 double ratio = need > 0 ? Math.Clamp(xp / need, 0, 1) : 0;
-                XpFill.Width = XpTrack.Bounds.Width * ratio;
+                ShowStats(level, Math.Max(0, s.SkillPoints), XpTrack.Bounds.Width * ratio);
                 XpCaption.Text = Loc.GetF("launcher_stat_xp", ((int)xp).ToString("N0"), ((int)need).ToString("N0"));
             }
             catch (Exception ex) { Log.Debug(ex, "[Launcher] RefreshStats failed"); }
@@ -408,7 +465,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             try
             {
-                var now = VisibleCards.Select(c => new KeyValuePair<string, bool>(c.Id, true));
+                var now = ShelfCards.Select(c => new KeyValuePair<string, bool>(c.Id, Revealed(c)));
                 if (!LauncherTileRefresh.ShouldRebuild(trigger, IsVisible, _revealedAtBuild, now)) return;
                 Log.Information("[Launcher] {Trigger} redrawing tiles", trigger);
                 BuildTiles();
@@ -419,7 +476,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>WPF ModPill_Click: installed mods in stock order, the active one ticked, then Manage mods.</summary>
         private void ModPill_Click(object? sender, RoutedEventArgs e)
         {
-            // ponytail: no LockdownVeil on this head yet; this refusal stands in for it.
+            // Belt and braces under the Lockdown veil (LauncherWindow.Veil.cs): the handler refuses too.
             if (MainShellWindow.LockdownActive) return;
             try
             {
@@ -466,19 +523,64 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>WPF LauncherHost.LaunchGame for the destinations this head has.</summary>
         internal void Play(LauncherCard card)
         {
-            if (!Destinations.TryGetValue(card.Id, out var dest)) return;
+            bool revealed = Revealed(card);
             bool needsAccount = card.RequiresAccount && !CoreAccount.IsLoggedIn;
-            // No leash gate on this head yet, and every destination here is a panel tab: a locked
-            // one still opens it (its own gate paints the refusal), as WPF's does.
-            bool locked = Locked(dest);
-            FxPlayBeat(card.Id, needsAccount || locked);
-            if (LauncherRules.Game(needsAccount, locked, leashBlocks: false) == LauncherGameStep.SignIn)
+            bool locked = !needsAccount && revealed && LockedFor(card);
+            // The mystery card's Play goes to the counter, not to the game it hides (WPF LaunchGame("backroom")).
+            var targetId = revealed ? card.Id : "backroom";
+            bool hosted = Destinations.TryGetValue(targetId, out var dest);
+            // A card with no host on this head flinches like a refusal; its tooltip says why.
+            FxPlayBeat(card.Id, needsAccount || locked || !hosted);
+            // Every destination here is a panel tab: a locked one still opens it (its own gate paints the
+            // refusal), as WPF's does. A pending leash punishment sends the tile to the gate on the panel
+            // first (WPF LauncherHost.cs:360, play#48).
+            var step = LauncherRules.Game(needsAccount, locked, leashBlocks: MainShellWindow.LeashBlocksGames);
+            if (step == LauncherGameStep.SignIn)
             {
                 OpenSignIn();
                 return;
             }
+            if (step == LauncherGameStep.Leash && hosted)
+            {
+                Log.Information("[Launcher] {Id} waits: a leash punishment is pending", targetId);
+                OpenPanel(p => p.PresentLeashGateFromLauncher());
+                return;
+            }
+            if (!hosted)
+            {
+                Log.Information("[Launcher] {Id}: no game host on this head yet", targetId);
+                return;
+            }
+            if (Games.GameWindow.Games.ContainsKey(targetId) || IsRace(targetId))
+            {
+                LaunchGame(targetId);
+                return;
+            }
             OpenPanel(dest.Open);
         }
+
+        /// <summary>WPF LauncherHost.LaunchGame: the game opens, then the launcher hides behind it (never
+        /// trays); the return poll brings the launcher back when the game closes and the panel is not up.
+        /// A gate that refused leaves the launcher where it is.</summary>
+        private void LaunchGame(string id)
+        {
+            var game = IsRace(id) ? Games.RaceWindow.Launch() : Games.GameWindow.Launch(id);
+            if (game == null) return;
+            AfterExitBeat(() =>
+            {
+                if (!game.IsVisible) return;
+                Hide();
+                game.Activate();
+            });
+            game.Closed += (_, _) =>
+            {
+                if (Panel is { IsVisible: true }) return;
+                try { Show(); Activate(); }
+                catch (Exception ex) { Log.Debug(ex, "[Launcher] return after {Id} failed", id); }
+            };
+        }
+
+        private static bool IsRace(string id) => string.Equals(id, "race", StringComparison.OrdinalIgnoreCase);
 
         private static bool Locked((Func<bool> Locked, Action<MainShellWindow> Open) dest)
         {
@@ -502,26 +604,67 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             GamesGrid.Children.Clear();
             _revealedAtBuild.Clear();
-            foreach (var card in VisibleCards) { GamesGrid.Children.Add(CreateTile(card)); _revealedAtBuild[card.Id] = true; }
+            foreach (var card in ShelfCards)
+            {
+                bool revealed = Revealed(card);
+                try { GamesGrid.Children.Add(CreateTile(card, revealed)); _revealedAtBuild[card.Id] = revealed; }
+                catch (Exception ex) { Log.Warning(ex, "[Launcher] tile {Id} failed to build", card.Id); }
+            }
             SeatGrid();
         }
 
-        /// <summary>WPF GamesColumn_SizeChanged: columns and card height from LauncherGridLayout.</summary>
+        /// <summary>WPF FitTiles: columns and card height from LauncherGridLayout; a block that fits sits in the
+        /// middle of the column, one that overflows hangs from the top, scrolls, and grows the window once.</summary>
         private void SeatGrid()
         {
-            int count = GamesGrid.Children.Count;
-            double width = GamesColumn.Bounds.Width;
-            int columns = LauncherGridLayout.Columns(width, count);
-            GamesGrid.Columns = columns;
-            double height = LauncherGridLayout.TileHeight(LauncherGridLayout.TileWidth(width, columns));
-            foreach (var tile in GamesGrid.Children) tile.Height = height;
+            try
+            {
+                int count = GamesGrid.Children.Count;
+                double width = GamesColumn.Bounds.Width;
+                int columns = LauncherGridLayout.Columns(width, count);
+                GamesGrid.Columns = columns;
+                double height = LauncherGridLayout.TileHeight(LauncherGridLayout.TileWidth(width, columns));
+                foreach (var tile in GamesGrid.Children) tile.Height = height;
+
+                double available = GamesScroller.Bounds.Height;
+                if (count == 0 || available <= 0 || width <= 0) return;
+                double gridHeight = LauncherGridLayout.GridHeight(width, columns, LauncherGridLayout.Rows(count, columns));
+                bool scroll = LauncherGridLayout.NeedsScroll(available, gridHeight);
+                var seat = scroll ? VerticalAlignment.Top : VerticalAlignment.Center;
+                if (GamesGrid.VerticalAlignment != seat) GamesGrid.VerticalAlignment = seat;
+                if (scroll) GrowToFitTiles(available, gridHeight);
+            }
+            catch (Exception ex) { Log.Debug(ex, "[Launcher] tile fit failed"); }
         }
 
-        private Border CreateTile(LauncherCard card)
+        private bool _grewToFitTiles;
+
+        /// <summary>WPF 7.1.5 GrowToFitTiles: the default 1280x800 cut the third row off. The first time the
+        /// tiles overflow the window grows (once per window, so it never fights a hand resize) by the overflow,
+        /// capped at the screen's work area, and stays centred on it. A short screen keeps the scroller.</summary>
+        private void GrowToFitTiles(double available, double gridHeight)
         {
-            var dest = Destinations[card.Id];
+            if (_grewToFitTiles || WindowState != WindowState.Normal || !IsVisible) return;
+            _grewToFitTiles = true;
+            if (Screens?.ScreenFromWindow(this) is not { } screen) return;
+            double scale = screen.Scaling > 0 ? screen.Scaling : 1;
+            var wa = screen.WorkingArea;
+            double waTop = wa.Y / scale, waHeight = wa.Height / scale;
+            double old = Bounds.Height > 0 ? Bounds.Height : Height;
+            double grown = LauncherGridLayout.FitWindowHeight(old, available, gridHeight, waHeight);
+            if (grown <= old + 0.5) return;
+            double top = Position.Y / scale - (grown - old) / 2;
+            Height = grown;
+            top = Math.Max(waTop, Math.Min(top, waTop + waHeight - grown));
+            Position = new PixelPoint(Position.X, (int)Math.Round(top * scale));
+            Log.Debug("[Launcher] grew {Old:0} -> {New:0} px to seat every tile row", old, grown);
+        }
+
+        private Border CreateTile(LauncherCard card, bool revealed)
+        {
             bool needsAccount = card.RequiresAccount && !CoreAccount.IsLoggedIn;
-            bool locked = !needsAccount && Locked(dest);
+            bool locked = !needsAccount && revealed && LockedFor(card);
+            bool hosted = Destinations.ContainsKey(revealed ? card.Id : "backroom");
             var hue = Color.FromRgb(card.R, card.G, card.B);
 
             var tile = new Border
@@ -531,24 +674,37 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 BorderBrush = locked ? Res("Tier2DiamondBorderBrush") : RimBrush(hue),
                 BorderThickness = new Thickness(LauncherGridLayout.TileBorder),
                 Margin = new Thickness(LauncherGridLayout.TileMargin),
-                ClipToBounds = true,
                 Cursor = new Cursor(StandardCursorType.Hand),
                 Tag = card.Id,
             };
 
             var body = new Grid { RowDefinitions = new RowDefinitions("*,Auto") };
 
-            // --- the art plate: the mod's art, else the hue plate with the glyph ---
-            // ponytail: WPF's glyph plate also draws a radial hue and a road (no art-less card shows yet).
-            var plate = new Panel { MinHeight = LauncherGridLayout.MinArtHeight, Background = new SolidColorBrush(hue, 0.35) };
-            if (ModArt.TryLoad(card.ArtPath, 640) is { } art)
-                plate.Children.Add(new Image { Source = art, Stretch = Stretch.UniformToFill });
-            else
-                plate.Children.Add(new TextBlock
+            // --- the art plate: the mod's art (or the Breakout covers), else the glyph plate; the mystery face ---
+            var plate = new Panel { MinHeight = LauncherGridLayout.MinArtHeight, Background = new SolidColorBrush(hue, 0.35), ClipToBounds = true };
+            // WPF Tiles.cs:100-103: the art rides in its own host, 7 px larger each way, so the parallax slide
+            // never shows an edge.
+            TranslateTransform? artSlide = null;
+            Image? artImage = null;
+            IImage? art = null;
+            if (revealed)
+                art = (IImage?)ModArt.TryLoad(card.ArtPath, 640) ?? card.Id switch
                 {
-                    Text = card.Glyph, FontSize = 64, Foreground = Brushes.White, Opacity = 0.95,
-                    HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
+                    "breakoutdemo" => BreakoutCardArt.Demo,
+                    "breakout" => BreakoutCardArt.Full,
+                    _ => null,
+                };
+            if (!revealed) BuildMysteryPlate(plate, hue);
+            else if (art != null)
+            {
+                artSlide = new TranslateTransform();
+                plate.Children.Add(new Panel
+                {
+                    Tag = "tile-art", RenderTransform = artSlide, Margin = new Thickness(-TileArtParallaxPx),
+                    Children = { (artImage = new Image { Source = art, Stretch = Stretch.UniformToFill }) },
                 });
+            }
+            else BuildGlyphPlate(plate, card.Glyph, hue);
             var surface = ((ISolidColorBrush)Res("SurfaceBgBrush")).Color;
             plate.Children.Add(new Border
             {
@@ -569,7 +725,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (needsAccount) plate.Children.Add(Pill("launcher_pill_sign_in", null, Res("AccentGradientBrush"), Brushes.White, 10));
             else if (locked) plate.Children.Add(Pill("launcher_prime_pill", "🔒", Res("Tier2DiamondBorderBrush"),
                 new SolidColorBrush(Color.FromRgb(0x2A, 0x1C, 0x08)), 10));
-            if (card.IsNew) plate.Children.Add(Pill("exclusives_badge_new", null, Res("AccentGradientBrush"), Brushes.White,
+            if (OpenTablesBadgeFor(card.Id, revealed && !needsAccount) is { } openBadge) plate.Children.Add(openBadge);   // LauncherWindow.OpenTables.cs
+            if (revealed) plate.Children.Add(ShortcutButton(tile, card.Id));   // LauncherWindow.Links.cs
+            if (card.IsNew && revealed) plate.Children.Add(Pill("exclusives_badge_new", null, Res("AccentGradientBrush"), Brushes.White,
                 needsAccount || locked ? 40 : 10));
             body.Children.Add(plate);
 
@@ -582,33 +740,52 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             Grid.SetRow(text, 1);
             text.Children.Add(new TextBlock
             {
-                Text = Loc.Get(card.TitleKey), FontFamily = new FontFamily("Fredoka, Segoe UI"), FontSize = 19,
+                Text = Loc.Get(revealed ? card.TitleKey : "launcher_mystery_title"), FontFamily = new FontFamily("Fredoka, Segoe UI"), FontSize = 19,
                 FontWeight = FontWeight.SemiBold, Foreground = Res("TextLightBrush"),
                 Height = LauncherGridLayout.TitleHeight, VerticalAlignment = VerticalAlignment.Center,
                 TextTrimming = TextTrimming.CharacterEllipsis,
             });
             text.Children.Add(new TextBlock
             {
-                Text = Loc.Get(card.BlurbKey), FontSize = 14, Margin = new Thickness(0, LauncherGridLayout.BlurbGap, 0, 0),
+                Text = Loc.Get(revealed ? card.BlurbKey : "launcher_mystery_blurb"), FontSize = 14, Margin = new Thickness(0, LauncherGridLayout.BlurbGap, 0, 0),
                 Foreground = Res("TextSecondaryBrush"), TextWrapping = TextWrapping.Wrap,
                 TextTrimming = TextTrimming.CharacterEllipsis, Height = LauncherGridLayout.BlurbHeight,
             });
-            var play = PlayButton(hue, locked, needsAccount);
-            // ponytail: no LockdownVeil on this head yet (WPF's swallows every tile click); this refusal stands in for it.
+            var play = PlayButton(hue, locked, needsAccount, revealed ? null : "launcher_mystery_play");
+            // Belt and braces under the Lockdown veil (LauncherWindow.Veil.cs), which swallows every tile click.
             play.Click += (_, _) => { if (!MainShellWindow.LockdownActive) Play(card); };
             text.Children.Add(play);
             body.Children.Add(text);
 
-            // A signed-out card is the ask as a whole, not only its button (WPF Tiles.cs:218).
-            if (needsAccount) tile.PointerReleased += (_, _) => { if (MainShellWindow.LockdownActive) return; FxPlayBeat(card.Id, true); OpenSignIn(); };
+            // WPF 7.1.5 (tester: "only the Play button works"): the WHOLE card is the Play button. A press must
+            // start AND end on the tile; the Play button handles its own press, so nothing fires twice.
+            bool tileArmed = false;
+            tile.PointerPressed += (_, e) => { if (!e.Handled && e.GetCurrentPoint(tile).Properties.IsLeftButtonPressed) tileArmed = true; };
+            tile.PointerExited += (_, _) => tileArmed = false;
+            tile.PointerReleased += (_, e) =>
+            {
+                bool armed = tileArmed;
+                tileArmed = false;
+                if (!armed || e.Handled || MainShellWindow.LockdownActive) return;
+                e.Handled = true;
+                Play(card);
+            };
+            if (!hosted && !needsAccount) ToolTip.SetTip(tile, Loc.Get("exclusives_not_on_this_build"));
 
-            tile.Child = body;
-            DecorateTileFx(tile, hue);
+            // The glow is a BoxShadow on the tile (no Effect over art that drifts), so the tile no longer clips
+            // itself: the body carries the rounded clip one border in.
+            tile.Child = new Border
+            {
+                CornerRadius = new CornerRadius(Math.Max(0, TileRadius - LauncherGridLayout.TileBorder)),
+                ClipToBounds = true, Child = body,
+            };
+            DecorateTileFx(tile, hue, artSlide, artImage);
             return tile;
         }
 
-        /// <summary>WPF BuildPlayButton: outline at rest, hue fill on hover; Sign in / Locked / Play.</summary>
-        private Button PlayButton(Color hue, bool locked, bool needsAccount)
+        /// <summary>WPF BuildPlayButton: outline at rest, hue fill on hover; Sign in / Locked / Play.
+        /// <paramref name="labelKey"/> overrides the Play/Locked label; a signed-out tile always reads Sign in.</summary>
+        private Button PlayButton(Color hue, bool locked, bool needsAccount, string? labelKey = null)
         {
             var label = new StackPanel { Orientation = Orientation.Horizontal };
             if (!needsAccount)
@@ -619,7 +796,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 });
             label.Children.Add(new TextBlock
             {
-                Text = Loc.Get(needsAccount ? "launcher_sign_in" : locked ? "launcher_locked" : "launcher_play"),
+                Text = Loc.Get(needsAccount ? "launcher_sign_in" : labelKey ?? (locked ? "launcher_locked" : "launcher_play")),
                 VerticalAlignment = VerticalAlignment.Center,
             });
             IBrush fill = needsAccount ? Res("AccentGradientBrush")
@@ -653,6 +830,57 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top,
                 Child = row,
             };
+        }
+
+        /// <summary>WPF BuildGlyphPlate: a warm radial in the hue, a road drawn in perspective (lanes converging on
+        /// a low horizon, a dashed centre line) and the glyph sitting on it. Reads as a picture, not a placeholder.</summary>
+        private static void BuildGlyphPlate(Panel host, string glyph, Color hue)
+        {
+            host.Background = new RadialGradientBrush
+            {
+                GradientOrigin = new RelativePoint(0.5, 0.3, RelativeUnit.Relative),
+                Center = new RelativePoint(0.5, 0.3, RelativeUnit.Relative),
+                RadiusX = new RelativeScalar(0.85, RelativeUnit.Relative),
+                RadiusY = new RelativeScalar(0.95, RelativeUnit.Relative),
+                GradientStops = { new GradientStop(Lighten(hue, 0.1), 0), new GradientStop(Darken(hue, 0.4), 1) },
+            };
+            var road = new Canvas { IsHitTestVisible = false, Opacity = 0.22, Width = 330, Height = 200 };
+            void Line(double x1, double y1, double x2, double y2, double thickness, double opacity = 1, AvaloniaList<double>? dash = null) =>
+                road.Children.Add(new global::Avalonia.Controls.Shapes.Line
+                {
+                    StartPoint = new Point(x1, y1), EndPoint = new Point(x2, y2), Stroke = Brushes.White,
+                    StrokeThickness = thickness, Opacity = opacity, StrokeDashArray = dash,
+                });
+            // The geometry assumes ~330 x 200; the Viewbox scales it with the tile.
+            Line(-30, 200, 150, 96, 1.5); Line(90, 200, 158, 96, 1.5); Line(240, 200, 172, 96, 1.5); Line(360, 200, 180, 96, 1.5);
+            Line(165, 200, 165, 96, 2, 1, new AvaloniaList<double> { 4, 5 });
+            Line(0, 96, 330, 96, 1, 0.6);
+            host.Children.Add(new Viewbox { Stretch = Stretch.Fill, IsHitTestVisible = false, Child = road });
+            host.Children.Add(new TextBlock
+            {
+                Text = glyph, FontSize = 64, FontFamily = new FontFamily("Fredoka, Segoe UI"),
+                Foreground = Brushes.White, Opacity = 0.95, Margin = new Thickness(0, 0, 0, 12),
+                HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
+            });
+        }
+
+        /// <summary>WPF BuildMysteryPlate: the hue pulled down to dusk and a large "?". Nothing on it names the game.</summary>
+        private static void BuildMysteryPlate(Panel host, Color hue)
+        {
+            host.Background = new RadialGradientBrush
+            {
+                GradientOrigin = new RelativePoint(0.5, 0.35, RelativeUnit.Relative),
+                Center = new RelativePoint(0.5, 0.35, RelativeUnit.Relative),
+                RadiusX = new RelativeScalar(0.85, RelativeUnit.Relative),
+                RadiusY = new RelativeScalar(0.95, RelativeUnit.Relative),
+                GradientStops = { new GradientStop(Darken(hue, 0.55), 0), new GradientStop(Darken(hue, 0.22), 1) },
+            };
+            host.Children.Add(new TextBlock
+            {
+                Text = "?", FontSize = 96, FontWeight = FontWeight.Bold, FontFamily = new FontFamily("Fredoka, Segoe UI"),
+                Foreground = new SolidColorBrush(Lighten(hue, 0.55)), Opacity = 0.95, Margin = new Thickness(0, 0, 0, 12),
+                HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
+            });
         }
 
         private IBrush Res(string key) => (IBrush)this.FindResource(key)!;

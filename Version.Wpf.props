@@ -1,0 +1,9 @@
+<Project>
+  <!-- The version of the shipping WPF head (ConditioningControlPanel.csproj), and only that head.
+       The Avalonia head and Core read ..\Version.props (7.2.0 with its "parity" label); the WPF
+       app is still the released 7.1.5 line and must never report the port's number. A WPF release
+       bumps this and UpdateService.AppVersion (see ConditioningControlPanel/CLAUDE.md). -->
+  <PropertyGroup>
+    <Version>7.1.5</Version>
+  </PropertyGroup>
+</Project>

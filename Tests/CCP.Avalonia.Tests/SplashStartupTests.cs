@@ -62,7 +62,7 @@ public sealed class SplashStartupTests
             await start;
             Assert.Equal(new[] { "settings", "audio", "shell built" }, ran);
             Assert.True(shell.IsVisible);
-            Assert.Equal("Ready!", Status(splash));
+            Assert.Equal("Ready", Status(splash));
             Assert.False(splash.Topmost);   // dropped first so the shell is not hidden under the fade
 
             for (int i = 0; i < 120 && splash.IsVisible; i++)

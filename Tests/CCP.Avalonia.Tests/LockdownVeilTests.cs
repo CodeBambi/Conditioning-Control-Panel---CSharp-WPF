@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
@@ -169,8 +170,13 @@ public sealed class LockdownVeilTests
         var host = new Window { Width = 900, Height = 900 };
         host.Show();
         var oldPremium = CoreEntitlement.HasPremiumProvider;
+        var oldPrograms = AvApp.Programs;
+        var programsDir = Directory.CreateTempSubdirectory("ccp-veil-programs-").FullName;
+        var programs = AvApp.Programs = new ConditioningControlPanel.Services.Program.ProgramService(
+            Path.Combine(programsDir, "programs.json"), readOnly: false);
         try
         {
+            Assert.NotNull(programs.Enroll(programs.Library.First(p => p.Id == "first_week")));
             CoreEntitlement.HasPremiumProvider = () => true;
             s.AutonomyConsentGiven = true;
             s.AutonomyResumeOnStartup = false;
@@ -225,6 +231,13 @@ public sealed class LockdownVeilTests
                           || ToolTip.GetTip(NoPanic(host)) as string != Loc.Get("tooltip_you_are_in_lockdown_mode_there_is_no_escape")),
                 // WPF Lab.cs:612: the CC Labs door is greyed, not only refused
                 ("CC Labs button greyed", () => { }, () => shell.Named<Button>("BtnBackToLauncher")!.IsEnabled),
+                // programs 3a (P05; WPF has no gate): each lifecycle door says Lockdown before anything else
+                ("program Enroll", () => _ = shell.EnrollProgramAsync("first_week"),
+                    () => !DialogTexts(shell).Contains(Loc.Get("msg_you_are_in_lockdown_mode_nthere_is_no_escape"))),
+                ("program Withdraw", () => _ = shell.WithdrawProgramAsync(),
+                    () => programs.ActiveEnrollment == null || !DialogTexts(shell).Contains(Loc.Get("msg_you_are_in_lockdown_mode_nthere_is_no_escape"))),
+                ("program Start session", () => _ = shell.StartProgramSessionAsync(),
+                    () => !DialogTexts(shell).Contains(Loc.Get("msg_you_are_in_lockdown_mode_nthere_is_no_escape"))),
                 // WPF LauncherHost.cs:413 and the launcher Stop link
                 ("launcher close", launcher.RequestClose, () => !launcher.IsVisible),
                 ("launcher Stop link", () => Click(launcher.FindControl<Button>("StopLink")!), () => !CoreEngine.IsRunning),
@@ -252,6 +265,9 @@ public sealed class LockdownVeilTests
         finally
         {
             CoreEntitlement.HasPremiumProvider = oldPremium;
+            programs.Dispose();
+            AvApp.Programs = oldPrograms;
+            Directory.Delete(programsDir, true);
             s.BubbleCountStrictLock = false;
             s.FlashEnabled = false;
             runner.Stop();
@@ -438,5 +454,112 @@ public sealed class LockdownVeilTests
             Assert.False(CoreSettings.Current.HideLockdownTimer);
         }
         finally { CoreSettings.Current.HideLockdownTimer = false; }
+    });
+
+    private static string? Hex(object? brush) => (brush as global::Avalonia.Media.ISolidColorBrush)?.Color.ToUInt32().ToString("x8");
+
+    /// <summary>WPF ApplyLockdownTheme / RestoreLockdownTheme / PlayLockdownActivationAnimation
+    /// (Lab.cs:1147/1203/1254): Activate turns window, title bar, accent brushes and the Lockdown card
+    /// blood-red and drops a crimson veil that fades out over 600 ms; Deactivate gives every one back.</summary>
+    [Fact]
+    public void Activation_TurnsTheShellBloodRed_FlashesOnce_AndExitRestoresIt() => Run((shell, ld) =>
+    {
+        var res = Application.Current!.Resources;
+        Assert.True(res.TryGetResource("PinkBrush", null, out var pb));
+        var pinkBefore = Hex(pb);
+        var titleBar = shell.Named<Border>("TitleBarBorder")!;
+        var titleBefore = Hex(titleBar.Background);
+        var windowBefore = Hex(shell.Background);
+        var card = shell.Named<LockdownTabView>("LockdownTab")!.LockdownCardBorder;
+        var root = shell.Named<Grid>("RootGrid")!;
+        Assert.Null(shell.LockdownFlash);
+
+        ld.Activate(TimeSpan.FromMinutes(30));
+        Frame();
+        Assert.True(res.TryGetResource("PinkBrush", null, out pb));
+        Assert.Equal("ffdc143c", Hex(pb));
+        Assert.Equal("ff8b0000", Hex(titleBar.Background));
+        Assert.Equal("ff100505", Hex(shell.Background));
+        Assert.Equal("ffdc143c", Hex(card.BorderBrush));
+        Assert.Equal("ffdc143c", Hex(shell.Named<TextBlock>("TxtPlayerTitle")!.Foreground));
+
+        var flash = shell.LockdownFlash!;
+        Assert.Same(root, flash.Parent);
+        Assert.False(flash.IsHitTestVisible);
+        shell.PaintLockdownFlash(300);
+        Assert.Equal(0.25, flash.Opacity, 3);
+        shell.PaintLockdownFlash(600);
+        Assert.DoesNotContain(flash, root.Children);
+        Assert.Null(shell.LockdownFlash);
+
+        ld.Deactivate();
+        Frame();
+        Assert.True(res.TryGetResource("PinkBrush", null, out pb));
+        Assert.Equal(pinkBefore, Hex(pb));
+        Assert.Equal(titleBefore, Hex(titleBar.Background));
+        Assert.Equal(windowBefore, Hex(shell.Background));
+        Assert.IsAssignableFrom<global::Avalonia.Media.ILinearGradientBrush>(card.BorderBrush);
+        Assert.False(shell.LockdownThemed);
+    });
+
+    /// <summary>WPF OnLockdownActivated / Deactivated (Lab.cs:640-656 / 726-739): the Studio rack's
+    /// Video Strict toggle is greyed while Lockdown forces Strict Lock; Bubble Count's only when
+    /// ticked; both are given back on exit.</summary>
+    [Fact]
+    public void StudioStrictToggles_GreyWhileLockdownHoldsThem() => Run((shell, ld) =>
+    {
+        var s = CoreSettings.Current;
+        try
+        {
+            ShowTab(shell, "studio");
+            var studio = shell.Named<StudioTabView>("StudioTab")!;
+            var video = studio.PanelVideo.FindControl<CheckBox>("ChkStrict")!;
+            var bubble = studio.PanelBubbleCount.FindControl<CheckBox>("ChkStrict")!;
+            var tip = Loc.Get("tooltip_you_are_in_lockdown_mode_there_is_no_escape");
+
+            s.BubbleCountStrictLock = false;
+            studio.FocusRackEntry("video");
+            Frame();
+            Assert.True(TopLevel.GetTopLevel(video) != null, "video strict not attached");
+            ld.Activate(TimeSpan.FromMinutes(30));
+            Frame();
+            Assert.False(video.IsEnabled);
+            Assert.Equal(0.4, video.Opacity);
+            Assert.Equal(tip, ToolTip.GetTip(video));
+            var host = new Window { Width = 900, Height = 900 };
+            host.Show();
+            var late = Host(host, new VideoFeatureControl()).FindControl<CheckBox>("ChkStrict")!;   // attached mid-run
+            Assert.False(late.IsEnabled);
+            var lateBubble = Host(host, new BubbleCountFeatureControl());
+            s.BubbleCountStrictLock = true;    // ticked mid-run, then detached and re-attached
+            host.Content = null;
+            Host(host, lateBubble);
+            Assert.True(lateBubble.FindControl<CheckBox>("ChkStrict")!.IsEnabled, "WPF greys only at activation (Lab.cs:652), not on re-attach");
+            s.BubbleCountStrictLock = false;
+            host.Close();
+            studio.FocusRackEntry("bubblecount");
+            Frame();
+            Assert.True(bubble.IsEnabled);     // unticked: may still be switched on
+            ld.Deactivate();
+            Frame();
+            studio.FocusRackEntry("video");
+            Frame();
+            Assert.True(video.IsEnabled);
+            Assert.Equal(1.0, video.Opacity);
+            Assert.Null(ToolTip.GetTip(video));
+
+            s.BubbleCountStrictLock = true;
+            ld.Activate(TimeSpan.FromMinutes(30));
+            Frame();
+            studio.FocusRackEntry("bubblecount");
+            Frame();
+            Assert.False(bubble.IsEnabled);
+            Assert.Equal(tip, ToolTip.GetTip(bubble));
+            ld.Deactivate();
+            Frame();
+            Assert.True(bubble.IsEnabled);
+            Assert.Null(ToolTip.GetTip(bubble));
+        }
+        finally { s.BubbleCountStrictLock = false; }
     });
 }

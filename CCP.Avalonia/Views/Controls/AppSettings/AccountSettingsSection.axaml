@@ -13,12 +13,13 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+             xmlns:tabs="clr-namespace:ConditioningControlPanel.Avalonia.Views.Tabs"
              xmlns:fx="clr-namespace:ConditioningControlPanel.Avalonia.Controls"
              x:Class="ConditioningControlPanel.Avalonia.Views.Controls.AppSettings.AccountSettingsSection">
 
     <StackPanel>
 
-        <TextBlock Text="{loc:Str set2_section_account}" Theme="{StaticResource SectionHeader}"/>
+        <TextBlock Text="{loc:Str settings_section_plans}" Theme="{StaticResource SectionHeader}"/>
 
         <!-- Net-new: who you are, and which bar you clear. Painted by RefreshTierBadge(). -->
         <Border x:Name="AccountTierCard" CornerRadius="12" Padding="0" Margin="0,0,0,12"
@@ -59,6 +60,13 @@
                 </Grid>
             </Grid>
         </Border>
+
+        <!-- ==== PLANS (WPF 7.1.5 nav rework, REHOME lane; trimmed in polish 12) ====
+             The vault header with the tier plates, a link to the full Premium page (Home >
+             Premium) and the invites card. The shelf and the spotlight live on the Premium page.
+             AppSettingsTabView.SyncPlansMotion starts / parks the room while the Account pill
+             is lit. -->
+        <tabs:ExclusivesTabView x:Name="PlansView" PlansMode="True" Margin="0,0,0,12"/>
 
         <!-- Brand card: keeps Patreon red, takes the shared edge-bar pattern in that colour. -->
         <Border x:Name="PatreonLoginCard" CornerRadius="12" Padding="0" Margin="0,0,0,12"
@@ -228,7 +236,7 @@
             </Grid>
         </Border>
 
-        <!-- Starts hidden; shown only with a cloud identity. -->
+        <!-- Starts hidden; shown only with a cloud identity (AccountSettingsSection.CloudBackup.cs). -->
         <Border x:Name="CloudSettingsBackupSection" Background="{DynamicResource DarkerBgBrush}" CornerRadius="12" Padding="0" Margin="0,0,0,12"
                 BorderBrush="{StaticResource SectionHueAccountBorderBrush}" BorderThickness="1" IsVisible="False">
             <Grid>
@@ -250,7 +258,7 @@
                                 FontWeight="Bold" FontSize="12"
                                 Cursor="Hand"
                                 Click="BtnBackupSettingsNow_Click">
-                            <TextBlock Text="{loc:Str btn_backup_now}"/>
+                            <TextBlock x:Name="TxtBtnBackupNow" Text="{loc:Str btn_backup_now}"/>
                         </Button>
                         <Button x:Name="BtnRestoreSettings"
                                 Background="Transparent" Foreground="{DynamicResource SecondaryBrush}"
@@ -258,7 +266,7 @@
                                 FontWeight="Bold" FontSize="12"
                                 Cursor="Hand"
                                 Click="BtnRestoreSettings_Click">
-                            <TextBlock Text="{loc:Str btn_restore_from_cloud}"/>
+                            <TextBlock x:Name="TxtBtnRestore" Text="{loc:Str btn_restore_from_cloud}"/>
                         </Button>
                     </StackPanel>
                 </StackPanel>
@@ -278,7 +286,7 @@
                     <TextBlock Text="{loc:Str label_export_your_cloud_data_or_view_our_privacy_po}"
                                Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,10"/>
 
-                    <!-- The same switch as the friends drawer header (WPF FRIENDS PRESENCE row). -->
+                    <!-- FRIENDS PRESENCE (WPF 2026-09-28): the same switch as the friends drawer header. -->
                     <Grid MinHeight="34" ColumnDefinitions="*,Auto" ToolTip.Tip="{loc:Str friends_presence_toggle_tip}">
                         <TextBlock Grid.Column="0" Theme="{StaticResource SettingLabel}"
                                    Foreground="{StaticResource SectionHueAccountBrush}"
@@ -286,17 +294,15 @@
                                    Margin="0,0,14,0" TextTrimming="CharacterEllipsis"/>
                         <CheckBox Grid.Column="1" x:Name="ChkFriendsPresence"
                                   Theme="{StaticResource ToggleStyle}" IsChecked="False"
-                                  VerticalAlignment="Center"
-                                  IsCheckedChanged="ChkFriendsPresence_Changed"/>
+                                  VerticalAlignment="Center"/>
                     </Grid>
                     <TextBlock Text="{loc:Str friends_presence_setting_hint}"
                                Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                TextWrapping="Wrap" Margin="0,2,0,12"/>
 
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                        <!-- Hidden until GDPR export is ported (needs ProfileSync's export call): a
-                             visible button that does nothing is worse than none. -->
-                        <Button x:Name="BtnExportData" IsVisible="False"
+                        <!-- GDPR export: live (AccountSettingsSection.Providers.cs ExportDataAsync). -->
+                        <Button x:Name="BtnExportData"
                                 Background="#555" Foreground="White"
                                 BorderThickness="0" Padding="15,8" Margin="0,0,10,0"
                                 FontWeight="Bold" FontSize="12"

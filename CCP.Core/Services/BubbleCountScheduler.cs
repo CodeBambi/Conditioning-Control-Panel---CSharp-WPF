@@ -36,8 +36,7 @@ namespace ConditioningControlPanel.Services
     /// The Bambi Freeze lead-in (:353) goes through <see cref="CoreSubliminal.TriggerBambiFreeze"/>.
     /// A game due while another fullscreen interaction is up waits and replays once it ends
     /// (WPF TriggerGame :321 queueing on InteractionQueue), re-checked every <see cref="QueuePoll"/>.
-    /// ponytail: local clips only - pack clips and the For You defer need ContentPacks / the feed
-    /// host, neither of which exists outside the WPF head yet.
+    /// Pack clips come through <see cref="PackVideos"/>. ponytail: the For You defer needs the feed host.
     /// </summary>
     public sealed class BubbleCountScheduler
     {
@@ -221,6 +220,7 @@ namespace ConditioningControlPanel.Services
                     Log.Information("Bubble count game completed! +{Xp} XP", xp);
                 }
                 CoreProgression.TrackBubbleCountCompleted();
+                CoreTubeEvents.RaiseBubbleGameCompleted();   // WPF GameCompleted (tube#T5)
                 return;
             }
             var s = CoreSettings.Current;
@@ -229,20 +229,21 @@ namespace ConditioningControlPanel.Services
                 _retryCount = 0;
                 Idle();
                 Log.Information("Bubble count game failed");
+                CoreTubeEvents.RaiseBubbleGameFailed();   // WPF GameFailed (tube#T5)
                 return;
             }
             _retryCount++;
             if (_retryCount >= s.MercyAfterFails && s.MercySystemEnabled)   // #1145: 2..10, default 3
             {
                 Log.Information("Bubble count mercy after {Retries} retries", _retryCount);
-                _host.ShowMessage(CoreMods.AttentionCheckMercyMessage ?? "BAMBI GETS MERCY", 2500, () => { _retryCount = 0; Idle(); });
+                _host.ShowMessage(CoreMods.AttentionCheckMercyMessage ?? "BAMBI GETS MERCY", 2500, () => { _retryCount = 0; Idle(); CoreTubeEvents.RaiseBubbleGameFailed(); });
                 return;
             }
             Log.Information("Bubble count retry {Count} (mercy at {Mercy})", _retryCount, s.MercyAfterFails);
             _host.ShowMessage(CoreMods.BubbleCountRetryMessage ?? "WRONG!\nWATCH AGAIN", 2000, () =>
             {
                 if (!IsBusy) return;   // panic during the message
-                if (!Play(true)) { Log.Warning("BubbleCountService: No videos for retry, granting mercy"); _retryCount = 0; Idle(); }
+                if (!Play(true)) { Log.Warning("BubbleCountService: No videos for retry, granting mercy"); _retryCount = 0; Idle(); CoreTubeEvents.RaiseBubbleGameFailed(); }
             });
         }
 
@@ -252,11 +253,24 @@ namespace ConditioningControlPanel.Services
             CoreBubbles.Resume();
         }
 
+        /// <summary>WPF BubbleCountService.ReloadAssets: drop the dealt queue so the next game re-reads
+        /// the enabled library (#130).</summary>
+        public void ReloadAssets() => _queue = new Queue<string>();
+
         internal string? PickNext()
         {
+            var packCount = PackVideos?.Count ?? 0;
             if (_queue.Count == 0) _queue = new Queue<string>(_library().OrderBy(_ => _random.Next()));
+            // WPF GetNextVideo (BubbleCountService.cs:697): pack clips join, weighted by count, each a
+            // fresh decrypt kept on PackVideos' record.
+            if (PackVideos != null && Flash.FlashSourceRules.ShouldDrawPack(_queue.Count, packCount, _random)
+                && PackVideos.TryNext(out var entry) && PackVideos.Decrypt(entry) is { } temp)
+                return temp;
             return _queue.Count > 0 ? _queue.Dequeue() : null;
         }
+
+        /// <summary>The content-pack clips mixed in (WPF _packVideos); null = local only.</summary>
+        public PackMediaPool? PackVideos { get; set; }
 
         private ITimer After(TimeSpan due, Action<ITimer?> tick)
         {

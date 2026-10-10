@@ -79,8 +79,8 @@ public sealed class PanicSurfacesTests
     /// <summary>Surfaces a panic must never lose. Dropping one fails here; a new surface needs no edit.</summary>
     private static readonly string[] SafetyCritical =
     {
-        "intake", "voice-capture", "ai-followups", "blink-trainer", "gaze-minigame", "mantra", "chaos", "haptics",
-        "remote-haptics", "takeover", "engine", "pink-rush", "corner-gif", "lock-cards", "attention-test", "deeper-editor-audio", "camera",
+        "intake", "voice-capture", "ai-followups", "blink-trainer", "gaze-minigame", "mantra", "haptics",
+        "remote-haptics", "remote-overlays", "takeover", "program-session", "engine", "pink-rush", "corner-gif", "lock-cards", "attention-test", "deeper-editor-audio", "deeper-player", "camera",
     };
 
     /// <summary>The order that is contract: (stops first, stops later). WPF refs are
@@ -97,7 +97,8 @@ public sealed class PanicSurfacesTests
         // WPF :1714-1721 game surfaces + Lab minigames close BEFORE RunPanicStopTail (:1722); the engine stop never reaches them.
         ("blink-trainer", "engine", "Lab minigames before the engine"),
         ("gaze-minigame", "engine", "Lab minigames before the engine"),
-        ("chaos", "engine", "WPF GameSurfaces.cs:50 'chaos' closes before the tail"),
+        // The native Chaos run is retired on this head (owner, 2026-10-10): Chaos is a web game window.
+        ("games", "engine", "WPF GameSurfaces.cs: every game surface closes before the tail"),
         // WPF :1808 KillAllAudio (App.xaml.cs:1780 Mantra.Dispose) runs before StopEngine (:1827).
         ("mantra", "engine", "audio killed before the engine stop"),
         // WPF :1786 remote haptics and :1992 haptics PanicStop come before StopEngine (:1827).
@@ -114,6 +115,11 @@ public sealed class PanicSurfacesTests
         // gaze minigame ends before the camera it reads (PanicSurfaces.cs comment).
         ("gaze-minigame", "camera", "gaze ends before the camera stops"),
     };
+
+    [Fact]
+    public void TheSurfaceListIsExactAndOrdered() =>
+        Assert.Equal(new[] { "intake", "games", "friends-landing", "voice-capture", "ai-followups", "blink-trainer", "gaze-minigame", "mantra", "haptics", "remote-haptics", "remote-overlays",
+            "possession", "takeover", "program-session", "engine", "pink-rush", "corner-gif", "tube", "lock-cards", "attention-test", "deeper-editor-audio", "deeper-player", "camera" }, PanicSurfaces.All.Select(x => x.Id));
 
     [Fact]
     public void EveryIdIsUniqueAndEverySafetyCriticalIdIsRegistered()
@@ -153,8 +159,11 @@ public sealed class PanicSurfacesTests
         ["LockCardWindow"] = "phrase mic + cards: the 'lock-cards' surface (StopLockCards) closes every card",
         ["DevicesSettingsSection"] = "camera preview/calibration: the 'camera' surface stops WebcamTracker",
         ["BlinkTrainerTabView"] = "camera: the 'camera' and 'blink-trainer' surfaces",
+        ["SettingsTabView"] = "the Home browser card's webcam pill: the 'camera' surface stops WebcamTracker",
+        ["PlayTabView"] = "the Focus Gaze switch starts the camera: the 'camera' surface stops WebcamTracker, which stands GazeFocusHead down",
         ["LibVlcAudio"] = "the CoreAudio sink: Core services stop their clips on the 'engine' surface",
         ["MandatoryVideoOverlay"] = "Core video sink: the 'engine' surface (CoreEngine.Stop) closes it",
+        ["FlashClipPlayer"] = "a flash's muted clip: the 'engine' surface (FlashOverlay.CloseAll) closes the window, which disposes it",
         ["BubbleCountWindow"] = "Core bubble-count sink: the 'engine' surface closes it",
         ["BubbleCountHost"] = "Core bubble-count sink: the 'engine' surface closes it",
         ["PopQuizHost"] = "OnEngineStopped closes it after the 'engine' surface",
@@ -164,6 +173,12 @@ public sealed class PanicSurfacesTests
         ["MiniPlayerWindow"] = "only --video-check (a CLI diagnostic) opens it",
         ["DeeperLocalAudio"] = "the Deeper editor's transport: the 'deeper-editor-audio' surface pauses every open editor",
         ["MediaHistoryWindow"] = "WPF parity: the Media Log's muted preview of a user-picked row; WPF panic leaves that window alone",
+        ["LeashTaskHost"] = "registers itself at startup (LeashTaskHost.HookPanic: the leash-task stop, right after intake)",
+        ["LeashExplainHost"] = "the leash '?' help router: a still explainer card the player opened, starts no feature; WPF panic leaves it alone",
+        ["FriendsFeedHost"] = "the friends feed log: opens no surface, nothing to stop",
+        ["RaceTrackPlayer"] = "the race's own track: the 'games' surface closes the race window, whose Closed funnel (DisposeRace -> DisposeRaceTracks) stops and disposes it (RaceTrackTests)",
+        ["DeeperWaveform"] = "the Deeper waveform's peak decode: a LibVLC sout chain that writes a temp WAV and nothing else (no sound, no picture, no window), so there is nothing for a panic to stop; it is cancelled by its window's token on close or clip swap (DeeperWaveformTests)",
+        ["WinRtScreenReader"] = "screen OCR (RecognizeAsync is not the mic): not a surface of its own. Owner 2026-10-10: every accepted panic press calls PanicSurfaces.SwitchOffKeywordTriggers, which switches the screen read off as a saved setting and stops ScreenOcrService, this reader's only caller (PanicKeywordOffTests)",
     };
 
     [Fact]

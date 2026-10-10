@@ -58,7 +58,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             }
             if (tracker.Calibration == null)
             {
-                ShowError("No calibration loaded. Run Calibrate (16-point) first — the tracker test needs a calibration to project gaze onto the screen.");
+                ShowError("No calibration loaded. Run Calibrate (16-point) first - the tracker test needs a calibration to project gaze onto the screen.");
                 return;
             }
             tracker.OnGazeMove += OnGazeMove;

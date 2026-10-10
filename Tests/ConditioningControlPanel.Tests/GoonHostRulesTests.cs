@@ -1,3 +1,7 @@
+// Both assemblies carry a GoonHostService in this namespace (the WPF window host, and the windowless
+// half ported to CCP.Core); this suite pins the WPF app's.
+extern alias wpf;
+using GoonHostService = wpf::ConditioningControlPanel.Services.GoonGame.GoonHostService;
 using ConditioningControlPanel.Services.GoonGame;
 using Xunit;
 

@@ -148,7 +148,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         private static string BuildRegionSelectionSummary(Region region)
         {
             var label = string.IsNullOrWhiteSpace(region.Label) ? region.Id : region.Label;
-            return $"{Loc.Get("deeper_editor_selection_kind_region")} · {label} ({FormatTimeShort(region.Start)}–{FormatTimeShort(region.End)})";
+            return $"{Loc.Get("deeper_editor_selection_kind_region")} · {label} ({FormatTimeShort(region.Start)}-{FormatTimeShort(region.End)})";
         }
 
         private static string BuildHapticSelectionSummary(HapticEvent ev)

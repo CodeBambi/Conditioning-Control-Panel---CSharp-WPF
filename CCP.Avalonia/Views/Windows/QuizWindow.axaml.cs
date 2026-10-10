@@ -259,7 +259,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             BuildCategoryButtons();
 
             // Start glow pulse animation (the style in .axaml carries the keyframes)
-            _glowOverlay.Classes.Add("pulse");
+            Helpers.VisibleBeat.Attach(_glowOverlay,
+                t => _glowOverlay.Opacity = 0.03 + (0.05 * Helpers.BeatLoop.PingPong(t, 2)),
+                () => _glowOverlay.Opacity = 0.05);
 
             // Initialize animated background gradient
             _bgStop0 = new GradientStop(_gradientPalette[0], 0.0);
@@ -731,7 +733,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 }
                 else
                 {
-                    trendBlock.Text = $"Score: {trend.LatestPercent}% \u2014 Your first {QuizStore.DisplayName(entry)} quiz!";
+                    trendBlock.Text = $"Score: {trend.LatestPercent}% - Your first {QuizStore.DisplayName(entry)} quiz.";
                 }
 
                 _trendPanel.Children.Add(trendBlock);

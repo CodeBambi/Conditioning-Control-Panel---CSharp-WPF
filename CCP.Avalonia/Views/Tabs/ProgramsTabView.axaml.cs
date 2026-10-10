@@ -12,11 +12,13 @@ using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models.Program;
 using ConditioningControlPanel.Services.Program;
 
+using AvApp = ConditioningControlPanel.Avalonia.App;
+
 namespace ConditioningControlPanel.Avalonia.Views.Tabs
 {
     /// <summary>
     /// Programs tab: the Core catalogue (browse) or, when App.Programs holds an enrollment, the
-    /// read-only run view (ProgramsTabView.Run.cs). No enrollment, timers, writes or sessions here.
+    /// run view (ProgramsTabView.Run.cs). The lifecycle work lives in MainShellWindow.ProgramsTab.cs.
     /// </summary>
     public partial class ProgramsTabView : UserControl
     {
@@ -35,6 +37,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             base.OnAttachedToVisualTree(e);
             LocalizationManager.Instance.LanguageChanged += OnLanguageChanged;
             CoreMods.ModChanged += OnModChanged;   // the active mod's programs lead (WPF #966)
+            Platform.ProgramEngineBridge.SessionChanged += OnProgramSessionChanged;   // P41
             RefreshPrograms();
         }
 
@@ -42,6 +45,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         {
             LocalizationManager.Instance.LanguageChanged -= OnLanguageChanged;
             CoreMods.ModChanged -= OnModChanged;
+            Platform.ProgramEngineBridge.SessionChanged -= OnProgramSessionChanged;
             UnsubscribePrograms();
             base.OnDetachedFromVisualTree(e);
         }
@@ -69,7 +73,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             // Snapshot first: replacing ItemsSource raises SelectionChanged with an empty
             // selection, which would null out _selectedProgramId before we can restore it.
             var wantedId = _selectedProgramId;
-            var items = MainShellWindow.BuildProgramBrowseItems(_library);
+            var items = MainShellWindow.BuildProgramBrowseItems(_library, AvApp.Programs);
             list.ItemsSource = items;
 
             Find<StackPanel>("ProgramsBrowsePanel").IsVisible = true;
@@ -126,14 +130,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         // ---- HANDLERS -------------------------------------------------------------
 
-        // Execution belongs to programs slice 3 (CHECKPOINT B). These handlers intentionally do
-        // nothing: their buttons are disabled (browse) or hidden (read-only run view), and no
-        // progress state is implied by opening or rendering this view.
-        private void BtnProgramEnroll_Click(object? sender, RoutedEventArgs e) { }
-        private void BtnProgramPauseResume_Click(object? sender, RoutedEventArgs e) { }
-        private void BtnProgramWithdraw_Click(object? sender, RoutedEventArgs e) { }
-        private void BtnStartTodaySession_Click(object? sender, RoutedEventArgs e) { }
-        private void BtnProgramSubmitRitual_Click(object? sender, RoutedEventArgs e) { }
+        // Every lifecycle door forwards to the shell (WPF keeps them on MainWindow):
+        // MainShellWindow.ProgramsTab.cs owns the read-only and Lockdown refusals.
+        private MainShellWindow? Shell => TopLevel.GetTopLevel(this) as MainShellWindow;
+        internal void BtnProgramEnroll_Click(object? sender, RoutedEventArgs e) =>
+            _ = Shell?.EnrollProgramAsync((sender as Button)?.Tag as string);
+        internal void BtnProgramPauseResume_Click(object? sender, RoutedEventArgs e) => _ = Shell?.PauseResumeProgramAsync();
+        internal void BtnProgramWithdraw_Click(object? sender, RoutedEventArgs e) => _ = Shell?.WithdrawProgramAsync();
+        internal void BtnStartTodaySession_Click(object? sender, RoutedEventArgs e) => _ = Shell?.StartProgramSessionAsync();
+        internal void BtnProgramSubmitRitual_Click(object? sender, RoutedEventArgs e) =>
+            _ = Shell?.SubmitProgramRitualAsync((sender as Button)?.Tag as string);
 
         /// <summary>WPF MainWindow.ProgramsTab.cs:2174 BtnProgramOpenMantras_Click.</summary>
         internal void BtnProgramOpenMantras_Click(object? sender, RoutedEventArgs e)
@@ -145,8 +151,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             }
             catch (Exception ex) { Serilog.Log.Warning(ex, "Program mantra launch failed"); }
         }
-        private void BtnProgramRestart_Click(object? sender, RoutedEventArgs e) { }
-        private void BtnProgramDismissGraduated_Click(object? sender, RoutedEventArgs e) { }
+        internal void BtnProgramRestart_Click(object? sender, RoutedEventArgs e) => _ = Shell?.RestartProgramAsync();
+        internal void BtnProgramDismissGraduated_Click(object? sender, RoutedEventArgs e) => Shell?.DismissGraduatedProgram();
 
         /// <summary>
         /// Keeps the session bar's clip a rounded rect at its live size. A Border's ClipToBounds

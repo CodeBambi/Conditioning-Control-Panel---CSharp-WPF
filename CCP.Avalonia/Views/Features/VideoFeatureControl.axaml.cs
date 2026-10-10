@@ -40,6 +40,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             // InitializeComponent, not AvaloniaXamlLoader.Load: only the generated one assigns the
             // x:Name fields, and everything below reads them.
             InitializeComponent();
+            // WPF ApplyFeatureArt: hero + side plates from features/mandatory_videos.png, mod override first, repainted on a mod switch.
+            Helpers.ModArt.BindFeaturePlates(this, "features/mandatory_videos.png", HeroArt, SideArt);
 
             ChkEnable.IsCheckedChanged += ChkEnable_Changed;
             CmbMonitor.DropDownOpened += (_, _) => PopulateMonitors();
@@ -49,6 +51,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             CmbMercyAfter.SelectionChanged += CmbMercyAfter_Changed;
             SliderPerHour.ValueChanged += SliderPerHour_Changed;
             ChkStrict.IsCheckedChanged += ChkStrict_Changed;
+            // WPF Lab.cs:640-647 / 726-732: greyed while a Lockdown forces Strict Lock, given back on exit.
+            Windows.MainShellWindow.HoldWhileLockdown(ChkStrict, () => ConditioningControlPanel.Services.LockdownStrictHold.HoldsNow);
             SliderVideoMinDur.ValueChanged += SliderVideoMinDur_Changed;
             SliderVideoMaxDur.ValueChanged += SliderVideoMaxDur_Changed;
             ChkMiniGame.IsCheckedChanged += ChkMiniGame_Changed;
@@ -63,11 +67,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
 
             LoadFromSettings();
 
-            // ponytail: WPF also repaints the hero and side art plates here (ApplyFeatureArt +
-            // App.Mods.ModChanged). The mod-override half of ResolveImageDecoded is portable now
-            // (CoreModArt.OverridePath), but the plate still needs a named ImageBrush in the
-            // .axaml, which Avalonia rejects (x:Name on a brush is AVLN2000); the port draws a
-            // static wash instead, so there is nothing here to repaint.
+            // The hero and side plates repaint themselves on a mod switch (ModArt.BindFeaturePlates).
         }
 
         // ---- settings instance tracking (WPF: SettingsHook + ISettingsRebindable) --------------
@@ -410,11 +410,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             await new AttentionTargetEditorDialog().ShowDialogSafe(owner);
         }
 
+        /// <summary>The fullscreen interaction on screen right now, by its WPF queue name, or null
+        /// (WPF InteractionQueue.CurrentInteraction). A seam for tests.</summary>
+        internal static Func<string?> OtherInteraction = () =>
+            Windows.LockCardWindow.IsAnyOpen() ? "LockCard"
+            : Windows.BubbleCountWindow.IsAnyOpen() ? "BubbleCount"
+            : Windows.PopQuizWindow.IsAnyOpen() ? "PopQuiz"
+            : null;
+
         private async void BtnTestVideo_Click(object? sender, RoutedEventArgs e)
         {
-            // WPF BtnTestVideo_Click -> TriggerVideo(userInitiated: true), after its stuck-video prompt.
-            // ponytail: WPF's second prompt ("another interaction is in progress") needs the interaction
-            // queue, which this head does not have.
+            // WPF BtnTestVideo_Click -> TriggerVideo(userInitiated: true), after its two prompts.
             if (CoreEngine.Video is not { } video) return;
             if (video.IsPlaying)
             {
@@ -423,6 +429,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
                         "A video appears to be playing.\n\nIf you don't see a video, it may be stuck. Click Yes to force reset and try again.",
                         okText: "Yes")) return;
                 Serilog.Log.Warning("User requested force reset of stuck video state");
+                video.ForceCleanup();
+            }
+            // WPF's second prompt (InteractionQueue.CanStart): never fire over an open interaction
+            // without asking. This head has no queue, so the question is asked of the windows.
+            if (OtherInteraction() is { } other)
+            {
+                if (TopLevel.GetTopLevel(this) is not Window owner) return;
+                if (!await Dialogs.MessageDialog.ConfirmAsync(owner, "Please Wait",
+                        $"Another interaction is in progress ({other}).\n\nIf this seems stuck, click Yes to force reset and try again.",
+                        okText: "Yes")) return;
                 video.ForceCleanup();
             }
             video.Trigger();

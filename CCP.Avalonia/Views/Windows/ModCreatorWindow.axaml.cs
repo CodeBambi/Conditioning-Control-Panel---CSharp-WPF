@@ -337,6 +337,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             CoreTutorial.Start("Modding");
             if (!CoreTutorial.IsActive) return;
 
+            // WPF ModCreatorWindow.LaunchTutorial :257: a step with RequiresTab "mod:xxx" opens that
+            // section of THIS window, and the first step's callback is fired by hand.
+            var tours = global::ConditioningControlPanel.Avalonia.Tours.TutorialHead.Service;
+            foreach (var step in tours.CurrentSteps)
+            {
+                if (step.RequiresTab != null && step.RequiresTab.StartsWith("mod:", StringComparison.Ordinal))
+                {
+                    var sectionKey = step.RequiresTab.Substring(4);
+                    step.OnActivate = () => NavigateToSection(sectionKey);
+                }
+            }
+            try { tours.CurrentStep?.OnActivate?.Invoke(); } catch { /* a tour never blocks on UI quirks */ }
+
             _tutorialOverlay = new TutorialOverlay(this);
             _tutorialOverlay.Closed += (_, _) => _tutorialOverlay = null;
             _tutorialOverlay.Show();
@@ -669,7 +682,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             (_swatchSurface, _txtSurfaceHex) = CreateColorRow(stack, "Surface Color", "#1E1E3A");
 
             stack.Children.Add(CreateSubHeader("Ambient FX Palette"));
-            stack.Children.Add(CreateSectionDescription("Optional. Colors for the drifting fog, particle bursts, glow breathing and one-shot flashes. Leave these on the defaults and the FX follow your Filter Color, then your Accent Color — only set them when you want the atmosphere a different color from the UI."));
+            stack.Children.Add(CreateSectionDescription("Optional. Colors for the drifting fog, particle bursts, glow breathing and one-shot flashes. Leave these on the defaults and the FX follow your Filter Color, then your Accent Color - only set them when you want the atmosphere a different color from the UI."));
             (_swatchMist, _txtMistHex) = CreateColorRow(stack, "Mist Color", FxRowDefault);
             (_swatchParticle, _txtParticleHex) = CreateColorRow(stack, "Particle Color", FxRowDefault);
             (_swatchGlow, _txtGlowHex) = CreateColorRow(stack, "Glow Color", FxRowDefault);

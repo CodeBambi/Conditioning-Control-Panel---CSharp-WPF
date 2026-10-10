@@ -26,9 +26,9 @@
      no x:DataType. ScaleX stays 0: MainWindow.LabTab's InstallWebcamLoadingSplash calls
      SetProgress immediately after Show(), so an empty bar is the true first frame. -->
 <Window xmlns="https://github.com/avaloniaui"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="ConditioningControlPanel.Avalonia.Views.Windows.WebcamLoadingSplash"
-        Title="Starting Eye Tracking"
+        Title="{loc:Str webcam_splash_title}"
         Height="200" Width="420"
         SystemDecorations="None"
         TransparencyLevelHint="Transparent"
@@ -39,17 +39,8 @@
         Topmost="True">
 
     <Window.Styles>
-        <!-- The WPF StartPulse() DoubleAnimation, verbatim: 1.0 -> 0.55 over 900ms, autoreversed
-             forever on a sine ease. StopPulse() removes the class. -->
-        <Style Selector="Border.pulse">
-            <Style.Animations>
-                <Animation Duration="0:0:0.9" IterationCount="INFINITE"
-                           PlaybackDirection="Alternate" Easing="SineEaseInOut">
-                    <KeyFrame Cue="0%"><Setter Property="Opacity" Value="1.0"/></KeyFrame>
-                    <KeyFrame Cue="100%"><Setter Property="Opacity" Value="0.55"/></KeyFrame>
-                </Animation>
-            </Style.Animations>
-        </Style>
+        <!-- The WPF StartPulse() DoubleAnimation (1.0 -> 0.55 over 900ms, autoreversed forever on
+             a sine ease) runs from StartPulse() on the shared 30 fps beat. -->
     </Window.Styles>
 
     <Border Background="{DynamicResource DarkerBgBrush}" CornerRadius="15" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="2"
@@ -67,7 +58,7 @@
             <!-- Title -->
             <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Center">
                 <TextBlock Text="&#x1F441;" FontSize="20" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                <TextBlock Text="Starting Eye Tracking"
+                <TextBlock Text="{loc:Str webcam_splash_title}"
                            FontSize="20"
                            FontWeight="Bold"
                            Foreground="{DynamicResource PinkBrush}"
@@ -78,7 +69,7 @@
             <!-- Loading status -->
             <TextBlock x:Name="TxtStatus"
                        Grid.Row="1"
-                       Text="Preparing eye-tracking engine…"
+                       Text="{loc:Str webcam_splash_preparing}"
                        FontSize="12"
                        Foreground="{DynamicResource TextSecondaryBrush}"
                        HorizontalAlignment="Center"
@@ -109,7 +100,7 @@
 
             <!-- Hint -->
             <TextBlock Grid.Row="3"
-                       Text="First run can take a few seconds while the camera warms up and the AI models load."
+                       Text="{loc:Str webcam_splash_first_run}"
                        FontSize="11"
                        Foreground="{DynamicResource TextMutedBrush}"
                        TextWrapping="Wrap"
@@ -119,7 +110,7 @@
 
             <!-- Drag affordance -->
             <TextBlock Grid.Row="4"
-                       Text="drag to move"
+                       Text="{loc:Str webcam_splash_drag}"
                        FontSize="9"
                        Foreground="#555555"
                        HorizontalAlignment="Center"

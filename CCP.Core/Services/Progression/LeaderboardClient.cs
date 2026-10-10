@@ -126,10 +126,11 @@ public class LeaderboardEntryData
     {
         get
         {
+            // Invariant: "120.0k" on every locale, as the leaderboard rows read (an Italian machine printed "120,0k").
             if (Xp >= 1_000_000)
-                return $"{Xp / 1_000_000.0:F1}M";
+                return FormattableString.Invariant($"{Xp / 1_000_000.0:F1}M");
             if (Xp >= 1_000)
-                return $"{Xp / 1_000.0:F1}k";
+                return FormattableString.Invariant($"{Xp / 1_000.0:F1}k");
             return Xp.ToString();
         }
     }
@@ -153,9 +154,9 @@ public class LeaderboardEntryData
     private static string FormatLargeNumber(int value)
     {
         if (value >= 1_000_000)
-            return $"{value / 1_000_000.0:F1}M";
+            return FormattableString.Invariant($"{value / 1_000_000.0:F1}M");
         if (value >= 1_000)
-            return $"{value / 1_000.0:F1}k";
+            return FormattableString.Invariant($"{value / 1_000.0:F1}k");
         return value.ToString();
     }
 

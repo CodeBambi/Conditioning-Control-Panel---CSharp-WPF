@@ -157,7 +157,7 @@
             <!-- Spinner (visible during submission) -->
             <StackPanel Grid.Row="5" x:Name="PnlSpinner" Orientation="Horizontal" Margin="0,0,0,12" IsVisible="False">
                 <TextBlock Text="⌛" FontSize="14" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                <TextBlock Text="Submitting..." Foreground="#B0B0C0" FontSize="13" VerticalAlignment="Center"/>
+                <TextBlock Text="{loc:Str dialog_catalogue_submit_spinner}" Foreground="#B0B0C0" FontSize="13" VerticalAlignment="Center"/>
             </StackPanel>
 
             <!-- Buttons -->

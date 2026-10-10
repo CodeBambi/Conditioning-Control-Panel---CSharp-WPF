@@ -1,39 +1,46 @@
 using Avalonia.Controls;
+using ConditioningControlPanel.Avalonia.Views.Controls.Companion;
+using ConditioningControlPanel.Avalonia.Views.Controls.Companion.V2;
+using ConditioningControlPanel.Services.Companion;
 
 namespace ConditioningControlPanel.Avalonia.Views.Tabs
 {
     /// <summary>
-    /// PORTED from ConditioningControlPanel/Views/Tabs/CompanionTabView.xaml.cs. The tab is a host
-    /// for one control — <see cref="Controls.Companion.CompanionRoomView"/> — plus the hidden
-    /// HelpBtnAiChat compat element. That much crosses verbatim.
+    /// PORTED from WPF 7.1.5 ConditioningControlPanel/Views/Tabs/CompanionTabView.xaml.cs. The tab
+    /// owns the room and, v2 being on for everyone, stands the <see cref="ConversationPage"/>
+    /// (Companion &gt; Chat) over it: the room is collapsed and stays in the tree as the owner of the
+    /// live zones the Companion section pages adopt (Personality, Permissions, Links, AI).
     ///
-    /// <para><b>What is stubbed, and why it is not a dropped feature.</b> The WPF file's other two
-    /// jobs are the runtime viewmodel and the compat seam: it news up a
-    /// <c>CompanionRoomRuntimeVm</c>, hands it to <c>Room.ViewModel</c>, and re-publishes ~110
-    /// control names (<c>TxtDetachStatusCompanion</c>, the sixteen AiPermissionsGrid names,
-    /// <c>_vm.Shelf.Roster.*</c>, <c>_vm.Shelf.Behavior.*</c>, …) so the seven MainWindow partials
-    /// keep the accessor path they always had. None of that has anywhere to land here: the ported
-    /// <see cref="Controls.Companion.CompanionRoomView"/> has no <c>ViewModel</c> property and no
-    /// <c>Shelf</c> zone viewmodels, and the partials that consume the names are WPF-side. Writing
-    /// 110 properties that return null would be a seam in name only — it would compile, satisfy a
-    /// reader, and break at the first use — so they are deliberately absent rather than faked.
-    /// ponytail: needs CompanionRoomRuntimeVm + the zone viewmodels (ICompanionRoomVm's eight zone
-    /// interfaces), wired when they move to Core; each passthrough is then one line.</para>
+    /// <para><b>Still not here, and why.</b> WPF news up a <c>CompanionRoomRuntimeVm</c> and
+    /// re-publishes ~110 control names for the MainWindow partials (the compat seam). This head's
+    /// zones seed their own viewmodels and no partial writes those names, so the page hands the
+    /// conversation the two viewmodels it needs (the hero's and the engine's) straight from the
+    /// zones, and the passthroughs stay absent rather than faked.</para>
     /// </summary>
     public partial class CompanionTabView : UserControl
     {
         public CompanionTabView()
         {
             InitializeComponent();
-
-            // ponytail: `_vm = new CompanionRoomRuntimeVm(() => Window.GetWindow(this) as
-            // MainWindow); Room.ViewModel = _vm;` — needs CompanionRoomRuntimeVm, wired when it
-            // moves to Core. The room seats its own per-zone sample data until then.
+            if (CompanionExperience.IsV2Enabled
+                && Room.HeroZone.ViewModel is { } hero
+                && Room.EngineZone.DataContext is EngineRoomVm engine)
+            {
+                Room.IsVisible = false;
+                Conversation = new ConversationPage(hero, engine, () => Room.HeroZone.ApplyAvatarArt());
+                PageHost.Children.Add(Conversation);
+            }
 
             // WPF hooks IsVisibleChanged here to call MainWindow.OnCompanionTabVisibilityChanged.
             // Avalonia's IsVisible is local, so the room's effective-visibility watch raises the edge.
             Room.TabVisibilityChanged += (_, visible) =>
                 (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.OnCompanionTabVisibilityChanged(visible, Room);
         }
+
+        /// <summary>The live room (collapsed under the conversation in v2): the zones' owner.</summary>
+        internal CompanionRoomView RoomView => Room;
+
+        /// <summary>Companion &gt; Chat. Null only when v2 is off (never, in this build).</summary>
+        internal ConversationPage? Conversation { get; }
     }
 }

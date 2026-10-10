@@ -1,3 +1,4 @@
+using ConditioningControlPanel.Localization;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -149,7 +150,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             if (!Tracker.IsRunning)
             {
-                ShowError("Webcam tracking is not running. Start tracking before calibrating.");
+                ShowError(Loc.Get("webcam_cal_err_not_running"));
                 return;
             }
             _before = Tracker.Calibration;
@@ -175,7 +176,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             catch (Exception ex)
             {
                 Log.Warning(ex, "WebcamCalibrationWindow: calibration sequence threw");
-                ShowError("Calibration failed unexpectedly. See logs/app.log for details.");
+                ShowError(Loc.Get("webcam_cal_err_unexpected"));
             }
         }
 
@@ -252,7 +253,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             {
                 if (_cancelled) return;
                 MoveDotTo(positions[i].Screen);
-                _txtProgress.Text = $"Point {i + 1} / {positions.Length}  ({positions[i].Label})";
+                _txtProgress.Text = Loc.GetF("webcam_cal_point_progress", i + 1, positions.Length, positions[i].Label);
 
                 bool succeeded = false;
                 for (int attempt = 1; attempt <= MaxAttemptsPerPoint && !succeeded; attempt++)
@@ -265,12 +266,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     ActiveDotIndex = i;
 
                     _txtStatus.Text = attempt == 1
-                        ? "Look at the pink dot…"
-                        : "Missed that one — let's try again. Look at the pink dot…";
+                        ? Loc.Get("webcam_cal_look_dot")
+                        : Loc.Get("webcam_cal_look_dot_retry");
                     await Delay(attempt == 1 ? ReadyMs : RetryReadyMs);
                     if (_cancelled) return;
 
-                    _txtStatus.Text = "Hold steady — sampling…";
+                    _txtStatus.Text = Loc.Get("webcam_cal_sampling");
                     WebcamQuickRecalWindow.Play("lvup.mp3", 0.25f);   // CalibrationSoundService.DotSampleStart
                     _collecting = true;
                     await Delay(SampleMs);
@@ -294,10 +295,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 if (!succeeded)
                 {
                     ShowError(
-                        $"Couldn't sample point {i + 1} ({positions[i].Label}) after " +
-                        $"{MaxAttemptsPerPoint} tries. " +
-                        $"Got {_allSamples[i].Count} samples (need at least {MinSamplesPerPoint}). " +
-                        "Make sure you're well-lit, facing the camera, and your face fits in frame.");
+                        Loc.GetF("webcam_cal_err_sample", i + 1, positions[i].Label, MaxAttemptsPerPoint, _allSamples[i].Count, MinSamplesPerPoint));
                     return;
                 }
                 StopRingPulse();
@@ -314,16 +312,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 positions.Select(p => new OpenCvSharp.Point2d(p.Screen.X, p.Screen.Y)).ToArray(), Bounds.Width, Bounds.Height);
             if (fit.Data is not { } data)
             {
-                ShowError("Couldn't fit calibration from your samples. The points may have been too similar — try again and make sure to look directly at each dot.");
+                ShowError(Loc.Get("webcam_cal_err_fit"));
                 return;
             }
             if (fit.TooInaccurate)
             {
                 Log.Warning("WebcamCalibration: fit residual too high — rms_x={Rx:F0}, rms_y={Ry:F0} DIPs; prompting redo", fit.RmsX, fit.RmsY);
-                bool redo = await Dialogs.MessageDialog.ConfirmAsync(this, "Calibration inaccurate",
-                    "This calibration came out very inaccurate — the dots didn't line up, so eye tracking would be unreliable.\n\n" +
-                    "For a better result: good, even lighting; avoid glare on glasses (or try without them); keep your head still and look right at each dot.\n\n" +
-                    "Try the calibration again?", okText: "Yes");
+                bool redo = await Dialogs.MessageDialog.ConfirmAsync(this, Loc.Get("webcam_cal_inaccurate_title"),
+                    Loc.Get("webcam_cal_inaccurate_body"), okText: Loc.Get("btn_yes"));
                 if (_cancelled) return;
                 if (redo) { WantsRecalibrate = true; Close(false); return; }
                 Log.Information("WebcamCalibration: user kept low-quality calibration despite high residual");
@@ -346,7 +342,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (!Tracker.ApplyCalibration(data))
             {
                 _validationPanel.IsVisible = false;
-                ShowError("Couldn't save the calibration. See logs/app.log for details.");
+                ShowError(Loc.Get("webcam_cal_err_save"));
                 return;
             }
             _saved = true;
@@ -361,24 +357,24 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             _dotCanvas.IsVisible = false;
             _validationPanel.IsVisible = true;
-            _txtTitle.Text = "Verifying calibration";
-            _txtStatus.Text = "Follow the prompts to confirm the system can read your blinks and mouth.";
+            _txtTitle.Text = Loc.Get("webcam_cal_verifying_title");
+            _txtStatus.Text = Loc.Get("webcam_cal_verifying_status");
             _txtProgress.Text = "";
             _txtValidationCue.Text = "";
-            _txtValidationPrompt.Text = "Get ready…";
-            _txtValidationDetail.Text = "A couple of quick gesture checks and you're done.";
+            _txtValidationPrompt.Text = Loc.Get("webcam_cal_get_ready");
+            _txtValidationDetail.Text = Loc.Get("webcam_cal_gesture_intro");
             _txtValidationAttempt.Text = "";
             await Delay(1400);
             if (_cancelled) return;
 
-            await RunGestureCheckAsync("👁", "Blink a couple of times", 2, h => Tracker.OnBlink += h, h => Tracker.OnBlink -= h);
+            await RunGestureCheckAsync("👁", Loc.Get("webcam_cal_prompt_blink"), 2, h => Tracker.OnBlink += h, h => Tracker.OnBlink -= h);
             if (_cancelled) return;
-            await RunGestureCheckAsync("😮", "Open your mouth wide", 1, null, null);
+            await RunGestureCheckAsync("😮", Loc.Get("webcam_cal_prompt_mouth"), 1, null, null);
             if (_cancelled) return;
-            _txtValidationDetail.Text = "Good — close, and once more in a moment…";
+            _txtValidationDetail.Text = Loc.Get("webcam_cal_close_again");
             await Delay(1000);
             if (_cancelled) return;
-            await RunGestureCheckAsync("😮", "Open your mouth wide again", 1, null, null);
+            await RunGestureCheckAsync("😮", Loc.Get("webcam_cal_prompt_mouth_again"), 1, null, null);
         }
 
         /// <summary>WPF RunGestureCheckAsync + WaitFor*Async: up to 5 s for <paramref name="needed"/>
@@ -388,7 +384,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             const int TimeoutMs = 5000;
             _txtValidationCue.Text = cue;
             _txtValidationPrompt.Text = prompt;
-            _txtValidationDetail.Text = $"Detected: 0 / {needed}";
+            _txtValidationDetail.Text = Loc.GetF("webcam_cal_detected_count", 0, needed);
             _txtValidationAttempt.Text = "";
 
             var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -396,7 +392,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             void Handler()
             {
                 count++;
-                _txtValidationDetail.Text = $"Detected: {count} / {needed}";
+                _txtValidationDetail.Text = Loc.GetF("webcam_cal_detected_count", count, needed);
                 if (count >= needed) tcs.TrySetResult(true);
             }
             add?.Invoke(Handler);
@@ -412,14 +408,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 var prevColor = _txtValidationCue.Foreground;
                 _txtValidationCue.Text = "✓";
                 _txtValidationCue.Foreground = new SolidColorBrush(Color.FromRgb(0x80, 0xE0, 0x80));
-                _txtValidationDetail.Text = "Detected.";
+                _txtValidationDetail.Text = Loc.Get("webcam_cal_detected");
                 await Delay(700);
                 _txtValidationCue.Text = prevCue;
                 _txtValidationCue.Foreground = prevColor;
             }
             else
             {
-                _txtValidationDetail.Text = "No worries — moving on.";
+                _txtValidationDetail.Text = Loc.Get("webcam_cal_moving_on");
                 await Delay(700);
             }
         }
@@ -443,12 +439,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             return final;
         }
 
-        /// <summary>WPF App.ApplyCalibrationScreenPlacement: start on the monitor the last calibration
-        /// ran on (matched by pixel origin) so Maximized lands there; unknown monitor: leave it.</summary>
+        /// <summary>WPF App.ApplyCalibrationScreenPlacement: start on the tracking monitor picked in
+        /// Settings > Devices (WebcamCalibrationScreen; Primary by default) so Maximized lands there.</summary>
         internal static void PlaceOnCalibratedScreen(Window window)
         {
-            if (Tracker.Calibration?.MonitorBounds is not { } mb || window.Screens is not { } screens) return;
-            if (screens.All.FirstOrDefault(s => s.Bounds.X == mb.X && s.Bounds.Y == mb.Y) is not { } sc) return;
+            if (Platform.WebcamScreen.Resolve(window.Screens) is not { } sc) return;
             window.WindowStartupLocation = WindowStartupLocation.Manual;
             window.Position = sc.Bounds.Position;
         }
@@ -478,7 +473,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         private void UpdateVerifyCountdownUi() =>
-            _txtVerifyStatus.Text = $"Move your eyes around — the pink dot should track them. {_verifyCountdownSecondsLeft}s left.";
+            _txtVerifyStatus.Text = Loc.GetF("webcam_cal_verify_countdown", _verifyCountdownSecondsLeft);
 
         private void StopVerifyCountdown()
         {
@@ -486,7 +481,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (_verifyGazeSubscribed) { Tracker.OnGazeMove -= OnVerifyGaze; _verifyGazeSubscribed = false; }
             _verifyCursor.IsVisible = false;
             _btnVerifyAccuracy.IsEnabled = true;
-            _txtVerifyStatus.Text = "Click Verify to preview accuracy with a live gaze cursor, or close when ready.";
+            _txtVerifyStatus.Text = Loc.Get("webcam_cal_verify_idle");
         }
 
         private void BtnVerifyBubbleTest_Click()

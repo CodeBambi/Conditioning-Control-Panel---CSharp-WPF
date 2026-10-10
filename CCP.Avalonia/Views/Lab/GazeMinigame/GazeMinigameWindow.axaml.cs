@@ -1,3 +1,4 @@
+using ConditioningControlPanel.Localization;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -503,8 +504,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
             var ignore = _library.Where(p => RoleOf(p) == GazePackRole.Ignore).ToList();
 
             string? reason = null;
-            if (focus == null) reason = "Pick a Focus set and at least one Ignore set.";
-            else if (ignore.Count == 0) reason = "Add at least one Ignore set (the distractions).";
+            if (focus == null) reason = Loc.Get("gaze_mini_pick_sets");
+            else if (ignore.Count == 0) reason = Loc.Get("gaze_mini_add_ignore");
             else
             {
                 // Both buckets must be able to supply at least one shared content
@@ -512,14 +513,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
                 bool sharedImages = focus.ImageCount > 0 && ignore.Any(p => p.ImageCount > 0);
                 bool sharedVideos = VideoRoundsPlayable && focus.VideoCount > 0 && ignore.Any(p => p.VideoCount > 0);
                 if (!sharedImages && !sharedVideos)
-                    reason = "Focus and Ignore don't share a content type — pick sets that both have images, or both have videos.";
+                    reason = Loc.Get("gaze_mini_no_shared_type");
             }
 
             _btnStartGame.IsEnabled = reason == null;
             if (reason == null)
             {
                 var ignoreNames = string.Join(", ", ignore.Select(p => p.Name));
-                _txtSelectionSummary.Text = $"Focus: {focus!.Name}   ·   Ignore: {ignoreNames}";
+                _txtSelectionSummary.Text = Loc.GetF("gaze_mini_selection_summary", focus!.Name, ignoreNames);
                 _txtSelectionSummary.Foreground = new SolidColorBrush(Color.FromRgb(0xBB, 0xBB, 0xBB));
             }
             else
@@ -536,7 +537,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
             {
                 var picked = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
                 {
-                    Title = "Pick a folder of images and/or videos",
+                    Title = Loc.Get("gaze_mini_pick_folder_title"),
                     AllowMultiple = false,
                 });
                 var folder = picked.Count > 0 ? picked[0].TryGetLocalPath() : null;
@@ -545,13 +546,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
                 var key = NormPath(folder);
                 if (_library.Any(p => NormPath(p.Path) == key))
                 {
-                    ShowReadyBanner("That folder is already in your library.");
+                    ShowReadyBanner(Loc.Get("gaze_mini_folder_dupe"));
                     return;
                 }
                 var pack = AssetPack.FromFolder(folder);
                 if (pack == null)
                 {
-                    ShowReadyBanner("No images or videos found in that folder.");
+                    ShowReadyBanner(Loc.Get("gaze_mini_folder_empty"));
                     return;
                 }
                 if (!_customPaths.Any(p => NormPath(p) == key)) _customPaths.Add(folder);
@@ -686,8 +687,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
                 return;
             }
             _txtVibrationStatus.Text = CoreHaptics.Service?.IsConnected == true
-                ? "Haptic device connected."
-                : "Haptic device not connected — setting saved but no vibration will fire.";
+                ? Loc.Get("gaze_mini_haptic_on")
+                : Loc.Get("gaze_mini_haptic_off");
         }
 
         private void UpdateRewardAudioVisibility()
@@ -746,7 +747,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
                 problems.Add($"videos ({_settings.VideoMaxDurationSec}s)");
             if (problems.Count > 0)
             {
-                _txtPassTimeWarn.Text = $"Pass time exceeds {string.Join(" and ", problems)} display time — those rounds will time out before you can pass.";
+                _txtPassTimeWarn.Text = $"Pass time exceeds {string.Join(" and ", problems)} display time - those rounds will time out before you can pass.";
                 _txtPassTimeWarn.IsVisible = true;
             }
             else
@@ -781,7 +782,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
             catch (Exception ex) { Log.Warning(ex, "GazeMinigame: calibration dialog failed"); }
 
             if (Tracker.Calibration == null)
-                ShowReadyBanner("Still not calibrated — run a 16-point gaze calibration so the game can read which side you're looking at.", showCalibrateAction: true);
+                ShowReadyBanner(Loc.Get("gaze_mini_not_calibrated_still"), showCalibrateAction: true);
             else
                 HideReadyBanner();
         }
@@ -797,7 +798,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
             var ignorePacks = _library.Where(p => RoleOf(p) == GazePackRole.Ignore).ToList();
             if (focusPack == null || ignorePacks.Count == 0)
             {
-                ShowReadyBanner("Pick one Focus set and at least one Ignore set first.");
+                ShowReadyBanner(Loc.Get("gaze_mini_pick_first"));
                 return;
             }
             _packs.Clear();
@@ -813,7 +814,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
                 if (_closed) return;   // closed while the dialog was up: Window_Closing already ran
                 if (!dlg.ConsentGiven)
                 {
-                    ShowReadyBanner("Camera consent is required for the gaze minigame.");
+                    ShowReadyBanner(Loc.Get("gaze_mini_consent_required"));
                     return;
                 }
             }
@@ -821,12 +822,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
             // Off the UI thread: camera open + model load can take seconds (WPF BUG-T3HE68DHXY).
             if (!Tracker.IsRunning)
             {
-                ShowReadyBanner("Starting the webcam…");
+                ShowReadyBanner(Loc.Get("gaze_mini_starting_webcam"));
                 var started = await Tracker.StartAsync();
-                if (_closed) return;   // closed during "Starting the webcam…": never suspend flashes after Window_Closing
+                if (_closed) return;   // closed during the "Starting the webcam" banner: never suspend flashes after Window_Closing
                 if (!started)
                 {
-                    ShowReadyBanner($"Couldn't start the webcam ({Tracker.LastError}). Check that no other app is using the camera.");
+                    ShowReadyBanner(Loc.GetF("gaze_mini_webcam_failed", Tracker.LastError ?? ""));
                     return;
                 }
                 HideReadyBanner();
@@ -834,7 +835,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
 
             if (Tracker.Calibration == null)
             {
-                ShowReadyBanner("No gaze calibration loaded yet. Run a 16-point calibration first so the minigame can tell which side you're looking at.", showCalibrateAction: true);
+                ShowReadyBanner(Loc.Get("gaze_mini_no_calibration"), showCalibrateAction: true);
                 return;
             }
 
@@ -850,7 +851,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
             }
             if (_rounds.Count == 0)
             {
-                ShowReadyBanner("Set at least one image or video round before starting.");
+                ShowReadyBanner(Loc.Get("gaze_mini_need_round"));
                 return;
             }
 
@@ -973,7 +974,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
             }
 
             var spec = _rounds[_currentRoundIdx];
-            _txtRoundInfo.Text = $"Round {_currentRoundIdx + 1} / {_rounds.Count}  ({spec.Type}, {spec.DurationSec}s)";
+            _txtRoundInfo.Text = Loc.GetF("gaze_mini_round_info", _currentRoundIdx + 1, _rounds.Count, spec.Type, spec.DurationSec);
 
             // Map "correct" / "noise" onto the actual left/right panes.
             var leftPath = spec.CorrectSide == GameSide.Left ? spec.CorrectPath : spec.NoisePath;
@@ -1468,8 +1469,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
             // Display-cap rounds resolve to Correct/Wrong by dwell time, so the no-decision
             // bucket should be empty in practice.
             _txtResultsHeadline.Text = timeout > 0
-                ? $"{correct} correct  ·  {wrong} wrong  ·  {timeout} no-decision"
-                : $"{correct} correct  ·  {wrong} wrong";
+                ? Loc.GetF("gaze_mini_results_headline_timeout", correct, wrong, timeout)
+                : Loc.GetF("gaze_mini_results_headline", correct, wrong);
 
             for (int i = 0; i < _results.Count; i++)
             {
@@ -1560,8 +1561,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
             try
             {
                 bool quit = await Views.Dialogs.MessageDialog.ConfirmAsync(
-                    this, "Gaze minigame",
-                    "Quit the current session? Your progress for this run will be lost.");
+                    this, Loc.Get("gaze_mini_quit_title"),
+                    Loc.Get("gaze_mini_quit_body"));
                 if (quit && _gameRunning) Close();
             }
             catch (Exception ex) { Log.Warning(ex, "GazeMinigame: quit confirmation failed"); }

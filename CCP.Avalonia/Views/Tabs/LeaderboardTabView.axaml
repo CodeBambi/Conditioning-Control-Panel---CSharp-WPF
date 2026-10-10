@@ -403,7 +403,7 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <!-- season name + live countdown -->
+                <!-- which board this is (seasons are retired: no season name, no countdown) -->
                 <StackPanel Grid.Column="0" VerticalAlignment="Center" MinWidth="180" Margin="0,0,14,0">
                     <TextBlock x:Name="TxtLeaderboardSeason"
                                FontSize="13" FontWeight="Bold"
@@ -511,10 +511,14 @@
                             ToolTip.Tip="{loc:Str btn_jump_to_me}">
                         <TextBlock Text="&#x25CE;"/>
                     </Button>
-                    <Button x:Name="BtnViewSeasonRecap" Theme="{StaticResource LbTextButton}"
-                            IsVisible="False">
-                        <TextBlock Text="{loc:Str recap_btn_view}"/>
-                    </Button>
+                    <!-- Seasons are retired (WPF 7.1.5, owner 2026-09-24): the recap button stays in the
+                         tree for its callers but its host never shows, whatever they set on the button. -->
+                    <Border x:Name="SeasonRecapHost" IsVisible="False">
+                        <Button x:Name="BtnViewSeasonRecap" Theme="{StaticResource LbTextButton}"
+                                IsVisible="False">
+                            <TextBlock Text="{loc:Str recap_btn_view}"/>
+                        </Button>
+                    </Border>
                     <Button x:Name="HelpBtnLeaderboard" Theme="{StaticResource HelpButtonStyle}"
                             VerticalAlignment="Center" Margin="6,0,0,0" Tag="Leaderboard"/>
                 </StackPanel>
@@ -617,7 +621,7 @@
                                                    Foreground="{DynamicResource PinkSoftBrush}"/>
                                     </StackPanel>
                                 </Border>
-                                <Button Classes="lbdiscord" Cursor="Hand" Tag="{Binding DiscordId}"
+                                <Button Classes="lbdiscord" Cursor="Hand" Tag="{Binding DiscordId}" Click="BtnLeaderboardDiscord_Click"
                                         ToolTip.Tip="{loc:Str tooltip_send_discord_dm}"
                                         IsVisible="{Binding HasDiscord}">
                                     <Button.Template>
@@ -835,7 +839,7 @@
                                                     </StackPanel>
                                                 </Border>
                                                 <!-- Discord (keeps the old column's click + tooltip) -->
-                                                <Button Classes="lbdiscord" Cursor="Hand" Tag="{Binding DiscordId}"
+                                                <Button Classes="lbdiscord" Cursor="Hand" Tag="{Binding DiscordId}" Click="BtnLeaderboardDiscord_Click"
                                                         ToolTip.Tip="{loc:Str tooltip_send_discord_dm}"
                                                         IsVisible="{Binding HasDiscord}">
                                                     <Button.Template>
@@ -953,9 +957,8 @@
                 </Grid.ColumnDefinitions>
 
                 <StackPanel Grid.Column="0" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
-                    <TextBlock x:Name="TxtYouDelta" FontSize="9.5" FontWeight="Bold"
-                               Margin="0,0,5,0" VerticalAlignment="Center"
-                               Foreground="{DynamicResource TextDimBrush}"/>
+                    <TextBlock x:Name="TxtYouDelta" Classes="lbdelta" FontSize="9.5" FontWeight="Bold"
+                               Margin="0,0,5,0" VerticalAlignment="Center"/>
                     <TextBlock x:Name="TxtYouRankNumber" FontSize="16" FontWeight="Bold"
                                VerticalAlignment="Center"
                                Foreground="{DynamicResource PinkBrush}"/>

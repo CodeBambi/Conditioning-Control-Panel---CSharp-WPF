@@ -21,7 +21,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         public AttentionGaugeView()
         {
             AvaloniaXamlLoader.Load(this);
-            DataContext = new AttentionGaugeViewModel(() => TopLevel.GetTopLevel(this) as Windows.MainShellWindow);
+            // The logical tree as a fallback (WPF Window.GetWindow): under companion v2 the room is
+            // collapsed, its zones never get a visual root, and the upsell still has to land.
+            DataContext = new AttentionGaugeViewModel(() => TopLevel.GetTopLevel(this) as Windows.MainShellWindow
+                ?? global::Avalonia.LogicalTree.LogicalExtensions.FindLogicalAncestorOfType<Windows.MainShellWindow>(this));
         }
 
         /// <summary>Convenience for hosts that hand in a viewmodel rather than setting DataContext.</summary>

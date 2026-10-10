@@ -13,7 +13,7 @@
      The Done button holds a TextBlock rather than a string Content, per the access-key
      trap in CLAUDE.md. The slot cards are still built in code-behind, as in WPF. -->
 <Window xmlns="https://github.com/avaloniaui"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="ConditioningControlPanel.Avalonia.Views.Windows.CornerGifWindow"
         Title="Corner GIFs"
         Width="460" Height="640"
@@ -53,7 +53,7 @@
                 Padding="16,8"
                 HorizontalAlignment="Right"
                 Margin="0,14,0,0">
-            <TextBlock Text="Done"/>
+            <TextBlock Text="{loc:Str btn_done}"/>
         </Button>
     </Grid>
 </Window>

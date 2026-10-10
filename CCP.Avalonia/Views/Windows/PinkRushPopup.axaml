@@ -26,7 +26,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="ConditioningControlPanel.Avalonia.Views.Windows.PinkRushPopup"
-        Title="Pink Rush!"
+        Title="Pink Rush"
         Width="350" Height="150"
         SystemDecorations="None"
         TransparencyLevelHint="Transparent"
@@ -66,9 +66,9 @@
 
             <!-- Text Content -->
             <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                <TextBlock x:Name="TxtPinkRushTitle" Text="⚡ PINK RUSH!" Foreground="#FF1493"
+                <TextBlock x:Name="TxtPinkRushTitle" Text="⚡ PINK RUSH" Foreground="#FF1493"
                            FontWeight="Bold" FontSize="18" Margin="0,0,0,4"/>
-                <TextBlock x:Name="TxtPinkRushSubtitle" Text="3x XP for 60 seconds!" Foreground="{DynamicResource PinkBrush}"
+                <TextBlock x:Name="TxtPinkRushSubtitle" Text="3x XP for 60 seconds" Foreground="{DynamicResource PinkBrush}"
                            FontSize="13" Margin="0,0,0,6"/>
                 <TextBlock x:Name="TxtCountdown" Text="60s remaining" Foreground="{DynamicResource TextMutedBrush}"
                            FontSize="12"/>

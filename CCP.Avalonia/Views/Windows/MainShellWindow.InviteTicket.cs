@@ -25,7 +25,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>The ticket's server read (tests swap the wire).</summary>
         internal Func<IInviteApi> InviteTicketApi { get; set; } = () => new InviteApi();
 
-        private InvitePanel? InvitesCard => Named<Tabs.ExclusivesTabView>("ExclusivesTab")?.FindControl<InvitePanel>("InvitesHost");
+        /// <summary>WPF 7.1.5 PlansVaultView.InvitesHost: the invites card lives on Settings &gt; Account &amp;
+        /// Plans (the Premium page copy keeps its panel hidden). Falls back to the Premium copy.</summary>
+        private InvitePanel? InvitesCard =>
+            Named<Tabs.AppSettingsTabView>("AppSettingsTab")?.FindControl<Views.Controls.AppSettings.AccountSettingsSection>("SectionAccount")
+                ?.Plans.FindControl<InvitePanel>("InvitesHost")
+            ?? PremiumInvitesCard;
+
+        private InvitePanel? PremiumInvitesCard => Named<Tabs.ExclusivesTabView>("ExclusivesTab")?.FindControl<InvitePanel>("InvitesHost");
 
         /// <summary>WPF InitializeInviteTicket: one delayed read, then every 30 min and on account change;
         /// every read the invites card makes repaints the ticket too.</summary>
@@ -40,6 +47,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _inviteTicketWobble = new DispatcherTimer { Interval = InviteTicketRule.NextWobble(_inviteTicketRng) };
             _inviteTicketWobble.Tick += (_, _) => WobbleInviteTicket();
             if (InvitesCard is { } card) card.Read += ApplyInviteTicket;
+            if (PremiumInvitesCard is { } premium && !ReferenceEquals(premium, InvitesCard)) premium.Read += ApplyInviteTicket;
             CoreAccount.UnifiedIdentityChanged += OnInviteTicketIdentityChanged;
             // Better than WPF (P01): no wobble ticks while the panel window is hidden.
             PropertyChanged += (_, e) => { if (e.Property == IsVisibleProperty) SyncInviteWobble(); };
@@ -97,31 +105,48 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>WPF WobbleInviteTicket: a 420 ms shake about the -8 degree rest and a small pop.</summary>
         private void WobbleInviteTicket()
         {
+          try
+          {
             if (_inviteTicketWobble != null) _inviteTicketWobble.Interval = InviteTicketRule.NextWobble(_inviteTicketRng);
             if (!AmbientFxCanvas.Env.AllowTransitions || !IsVisible || Named<Button>("BtnInviteTicket") is not { IsVisible: true } ticket
                 || ticket.Content is not Control { RenderTransform: TransformGroup g }
                 || g.Children[0] is not ScaleTransform scale || g.Children[1] is not RotateTransform tilt) return;
             const double rest = -8;
-            _ = Run(tilt, RotateTransform.AngleProperty, 420, (0.1667, rest - 14), (0.381, rest + 11), (0.595, rest - 8), (0.798, rest + 4), (1, rest));
-            _ = Run(scale, ScaleTransform.ScaleXProperty, 280, (0.5, 1.12), (1, 1.0));
-            _ = Run(scale, ScaleTransform.ScaleYProperty, 280, (0.5, 1.12), (1, 1.0));
-
-            static Task Run(Animatable target, global::Avalonia.AvaloniaProperty prop, int ms, params (double Cue, double Value)[] frames)
-            {
-                var a = new Animation { Duration = TimeSpan.FromMilliseconds(ms), Easing = new global::Avalonia.Animation.Easings.QuadraticEaseOut() };
-                foreach (var (cue, value) in frames) a.Children.Add(new KeyFrame { Cue = new Cue(cue), Setters = { new Setter(prop, value) } });
-                return a.RunAsync(target);
-            }
+            // Animation.RunAsync on a Transform throws (TransformAnimator casts to Visual) and this runs
+            // from a timer tick, so the keys go through TransformTween and the tick is guarded.
+            var ease = new global::Avalonia.Animation.Easings.QuadraticEaseOut();
+            _inviteTiltRun?.Stop();
+            _inviteTiltRun = Helpers.TransformTween.Run(tilt, TimeSpan.FromMilliseconds(420),
+                new (double, global::Avalonia.AvaloniaProperty, double)[]
+                {
+                    (0, RotateTransform.AngleProperty, rest), (0.1667, RotateTransform.AngleProperty, rest - 14),
+                    (0.381, RotateTransform.AngleProperty, rest + 11), (0.595, RotateTransform.AngleProperty, rest - 8),
+                    (0.798, RotateTransform.AngleProperty, rest + 4), (1, RotateTransform.AngleProperty, rest),
+                }, ease);
+            _invitePopRun?.Stop();
+            _invitePopRun = Helpers.TransformTween.Run(scale, TimeSpan.FromMilliseconds(280),
+                new (double, global::Avalonia.AvaloniaProperty, double)[]
+                {
+                    (0, ScaleTransform.ScaleXProperty, 1.0), (0.5, ScaleTransform.ScaleXProperty, 1.12), (1, ScaleTransform.ScaleXProperty, 1.0),
+                    (0, ScaleTransform.ScaleYProperty, 1.0), (0.5, ScaleTransform.ScaleYProperty, 1.12), (1, ScaleTransform.ScaleYProperty, 1.0),
+                }, ease);
+          }
+          catch (Exception ex) { Log.Debug("WobbleInviteTicket: {E}", ex.Message); }
         }
+
+        private DispatcherTimer? _inviteTiltRun, _invitePopRun;
+        /// <summary>Test seam: the wobble's two runs (tilt, pop), null until the first wobble.</summary>
+        internal (DispatcherTimer? Tilt, DispatcherTimer? Pop) InviteWobbleRuns => (_inviteTiltRun, _invitePopRun);
+        internal void WobbleInviteTicketForTest() => WobbleInviteTicket();
 
         internal void BtnInviteTicket_Click(object? sender, RoutedEventArgs e) => OpenInvitesCard();
 
-        /// <summary>WPF OpenInvitesCard: the Premium tab, a forced read, and the card scrolled into view.
-        /// Refused under Lockdown (no veil on this head yet).</summary>
+        /// <summary>WPF 7.1.5 OpenInvitesCard: Settings &gt; Account &amp; Plans, a forced read, and the card
+        /// scrolled into view. Refused under Lockdown (no veil on this head yet).</summary>
         internal void OpenInvitesCard()
         {
             if (LockdownActive) return;
-            ShowTab("exclusives");
+            OpenAppSettingsSection("account");
             DispatcherTimer.RunOnce(async () =>
             {
                 try

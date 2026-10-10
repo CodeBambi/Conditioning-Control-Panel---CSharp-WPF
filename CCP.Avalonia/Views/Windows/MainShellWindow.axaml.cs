@@ -90,6 +90,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             // WPF put these on the Window element itself; Avalonia routes them as attached events.
             HookResizeEdges();
+            HookLifetime();   // the close releases what the shell left on static seams (MainShellWindow.Lifetime.cs)
             // handledEventsToo: a drop the Sessions tab already imported must still clear the overlay.
             AddHandler(DragDrop.DropEvent, Window_Drop, RoutingStrategies.Bubble, handledEventsToo: true);
             AddHandler(DragDrop.DragEnterEvent, Window_DragEnter);
@@ -107,29 +108,38 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             InitFavoritesRail(); // MainShellWindow.FavoritesRail.cs (WPF MainWindow.xaml.cs:3501)
             ApplyEnableDeeper(); // MainShellWindow.DeeperTab.cs (WPF LoadSettings: rail door follows EnableDeeper)
             InitializeTabHistoryInput(); // MainShellWindow.TabHistory.cs (WPF MainWindow ctor)
+            InitializePaletteShortcut(); // MainShellWindow.SectionChrome.cs (WPF EnsurePaletteShortcut, d858d6108)
             // The mod switcher's rows, the saved mod's palette and the pending first-run choice
             // (MainShellWindow.ModSwitch.cs). No-op on the headless render path (no App.Mods).
             AttachModSwitch();
             HookWallRings();   // MainShellWindow.Presets.cs: wall tile rings follow the flags
             HookLevelDisplay(); // MainShellWindow.HeroFx.cs: header level/XP follow ProgressionBank
+            InitializeQuestStamps(); // MainShellWindow.QuestStamps.cs: the header quest stamps
             HookAutonomy();     // MainShellWindow.Autonomy.cs: Takeover seeds; starts only on the user's switch
             InitializeDescentFuse(); // MainShellWindow.DescentFuse.cs (WPF MainWindow ctor); no-op without App.DescentCountdown
             InitializeSpiralRoom();  // MainShellWindow.SpiralRoom.cs (WPF MainWindow ctor): the rail row
             InitializeProfileBubble(); // MainShellWindow.ProfileBubble.cs (WPF MainWindow ctor): face + reactions
+            InitializeAccountRecovery(); // MainShellWindow.Login.cs: contract D repaint + sign-in offer (z1)
+            InitializeProfileVat();    // MainShellWindow.ProfileVat.cs: the XP vat follows the Profile page (z1)
             InitializeProfileFx();     // MainShellWindow.ProfileFx.cs: search glow + OG border loop gate
             InitializeInboxBadge(); // MainShellWindow.Inbox.cs (WPF MainWindow.Inbox.cs:27)
-            InitializeServerAnnouncement(); // MainShellWindow.Announcement.cs (WPF MainWindow.Marquee.cs:688)
+            // Merge 2026-10-09: the announcement check runs once, from InitializeServerBanners
+            // (MainShellWindow.ServerBanners.cs); Announcement.cs keeps the dismissal record + the async seam.
             InitializeLockdownGreys(); // MainShellWindow.Lockdown.cs (WPF Lab.cs:612/707)
             InitializeInviteTicket(); // MainShellWindow.InviteTicket.cs (WPF MainWindow.xaml.cs, main e2d4e35ef)
             InitializeInviteEnding(); // MainShellWindow.Patreon.cs (WPF MainWindow.xaml.cs:3590, main fbe161de2)
             InitializePremiumCelebration(); // MainShellWindow.Patreon.cs (WPF InitializePatreonTab + MainWindow.xaml.cs:3559)
             InitializeWebcamLoadingSplash(); // MainShellWindow.WebcamSplash.cs (WPF MainWindow.xaml.cs:3631)
+            InitializeSafetyPills(); InitializeRapidBlinkStop(); // MainShellWindow.SafetyPills.cs / .BlinkStop.cs (WPF LabTab.cs)
             InitializeOfflineModeUI(); // MainShellWindow.OfflineMode.cs (WPF MainWindow.Settings.cs:122)
             InitializeHelpButtons(); // MainShellWindow.HelpButtons.cs (WPF MainWindow.Presets.cs:35 SetupHelpButtons)
             InitializeDashboardFx(); // MainShellWindow.DashboardFx.cs (WPF MainWindow ctor -> InitializeDashboardFx)
-            InitDashboardBrowserFold(); // MainShellWindow.DashboardFold.cs (WPF MainWindow.xaml.cs:3505)
             InitializeRememberButton(); // MainShellWindow.Remember.cs (WPF MainWindow.xaml.cs:3508)
+            InitializeFocusGaze(); // MainShellWindow.FocusGaze.cs (WPF MainWindow.LabTab.cs HookFocusGazeService)
+            InitializeCameraShortcut(); // MainShellWindow.CameraShortcut.cs (WPF ApplyCameraShortcutTo + ApplyGlobalCameraHotkey)
             InitializeMicActivePill(); // MainShellWindow.SheListening.cs (WPF MainWindow.xaml.cs:3594 WireMicActivePill)
+            InitializeRemoteControlOverlay(); // MainShellWindow.RemoteControl.cs (WPF MainWindow.RemoteControl.cs:784)
+            InitializeJustDropDoor(); // MainShellWindow.JustDrop.cs (WPF MainWindow.xaml.cs:3850)
             // WPF MainWindow.xaml.cs:3695: the tube is built on load when the companion is enabled.
             Opened += (_, _) => { if (CoreSettings.Current.AvatarEnabled) InitializeAvatarTube(); };
             Closed += (_, _) => _avatarTubeWindow?.Close();
@@ -143,6 +153,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             };
             // WPF MainWindow.xaml.cs:3531-3535: one forced share-status poll per launch.
             Opened += (_, _) => PollCatalogueStatuses(force: true);
+            Opened += (_, _) => StartStatPillUpdateTimer();
         }
 
         /// <summary>Uses an already-loaded catalogue without making the parameterless shell open
@@ -180,7 +191,26 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     ConditioningControlPanel.Localization.Loc.Get("msg_you_are_in_lockdown_mode_nthere_is_no_escape"));
                 return;
             }
+            // WPF MainWindow.Settings.cs:457: a running engine asks first. The tray Exit stays silent.
+            if (CoreEngine.IsRunning) { _ = ConfirmExitWhileRunningAsync(); return; }
             RequestExit();
+        }
+
+        /// <summary>Test seam: answers the "Engine is running. Stop and exit?" question without a window.</summary>
+        internal Func<System.Threading.Tasks.Task<bool>>? ExitConfirmOverride;
+
+        internal async System.Threading.Tasks.Task ConfirmExitWhileRunningAsync()
+        {
+            try
+            {
+                bool yes = ExitConfirmOverride != null
+                    ? await ExitConfirmOverride()
+                    : await Dialogs.MessageDialog.ConfirmAsync(this, ConditioningControlPanel.Localization.Loc.Get("title_confirm_exit"),
+                        ConditioningControlPanel.Localization.Loc.Get("msg_engine_is_running_stop_and_exit"));
+                if (!yes) return;
+                RequestExit();   // stops the engine, shows Circe's bill, refuses again under Lockdown
+            }
+            catch (Exception ex) { Serilog.Log.Warning(ex, "Exit confirm failed"); }
         }
     }
 }
