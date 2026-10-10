@@ -47,6 +47,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
             EmiDeskBus.VideoTitleProbe = () => null;   // no LastVideoTitle on this head: the line drops its {target}
             ConditioningControlPanel.Services.HapticService.EmiDeskFire = Fire;
             EmiNames.TargetLabelProbe = id => EmiTargets.Find(id) is { } t ? ConditioningControlPanel.Localization.Loc.Get(t.LabelKey) : null;
+            SeedKnockProbes();
         }
 
         /// <summary>
@@ -162,6 +163,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
             {
                 StartNudges(summons);
                 _summonMoment = ChooseGreetMoment();
+                if (TakeKnockContact() is { } contact) _summonMoment = contact;   // WPF :340: the knock picks by population
                 _summonVia = string.Equals(why, "hotkey", StringComparison.OrdinalIgnoreCase) ? "hotkey" : "rail";
                 _summonTouring = string.Equals(why, "tour", StringComparison.OrdinalIgnoreCase);
                 ScheduleSummonMoment();

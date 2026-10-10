@@ -176,6 +176,30 @@ public sealed class EmiDeskMomentTests
             CoreSettings.ServiceProvider = oldSettings;
         }
     });
+    [Fact]
+    public Task SheNeverKnocksWhenTheHeadCannotSeeAUsableWindow() => AvaloniaTestDispatcher.RunAsync(async () =>
+    {
+        EnsureApp();
+        await Task.CompletedTask;
+        var svc = EmiDeskService.Instance;
+        var prev = EmiKnockWorld.WindowUsableProbe;
+        int knocks = 0;
+        EventHandler onKnock = (_, _) => knocks++;
+        svc.KnockRequested += onKnock;
+        try
+        {
+            EmiKnockWorld.WindowUsableProbe = () => false;   // hidden or minimised: nothing to knock on
+            Assert.False(svc.TryKnock(null));
+            Assert.Equal(0, knocks);
+            Assert.False(svc.KnockPending);
+            Assert.False(svc.IsOut);
+        }
+        finally
+        {
+            svc.KnockRequested -= onKnock;
+            EmiKnockWorld.WindowUsableProbe = prev;
+        }
+    });
 }
 
 /// <summary>HC8, the nudges: a track outside the lines file's vocabulary falls back to its fixed line,
