@@ -874,3 +874,20 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
 - Tests: `Tests/CCP.Avalonia.Tests/ProgramsRunControlsTests.cs`, `Tests/CCP.Core.Tests/ProgramRitualTests.cs` (oracle tests 1-4),
   `ProgramServiceStartupTests.AppStartupSeedsTheRoadmapProviderLazily` (6), `ProgramCapabilitiesTests`, `LockdownVeilTests`.
   Fail-proofs: ~/ccp-port/evidence/review-programs-run-3b/fail-proofs.log.
+
+## 2026-10-10: reference-render CI, WPF and Avalonia side by side (avalonia-port/reference-render-ci)
+- Advised by: supervisor, user-approved.
+- Decision: a separate workflow, `.github/workflows/reference-render.yml` (build.yml untouched), renders every WPF
+  `Window`/`UserControl` on `windows-latest` (the only place WPF runs) and every Avalonia view with `--render-all`
+  on ubuntu, then `.github/scripts/pair-renders.py` pairs them per `docs/avalonia-parity.md` row into
+  `<row-id>.png` (WPF left, Avalonia right), `index.html`, `summary.json`, `_unpaired.txt`. Artifacts kept 30 days;
+  `~/ccp-port/bin/fetch-renders.sh <branch>` downloads the latest.
+- WPF side: `Tests/ConditioningControlPanel.Tests/WpfReferenceRender.cs`, opt-in on `CCP_REFERENCE_RENDER_DIR` (a
+  no-op otherwise, so the normal suite is unchanged). Reuses `WpfRenderHarness` (real App.xaml theme, STA thread) and
+  the suite's CCP_USERDATA_DIR sandbox; no `App.OnStartup`, so no services, network or devices. `App.Settings` is a
+  default `SettingsService` in that sandbox. Windows are never shown: their content is lifted into a host and drawn
+  offscreen (the LeashExplainRenderTests trick), at the design size or 1280x800; controls at their size or 900x600.
+  A type that throws or exceeds 30 s is a line in `_failures.txt`, never a failed run.
+- Pairing maps a file to its type by basename up to the first `.`, so shell partials pair `MainWindow` with
+  `MainShellWindow`; the first file per side that has a render wins. These images are evidence for a reviewer, not a
+  verdict: a row still needs the ledger's Keincheck run to become `verified`.

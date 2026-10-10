@@ -1,0 +1,97 @@
+name: reference-render
+
+# WPF (the frozen reference, Windows only) and Avalonia renders of one commit, paired per row of
+# docs/avalonia-parity.md into side-by-side PNGs. Evidence for moving rows wired -> verified; it
+# never fails on a view that does not draw - that is what _failures.txt / _unpaired.txt are for.
+# No secrets, no servers: both renderers run in a throwaway CCP_USERDATA_DIR profile.
+on:
+  workflow_dispatch:
+  push:
+    branches: ['avalonia-port/**']
+    paths:
+      - 'ConditioningControlPanel/**'
+      - 'CCP.Avalonia/**'
+      - 'CCP.Core/**'
+      - 'docs/avalonia-parity.md'
+      - 'Tests/ConditioningControlPanel.Tests/WpfReferenceRender*'
+      - '.github/workflows/reference-render.yml'
+      - '.github/scripts/pair-renders.py'
+
+concurrency:
+  group: reference-render-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  wpf-render:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            10.0.x
+      # Same -p: flag as build.yml's windows job (NETSDK1151); see the comment there.
+      - name: Render every WPF view
+        env:
+          CCP_REFERENCE_RENDER_DIR: ${{ runner.temp }}/wpf
+        run: dotnet test Tests/ConditioningControlPanel.Tests/ConditioningControlPanel.Tests.csproj -c Release -p:ValidateExecutableReferencesMatchSelfContained=false --filter "Category=ReferenceRender"
+      - name: Counts
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/wpf"
+          echo "rendered: $(ls "$d"/*.png 2>/dev/null | wc -l)  failed: $(wc -l < "$d/_failures.txt" 2>/dev/null || echo ?)"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: wpf-reference-render
+          path: ${{ runner.temp }}/wpf/
+          retention-days: 30
+
+  avalonia-render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            10.0.x
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libvlc-dev vlc-plugin-base
+      # --render-all exits non-zero if any view throws; keep the frames that did draw either way.
+      - run: dotnet run --project CCP.Avalonia/CCP.Avalonia.csproj -c Release -- --render-all $RUNNER_TEMP/avalonia
+        env:
+          CCP_USERDATA_DIR: ${{ runner.temp }}/ccp-profile
+          XDG_CONFIG_HOME: ${{ runner.temp }}/xdg
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: avalonia-render
+          path: ${{ runner.temp }}/avalonia/
+          retention-days: 30
+
+  side-by-side:
+    runs-on: ubuntu-latest
+    needs: [wpf-render, avalonia-render]
+    if: ${{ !cancelled() }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: wpf-reference-render
+          path: ${{ runner.temp }}/wpf
+      - uses: actions/download-artifact@v4
+        with:
+          name: avalonia-render
+          path: ${{ runner.temp }}/avalonia
+      - run: pip install --quiet Pillow
+      - run: python3 .github/scripts/pair-renders.py docs/avalonia-parity.md $RUNNER_TEMP/wpf $RUNNER_TEMP/avalonia $RUNNER_TEMP/side-by-side
+      - uses: actions/upload-artifact@v4
+        with:
+          name: side-by-side
+          path: ${{ runner.temp }}/side-by-side/
+          retention-days: 30
