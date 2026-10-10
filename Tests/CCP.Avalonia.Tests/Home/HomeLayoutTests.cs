@@ -38,6 +38,18 @@ public sealed class HomeLayoutTests
         Dispatcher.UIThread.RunJobs();
     }
 
+    /// <summary>The fold eases for 180 ms on a real clock with the body out of the way
+    /// (MainShellWindow.DashboardFold.cs); the landing state is read once the ease has settled.</summary>
+    private static void SettleFold(MainShellWindow shell)
+    {
+        Settle();
+        for (int i = 0; i < 200 && shell.BrowserFoldAnimating; i++)
+        {
+            System.Threading.Thread.Sleep(10);
+            Settle();
+        }
+    }
+
     private static void Shot(MainShellWindow shell, string name)
     {
         if (Environment.GetEnvironmentVariable("CCP_HOME_PNG_DIR") is not { Length: > 0 } dir) return;
@@ -120,7 +132,7 @@ public sealed class HomeLayoutTests
         var board = tab.FindControl<Border>("DashBillboard")!;
 
         arrow.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-        Settle();
+        SettleFold(shell);
         Assert.False(CoreSettings.Current.DashboardBrowserCollapsed);
         Assert.True(body.IsVisible);
         Assert.False(board.IsVisible);
@@ -130,7 +142,7 @@ public sealed class HomeLayoutTests
         Shot(shell, "e3-home-browser-open.png");
 
         arrow.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-        Settle();
+        SettleFold(shell);
         Assert.True(CoreSettings.Current.DashboardBrowserCollapsed);
         Assert.False(body.IsVisible);
         Assert.True(board.IsVisible);
