@@ -28,6 +28,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             new("intake", _ => IntakeHostWindow.CloseAllForPanic(), IntakeHostWindow.IsAnyOpen),
             // WPF GameSurfaces backroom/breakout/goon/piecebypiece/dtrh/arcademy: every web game window.
             new("games", _ => Games.GameWindow.CloseAllForPanic(), Games.GameWindow.IsAnyOpen),
+            new("friends-landing", _ => Friends.FriendsLanding.CloseAllForPanic()),   // knock cards, corner notices, floating words: down at once, unanswered ones wait in the Inbox
             new("voice-capture", sh => sh?.CancelVoicePrompt()),
             new("ai-followups", _ => MainShellWindow.CancelPendingAi()),
             // WPF MainWindow.xaml.cs:1726: standalone Lab minigames first; the engine stop never reaches them.

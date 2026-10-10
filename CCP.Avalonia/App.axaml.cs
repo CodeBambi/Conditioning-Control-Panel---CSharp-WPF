@@ -565,6 +565,7 @@ namespace ConditioningControlPanel.Avalonia
                         Views.Controls.Friends.FriendsFeedHost.Attach(friends);
                         CoreAccount.UnifiedIdentityChanged += (_, _) => friends.Kick();
                         friends.Start(new Platform.FriendsHead.Timer());
+                        Dispatcher.UIThread.Post(Views.Friends.FriendsLanding.Start);   // WPF App.xaml.cs:2526: invites, watches, pokes and requests land
                         // WPF App.xaml.cs LEASH: rides the friends poll (report out, block in, 20 s while leashed).
                         try
                         {
@@ -1117,6 +1118,7 @@ namespace ConditioningControlPanel.Avalonia
             try { Quests?.Dispose(); } catch { /* WPF App.OnExit:6104; saves only when dirty */ }
             try { Programs?.Dispose(); } catch { /* WPF App.OnExit:6309; idempotent after StopPrograms */ }
             try { MediaHistory?.Dispose(); } catch { /* WPF App.OnExit:6231; flushes the final entries */ }
+            try { Views.Friends.FriendsLanding.Stop(); } catch { /* the unowned landing windows close with the app */ }
             try { (Platform.FriendsHead.Service as IDisposable)?.Dispose(); } catch { /* WPF App.OnExit: the friends poll stops */ }
             try { Brain?.Dispose(); } catch { /* WPF App.OnExit:6121; flushes the turn log */ }
             try { Ai?.Dispose(); } catch { /* WPF App.OnExit:6250 (#629): unloads the local Ollama model */ }
