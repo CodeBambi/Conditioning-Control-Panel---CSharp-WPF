@@ -106,6 +106,7 @@ namespace ConditioningControlPanel.Services.GoonGame
             _pendingAutoHost = false;
             _sessionOptIn = false;
             SetRoomCode(null, again: false);
+            try { ResetPeerCardState(); } catch { }
         }
 
         private static void Post(object frame)
@@ -224,10 +225,6 @@ namespace ConditioningControlPanel.Services.GoonGame
             catch { return "Player"; }
         }
 
-        /// <summary>Is a Discord account linked (avatarState "off"/"shared" instead of "unlinked").
-        /// Seeded by the head when it has one; unseeded reads unlinked.</summary>
-        public static volatile Func<bool>? DiscordLinkedProvider;
-
         /// <summary>WPF OnPageReady's init, field for field. Spends the pending join code and the
         /// pending auto-host, so a reload does not rejoin a finished room.</summary>
         public static JObject BuildInit(bool fullscreen)
@@ -281,8 +278,9 @@ namespace ConditioningControlPanel.Services.GoonGame
             });
         }
 
-        /// <summary>The <c>discord</c> block for init and the echo. The avatar cache
-        /// (GoonAvatarCache) is not ported: avatarDataUri is always null on this head.</summary>
+        /// <summary>The <c>discord</c> block for init and the echo (WPF BuildDiscordBlock). Reads the
+        /// avatar from the DISK CACHE only: init is posted synchronously and an avatar may never sit on
+        /// a boot path. A stale one is topped up by <see cref="RefreshOwnAvatarEchoAsync"/>.</summary>
         public static JObject BuildDiscordBlock(bool includeLastOpponent)
         {
             var block = new JObject
@@ -296,16 +294,45 @@ namespace ConditioningControlPanel.Services.GoonGame
             try
             {
                 var s = CoreSettings.Current;
-                bool linked = false;
-                try { linked = DiscordLinkedProvider?.Invoke() == true; } catch { }
-                block["avatarState"] = !linked ? "unlinked" : (s.GoonShareAvatar ? "shared" : "off");
+                var d = GoonAvatarCache.OwnDiscord();
+                bool shareAvatar = s.GoonShareAvatar;
+                // Three states: "off" (linked, chose not to share) and "unlinked" read differently in the lobby.
+                block["avatarState"] = !d.Linked ? "unlinked" : (shareAvatar ? "shared" : "off");
                 block["dmShared"] = s.GoonShareDiscordDm;
                 block["richPresence"] = s.GoonRichPresence;
                 block["seenSharePrompt"] = s.GoonSeenSharePrompt;
+                if (d.Linked && shareAvatar)
+                {
+                    var uri = GoonAvatarCache.ReadOwnDataUriIfFresh(d.AvatarHash);
+                    if (uri != null) block["avatarDataUri"] = uri;
+                }
             }
             catch (Exception ex) { Log.Debug("GoonHostService.BuildDiscordBlock: {E}", ex.Message); }
             if (includeLastOpponent) block["lastOpponent"] = BuildLastOpponentBlock();
             return block;
+        }
+
+        /// <summary>The <c>discord</c> echo frame (the block minus lastOpponent).</summary>
+        public static JObject DiscordEcho()
+        {
+            var block = BuildDiscordBlock(includeLastOpponent: false);
+            block["type"] = "discord";
+            return block;
+        }
+
+        /// <summary>WPF KickOwnAvatarRefresh: tops the own avatar up off-thread and returns the echo to
+        /// post when it landed, else null. A no-op unless the user is linked AND sharing, so a player
+        /// who shares nothing never touches the Discord CDN.</summary>
+        public static async Task<JObject?> RefreshOwnAvatarEchoAsync()
+        {
+            try
+            {
+                if (!CoreSettings.Current.GoonShareAvatar) return null;
+                if (!GoonAvatarCache.OwnDiscord().Linked) return null;
+                var uri = await GoonAvatarCache.RefreshOwnAvatarAsync().ConfigureAwait(false);
+                return uri == null ? null : DiscordEcho();
+            }
+            catch (Exception ex) { Log.Debug("GoonHostService.RefreshOwnAvatarEchoAsync: {E}", ex.Message); return null; }
         }
 
         private static JToken BuildLastOpponentBlock()
@@ -317,16 +344,24 @@ namespace ConditioningControlPanel.Services.GoonGame
                 var rec = JObject.Parse(raw);
                 var name = (string?)rec["name"];
                 if (string.IsNullOrWhiteSpace(name)) return JValue.CreateNull();
+
+                string? uri = null;
+                // Only the ONE bare filename this cache ever writes is accepted; a record naming
+                // anything else is treated as having no picture rather than being followed.
+                if ((string?)rec["avatarFile"] == GoonAvatarCache.LastOpponentFile)
+                    uri = GoonAvatarCache.ReadDataUri(GoonAvatarCache.LastOpponentFile);
+
                 return new JObject
                 {
                     ["name"] = name,
-                    ["avatarDataUri"] = JValue.CreateNull(),
+                    ["avatarDataUri"] = uri == null ? JValue.CreateNull() : (JToken)uri,
                     ["dm"] = !string.IsNullOrEmpty((string?)rec["dmId"]),
                     ["ts"] = (long?)rec["ts"] ?? 0L,
                 };
             }
             catch (Exception ex)
             {
+                // A corrupt record is a missing record: never a boot failure.
                 Log.Debug("GoonHostService.BuildLastOpponentBlock: {E}", ex.Message);
                 return JValue.CreateNull();
             }
@@ -352,22 +387,213 @@ namespace ConditioningControlPanel.Services.GoonGame
                 CoreSettings.Save();
             }
             catch (Exception ex) { Log.Warning("GoonHostService.discord-prefs: {E}", ex.Message); }
-            var block = BuildDiscordBlock(includeLastOpponent: false);
-            block["type"] = "discord";
-            return block;
+            return DiscordEcho();
         }
 
-        /// <summary>WPF OnLastOpponentClear: the record goes, the echo says so.</summary>
+        // ---- the peer card (contract 4: name + avatar of the opponent, a BOOLEAN for the DM) ------
+
+        /// <summary>The peer-card endpoint. A compile-time constant: the page never names this URL.</summary>
+        public const string PeerCardPath = "/v2/goon/peercard";
+
+        // PRIVACY BOUNDARY: the peer's Discord snowflake exists only in this field, in the
+        // last-opponent record and in the shell-opened URL. Never posted to the page, never logged.
+        private static string? _peerDmId;
+        private static string? _peerName;
+        private static bool _peerAvatarCached;
+        private static bool _peerCardFetched;
+        private static int _peerCardInFlight;
+
+        /// <summary>WPF OnPeerCardRequest: one fetch at a time (null = a duplicate, post nothing),
+        /// two attempts of 3 s, and the <c>peer-card</c> frame to post. A failure is reason "error".</summary>
+        public static async Task<JObject?> PeerCardAsync(JObject o, HttpMessageInvoker? http = null)
+        {
+            if (Interlocked.CompareExchange(ref _peerCardInFlight, 1, 0) != 0)
+            {
+                Log.Debug("GoonHostService: peer-card-req ignored (already in flight)");
+                return null;
+            }
+            try
+            {
+                // A NEW request means a NEW peer: drop the previous one's card first, or a failed fetch
+                // for match 2 would let match 1's opponent be written as match 2's last opponent.
+                ResetPeerCardState();
+                var body = Newtonsoft.Json.JsonConvert.SerializeObject(new
+                {
+                    unified_id = CoreAccount.UnifiedUserId ?? "",
+                    code = SafeShort((string?)o["code"], 32),
+                    token = SafeShort((string?)o["token"], 128),
+                    role = SafeShort((string?)o["role"], 16),
+                });
+                var json = await PostPeerCardAsync(body, http).ConfigureAwait(false);
+                if (json == null) return PeerCardFrame(null, null, "error", false, null);
+
+                var name = (string?)json["name"];
+                var reason = (string?)json["avatar_reason"] ?? "error";
+                var dmId = (string?)json["dm_id"];
+                _peerName = string.IsNullOrWhiteSpace(name) ? null : name!.Trim();
+                // Re-validate what the server sent before it can ever reach a shell command.
+                _peerDmId = IsSnowflake(dmId) ? dmId : null;
+                _peerAvatarCached = false;
+
+                string? uri = null;
+                var bytes = GoonAvatarCache.DecodeDataUri((string?)json["avatar"]);
+                if (bytes != null && GoonAvatarCache.Write(GoonAvatarCache.PeerFile, bytes))
+                {
+                    _peerAvatarCached = true;
+                    uri = GoonAvatarCache.ReadDataUri(GoonAvatarCache.PeerFile);
+                }
+                _peerCardFetched = true;
+                Log.Information("GoonHostService: peer card fetched (avatar={A}, reason={R}, dm={D})",
+                    uri != null, reason, _peerDmId != null);
+                return PeerCardFrame(_peerName, uri, reason, _peerDmId != null, (string?)json["ver"]);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning("GoonHostService.peer-card-req: {E}", ex.Message);
+                return PeerCardFrame(null, null, "error", false, null);
+            }
+            finally { Interlocked.Exchange(ref _peerCardInFlight, 0); }
+        }
+
+        private static JObject PeerCardFrame(string? name, string? avatarDataUri, string reason, bool dm, string? ver) => new()
+        {
+            ["type"] = "peer-card",
+            ["name"] = name ?? "",
+            ["avatarDataUri"] = avatarDataUri == null ? JValue.CreateNull() : (JToken)avatarDataUri,
+            ["reason"] = reason,
+            ["dm"] = dm,
+            ["ver"] = ver == null ? JValue.CreateNull() : (JToken)ver,
+        };
+
+        private static async Task<JObject?> PostPeerCardAsync(string body, HttpMessageInvoker? http)
+        {
+            for (var attempt = 1; attempt <= 2; attempt++)
+            {
+                try
+                {
+                    // The shared client's 40 s timeout is for the relay long-poll; an avatar gets 3 s.
+                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+                    using var request = new HttpRequestMessage(HttpMethod.Post, ProxyBaseUrl + PeerCardPath)
+                    {
+                        Content = new StringContent(body, Encoding.UTF8, "application/json"),
+                    };
+                    var auth = SafeAuthToken();
+                    if (!string.IsNullOrEmpty(auth)) request.Headers.Add("X-Auth-Token", auth);
+                    request.Headers.Add("X-Client-Version", CoreReleaseContent.AppVersion);
+                    using var response = await (http ?? Http).SendAsync(request, cts.Token).ConfigureAwait(false);
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        // 403/429 are ANSWERS, not transport faults: retrying spends the 6/min gate for nothing.
+                        Log.Debug("GoonHostService: peercard HTTP {S}", (int)response.StatusCode);
+                        return null;
+                    }
+                    return JObject.Parse(await response.Content.ReadAsStringAsync().ConfigureAwait(false));
+                }
+                catch (Exception ex) { Log.Debug("GoonHostService: peercard attempt {N}/2 failed: {E}", attempt, ex.Message); }
+            }
+            return null;
+        }
+
+        /// <summary>WPF WriteLastOpponentRecord (on match-result): written by the HOST from the peer
+        /// card it already fetched; no page-supplied data.</summary>
+        public static void WriteLastOpponentRecord()
+        {
+            try
+            {
+                if (!_peerCardFetched || string.IsNullOrWhiteSpace(_peerName)) return;
+                var s = CoreSettings.Current;
+                string? file = null;
+                if (_peerAvatarCached) file = GoonAvatarCache.PromotePeerToLastOpponent();
+                // A peer who shared no picture must not inherit the PREVIOUS opponent's one.
+                if (file == null) GoonAvatarCache.Delete(GoonAvatarCache.LastOpponentFile);
+                var rec = new JObject
+                {
+                    ["name"] = _peerName,
+                    ["dmId"] = _peerDmId == null ? JValue.CreateNull() : (JToken)_peerDmId,
+                    ["avatarFile"] = file == null ? JValue.CreateNull() : (JToken)file,   // bare name, never a path
+                    ["ts"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                };
+                s.GoonLastOpponentJson = rec.ToString(Newtonsoft.Json.Formatting.None);
+                CoreSettings.Save();
+                Log.Information("GoonHostService: last-opponent record written (avatar={A}, dm={D})", file != null, _peerDmId != null);
+            }
+            catch (Exception ex) { Log.Warning("GoonHostService.WriteLastOpponentRecord: {E}", ex.Message); }
+        }
+
+        /// <summary>WPF OnLastOpponentClear: the record and its picture go.</summary>
         public static void OnLastOpponentClear()
         {
             try
             {
                 var s = CoreSettings.Current;
-                if (string.IsNullOrEmpty(s.GoonLastOpponentJson)) return;
-                s.GoonLastOpponentJson = "";
-                CoreSettings.Save();
+                if (!string.IsNullOrEmpty(s.GoonLastOpponentJson))
+                {
+                    s.GoonLastOpponentJson = "";
+                    CoreSettings.Save();
+                }
+                GoonAvatarCache.Delete(GoonAvatarCache.LastOpponentFile);
+                Log.Information("GoonHostService: last-opponent record cleared");
             }
-            catch (Exception ex) { Log.Debug("GoonHostService.last-opponent-clear: {E}", ex.Message); }
+            catch (Exception ex) { Log.Warning("GoonHostService.last-opponent-clear: {E}", ex.Message); }
+        }
+
+        /// <summary>WPF OnDiscordOpenDm, the lookup half: the profile URL for <c>which</c> = "peer" or
+        /// "last" (an enum: a page-supplied id is not a case), or null when there is nothing to open.
+        /// The id is never logged: the URL identifies a real person.</summary>
+        public static string? DiscordDmUrl(string? which)
+        {
+            string? id = which switch
+            {
+                "peer" => _peerDmId,
+                "last" => ReadLastOpponentDmId(),
+                _ => null,
+            };
+            return IsSnowflake(id) ? "https://discord.com/users/" + id : null;
+        }
+
+        private static string? ReadLastOpponentDmId()
+        {
+            try
+            {
+                var raw = CoreSettings.Current.GoonLastOpponentJson;
+                if (string.IsNullOrWhiteSpace(raw)) return null;
+                var id = (string?)JObject.Parse(raw)["dmId"];
+                return IsSnowflake(id) ? id : null;
+            }
+            catch { return null; }
+        }
+
+        /// <summary>WPF OnRichPresenceState, the gate: a state off the enum is refused; with the flag
+        /// off the frame is dropped. Returns the state to publish, or null.</summary>
+        public static string? RichPresenceState(JObject o)
+        {
+            var s = (string?)o["s"] ?? "";
+            if (s != "lobby" && s != "live" && s != "recap" && s != "off") return null;
+            return CoreSettings.Current.GoonRichPresence ? s : null;
+        }
+
+        internal static bool IsSnowflake(string? id)
+        {
+            if (string.IsNullOrEmpty(id) || id!.Length > 20) return false;
+            foreach (var c in id) if (c < '0' || c > '9') return false;
+            return true;
+        }
+
+        private static string SafeShort(string? v, int max)
+        {
+            if (string.IsNullOrWhiteSpace(v)) return "";
+            var t = v!.Trim();
+            return t.Length > max ? t.Substring(0, max) : t;
+        }
+
+        /// <summary>WPF ResetPeerCardState: a closed window or a new request forgets the peer.</summary>
+        public static void ResetPeerCardState()
+        {
+            _peerDmId = null;
+            _peerName = null;
+            _peerAvatarCached = false;
+            _peerCardFetched = false;
+            try { GoonAvatarCache.Delete(GoonAvatarCache.PeerFile); } catch { }
         }
 
         // ---- online pictures: the stored pick ------------------------------------------------

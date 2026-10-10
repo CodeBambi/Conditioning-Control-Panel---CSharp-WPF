@@ -68,11 +68,22 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             lock (Open) return Open.FirstOrDefault(w => w.Spec.Id == "goon");
         }
 
-        private static void SeedGoon() => GoonHostService.OpenWindowProvider ??= () =>
+        private static void SeedGoon()
         {
-            var w = Launch("goon");   // the account gate runs here; a live window is focused
-            return w != null;
-        };
+            GoonHostService.OpenWindowProvider ??= () =>
+            {
+                var w = Launch("goon");   // the account gate runs here; a live window is focused
+                return w != null;
+            };
+            // WPF App.Discord: linked = authenticated with a user id; the avatar hash + CDN url for the own plate.
+            GoonAvatarCache.OwnDiscordProvider ??= () =>
+            {
+                var d = Platform.AccountSeed.Discord;
+                return d != null && d.IsAuthenticated && !string.IsNullOrEmpty(d.UserId)
+                    ? (true, d.Avatar, d.GetAvatarUrl(128))
+                    : (false, null, null);
+            };
+        }
 
         // ---- attach / close --------------------------------------------------------------------
 
@@ -192,7 +203,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                 case "match-result":
                     // WPF: a stub too (XP wiring comes with the client ledger); logged so a play-test sees the end.
                     Log.Information("[Goon] match-result (not scored, as WPF): {R}", o["result"]?.ToString(Formatting.None));
-                    // not ported: WriteLastOpponentRecord (needs the peer card + avatar cache).
+                    // The last-opponent record is written HERE, by the host, from the peer card it fetched.
+                    GoonHostService.WriteLastOpponentRecord();
                     return true;
                 case "toy-pattern":
                 case "toy-stop":
@@ -201,9 +213,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                     return true;
                 case "discord-prefs":
                 {
-                    var echo = GoonHostService.OnDiscordPrefs(o, out var sharedChanged, out _);
-                    // not ported: the profile sync push and the own-avatar refresh WPF kicks on a change.
-                    if (sharedChanged) Log.Information("[Goon] discord sharing flags changed (stored; sync push not ported)");
+                    var echo = GoonHostService.OnDiscordPrefs(o, out var sharedChanged, out var rpOff);
+                    // not ported: the immediate profile sync push WPF kicks on a change (the flags ride the
+                    // next scheduled sync) and the rich presence retract (no Discord RPC on this head).
+                    if (rpOff) Log.Information("[Goon] rich presence switched off (no RPC client on this head)");
+                    if (sharedChanged) KickGoonAvatarRefresh();
                     Post(echo);
                     return true;
                 }
@@ -251,13 +265,47 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                     Log.Information("[Goon] {Type}: not ported (StakeBridge)", type);
                     return true;
                 case "peer-card-req":
+                    // WPF OnPeerCardRequest: the opponent's name + avatar for the VS splash; a duplicate posts nothing.
+                    _ = Task.Run(async () =>
+                    {
+                        var card = await GoonPeerCard(o).ConfigureAwait(false);
+                        if (card != null) Post(card);
+                    });
+                    return true;
                 case "discord-open-dm":
+                {
+                    // WPF OnDiscordOpenDm: "peer" or "last" only; the id never comes from the page and is never logged.
+                    var url = GoonHostService.DiscordDmUrl((string?)o["which"]);
+                    if (url == null) { Log.Debug("[Goon] discord-open-dm: nothing to open"); return true; }
+                    GoonUnFullscreenForShellOpen();
+                    _ = GoonOpenUrl(this, url);
+                    Log.Information("[Goon] opened Discord DM ({W})", (string?)o["which"]);
+                    return true;
+                }
                 case "discord-link-request":
+                    // WPF OnDiscordLinkRequest: out of fullscreen, the panel to the front on its Discord page.
+                    GoonUnFullscreenForShellOpen();
+                    try
+                    {
+                        if (Windows.MainShellWindow.Current is { } shell)
+                        {
+                            if (shell.WindowState == WindowState.Minimized) shell.WindowState = WindowState.Normal;
+                            shell.Show();
+                            shell.Activate();
+                            shell.ShowTab("discord");
+                        }
+                    }
+                    catch (Exception ex) { Log.Warning("[Goon] discord-link-request: {E}", ex.Message); }
+                    return true;
                 case "rp-state":
+                    // not ported: Discord rich presence has no client on this head (SEAM(discord rpc), as the
+                    // Settings and Profile pages already note). The gate still runs so the log says what was asked.
+                    Log.Information("[Goon] rp-state {S}: not ported (no Discord RPC client)", GoonHostService.RichPresenceState(o) ?? "(dropped)");
+                    return true;
                 case "share-card":
-                    // not ported: Discord peer card / DM / link, rich presence, the recap share card.
-                    Log.Information("[Goon] {Type}: not ported", type);
-                    if (type == "share-card") Post(new { type = "share-card-result", id = (string?)o["id"], ok = false, error = "unavailable" });
+                    // not ported: GoonShareCard (clipboard / save dialog for the recap PNG).
+                    Log.Information("[Goon] share-card: not ported");
+                    Post(new { type = "share-card-result", id = (string?)o["id"], ok = false, error = "unavailable" });
                     return true;
                 default:
                     return false;
@@ -287,6 +335,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
 
             // Online pictures: only a pick made in THIS session fetches (a reload inside one window keeps it).
             StartGoonOnlineFromSettings();
+            // ...and top the own avatar up off-thread; the page gets a discord echo when it lands.
+            KickGoonAvatarRefresh();
             Post(new { type = "fullscreen", on = IsHostFullscreen });
             Log.Information("[Goon] sent init + manifest ({I} images, {V} videos)",
                 (manifest["images"] as JArray)?.Count ?? 0, (manifest["videos"] as JArray)?.Count ?? 0);
@@ -303,6 +353,23 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                 var (status, text) = await GoonNetPost(path, body).ConfigureAwait(false);
                 Post(new { type = "net-post-result", id, status, body = text });
             });
+        }
+
+        /// <summary>The peer-card fetch and the shell open; tests swap them for fakes.</summary>
+        internal Func<JObject, Task<JObject?>> GoonPeerCard { get; set; } = o => GoonHostService.PeerCardAsync(o);
+        internal Func<GameWindow, string, Task> GoonOpenUrl { get; set; } =
+            async (w, url) => { try { await Platform.ExternalOpener.OpenAsync(w, url); } catch (Exception ex) { Log.Warning("[Goon] open failed: {E}", ex.Message); } };
+
+        private void KickGoonAvatarRefresh() => _ = Task.Run(async () =>
+        {
+            var echo = await GoonHostService.RefreshOwnAvatarEchoAsync().ConfigureAwait(false);
+            if (echo != null) Post(echo);
+        });
+
+        /// <summary>WPF UnFullscreenForShellOpen: first, synchronously, or the browser lands underneath.</summary>
+        private void GoonUnFullscreenForShellOpen()
+        {
+            if (IsHostFullscreen) SetHostFullscreen(false);
         }
 
         /// <summary>The proxy call; tests swap it for a fake.</summary>

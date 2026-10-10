@@ -309,6 +309,39 @@ public sealed class GoonHostTests
     }
 
     [Fact]
+    public async Task Discord_PeerCardIsPosted_AndADmOpensOnlyThroughTheEnum()
+    {
+        await AvaloniaTestDispatcher.RunAsync(async () =>
+        {
+            var (w, posted) = Open();
+            try
+            {
+                var opened = new List<string>();
+                w.GoonOpenUrl = (_, url) => { opened.Add(url); return Task.CompletedTask; };
+                w.GoonPeerCard = _ => Task.FromResult<JObject?>(new JObject { ["type"] = "peer-card", ["name"] = "Velvet", ["dm"] = false });
+                w.HandleMessage("{\"type\":\"ready\"}");
+                w.HandleMessage("{\"type\":\"peer-card-req\",\"code\":\"ABCD\",\"token\":\"t\",\"role\":\"host\"}");
+                for (int i = 0; i < 100 && Of(posted, "peer-card").Count == 0; i++) await Task.Delay(20);
+                Assert.Equal("Velvet", (string?)Assert.Single(Of(posted, "peer-card"))["name"]);
+
+                // No card with a DM id was fetched: "peer" has nothing to open, and an id from the page is not a case.
+                w.HandleMessage("{\"type\":\"discord-open-dm\",\"which\":\"peer\"}");
+                w.HandleMessage("{\"type\":\"discord-open-dm\",\"which\":\"123456789012345678\"}");
+                Assert.Empty(opened);
+
+                w.HandleMessage("{\"type\":\"discord-prefs\",\"seenSharePrompt\":true}");
+                Assert.True((bool)Of(posted, "discord").Last()["seenSharePrompt"]!);
+            }
+            finally
+            {
+                w.Close();
+                CoreSettings.Current.GoonSeenSharePrompt = false;
+                CoreSettings.SaveImmediate();
+            }
+        });
+    }
+
+    [Fact]
     public async Task Close_SaysEndRun_AndForgetsTheRoom()
     {
         await AvaloniaTestDispatcher.RunAsync(() =>
