@@ -19,8 +19,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
     /// entry (MainShellWindow.LaunchCardGame), so its sign-in ask, leash gate and tier refusal answer; a
     /// locked one still opens that door, which refuses in its own words.</para>
     ///
-    /// <para>ponytail: HIDDEN, not faked, until this head has their surface: fyp and justdrop (shell
-    /// WindowKeys with no window here) and spiral (the timed overlay card, WPF ShowOverlayTimed). A null from <see cref="Door"/> keeps the card out of the ring the
+    /// <para>ponytail: HIDDEN, not faked, until this head has its surface: spiral (the timed overlay card, WPF ShowOverlayTimed).
+    /// fyp and justdrop open through ShowTab's window keys (MainShellWindow.JustDrop.cs). A null from <see cref="Door"/> keeps the card out of the ring the
     /// same way an unavailable door does. Also missing: the moments WPF's Pick fires
     /// (<c>ringPick</c>, <c>lockedCardTapped</c>) - there is no <c>App.EmiDesk.Fire</c> on this head.</para>
     /// </summary>
@@ -51,6 +51,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         {
             "arcademy" => (() => ConditioningControlPanel.Services.Arcademy.ArcademyHostService.DoorAvailable, () => GameLocked(id), () => Game(id)),
             "dtrh" or "goon" or "backroom" or "intake" => (Always, () => GameLocked(id), () => Game(id)),
+            // WPF: OpenFypFeed demands premium itself; Just Drop exists only while the server's door does (never locked).
+            "fyp" => Premium(id, "fyp", () => Nav("fyp")),
+            "justdrop" => (() => ConditioningControlPanel.Services.JustDrop.JustDropService.DoorAvailable, Never, () => Nav("justdrop")),
             "loom" => Free(() => Rack("spiral")),
             "sessions" => Free(() => Nav("presets")),
             "flashes" => Free(() => Rack("flash")),
@@ -120,7 +123,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                 if (locked)
                 {
                     var name = Loc.Get("emi_desk_target_" + id);
-                    string? daily = id is "awareness" or "remote" or "takeover" ? id : null;
+                    string? daily = id is "awareness" or "remote" or "takeover" or "fyp" ? id : null;
                     if (daily == null) TierGate.DemandPremium(name); else TierGate.DemandPremium(name, daily);
                     return;
                 }

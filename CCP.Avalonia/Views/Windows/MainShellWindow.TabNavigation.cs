@@ -77,7 +77,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         };
 
         /// <summary>Keys that open a window or a service rather than a tab. ShowTab leaves the
-        /// current tab alone for them, as WPF does; the launch itself is not on this head yet.</summary>
+        /// current tab alone for them, as WPF does; OpenWindowKey (MainShellWindow.JustDrop.cs) launches them.</summary>
         private static readonly HashSet<string> WindowKeys = new(StringComparer.Ordinal)
             { "patreon", "fyp", "justdrop", "webapp" };
 
@@ -193,7 +193,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // WPF ShowTab("patreon") -> ShowAppInfoPopup -> ShowAccountSettings (MainWindow.TabNavigation.cs:126,
             // MainWindow.AccountShell.cs:73): Settings, scrolled to Account. Before the bark, as there.
             if (tab == "patreon") { OpenAppSettingsSection("account"); return; }
-            if (WindowKeys.Contains(tab)) return;                 // a window, not a tab - see header
+            if (WindowKeys.Contains(tab)) { OpenWindowKey(tab); return; }   // a window, not a tab (MainShellWindow.JustDrop.cs)
 
             // Unknown key: log and stay. Checked before anything is collapsed.
             bool lane = _navTabHosts.ContainsKey(tab);

@@ -55,6 +55,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             if (Spec.Id == PbpId && HandlePbp(o)) return true;
             if (Spec.Id == "goon" && HandleGoon(o)) return true;
             if (Spec.Id == "arcademy" && HandleArcademy(o)) return true;
+            if (Spec.Id == FypId && HandleFyp(o)) return true;
+            if (Spec.Id == JustDropId) return HandleJustDrop(o);
             return false;
         }
 
