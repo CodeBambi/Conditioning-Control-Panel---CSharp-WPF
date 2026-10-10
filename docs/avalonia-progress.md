@@ -1832,3 +1832,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/sync6-tonight-board-c: +431
 - Premium showcase on the Tonight Board: Core showcase provider (git mv), head art registry and lifecycle, muted ClipArtView. The art is released on shell close (P68).
 - Ledger row 104 is ported. Board stays silent, Live is blocked on Lobby, and drawn art needs a slice plan.
+
+## avalonia-port/distro-check: +292
+- Clean-distro Docker check of the linux-x64 tarball (6 distros, real Xvfb, offline run, screenshots + result.json) and a distro-check.yml CI matrix (run 38061705873 green).
+- Findings F1-F6 (tumbleweed no-font abort, WPE not packaged, libvlc P/Invoke, emoji tofu, HiDPI wizard, pactl) in evidence/distro-check/findings.md.
