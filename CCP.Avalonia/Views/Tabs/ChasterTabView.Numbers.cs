@@ -29,6 +29,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             TxtBalance.Text = balance == 0 ? CircesTab.Format(0, signed: false) : CircesTab.Format(balance);
             TxtBalance.Foreground = FigureBrush(balance);
             TxtBalanceCaption.Text = Loc.Get(balance < 0 ? "chaster_credit_caption" : "chaster_balance_caption");
+            RefreshTag(balance);
 
             var today = chaster.TodayAddedSeconds;
             var capSeconds = chaster.Caps.DailySeconds;

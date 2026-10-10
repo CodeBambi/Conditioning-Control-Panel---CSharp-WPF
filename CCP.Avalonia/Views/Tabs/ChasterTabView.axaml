@@ -105,10 +105,50 @@
             <Setter Property="FontWeight" Value="Bold"/>
             <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
         </ControlTheme>
+        <!-- WPF ChasterTabView.xaml:193-221: a menu row, a glass strip that lights in its board's colour when the price is on. -->
+        <ControlTheme x:Key="CirceRow" TargetType="ToggleButton">
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Margin" Value="0,0,8,8"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Panel>
+                        <Border Name="Fill" Background="{TemplateBinding Background}" CornerRadius="12" Opacity="0"/>
+                        <Border Name="Rim" Background="#12FFFFFF" BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="12" Opacity="0.35"/>
+                        <ContentPresenter Name="Cp" Margin="8,7,10,7" Opacity="0.72" Content="{TemplateBinding Content}"
+                                          HorizontalContentAlignment="Stretch"/>
+                    </Panel>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#Rim"><Setter Property="Opacity" Value="0.9"/></Style>
+            <Style Selector="^:pointerover /template/ ContentPresenter#Cp"><Setter Property="Opacity" Value="1"/></Style>
+            <Style Selector="^:checked /template/ Border#Rim"><Setter Property="Opacity" Value="1"/></Style>
+            <Style Selector="^:checked /template/ Border#Fill"><Setter Property="Opacity" Value="0.16"/></Style>
+            <Style Selector="^:checked /template/ ContentPresenter#Cp"><Setter Property="Opacity" Value="1"/></Style>
+        </ControlTheme>
+        <ControlTheme x:Key="CirceHowLine" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="LineHeight" Value="20"/>
+            <Setter Property="Margin" Value="0,0,0,6"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+        </ControlTheme>
+        <ControlTheme x:Key="CirceFoot" TargetType="Border">
+            <Setter Property="Background" Value="#10FFFFFF"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource GlassBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="12"/>
+            <Setter Property="Padding" Value="12,7"/>
+            <Setter Property="Margin" Value="0,0,8,8"/>
+        </ControlTheme>
     </UserControl.Resources>
 
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-        <Grid Margin="26,22,26,20" MaxWidth="1080" RowDefinitions="Auto,Auto,Auto,Auto,Auto">
+        <Grid Margin="26,22,26,20" MaxWidth="1080" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
             <!-- header: the name, and the account -->
             <Grid Grid.Row="0" Margin="4,0,4,14">
                 <TextBlock Text="{loc:Str chaster_title}" FontFamily="Fredoka, Segoe UI" FontSize="28"
@@ -180,8 +220,43 @@
 
             <!-- 1. THE LOCK -->
             <Border Grid.Row="1" Background="{DynamicResource SurfaceBgBrush}" BorderBrush="{DynamicResource PanelAccentBrush}"
-                    BorderThickness="1" CornerRadius="18" MinHeight="368" Margin="0,0,0,10">
+                    BorderThickness="1" CornerRadius="18" MinHeight="368" Margin="0,0,0,10" ClipToBounds="True">
                 <Panel>
+                <!-- the neon art, bleeding in from the right and fading into the card (WPF :431-441; the fade is painted in code) -->
+                <Panel x:Name="HeroArtPlate" Width="380" HorizontalAlignment="Right" ClipToBounds="True">
+                    <Image x:Name="HeroArt" Stretch="UniformToFill" Opacity="0.85" RenderOptions.BitmapInterpolationMode="HighQuality"/>
+                    <Border x:Name="HeroArtFade" IsHitTestVisible="False"/>
+                </Panel>
+                <!-- THE PAPER TAG, hanging off the lock: what is on the tab, when it lands, UNPAID (WPF :443-492). Click: the bill. -->
+                <Panel Width="380" HorizontalAlignment="Right" ZIndex="5">
+                    <Panel x:Name="PaperTag" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="-8,0,0,14" IsVisible="False"
+                           Cursor="Hand" Background="Transparent" RenderTransformOrigin="50%,0%" RenderTransform="rotate(-6deg)">
+                        <Rectangle Width="1.4" Height="14" Fill="#B0F3EAD9" HorizontalAlignment="Center" VerticalAlignment="Top"/>
+                        <Border Width="164" Margin="0,12,0,0" Background="#FFF3EAD9" CornerRadius="4" Padding="12,10,12,10"
+                                BoxShadow="0 4 14 0 #73000000">
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal">
+                                    <Ellipse Width="9" Height="9" Stroke="#FF241A2E" StrokeThickness="1.4" Fill="#FF1A1230" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                    <TextBlock Text="{loc:Str chaster_tag_eyebrow}" FontFamily="Consolas, Courier New" FontSize="10"
+                                               FontWeight="Bold" Foreground="#FF241A2E" Opacity="0.7" VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <TextBlock x:Name="TxtTagAmount" Text="0:00" FontFamily="Fredoka, Segoe UI" FontSize="30"
+                                           FontWeight="Bold" Foreground="#FFC8244A" Margin="0,2,0,0"/>
+                                <!-- the line wraps short of the rubber stamp, so the stamp never sits on it (WPF TAB-10) -->
+                                <Grid Margin="0,2,0,0" ColumnDefinitions="*,Auto">
+                                    <TextBlock x:Name="TxtTagLands" FontFamily="Consolas, Courier New" FontSize="9.5" Foreground="#FF241A2E"
+                                               Opacity="0.75" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                                    <Border x:Name="TagStamp" Grid.Column="1" VerticalAlignment="Bottom" Margin="6,5,-6,-2"
+                                            BorderBrush="#FFC8244A" BorderThickness="2" CornerRadius="3" Padding="5,1" Opacity="0.85"
+                                            RenderTransformOrigin="50%,50%" RenderTransform="rotate(-14deg)">
+                                        <TextBlock x:Name="TxtTagStamp" Text="UNPAID" FontFamily="Consolas, Courier New" FontSize="12"
+                                                   FontWeight="Bold" Foreground="#FFC8244A"/>
+                                    </Border>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+                    </Panel>
+                </Panel>
                 <!-- CIRCE'S MOOD: the heat row drawn, bottom right. Hidden with heat off (WPF :495). -->
                 <fx:CircesMoodMeter x:Name="MoodMeter" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,24,16" ZIndex="5"/>
                 <!-- CIRCE SAYS: her line, above the meter. Hidden between lines. -->
@@ -501,6 +576,166 @@
                     </Border>
                 </Popup>
             </Grid>
+            <!-- 5. THE MENU: two boards, always in view (WPF ChasterTabView.xaml:897-1056, linked only).
+                 Code in ChasterTabView.Menu.cs / PriceEdit.cs / Limits.cs / Trailer.cs. -->
+            <StackPanel x:Name="MenuPanel" Grid.Row="5" IsVisible="False">
+                <Grid Margin="4,18,0,2">
+                    <TextBlock Text="{loc:Str chaster_menu_eyebrow}" Theme="{StaticResource CirceEyebrow}" VerticalAlignment="Center"/>
+                    <Button x:Name="BtnHowItWorks" Theme="{StaticResource CirceLink}" HorizontalAlignment="Right" Click="BtnHowItWorks_Click">
+                        <TextBlock Text="{loc:Str chaster_how_title}" Foreground="{DynamicResource TextLightBrush}" TextDecorations="Underline"/>
+                    </Button>
+                </Grid>
+                <Border x:Name="HowItWorksCard" IsVisible="False" Theme="{StaticResource CirceCard}" Margin="0,4,0,10">
+                    <StackPanel>
+                        <TextBlock Text="{loc:Str chaster_how_1}" Theme="{StaticResource CirceHowLine}"/>
+                        <TextBlock Text="{loc:Str chaster_intro_2}" Theme="{StaticResource CirceHowLine}"/>
+                        <TextBlock Text="{loc:Str chaster_how_3}" Theme="{StaticResource CirceHowLine}"/>
+                        <TextBlock Text="{loc:Str chaster_intro_3}" Theme="{StaticResource CirceHowLine}"/>
+                    </StackPanel>
+                </Border>
+                <DockPanel Margin="4,0,0,8" LastChildFill="True">
+                    <Button x:Name="BtnResetPrices" DockPanel.Dock="Right" Theme="{StaticResource CirceLink}" IsVisible="False"
+                            VerticalAlignment="Center" Click="BtnResetPrices_Click">
+                        <TextBlock Text="{loc:Str chaster_price_reset}" Foreground="{DynamicResource TextLightBrush}" TextDecorations="Underline"/>
+                    </Button>
+                    <TextBlock x:Name="TxtMenuHint" FontSize="12" TextWrapping="Wrap" VerticalAlignment="Center"
+                               Foreground="{DynamicResource TextSecondaryBrush}"/>
+                </DockPanel>
+                <Grid x:Name="Boards" ColumnDefinitions="*,14,*">
+                    <Border x:Name="CostBoard" Grid.Column="0" Theme="{StaticResource CirceCard}" Padding="14,12,6,6" BorderBrush="#66FF6B8A">
+                        <StackPanel>
+                            <TextBlock Text="{loc:Str chaster_board_costs}" FontFamily="Fredoka, Segoe UI" FontSize="15"
+                                       FontWeight="SemiBold" Foreground="#FF8FA3" Margin="2,0,0,10"/>
+                            <UniformGrid x:Name="CostRows" Columns="2"/>
+                            <!-- Natasha's favourite on flashes: off = only bubbles are ever red. -->
+                            <Grid x:Name="FlashDodgeRow" Margin="2,6,8,6" ColumnDefinitions="Auto,*" Background="Transparent"
+                                  ToolTip.Tip="{loc:Str chaster_flash_dodge_hint}">
+                                <CheckBox x:Name="ChkFlashDodge" Theme="{StaticResource ToggleStyle}" VerticalAlignment="Top" Margin="0,1,0,0"
+                                          IsCheckedChanged="ChkFlashDodge_Changed"/>
+                                <StackPanel Grid.Column="1" Margin="10,0,0,0">
+                                    <TextBlock Text="{loc:Str chaster_flash_dodge}" FontSize="12.5" Foreground="{DynamicResource TextLightBrush}"/>
+                                    <TextBlock x:Name="TxtFlashDodgeSub" FontSize="11.5" TextWrapping="Wrap" Margin="0,2,0,0"
+                                               Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                </StackPanel>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+                    <Border x:Name="EarnBoard" Grid.Column="2" Theme="{StaticResource CirceCard}" Padding="14,12,6,6" BorderBrush="#665FFFD0">
+                        <StackPanel>
+                            <TextBlock Text="{loc:Str chaster_board_earns}" FontFamily="Fredoka, Segoe UI" FontSize="15"
+                                       FontWeight="SemiBold" Foreground="#5FFFD0" Margin="2,0,0,10"/>
+                            <UniformGrid x:Name="EarnRows" Columns="2"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                <!-- The jackpot, across both boards: gold, dashed, not a switch. -->
+                <Panel x:Name="JackpotRow" Margin="0,12,0,0" Cursor="Help" Background="Transparent">
+                    <Rectangle Stroke="#E0B052" StrokeThickness="1.2" StrokeDashArray="5,3" RadiusX="12" RadiusY="12" Fill="#12E0B052" Opacity="0.9"/>
+                    <Grid Margin="12,9,14,9" ColumnDefinitions="Auto,*,Auto">
+                        <Border x:Name="JackpotThumb" Grid.Column="0" Width="44" Height="44" CornerRadius="8" ClipToBounds="True" Margin="0,0,12,0">
+                            <Image x:Name="JackpotArt" Stretch="UniformToFill"/>
+                        </Border>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock Text="{loc:Str chaster_short_jackpot}" FontFamily="Fredoka, Segoe UI" FontSize="15"
+                                       FontWeight="SemiBold" Foreground="#E0B052"/>
+                            <TextBlock Text="{loc:Str chaster_flavour_jackpot}" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>
+                        </StackPanel>
+                        <TextBlock Grid.Column="2" Text="0:00" FontFamily="Consolas, Courier New" FontSize="15" FontWeight="Bold"
+                                   Foreground="#E0B052" VerticalAlignment="Center"/>
+                    </Grid>
+                </Panel>
+
+                <!-- the footer facts -->
+                <WrapPanel x:Name="FootRow" Margin="0,14,-8,0">
+                    <Border Theme="{StaticResource CirceFoot}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="PANIC" FontFamily="Fredoka, Segoe UI" FontSize="11" FontWeight="Bold" Foreground="#FF6B8A" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                            <TextBlock Text="{loc:Str chaster_fact_panic}" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Theme="{StaticResource CirceFoot}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="LIVE" FontFamily="Fredoka, Segoe UI" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource TextLightBrush}" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                            <TextBlock Text="{loc:Str chaster_fact_push_launch}" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Theme="{StaticResource CirceFoot}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#x21BA;" FontFamily="Fredoka, Segoe UI Symbol, Segoe UI" FontSize="12" FontWeight="Bold" Foreground="#5FFFD0" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                            <TextBlock Text="{loc:Str chaster_fact_floor_long}" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Theme="{StaticResource CirceFoot}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#x2298;" FontFamily="Fredoka, Segoe UI Symbol, Segoe UI" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                            <TextBlock Text="{loc:Str chaster_fact_unlink}" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+                </WrapPanel>
+
+                <!-- the two limits, behind one link: most players never touch them -->
+                <Grid Margin="0,10,0,0">
+                    <Button x:Name="BtnLimits" Theme="{StaticResource CirceLink}" HorizontalAlignment="Left" Click="BtnLimits_Click">
+                        <TextBlock Text="{loc:Str chaster_limits}" Foreground="{DynamicResource TextLightBrush}" TextDecorations="Underline"/>
+                    </Button>
+                </Grid>
+                <Border x:Name="LimitsCard" IsVisible="False" Theme="{StaticResource CirceCard}" Margin="0,10,0,0">
+                    <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto,Auto">
+                        <TextBlock Text="{loc:Str chaster_limit_day}" FontSize="13" Foreground="{DynamicResource TextLightBrush}"
+                                   VerticalAlignment="Center" Margin="0,0,16,0"/>
+                        <Slider x:Name="SliderDayLimit" Grid.Column="1" Minimum="15" Maximum="720" TickFrequency="15"
+                                IsSnapToTickEnabled="True" SmallChange="15" LargeChange="60" VerticalAlignment="Center"
+                                ValueChanged="LimitSlider_ValueChanged"/>
+                        <StackPanel Grid.Column="2" MinWidth="90" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="12,0,0,0">
+                            <TextBlock x:Name="TxtDayLimit" FontFamily="Consolas, Courier New" FontSize="15" FontWeight="Bold"
+                                       Foreground="#FF6B8A" HorizontalAlignment="Right"/>
+                            <!-- a raise waits a day: the figure it goes to, and when -->
+                            <TextBlock x:Name="TxtDayPending" FontFamily="Consolas, Courier New" FontSize="10.5" HorizontalAlignment="Right"
+                                       Foreground="#E0B052" IsVisible="False" ToolTip.Tip="{loc:Str chaster_limit_pending_tip}"/>
+                        </StackPanel>
+                        <TextBlock Grid.Row="1" Text="{loc:Str chaster_limit_backlog}" FontSize="13" Foreground="{DynamicResource TextLightBrush}"
+                                   VerticalAlignment="Center" Margin="0,12,16,0" ToolTip.Tip="{loc:Str chaster_limit_backlog_hint}"/>
+                        <Slider x:Name="SliderBacklogLimit" Grid.Row="1" Grid.Column="1" Minimum="60" Maximum="2880" TickFrequency="60"
+                                IsSnapToTickEnabled="True" SmallChange="60" LargeChange="360" VerticalAlignment="Center" Margin="0,12,0,0"
+                                ValueChanged="LimitSlider_ValueChanged" ToolTip.Tip="{loc:Str chaster_limit_backlog_hint}"/>
+                        <StackPanel Grid.Row="1" Grid.Column="2" MinWidth="90" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="12,12,0,0">
+                            <TextBlock x:Name="TxtBacklogLimit" FontFamily="Consolas, Courier New" FontSize="15"
+                                       FontWeight="Bold" Foreground="#FF6B8A" HorizontalAlignment="Right"/>
+                            <TextBlock x:Name="TxtBacklogPending" FontFamily="Consolas, Courier New" FontSize="10.5" HorizontalAlignment="Right"
+                                       Foreground="#E0B052" IsVisible="False" ToolTip.Tip="{loc:Str chaster_limit_pending_tip}"/>
+                        </StackPanel>
+                        <CheckBox x:Name="ChkRelock" Grid.Row="2" Grid.ColumnSpan="3" Margin="0,14,0,0"
+                                  ToolTip.Tip="{loc:Str chaster_relock_hint}" IsCheckedChanged="ChkRelock_Changed">
+                            <TextBlock Text="{loc:Str chaster_relock}" Foreground="{DynamicResource TextLightBrush}" FontSize="13"/>
+                        </CheckBox>
+                    </Grid>
+                </Border>
+
+                <!-- THE TRAILER: one popup, re-aimed at whichever row is hovered (WPF :1058-1110). It sits BELOW the row,
+                     never over it. The picture is the scene here: the WPF vignette browser is not on this head. -->
+                <Popup x:Name="Trailer" Placement="Bottom" VerticalOffset="6" IsLightDismissEnabled="False">
+                    <Border x:Name="TrailerCard" Width="320" Background="#FF1A1230" BorderBrush="{DynamicResource GlassBorderBrush}"
+                            BorderThickness="1" Padding="8" PointerEntered="Trailer_PointerEntered" PointerExited="Trailer_PointerExited">
+                        <StackPanel>
+                            <Panel x:Name="TrailerPlate" Height="190" ClipToBounds="True" Background="#FF120C1F">
+                                <Image x:Name="TrailerArt" Stretch="UniformToFill" RenderOptions.BitmapInterpolationMode="HighQuality"/>
+                            </Panel>
+                            <Grid Margin="6,8,6,0" ColumnDefinitions="*,Auto">
+                                <TextBlock x:Name="TxtTrailerFlavour" Grid.Column="0" FontFamily="Fredoka, Segoe UI" FontSize="14" FontWeight="Medium"
+                                           Foreground="{DynamicResource TextLightBrush}" TextWrapping="Wrap"/>
+                                <Border x:Name="TrailerBadgeHost" Grid.Column="1" VerticalAlignment="Top" Margin="8,0,0,0"/>
+                            </Grid>
+                            <Grid Margin="6,4,6,4" ColumnDefinitions="*,Auto">
+                                <TextBlock x:Name="TxtTrailerWhy" Grid.Column="0" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Opacity="0.85"
+                                           TextWrapping="Wrap"/>
+                                <TextBlock x:Name="TxtTrailerFigure" Grid.Column="1" FontFamily="Consolas, Courier New" FontSize="13" FontWeight="Bold"
+                                           VerticalAlignment="Bottom" Margin="8,0,0,0"/>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+                </Popup>
+            </StackPanel>
         </Grid>
     </ScrollViewer>
 </UserControl>

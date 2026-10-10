@@ -3,8 +3,10 @@
 // the live hero clock (:301), the ends line (:277), the pills (:372), the account chip (:871),
 // the link flow (:830-863) on the Core loopback OAuth, the lock pick (:962-1053) and the fact cap.
 // Circe's mood is the CircesMoodMeter heat row and her lines land in PageSays (WPF ChasterTabView.Mood.cs).
-// ponytail: the ground (spiral/glow/ambient), hero art, paper tag,
-// LockTitle letters, limits, menu, trailer and most Fx. The numbers + receipt (Numbers.cs), calendar (Calendar.cs) and keys (Keys.cs) are partials.
+// The hero art, the paper tag, the menu (two boards, the red flash switch, How it works, Reset), the
+// click-to-set figures, the two limits and the trailer are Menu.cs / PriceEdit.cs / Limits.cs / Trailer.cs.
+// ponytail: the ground (spiral/glow/ambient), LockTitle letters and most Fx.
+// The numbers + receipt (Numbers.cs), calendar (Calendar.cs) and keys (Keys.cs) are partials.
 // The heads-up clock, raffle card and ladder scrap are ChasterTabView.Ladder.cs (ChasterTabView.Fx.cs: FxSwitch/FxConsentShown/FxConsentOk
 // bursts included) are later slices. Unlink, the switch + consent and pause are real (slice 2).
 using System;
@@ -57,6 +59,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             LadderInit();
             NumbersInit();
             KeysInit();
+            MenuInit();
             Refresh();
             LadderRenderSample();
         }
@@ -95,7 +98,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         // All three arrive on whatever thread found out.
         private void OnLinkChanged() => Dispatcher.UIThread.Post(OnTabShown);
-        private void OnLockChanged() => Dispatcher.UIThread.Post(RefreshHero);
+        // WPF :167-172: a lock starting or ending also opens or closes the figures.
+        private void OnLockChanged() => Dispatcher.UIThread.Post(() => { RefreshHero(); PaintStamps(); });
         private void OnBooked(string eventId, TabBooking booking) => Dispatcher.UIThread.Post(() => { RefreshHero(); RefreshAdded(); RefreshNumbers(); });
 
         internal void Refresh()
@@ -107,14 +111,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             AccountStrip.IsVisible = linked;
             AddedRow.IsVisible = linked;
             NumbersPanel.IsVisible = linked;
-            if (linked) { RefreshNumbers(); RefreshPresets(); }
+            MenuPanel.IsVisible = linked;
+            PaperTag.IsVisible = linked;
+            if (!linked) HideTrailer();
+            RefreshLimits();
+            if (linked) { ApplyPriceToggles(); RefreshNumbers(); RefreshPresets(); }
             if (linked) RefreshAdded(); else HideLadder();
             SwitchPill.IsVisible = linked;
             PausePill.IsVisible = linked;
             PaintPause(CoreSettings.Current.ChasterPaused);
             BtnLink.IsEnabled = chaster != null;
             ShowLinking(chaster?.IsLinking == true);
-            TxtFactCap1.Text = TxtFactCap2.Text = CircesTab.Format((chaster?.Caps ?? TabLimits.Default).DailySeconds, signed: false);
             if (!linked) LockRow.IsVisible = false;
             RefreshHero();
             ConsentCard.IsVisible = false;
