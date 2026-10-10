@@ -77,9 +77,44 @@ public sealed class AnimatedLogoDial : Grid
         // move starts it. Event-driven, never a loop; a running clock returns at the first test.
         LayoutUpdated += (_, _) =>
         {
-            if (_clock.IsEnabled || _failed || !OnScreen || !AmbientFxCanvas.Env.AllowAmbientLoops) return;
+            if (_clock.IsEnabled || _failed || _modArt != null || !OnScreen || !AmbientFxCanvas.Env.AllowAmbientLoops) return;
             Refresh();
         };
+    }
+
+    private Bitmap? _modArt;
+
+    /// <summary>True while a mod's own wordmark is showing in place of the dial (tests).</summary>
+    internal bool ShowsModArtwork => _modArt != null;
+
+    /// <summary>WPF AnimatedLogoImage.SetArtwork: a mod that ships its own logo shows it still, as
+    /// its author drew it; null (the bundled wordmark) brings the animated dial back.</summary>
+    internal void SetArtwork(Bitmap? modArtwork)
+    {
+        try
+        {
+            _modArt = modArtwork;
+            if (modArtwork != null)
+            {
+                Stop();
+                _still.Source = modArtwork;
+                _still.IsVisible = true;
+                _surface.IsVisible = false;
+                return;
+            }
+            if (_failed)
+            {
+                try { _still.Source = new Bitmap(AssetLoader.Open(new Uri(FallbackUri))); }
+                catch (Exception e2) { Log.Debug("Logo wordmark fallback failed: {E}", e2.Message); }
+                _still.IsVisible = true;
+                return;
+            }
+            _still.Source = null;
+            _still.IsVisible = false;
+            _surface.IsVisible = _renderer != null;
+            Refresh();
+        }
+        catch (Exception ex) { Log.Debug("Logo dial SetArtwork: {E}", ex.Message); }
     }
 
     /// <summary>True while the clock runs (tests).</summary>
@@ -105,6 +140,7 @@ public sealed class AnimatedLogoDial : Grid
     {
         try
         {
+            if (_modArt != null) { Stop(); return; }   // a mod's own wordmark never animates (WPF IsAnimatedArtwork)
             EnsureRenderer();
             bool animate = OnScreen && !_failed && _renderer != null && AmbientFxCanvas.Env.AllowAmbientLoops;
             if (animate)

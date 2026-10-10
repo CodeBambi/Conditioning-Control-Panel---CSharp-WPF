@@ -242,7 +242,7 @@ public sealed class ModChoiceTests
         return ms.ToArray();
     }
 
-    private static Task Run(Func<MainShellWindow, ReleaseContentService, FakeServer, Task> body) => AvaloniaTestDispatcher.RunAsync(async () =>
+    internal static Task Run(Func<MainShellWindow, ReleaseContentService, FakeServer, Task> body) => AvaloniaTestDispatcher.RunAsync(async () =>
     {
         Assert.Equal(TestUserDataProfile.Root, CorePaths.UserData);   // never the real profile
         if (Application.Current is null)
