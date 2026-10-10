@@ -78,8 +78,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                     _racePinged = false;
                     return true;
                 case "sfx":
-                    // not ported: WPF ChaosSfx.Play (the descent's native sfx bank) has no port yet.
-                    Log.Debug("RaceHost: sfx '{Name}' dropped, no native sfx bank on this head", (string?)o["name"]);
+                    // WPF CaucusHostService: the descent's native sfx bank.
+                    Chaos.ChaosSfx.PlayFrame((string?)o["name"], (float?)o["scale"]);
                     return true;
                 case "fire-payload":
                     RaceFirePayload(o);
@@ -137,10 +137,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             {
                 _raceLastHeartbeatUtc = DateTime.UtcNow;
                 _racePinged = false;
+                try { Platform.WebAssetServer.Shared.ModRoot ??= Dtrh.DtrhModContent.ModDtrhRoot; } catch (Exception ex) { _ = ex; }   // WPF :179 ccp.mod
                 Post(RaceInitMessage());
-                Post(GameMediaManifest.BuildLive().Frame());
-                // not ported: favorites (WPF DtrhAssetStatsStore.TopAssets(12)); the engagement store
-                // is not on this head, and WPF posts nothing for an empty one.
+                var raceMedia = GameMediaManifest.BuildLive();
+                Dtrh.DtrhModContent.MergeMedia(raceMedia);   // WPF :288: creator mods mix / replace media, as the descent
+                Post(raceMedia.Frame());
+                try
+                {
+                    var favorites = DtrhAssetStatsStore.TopAssets(12);
+                    if (favorites.Count > 0) Post(new { type = "favorites", names = favorites });
+                }
+                catch (Exception ex) { Log.Debug("RaceHost favorites post failed: {E}", ex.Message); }
                 PostRaceLoomList();
                 if (!_raceLoomHooked) { DtrhLoomStore.Changed += OnRaceLoomChanged; _raceLoomHooked = true; }
             }
@@ -165,8 +172,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                 returnToCasino = false,
             },
             modId = RaceActiveModId(),
-            // Creator mods' own DTRH content: DtrhModContent is not on this head (as the descent's init).
-            modContent = (object?)null,
+            // Creator mods' own DTRH content (drift pools, portrait, tint, drone) on the ccp.mod route.
+            modContent = Dtrh.DtrhModContent.BuildInitPayload(),
         };
 
         private static int RaceMasterVolume()

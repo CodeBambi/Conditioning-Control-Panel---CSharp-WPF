@@ -96,6 +96,16 @@
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
     </Content>
+    <!-- Chaos art (WPF ConditioningControlPanel.csproj:216): hub banner + backdrop, boon chips, portraits, the recap
+         banner and the bubble sprites, resolved by Views/Chaos/ChaosArt from <exe>\assets\Chaos\{kind}\{id}.png.
+         The art still lives in the WPF head's folder; staging candidates stay out, as on WPF. -->
+    <Content Include="..\ConditioningControlPanel\assets\Chaos\**\*.png;..\ConditioningControlPanel\assets\Chaos\**\*.gif;..\ConditioningControlPanel\assets\Chaos\**\*.json"
+             Exclude="..\ConditioningControlPanel\assets\Chaos\**\_staging*\**"
+             Link="assets\Chaos\%(RecursiveDir)%(Filename)%(Extension)">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+    </Content>
     <!-- The shipped spiral (WPF Resources\spiral.gif): SpiralOverlay's default and the card's Default thumbnail. -->
     <Content Include="..\Assets\spiral.gif" Link="Resources\spiral.gif">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

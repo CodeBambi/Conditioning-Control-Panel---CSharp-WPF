@@ -175,6 +175,7 @@ public sealed class WebAssetServer : IDisposable
     {
         var rel = Uri.UnescapeDataString(urlPath).TrimStart('/');
         if (rel.StartsWith(CachePrefix, StringComparison.Ordinal)) return ResolveCacheFile(rel[CachePrefix.Length..]);
+        if (rel.StartsWith(ModPrefix, StringComparison.Ordinal)) return ResolveModFile(rel[ModPrefix.Length..]);
         var root = _root;
         int hostCut = rel.IndexOf('/');
         if (hostCut > 0 && Hosts.TryGetValue(rel[..hostCut], out var hosted)) return ResolveHosted(hosted(), rel[(hostCut + 1)..]);
@@ -199,6 +200,30 @@ public sealed class WebAssetServer : IDisposable
         if (!Inside(full, root) || !File.Exists(full) || !LinksStayInside(full, root)) return null;
         if (asset && !IntakeRun.IsAssetActive(IntakeRun.DisabledAssetSet(DisabledAssets()), root, full)) return null;
         return full;
+    }
+
+    // ---- ccp.mod (a creator mod's own DtRH content) ------------------------------------------
+    /// <summary>URL prefix for the active mod's <c>resources/dtrh</c> folder, WPF's <c>https://ccp.mod/</c>
+    /// virtual host (DtrhHostService / CaucusHostService map it at launch): same server, same token rule.</summary>
+    public const string ModPrefix = "ccp.mod/";
+
+    /// <summary>Root behind <see cref="ModPrefix"/>, read per request (the active mod can change); null = not served.</summary>
+    public Func<string?>? ModRoot { get; set; }
+
+    /// <summary>The page-side base for mod files (WPF "https://ccp.mod/").</summary>
+    public string ModUrlBase => $"http://127.0.0.1:{Port}/{ModPrefix}";
+
+    static readonly HashSet<string> ModExtensions = new(StringComparer.OrdinalIgnoreCase)
+        { ".mp3", ".ogg", ".wav", ".png", ".jpg", ".jpeg", ".webp", ".gif", ".mp4", ".webm", ".m4v" };
+
+    /// <summary>Media only (the kinds DtrhModContent hands out), no dot-files, never a link out of the folder.</summary>
+    string? ResolveModFile(string rel)
+    {
+        if (ModRoot?.Invoke() is not { Length: > 0 } mod || rel.Length == 0 || rel.Contains('\0')) return null;
+        if (!ModExtensions.Contains(Path.GetExtension(rel)) || rel.Split('/', (char)92).Any(seg => seg.StartsWith('.'))) return null;
+        var root = Path.GetFullPath(mod).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        var full = Path.GetFullPath(Path.Combine(root, rel));
+        return Inside(full, root) && File.Exists(full) && LinksStayInside(full, root) ? full : null;
     }
 
     // ---- ccp.cache (Goon own-media transfer) -------------------------------------------------

@@ -49,6 +49,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
         {
             switch ((string?)o["type"])
             {
+                case "vn-speaking":
+                case "sfx":
+                case "freeze-state":
+                case "mute-state":
+                case "asset-stats":
+                case "loom-save":
+                case "loom-delete":
+                case "loom-reveal":
+                case "report-bug":
+                case "bark":
+                case "haptic-state":
+                    HandleDtrhHostFrame(o);
+                    return true;
                 case "meta-command":
                     _meta ??= new DtrhMetaBridge(false, Post);
                     _meta.Handle(o);
@@ -64,6 +77,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                     InRun = true;
                     _lastRunProgress = null;
                     _runStartedUtc = DateTime.UtcNow;
+                    OnDtrhRunStartedExtras((string?)o["difficulty"] ?? "Gentle");
                     Log.Information("[Game] dtrh: run started (diff={D}, mode={M})", (string?)o["difficulty"] ?? "Gentle", (string?)o["mode"]);
                     return true;
                 case "run-ended":
@@ -86,6 +100,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
         {
             if (Spec.Id != "dtrh") return;
             BankDtrhRunOnTeardown("closed");
+            CloseDtrhHost();
             try { _meta?.FlushSave(); } catch (Exception ex) { Log.Debug("[Game] dtrh meta flush: {E}", ex.Message); }
         }
 
@@ -196,8 +211,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             _runActive = false;
             _lastRunProgress = null;   // banked: nothing left for the teardown to pay
             _runStartedUtc = DateTime.MinValue;
-            
-               // a run ending mid-freeze must resume native video + voice, not wedge them through the hub
+            ApplyWorldFreeze(false);   // a run ending mid-freeze must resume native video, not wedge it through the hub
+            ApplyDiveMute(false);      // a muted dive that ends must not leave every later video silent
             if (!DtrhRunCloseRule.ShouldPayBooking(wasActive))
             {
                 Log.Debug("DtrhHost: run-ended for a descent that is already banked - ignored");
@@ -277,7 +292,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                     // NOT on the teardown path: ChaosCrashSentinel.Recover("process-failed") and
                     // ("heartbeat-silent") both land in DisposeAll, and clearing the sentinel from
                     // there would report a genuine WebView2 crash as a clean run next launch.
-                    if (!fromTeardown) {  }
+                    if (!fromTeardown) { try { ChaosCrashSentinel.Clear(); } catch (Exception ex) { _ = ex; } }
                     // RevealService.Sync mutated pendingReveals BEHIND the bridge - push a fresh
                     // snapshot so the Warren's flash pass sees the new pendings on return.
                     try { _meta?.Rebroadcast(); } catch (Exception ex) { _ = ex; }
