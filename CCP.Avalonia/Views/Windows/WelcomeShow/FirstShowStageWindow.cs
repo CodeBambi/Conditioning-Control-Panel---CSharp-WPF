@@ -133,6 +133,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.WelcomeShow
             var primary = Screens?.Primary ?? Screens?.All.FirstOrDefault();
             _screenPx = primary?.Bounds ?? new PixelRect(0, 0, 1920, 1080);
             _scale = primary?.Scaling > 0 ? primary!.Scaling : 1;
+            // X11: override-redirect goes on BEFORE any geometry (X11Overlay.SetOverrideRedirect remarks: a
+            // Position set first is a ConfigureRequest the window manager can replay after Show at the
+            // 300x200 default size). The XID exists from the constructor on; Launch applies it again.
+            if (OperatingSystem.IsLinux())
+            {
+                try { X11Overlay.SetOverrideRedirect(this, _screenPx, passive: true); }
+                catch (Exception ex) { Log.Debug(ex, "First show stage: early override-redirect failed"); }
+            }
             Position = _screenPx.Position; Width = _screenPx.Width / _scale; Height = _screenPx.Height / _scale;
             Content = _stage;
             _surface.Width = Width; _surface.Height = Height; _stage.Children.Add(_surface);

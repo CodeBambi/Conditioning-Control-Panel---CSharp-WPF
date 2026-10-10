@@ -189,6 +189,41 @@ public sealed class ScreenOcrServiceTests
     }
 
     [Fact]
+    public void X11_NumberPad_Follows_NumLock()
+    {
+        const int Shift = 1, NumLock = 0x10;
+        uint Pad7(int level) => level == 0 ? 0xFF95u : level == 1 ? 0xFFB7u : 0u;   // KP_Home / KP_7
+        Assert.Null(X11KeyListener.Translate(0, Pad7));                                             // NumLock off: Home
+        Assert.Equal((X11KeyListener.Key.Char, '7'), X11KeyListener.Translate(NumLock, Pad7));      // on: the digit
+        Assert.Null(X11KeyListener.Translate(NumLock | Shift, Pad7));                               // Shift undoes it
+        // A one-level pad key (KP_Enter) keeps its meaning with NumLock on.
+        Assert.Equal(X11KeyListener.Key.Clear, X11KeyListener.Translate(NumLock, l => l == 0 ? 0xFF8Du : 0u)!.Value.Key);
+        // NumLock never changes a letter.
+        Assert.Equal((X11KeyListener.Key.Char, 'a'), X11KeyListener.Translate(NumLock, l => l == 0 ? 0x61u : 0x41u));
+    }
+
+    [Fact]
+    public void X11_Idle_Wobble_Is_Not_New_Input()
+    {
+        long first = HeadInputProbe.StableInputMoment(5_000_000);
+        Assert.Equal(first, HeadInputProbe.StableInputMoment(5_000_000 + HeadInputProbe.InputMomentSlackMs));   // same moment, read late
+        Assert.Equal(first, HeadInputProbe.StableInputMoment(5_000_000 - 7));
+        long next = HeadInputProbe.StableInputMoment(5_000_000 + 400);                                          // a real key press
+        Assert.NotEqual(first, next);
+        Assert.Equal(next, HeadInputProbe.StableInputMoment(5_000_000 + 395));
+    }
+
+    [Fact]
+    public void Linux_Font_Standins_Cover_The_Windows_Faces_And_Stay_Off_Windows()
+    {
+        foreach (var name in new[] { "Consolas", "Courier New", "monospace", "Segoe UI" })
+            Assert.True(AppFonts.Substitutes.ContainsKey(name), name);
+        Assert.Equal(AppFonts.BundledMono, AppFonts.Substitutes["Consolas"]);
+        if (System.OperatingSystem.IsWindows()) Assert.Null(AppFonts.Options());
+        else Assert.Equal(AppFonts.Substitutes.Count, AppFonts.Options()!.FontFamilyMappings!.Count);
+    }
+
+    [Fact]
     public void X11_Listener_Never_Starts_Off_Linux_Or_In_Tests()
     {
         X11KeyListener.Sync(true, (_, _) => { });

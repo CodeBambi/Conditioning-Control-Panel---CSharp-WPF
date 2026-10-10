@@ -3,7 +3,7 @@
 // Consulted by the scheduled flash (App CoreFlash.ShowProvider -> HoldsScheduledFlash, WPF FlashService.cs:689)
 // and the scheduled mandatory video (MandatoryVideoScheduler.ShouldDefer -> HoldsScheduledVideo, WPF
 // VideoService.cs:3013); Settings > Performance BtnDndPickApp lists RunningWindowedProcesses.
-// This file is the Windows half (user32). Linux: App.axaml.cs points Core DndGuard.ForegroundProcess at
+// Windows reads user32 here. Linux: this guard (and Core DndGuard, seeded in App.axaml.cs) reads
 // X11Windows.ForegroundProcess (_NET_ACTIVE_WINDOW + _NET_WM_PID), so the same list works for X11 and
 // XWayland windows; a native Wayland window has no readable owner and never suppresses.
 
@@ -37,7 +37,7 @@ internal static class DoNotDisturbGuard
     internal static string ForegroundProcessName()
     {
         if (ForegroundForTest is { } f) return f();
-        if (!OperatingSystem.IsWindows()) return "";
+        if (!OperatingSystem.IsWindows() && !OperatingSystem.IsLinux()) return "";
         lock (Gate)
         {
             var now = Environment.TickCount64;
@@ -45,6 +45,14 @@ internal static class DoNotDisturbGuard
             _cacheExpiryTick = now + CacheMs;
             try
             {
+                // Linux: the flash and video holds call THIS guard, so it reads X itself (it used to
+                // answer "" off Windows, which left do-not-disturb dead on Linux). X11 / XWayland windows
+                // only; a native Wayland window has no readable owner and never suppresses.
+                if (!OperatingSystem.IsWindows())
+                {
+                    _cachedProcess = X11Windows.ForegroundProcess();
+                    return _cachedProcess;
+                }
                 var hwnd = GetForegroundWindow();
                 if (hwnd == IntPtr.Zero) { _cachedProcess = ""; return ""; }
                 GetWindowThreadProcessId(hwnd, out uint pid);

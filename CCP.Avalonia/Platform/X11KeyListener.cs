@@ -46,7 +46,7 @@ internal static class X11KeyListener
 
     private const int GenericEvent = 35, XI_RawKeyPress = 13, XIAllMasterDevices = 1;
     private const uint XkbUseCoreKbd = 0x0100;
-    private const int ShiftMask = 1, LockMask = 2, ControlMask = 4, Mod1Mask = 8, Mod4Mask = 0x40, Mod5Mask = 0x80;
+    private const int ShiftMask = 1, LockMask = 2, ControlMask = 4, Mod1Mask = 8, Mod2Mask = 0x10, Mod4Mask = 0x40, Mod5Mask = 0x80;
     // XGenericEventCookie / XIRawEvent on LP64.
     private const int OffType = 0, OffExtension = 32, OffEvType = 36, OffData = 48, OffRawDetail = 56;
 
@@ -148,6 +148,13 @@ internal static class X11KeyListener
         var level = (shift ? 1 : 0) + ((mods & Mod5Mask) != 0 ? 2 : 0);   // Mod5 = AltGr
         var ks = keysymAtLevel(level);
         if (ks == 0 && level != 0) ks = keysymAtLevel(0);
+        // The number pad is a KEYPAD-type key: NumLock (Mod2 on every stock layout) picks level 1 and
+        // Shift undoes it. Without this the pad's digits arrive as KP_End, KP_Down... and are dropped.
+        if (ks is >= 0xFF80 and <= 0xFFBD && (mods & Mod2Mask) != 0)
+        {
+            var pad = keysymAtLevel(shift ? 0 : 1);
+            if (pad != 0) ks = pad;
+        }
         switch (ks)
         {
             case 0xFF0D or 0xFF8D or 0xFF09 or 0xFF1B: return (Key.Clear, '\0');   // Return, KP_Enter, Tab, Escape

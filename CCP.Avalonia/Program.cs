@@ -93,7 +93,7 @@ namespace ConditioningControlPanel.Avalonia
             // success and changes nothing, so only the server's answer proves it works.
             // Run it inside a nested compositor - scripts/x11-overlay-probe.sh does that.
             if (Array.IndexOf(args, "--x11-probe") >= 0)
-                return X11OverlayProbe.Run();
+                return LinuxOnlyCheck("--x11-probe") ?? X11OverlayProbe.Run();
 
             // --overlay-check opens one click-through override-redirect overlay per screen and
             // reads map state, override_redirect, depth, input shape and geometry back from the
@@ -111,17 +111,17 @@ namespace ConditioningControlPanel.Avalonia
 
             // --notify-check: org.freedesktop.Notifications Notify -> id -> CloseNotification, live.
             if (Array.IndexOf(args, "--notify-check") >= 0)
-                return Platform.OsNotifications.CheckAsync().GetAwaiter().GetResult();
+                return LinuxOnlyCheck("--notify-check") ?? Platform.OsNotifications.CheckAsync().GetAwaiter().GetResult();
 
             // --portal-check: GlobalShortcuts CreateSession -> Response 0 -> Session.Close, live.
             if (Array.IndexOf(args, "--portal-check") >= 0)
-                return Platform.PortalPanicShortcut.CheckAsync().GetAwaiter().GetResult();
+                return LinuxOnlyCheck("--portal-check") ?? Platform.PortalPanicShortcut.CheckAsync().GetAwaiter().GetResult();
 
             // --panic-check [Key] presses the panic key through XTest against the real app on a temp
             // profile and fails unless one press stops bouncing text and a double press exits.
             var pc = Array.IndexOf(args, "--panic-check");
             if (pc >= 0)
-                return PanicCheck.Run(pc + 1 < args.Length ? args[pc + 1] : "Pause");
+                return LinuxOnlyCheck("--panic-check") ?? PanicCheck.Run(pc + 1 < args.Length ? args[pc + 1] : "Pause");
             // --win-panic-check [Key]: the Windows twin; injects F24 into the WH_KEYBOARD_LL hook (sandbox only).
             var wpc = Array.IndexOf(args, "--win-panic-check");
             if (wpc >= 0)
@@ -223,6 +223,15 @@ namespace ConditioningControlPanel.Avalonia
             return 0;
         }
 
+        /// <summary>A self-check that talks to X11 or the session D-Bus: off Linux it says so and exits 2,
+        /// where it used to die on a missing libX11 / a null bus address. Null = run the check.</summary>
+        private static int? LinuxOnlyCheck(string flag)
+        {
+            if (OperatingSystem.IsLinux()) return null;
+            Console.Error.WriteLine($"{flag}: Linux only (X11 / session D-Bus). Not available on this OS.");
+            return 2;
+        }
+
         public static AppBuilder BuildAvaloniaApp()
         {
             var builder = AppBuilder.Configure<App>()
@@ -234,6 +243,9 @@ namespace ConditioningControlPanel.Avalonia
                 .With(new SkiaOptions { MaxGpuResourceSizeBytes = Platform.RenderBudget.GpuResourceCacheBytes });
             if (OperatingSystem.IsWindows())
                 builder = builder.With(Win32Options());
+            // Off Windows: bundled stand-ins for the Windows faces the views name (Platform/AppFonts.cs).
+            if (Platform.AppFonts.Options() is { } fonts)
+                builder = builder.With(fonts);
             // Pinned, not detected: every desktop overlay is an X11 override-redirect window
             // (Platform/X11Overlay.cs), and under a future native Wayland backend those calls would
             // silently no-op. On a Wayland session this runs through XWayland.
