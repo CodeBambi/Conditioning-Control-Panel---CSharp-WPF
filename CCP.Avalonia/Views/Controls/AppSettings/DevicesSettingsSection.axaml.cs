@@ -45,6 +45,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             SliderCmdPrecision.ValueChanged += SliderCmdPrecision_ValueChanged;
             ChkHeadphones.IsCheckedChanged += ChkHeadphones_Changed;
             WireVoiceModes();
+            BtnCameraShortcutDevices.Click += BtnCameraShortcutDevices_Click;
             ChkBlinkRecalWebcamBar.IsCheckedChanged += ChkBlinkRecalShortcut_Changed;
             ChkWebcamDriftCorrection.IsCheckedChanged += ChkWebcamDriftCorrection_Changed;
             ChkRestrictGazeToCalScreen.IsCheckedChanged += ChkRestrictGazeToCalScreen_Changed;
@@ -150,6 +151,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
                     : $"⏸ {s.PauseKey}");
 
                 RefreshChatShortcutLabel();
+                RefreshCameraShortcutLabel();
             }
             catch (Exception ex)
             {
@@ -791,13 +793,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             }
         }
 
-        // ponytail: BtnCameraShortcutDevices stays inert, and NOT for the reason the old note gave.
-        // SerializeModifiers shipped with the tube, so the capture half would work - but the combo
-        // it stores drives MainWindow.ToggleWebcamFromHotkey (MainWindow.SessionIO.cs:1485), which
-        // toggles WebcamTrackingService. This head now has a tracker (Platform/WebcamTracker, and
-        // CoreWebcam.IsAvailable is seeded true), but no global hotkey listener calls it, so a rebind
-        // here would let the user configure a key that cannot fire - and the row's own label would then
-        // report a binding that does nothing. The label is left at its XAML literal for the same reason.
-        // Unblocks with a global-hotkey route to WebcamTracker (ToggleWebcamFromHotkey).
+        // =====================================================================================
+        //  the camera shortcut (WPF MainWindow.SessionIO.cs BtnCameraShortcut_Click :1485)
+        // =====================================================================================
+
+        private void RefreshCameraShortcutLabel() =>
+            TxtCameraShortcutLabelDevices.Text = MainShellWindow.FormatCameraShortcut();
+
+        internal async void BtnCameraShortcutDevices_Click(object? sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (TopLevel.GetTopLevel(this) is not Window owner) return;
+                if (await MainShellWindow.RebindCameraShortcutAsync(owner)) RefreshCameraShortcutLabel();
+            }
+            catch (Exception ex) { Log.Warning(ex, "Settings/Devices: camera shortcut rebind failed"); }
+        }
     }
 }
