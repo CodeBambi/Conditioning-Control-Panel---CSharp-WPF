@@ -187,6 +187,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             RemoteStatusDot.Fill = idle ? Grey : connected ? Green : Orange;
             BindKey(TxtRemoteStatus, idle ? "label_remote_idle" : connected ? "label_controller_connected" : "label_waiting_for_controller");
             TxtRemoteStatus.Foreground = connected ? Green : Grey;
+            // WPF UpdateDirectoryListingStatus: the title bar pill follows the session (hidden with none).
+            (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.UpdateDirectoryListingStatus(!idle, _directoryOptedIn, connected);
         }
 
         /// <summary>WPF AppendRemoteCommandLog: newest first, 50 entries, quiet verbs skipped.</summary>
@@ -372,8 +374,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         private void BtnEditEmoteCancel_Click(object? sender, RoutedEventArgs e) { EmoteEditPopup.IsOpen = false; _editingPreset = null; }
 
-        // ponytail: the directory opt-in chain (/v2/directory/opt-in) and the listing pill are not ported;
-        // the opt-in form stays a local form that publishes nothing.
+        // ponytail: the directory opt-in chain (/v2/directory/opt-in) is not ported; the opt-in form stays a
+        // local form that publishes nothing, so the title bar pill only ever says "Private only" here.
+        // WPF sets this after OptInToDirectoryAsync succeeds (MainWindow.RemoteControl.cs:659).
+        private bool _directoryOptedIn = false;
         private void BtnGateUnlock_Click(object? sender, RoutedEventArgs e) => (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.BtnGateUnlock_Click(sender, e);
         private void ChkOptInTag_Click(object? sender, RoutedEventArgs e) { }
         private void TxtOptInStatus_TextChanged(object? sender, TextChangedEventArgs e) { }
