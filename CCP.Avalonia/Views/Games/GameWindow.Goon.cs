@@ -97,6 +97,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             if (_goonAttached) return;
             _goonAttached = true;
             SeedGoon();
+            OpenGoonTransfer();
             GoonHostService.AttachWindow(Post);
             GoonHostService.RoomCodeChanged += OnGoonRoomCodeChanged;
             Closing += (_, _) => GoonFinalWord();
@@ -136,6 +137,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             try { _goonPeer?.Dispose(); } catch { }
             _goonOnline = _goonPeer = null;
             ReleaseGoonNoise();
+            CloseGoonTransfer();
             GoonHostService.DetachWindow();
             try
             {
@@ -255,20 +257,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                 case "goon-recv-commit":
                 case "goon-recv-abort":
                 case "goon-recv-drop":
-                {
-                    // not ported: TransferInboxStore (the received-artifact inbox). Answered in the
-                    // page's own error vocabulary so receivedStore.js drops the artifact at once.
-                    var id = (string?)o["id"] ?? (string?)o["sha256"] ?? "";
-                    Log.Information("[Goon] {Type}: not ported (received inbox), answered io-failed", type);
-                    Post(new { type = "goon-recv-result", id, ok = type == "goon-recv-abort", url = (string?)null, bytes = 0, error = type == "goon-recv-abort" ? null : "io-failed" });
+                    OnGoonRecvVerb(o);          // GameWindow.GoonTransfer.cs (WPF OnRecvVerb)
                     return true;
-                }
                 case "cache-req":
                 case "cache-put":
                 case "encode-done":
-                    // not ported: GoonCacheBridge + the transfer compression cache. caps.mediaTransfer is
-                    // false on this head, so the page's lobby shows sending as off rather than half-working.
-                    Log.Information("[Goon] {Type}: not ported (transfer cache)", type);
+                    GoonCacheBridge.OnMessage(o);   // Core (WPF GoonCacheBridge): the own-media compression cache
                     return true;
                 case "peer-card-req":
                     // WPF OnPeerCardRequest: the opponent's name + avatar for the VS splash; a duplicate posts nothing.
@@ -329,15 +323,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             GoonHostService.OnPageReady();
             try { Web.Focus(); } catch { }
 
-            var init = GoonHostService.BuildInit(IsHostFullscreen);
-            // The transfer cache and the received inbox are not ported: say so in the caps, never
-            // advertise a lane that would fire blanks (WPF TransferAllowed is the patron bar).
-            ((JObject)init["caps"]!)["mediaTransfer"] = false;
-            Post(init);
+            // caps.mediaTransfer is WPF's patron bar (GoonHostService.TransferAllowed), untouched here.
+            Post(GoonHostService.BuildInit(IsHostFullscreen));
 
             var manifest = JObject.FromObject(GameMediaManifest.BuildLive().Frame());
-            manifest["received"] = new JArray();   // ephemeral inbox: always empty at boot, as WPF
+            manifest["received"] = GoonReceivedForManifest();   // ephemeral inbox: wiped first, so empty at boot
             Post(manifest);
+            AttachGoonCache();                                  // after the manifest: the page has its pool first
 
             // Online pictures: only a pick made in THIS session fetches (a reload inside one window keeps it).
             StartGoonOnlineFromSettings();

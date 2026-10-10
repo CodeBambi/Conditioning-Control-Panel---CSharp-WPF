@@ -37,7 +37,7 @@ public sealed class WebAssetServer : IDisposable
         {
             lock (_sharedLock)
                 return _shared ??= new WebAssetServer(Path.Combine(AppContext.BaseDirectory, "Resources", "web"))
-                    { AssetsRoot = () => CorePaths.EffectiveAssets };
+                    { AssetsRoot = () => CorePaths.EffectiveAssets, CacheRoot = () => Services.Transfer.TransferCacheStore.Instance.Root };
         }
     }
 
@@ -158,6 +158,7 @@ public sealed class WebAssetServer : IDisposable
     internal string? ResolveFile(string urlPath)
     {
         var rel = Uri.UnescapeDataString(urlPath).TrimStart('/');
+        if (rel.StartsWith(CachePrefix, StringComparison.Ordinal)) return ResolveCacheFile(rel[CachePrefix.Length..]);
         var root = _root;
         bool asset = rel.StartsWith(AssetsPrefix, StringComparison.Ordinal);
         if (asset)
@@ -180,6 +181,33 @@ public sealed class WebAssetServer : IDisposable
         if (!Inside(full, root) || !File.Exists(full) || !LinksStayInside(full, root)) return null;
         if (asset && !IntakeRun.IsAssetActive(IntakeRun.DisabledAssetSet(DisabledAssets()), root, full)) return null;
         return full;
+    }
+
+    // ---- ccp.cache (Goon own-media transfer) -------------------------------------------------
+    /// <summary>URL prefix for the transfer cache, WPF's third virtual host <c>https://ccp.cache/</c>
+    /// (GoonHostService maps it over {userdata}/transfer-cache): same server, same token rule.</summary>
+    public const string CachePrefix = "ccp.cache/";
+
+    /// <summary>Root behind <see cref="CachePrefix"/> (the folder that holds art/, prv/, recv/); null = not served.</summary>
+    public Func<string?>? CacheRoot { get; init; }
+
+    /// <summary>The page-side base for cache files (WPF "https://ccp.cache/").</summary>
+    public string CacheUrlBase => $"http://127.0.0.1:{Port}/{CachePrefix}";
+
+    /// <summary>Exactly <c>art|prv|recv / &lt;64 hex&gt;.&lt;ext&gt;</c> and nothing else: never the index files,
+    /// never a nested path, never the .tmp sibling (it is outside the root), never a link out.</summary>
+    string? ResolveCacheFile(string rel)
+    {
+        if (CacheRoot?.Invoke() is not { Length: > 0 } cache) return null;
+        var segs = rel.Split('/');
+        if (segs.Length != 2 || segs[0] is not ("art" or "prv" or "recv")) return null;
+        var name = segs[1];
+        int dot = name.IndexOf('.');
+        if (dot != 64 || name.LastIndexOf('.') != dot || !name.AsSpan(0, 64).ToString().All(Uri.IsHexDigit)) return null;
+        if (!MediaTypeSniffer.MediaExtensions.Contains(Path.GetExtension(name))) return null;
+        var root = Path.GetFullPath(cache).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        var full = Path.GetFullPath(Path.Combine(root, segs[0], name));
+        return Inside(full, root) && File.Exists(full) && LinksStayInside(full, root) ? full : null;
     }
 
     /// <summary>The user's unchecked assets (Settings DisabledAssetPaths), never served.</summary>

@@ -94,6 +94,38 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             return m;
         }
 
+        /// <summary>The same walk as <see cref="Build"/>, as files (WPF DtrhAssetManifest.EnumerateActive):
+        /// full path, assets-relative path, bytes, picture or video. Local disk only; the transfer cache's
+        /// planner is the consumer, so "the active pool" never means two things on this head.</summary>
+        internal static IEnumerable<(string Full, string Rel, long Bytes, bool IsImage)> EnumerateActive(string? root, IEnumerable<string>? disabledPaths)
+        {
+            if (string.IsNullOrEmpty(root)) yield break;
+            var disabled = new HashSet<string>((disabledPaths ?? Array.Empty<string>()).Select(p => p.Replace('\\', '/')),
+                StringComparer.OrdinalIgnoreCase);
+            int accepted = 0;
+            foreach (var isImage in new[] { true, false })
+            {
+                var dir = Path.Combine(root, isImage ? "images" : "videos");
+                if (!Directory.Exists(dir)) continue;
+                var exts = isImage ? ImageExts : VideoExts;
+                long cap = isImage ? MaxImageBytes : MaxVideoBytes;
+                foreach (var f in Walk(dir, 0))
+                {
+                    if (accepted >= MaxEntries * 2) break;
+                    if (!exts.Contains(Path.GetExtension(f).ToLowerInvariant())) continue;
+                    string rel;
+                    try { rel = Path.GetRelativePath(root, f).Replace('\\', '/'); }
+                    catch { continue; }
+                    if (disabled.Contains(rel)) continue;
+                    long len;
+                    try { len = new FileInfo(f).Length; } catch { continue; }
+                    if (len <= 0 || len > cap) continue;
+                    accepted++;
+                    yield return (f, rel, len, isImage);
+                }
+            }
+        }
+
         /// <summary>The live library through the shared asset server.</summary>
         internal static Manifest BuildLive()
         {

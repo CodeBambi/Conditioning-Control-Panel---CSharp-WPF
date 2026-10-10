@@ -292,11 +292,6 @@ public sealed class GoonHostTests
             try
             {
                 w.HandleMessage("{\"type\":\"ready\"}");
-                w.HandleMessage("{\"type\":\"goon-recv-begin\",\"id\":\"j1\",\"sha256\":\"00\",\"mime\":\"video/mp4\",\"bytes\":10}");
-                var r = Assert.Single(Of(posted, "goon-recv-result"));
-                Assert.Equal("j1", (string?)r["id"]);
-                Assert.False((bool)r["ok"]!);
-                Assert.Equal("io-failed", (string?)r["error"]);
                 w.HandleMessage("{\"type\":\"share-card\",\"id\":\"s1\",\"op\":\"copy\"}");
                 Assert.False((bool)Assert.Single(Of(posted, "share-card-result"))["ok"]!);
             }
