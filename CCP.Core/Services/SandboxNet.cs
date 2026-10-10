@@ -25,6 +25,15 @@ namespace ConditioningControlPanel.Services
 
         public static bool Active { get; private set; }
 
+        /// <summary>The one check a feed makes before it goes to the network (hunt3 IC9: community
+        /// prompts, showcase clips): never in Offline mode, and never from a CCP_USERDATA_DIR sandbox on
+        /// the real transport. A transport a test injected is not the network, so the sandbox half
+        /// lets it through; Offline mode still refuses it.</summary>
+        public static bool FeedBlocked(bool offlineMode, bool realTransport) => FeedBlocked(offlineMode, realTransport, Active);
+
+        internal static bool FeedBlocked(bool offlineMode, bool realTransport, bool sandboxed) =>
+            offlineMode || (realTransport && sandboxed);
+
         public static void Install()
         {
             lock (Gate)

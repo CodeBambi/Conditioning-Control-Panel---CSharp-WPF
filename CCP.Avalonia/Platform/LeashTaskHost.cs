@@ -185,7 +185,8 @@ internal sealed class LeashTaskHost : ILeashTaskHost, IDisposable
                 Serilog.Log.Information("Leash lock card: no phrases enabled");
                 return false;
             }
-            LockCardWindow.ShowNext(isTest: false);
+            // SAFETY (IC1): never the player's own strict setting. A holder cannot raise restraint.
+            LockCardWindow.ShowNext(isTest: false, global::ConditioningControlPanel.Services.LockCardOrigin.Leash);
             return true;
         }
         catch (Exception ex) { Serilog.Log.Warning("Leash lock card failed: {E}", ex.Message); return false; }

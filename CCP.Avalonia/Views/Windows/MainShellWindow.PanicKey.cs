@@ -108,7 +108,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 return;
             }
             bool wasRunning = CoreEngine.IsRunning;
-            PanicSurfaces.StopAll("panic key", this);
+            PanicSurfaces.StopAll("panic key", this, holdArmed: true);   // armed once, above
             if (wasRunning) ShowFromTray();   // WPF: Show + Activate the main window after a running stop
 
             if ((now - _lastPanicTime).TotalMilliseconds > 2000) _panicPressCount = 0;

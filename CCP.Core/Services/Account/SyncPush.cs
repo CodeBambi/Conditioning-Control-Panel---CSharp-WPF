@@ -23,7 +23,8 @@ namespace ConditioningControlPanel.Services
     public sealed class SyncPush
     {
         public const SyncBody.Field Sent = SyncBody.Field.UnifiedId | SyncBody.Field.Xp | SyncBody.Field.Level
-            | SyncBody.Field.DescentEpoch | SyncBody.Field.DescentAuto | SyncBody.Field.Achievements;
+            | SyncBody.Field.DescentEpoch | SyncBody.Field.DescentAuto | SyncBody.Field.Achievements
+            | SyncBody.Field.TotalConditioningMinutes;   // hunt3 IC5 (WPF ProfileSyncService.cs:1820)
         public static readonly TimeSpan Cooldown = TimeSpan.FromSeconds(30);
         public static readonly TimeSpan HeartbeatInterval = TimeSpan.FromSeconds(120);
         private static readonly TimeSpan NudgeSettle = TimeSpan.FromSeconds(3), NudgeCooldownSlack = TimeSpan.FromSeconds(2);
@@ -164,6 +165,7 @@ namespace ConditioningControlPanel.Services
             UnifiedId = s.UnifiedId,
             Xp = (int)ProfileAdopt.TotalXp(s),
             Level = s.PlayerLevel,
+            TotalConditioningMinutes = s.TotalConditioningMinutes,
             DescentEpoch = Descent.DescentEpochs.ClientEpoch,
             DescentAuto = true,   // this head takes the offer silently (DescentMigration.ApplyRestore)
             Achievements = achievements?.Distinct().OrderBy(a => a, StringComparer.Ordinal).ToList(),
