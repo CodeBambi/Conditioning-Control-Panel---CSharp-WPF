@@ -650,7 +650,6 @@ public class BoardTilesTests
         var ripples = new[] { new BoardRipple(20, 10, 0.1) };
         // Warm past tier-up (~30 calls + the background delay): with 10 frames CI measured Tier-0 code.
         for (int k = 0; k < 60; k++) { BoardScene.Compute(pic, 0, fx, 0.3 + k / 30.0, 10, ripples, 0.3 + k / 30.0, false, c, z, ro); r.Draw(c, z, true, 0.02, ro, 0.9); }
-        var cpu0 = Process.GetCurrentProcess().TotalProcessorTime; // TEMPDIAG
         var sw = Stopwatch.StartNew();
         const int frames = 60;
         for (int k = 0; k < frames; k++)
@@ -666,7 +665,6 @@ public class BoardTilesTests
         // sample, every effect): pitch 14 + CRT 1.6-1.7 ms (1.93 ms before on the same machine).
         // This guard is loose (Debug, cold JIT, a loaded CI runner) and only catches a gross regression.
         Assert.True(ms < 12, $"a board frame took {ms:F2} ms");
-        Assert.Fail($"TEMPDIAG cpus {Environment.ProcessorCount} ms {ms:F2} procCores {(Process.GetCurrentProcess().TotalProcessorTime - cpu0).TotalMilliseconds / sw.Elapsed.TotalMilliseconds:F2}");
     }
 
     // ---- the view ----------------------------------------------------------------------------

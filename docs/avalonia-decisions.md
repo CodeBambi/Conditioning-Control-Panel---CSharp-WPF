@@ -886,5 +886,10 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
 - LauncherShortcutsTests.Every_launcher_game_ships_an_icon_file: root cause is the port's move of the icons to the shared
   `/Assets/launcher-icons` (linked into the WPF head as `Resources\launcher-icons`). The test now reads them there and also pins
   the csproj `Content ... Link` so the head still ships them. Same per-game assertion.
-- BoardTilesTests.A_frame_fits_the_budget: board code is byte-identical to origin/main, so not a port code change; flaky on
-  CI (13.1-18.0 ms vs 12 in 4 of 8 recent runs, passed on 227cea7). Budget untouched; see the layer's PR body for the data.
+- BoardTilesTests.A_frame_fits_the_budget (WPF test, frozen reference; supervisor-approved fix, 12 ms budget UNCHANGED): board code
+  is byte-identical to origin/main, so no port code change. Failed 13.1/14.9/15.7/18.0 ms in 4 of 8 port runs. Local bench of the
+  same loop: net8.0.31 1.86 ms vs net10.0.12 1.85 ms steady, 2.43 vs 2.66 ms cold. CI diagnostic run 38051508272 (4 vCPU): process
+  at 1.70-2.01 cores during the timed window (other classes running in parallel), frames 3.8-23.7 ms falling across the pass
+  (Tier-0 after only 10 warm-up frames). Fix: the class runs in a DisableParallelization collection and warms 60 frames (past
+  tier-up, the comment's "warmed up" intent). Run 38053157085 with the fix: 5.96 ms, 1.27 cores.
+- build.yml gains `workflow_dispatch:` (additive) so a branch can run the build without a PR.
