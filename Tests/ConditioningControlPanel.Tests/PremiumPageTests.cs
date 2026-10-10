@@ -270,9 +270,13 @@ public class PremiumPageTests
     {
         var prop = typeof(App).GetProperty(nameof(App.Patreon), BindingFlags.Static | BindingFlags.Public)!;
         var before = prop.GetValue(null);
+        // The tier lives in Core's ProviderSubscription behind PatreonService._core (the port moved it).
         var svc = (PatreonService)RuntimeHelpers.GetUninitializedObject(typeof(PatreonService));
-        typeof(PatreonService).GetField("<CurrentTier>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic)!
-            .SetValue(svc, tier);
+        var core = (ProviderSubscription)RuntimeHelpers.GetUninitializedObject(typeof(ProviderSubscription));
+        typeof(ProviderSubscription).GetField("<CurrentTier>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .SetValue(core, tier);
+        typeof(PatreonService).GetField("_core", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .SetValue(svc, core);
         prop.SetValue(null, svc);
         try { body(); }
         finally { prop.SetValue(null, before); }

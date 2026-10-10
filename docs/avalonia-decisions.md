@@ -877,3 +877,14 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
 ## 2026-10-10: Vault gate card/PayPal checkout link (avalonia-port/sync6-gate-pay)
 - Mirrors WPF 750e76812 exactly (supervisor-approved, P44): same URL `https://app.cclabs.app/subscribe?plan={basic|prime}&from=panel`,
   same copy (`vaultgate_or_card`), opened only through ExternalOpener on a user click; tests use a fake launcher, never a real URL.
+## 2026-10-10: CI green on the port stack (avalonia-port/ci-green)
+- core-linux tarball step: `packaging/aur/PKGBUILD` pkgver 7.0.5 -> 7.1.5 with the header's sed (Version.props from main sync #6);
+  pkgrel stays 1 (new pkgver), sha256sums stay SKIP (pinned at release). Local gate mirror: ~/ccp-port/bin/gate.ci-additions.sh.
+- PremiumPageTests (WPF, Windows-only): root cause is the port's PatreonService -> Core `ProviderSubscription` move; the test's
+  `WithTier` set `PatreonService.<CurrentTier>k__BackingField`, which no longer exists (`CurrentTier => _core.CurrentTier`). The
+  stand-in now sets the same backing field on an uninitialised ProviderSubscription behind `_core`. Assertions unchanged.
+- LauncherShortcutsTests.Every_launcher_game_ships_an_icon_file: root cause is the port's move of the icons to the shared
+  `/Assets/launcher-icons` (linked into the WPF head as `Resources\launcher-icons`). The test now reads them there and also pins
+  the csproj `Content ... Link` so the head still ships them. Same per-game assertion.
+- BoardTilesTests.A_frame_fits_the_budget: board code is byte-identical to origin/main, so not a port code change; flaky on
+  CI (13.1-18.0 ms vs 12 in 4 of 8 recent runs, passed on 227cea7). Budget untouched; see the layer's PR body for the data.

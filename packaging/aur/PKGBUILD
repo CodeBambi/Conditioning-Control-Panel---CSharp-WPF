@@ -3,7 +3,7 @@
 # pkgver follows Version.props; bump both together (update step: sed -i "s/^pkgver=.*/pkgver=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' ../../Version.props)/" PKGBUILD).
 # Local test: bash packaging/aur/test-local.sh <tarball> (makepkg + the installed launcher's --smoke, no sudo).
 pkgname=conditioning-control-panel-bin
-pkgver=7.0.5
+pkgver=7.1.5
 pkgrel=1
 pkgdesc="A visual conditioning application with gamification features"
 arch=('x86_64')

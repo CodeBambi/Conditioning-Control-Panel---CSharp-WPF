@@ -55,11 +55,11 @@ public class LauncherShortcutsTests
     [Fact]
     public void Every_launcher_game_ships_an_icon_file()
     {
-        var dir = new System.IO.DirectoryInfo(System.AppContext.BaseDirectory);
-        while (dir != null && !System.IO.Directory.Exists(System.IO.Path.Combine(dir.FullName, "ConditioningControlPanel", LauncherShortcuts.IconFolder)))
-            dir = dir.Parent;
-        Assert.NotNull(dir);
-        var folder = System.IO.Path.Combine(dir!.FullName, "ConditioningControlPanel", LauncherShortcuts.IconFolder);
+        // The icons live in the shared /Assets/launcher-icons (CLAUDE.md "Where the art lives"); the
+        // WPF head links them into its IconFolder, so pin that link too or the files would not ship.
+        var csproj = SourceRoots.ReadProductFile("ConditioningControlPanel.csproj");
+        Assert.Contains("<Content Include=\"..\\Assets\\launcher-icons\\*.ico\" Link=\"" + LauncherShortcuts.IconFolder + "\\", csproj);
+        var folder = System.IO.Path.Combine(SourceRoots.RepoRoot, "Assets", "launcher-icons");
         foreach (var game in LauncherCatalogue.Games)
         {
             var name = LauncherShortcuts.IconFileName(game.Id);
