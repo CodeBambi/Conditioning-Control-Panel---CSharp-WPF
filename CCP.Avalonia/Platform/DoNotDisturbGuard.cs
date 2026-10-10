@@ -3,8 +3,9 @@
 // Consulted by the scheduled flash (App CoreFlash.ShowProvider -> HoldsScheduledFlash, WPF FlashService.cs:689)
 // and the scheduled mandatory video (MandatoryVideoScheduler.ShouldDefer -> HoldsScheduledVideo, WPF
 // VideoService.cs:3013); Settings > Performance BtnDndPickApp lists RunningWindowedProcesses.
-// ponytail: Linux reads no foreground process
-// yet (X11ActiveWindow reads the title only; needs _NET_WM_PID), so it never suppresses there.
+// This file is the Windows half (user32). Linux: App.axaml.cs points Core DndGuard.ForegroundProcess at
+// X11Windows.ForegroundProcess (_NET_ACTIVE_WINDOW + _NET_WM_PID), so the same list works for X11 and
+// XWayland windows; a native Wayland window has no readable owner and never suppresses.
 
 using System;
 using System.Collections.Generic;

@@ -125,6 +125,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 if (ex.Name == "KeywordTriggersExpander")
                     ex.SetCurrentValue(Expander.IsExpandedProperty, false);
 
+            HookLiveFeed();
             SyncAwarenessTabUi();
 
             // Tabs are shown and hidden rather than rebuilt, so re-read on every show: the master
@@ -192,6 +193,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 _isLoading = false;
             }
 
+            // WPF SyncAwarenessTabUI's tail: the pulse feed and the seen-app chips are rebuilt on
+            // every open (both grow while the user is on other tabs).
+            RefreshAwarenessPulseFeed();
+            RefreshAwarenessSeenAppChips();
+
             // Assign only on a real difference: Avalonia raises IsCheckedChanged on a programmatic
             // set too, and every handler below is a live editor.
             static void Set(CheckBox box, bool value)
@@ -208,8 +214,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             TxtAwarenessStatus.Text = on ? "Live" : "Off";
             TxtAwarenessStatus.Foreground = on ? pink ?? Brushes.HotPink : OffLabel;
 
-            // ponytail: WPF also breathes the dot while the engine is genuinely live
-            // (SetAwarenessStatusPulse). Cosmetic, and it belongs with the engine seam.
+            PulseStatusDot(on);   // WPF SetAwarenessStatusPulse: the dot breathes while live
         }
 
         // ------------------------------------------------------------------ live editors
@@ -363,9 +368,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 Log.Warning(ex, "Awareness tab: failed to write KeywordTriggerAppScope");
             }
 
-            // ponytail: WPF also rebuilds the "recently focused" chips from
-            // KeywordTriggerService.GetRecentForegroundApps(). That ring is fed by a foreground-
-            // window poll (Win32) and lives with the service, so the chip row stays empty here.
+            RefreshAwarenessSeenAppChips();   // WPF RefreshAwarenessAppScopeUi's tail
         }
 
         private void TxtAwarenessAppList_LostFocus(object? sender, RoutedEventArgs e) => CommitAppList();
@@ -387,6 +390,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             settings.KeywordTriggerApps = parsed;
             CoreSettings.Save();
             Log.Information("Awareness app scope list set to {Count} app(s) ({Mode})", parsed.Count, settings.KeywordTriggerAppScope);
+            RefreshAwarenessSeenAppChips();   // a typed app drops out of the offered chips
         }
 
         // ------------------------------------------------------------------ highlight colour
@@ -433,8 +437,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 Log.Warning(ex, "Awareness tab: failed to write KeywordHighlightColor");
             }
 
-            // ponytail: WPF then repaints the live highlight overlay through App.KeywordHighlight -
-            // click-through layered windows, head-side.
+            // The next highlight reads the colour when it is drawn (Overlays/KeywordHighlightOverlay).
         }
 
         /// <summary>

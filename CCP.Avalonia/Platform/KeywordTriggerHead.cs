@@ -27,9 +27,9 @@ namespace ConditioningControlPanel.Avalonia.Platform;
 /// callback BEFORE the panic check, so it only snapshots modifier state and posts; it can never
 /// throw into the callback (everything is caught), so the panic press is never skipped.</para>
 ///
-/// <para>ponytail: Linux has no global typed-text source (X11PanicKey grabs one key, not a stream;
-/// a whole-keyboard XInput2 raw listener is needed). Typed triggers are Windows-only there until one
-/// lands; <see cref="KeywordTriggerEngine.CheckTextForMatches"/> is ready for clipboard / OCR text.</para>
+/// <para>Linux: <see cref="X11KeyListener"/> (XInput2 raw key presses, passive, X11 and XWayland
+/// windows only, alive only while the master switch is on). Screen reads: <see cref="ScreenOcrService"/>
+/// feeds <see cref="KeywordTriggerEngine.CheckOcrWords"/> (Windows only; no Linux reader in the tree).</para>
 /// </summary>
 internal static class KeywordTriggerHead
 {

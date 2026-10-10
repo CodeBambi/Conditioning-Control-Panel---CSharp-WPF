@@ -317,6 +317,7 @@ namespace ConditioningControlPanel.Services.KeywordTriggers
             if (scope == AwarenessAppScope.Everywhere && !s.KeywordTriggerIgnoreOwnFocus) return true;
             var app = ForegroundResolver?.Invoke();
             if (app == null) return scope != AwarenessAppScope.OnlyListed;   // allow list fails closed
+            if (!app.IsOwnProcess) RememberSeenApp(app.ProcessName);
             if (app.IsOwnProcess && s.KeywordTriggerIgnoreOwnFocus) return false;
             return scope switch
             {
@@ -324,6 +325,35 @@ namespace ConditioningControlPanel.Services.KeywordTriggers
                 AwarenessAppScope.OnlyListed => MatchesAppList(s.KeywordTriggerApps, app.ProcessName),
                 _ => true,
             };
+        }
+
+        public const int SeenAppsCapacity = 8;
+        private readonly LinkedList<string> _seenApps = new();
+        private readonly object _seenAppsLock = new();
+
+        /// <summary>WPF GetRecentForegroundApps: distinct process names recently seen in the foreground,
+        /// newest first, never this app. In memory only, never persisted: a convenience for the app
+        /// list editor, not a history.</summary>
+        public IReadOnlyList<string> GetRecentForegroundApps()
+        {
+            lock (_seenAppsLock) return _seenApps.ToArray();
+        }
+
+        private void RememberSeenApp(string processName)
+        {
+            if (string.IsNullOrWhiteSpace(processName)) return;
+            lock (_seenAppsLock)
+            {
+                var existing = _seenApps.FirstOrDefault(a => string.Equals(a, processName, StringComparison.OrdinalIgnoreCase));
+                if (existing != null)
+                {
+                    _seenApps.Remove(existing);
+                    _seenApps.AddFirst(existing);
+                    return;
+                }
+                _seenApps.AddFirst(processName);
+                while (_seenApps.Count > SeenAppsCapacity) _seenApps.RemoveLast();
+            }
         }
 
         public static bool MatchesAppList(IEnumerable<string>? list, string processName)

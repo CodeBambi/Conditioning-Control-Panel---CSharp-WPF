@@ -177,6 +177,30 @@ namespace ConditioningControlPanel.Tests
         }
 
         [Fact]
+        public void Recently_Focused_Apps_Are_Remembered_Newest_First_Without_This_App_Capped_At_Eight()
+        {
+            var (e, s, _) = Make(1, KeywordTriggerEngine.NewCustomTrigger("obey"));
+            Assert.Empty(e.GetRecentForegroundApps());
+            s.KeywordTriggerAppScope = AwarenessAppScope.ExceptListed;   // Everywhere never resolves the app (WPF: near-free default)
+            var app = new ForegroundApp("self", true);
+            e.ForegroundResolver = () => app;
+            e.CheckOcrWords(new[] { W("x") });
+            Assert.Empty(e.GetRecentForegroundApps());
+            for (var i = 0; i < 10; i++)
+            {
+                app = new ForegroundApp("app" + i, false);
+                e.CheckOcrWords(new[] { W("x") });
+            }
+            app = new ForegroundApp("APP5", false);
+            e.CheckOcrWords(new[] { W("x") });
+            var seen = e.GetRecentForegroundApps();
+            Assert.Equal(KeywordTriggerEngine.SeenAppsCapacity, seen.Count);
+            Assert.Equal("app5", seen[0]);   // moved to the front, not duplicated
+            Assert.Equal("app9", seen[1]);
+            Assert.DoesNotContain("app0", seen);
+        }
+
+        [Fact]
         public void Stopped_Engine_Ignores_A_Scan()
         {
             var (e, _, fires) = Make(1, KeywordTriggerEngine.NewCustomTrigger("obey"));

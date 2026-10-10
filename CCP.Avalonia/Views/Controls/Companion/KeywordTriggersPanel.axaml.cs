@@ -48,8 +48,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
 
             this.FindControl<Button>("BtnAddKeywordTrigger")!.Click += (_, _) => AddTrigger();
             this.FindControl<Button>("BtnImportFromCustomTriggers")!.Click += async (_, _) => await ImportFromCustomTriggersAsync();
-            // WPF KeywordTriggers.cs:135-151 persists both; the OCR scanner / highlight overlay
-            // that read them are not on this head yet (ponytail: ScreenOcrService, KeywordHighlightService).
+            // WPF KeywordTriggers.cs:135-151 persists both; the engine reads them on every scan
+            // (KeywordTriggerEngine.CheckOcrWords).
             var confirm = this.FindControl<ComboBox>("CmbOcrConfirmation")!;
             confirm.SelectionChanged += (_, _) =>
             {
