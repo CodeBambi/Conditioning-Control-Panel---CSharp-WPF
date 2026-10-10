@@ -892,4 +892,14 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
   at 1.70-2.01 cores during the timed window (other classes running in parallel), frames 3.8-23.7 ms falling across the pass
   (Tier-0 after only 10 warm-up frames). Fix: the class runs in a DisableParallelization collection and warms 60 frames (past
   tier-up, the comment's "warmed up" intent). Run 38053157085 with the fix: 5.96 ms, 1.27 cores.
+  Main's green runs (e.g. 37949970298, net8, WPF suite 1m22s) do not log a passing test's time, so there is no main per-frame
+  number to compare; the comparable data is the suite wall time (port net10 1m30-1m59s) and the local net8/net10 bench above.
 - build.yml gains `workflow_dispatch:` (additive) so a branch can run the build without a PR.
+- Hidden behind the red app suite, the Windows "Test Avalonia notification suite" had 9 more reds:
+  - 8x WindowDropTests (`NotSupportedException: TryGetFileFromPathAsync` from FirstRunFolderPickerTests.PickerProxy): the
+    `BindStorageProvider` helper called the static `AvaloniaLocator.EnterScope` and then bound into the root locator it had
+    read before, so the fake factory outlived the scope for every later window in the testhost (the Linux gate shards them
+    apart). It now binds into the new scope; same fix in GeneralStartupVideoTests. Repro: the 3 classes in one host, 8 red -> 13/13.
+  - IntakePageTests.TheFallbackPanelNeverShowsTheToken: the Windows runner has WebView2, so WebHost never draws the fallback.
+    Supervisor-approved: always assert `WebHost.WithoutToken`, the TxtSource text when no engine, and on both runners that no
+    TextBlock/tooltip in the host holds `ccp_t`. Fail-proof: panel showing the raw URL -> red.

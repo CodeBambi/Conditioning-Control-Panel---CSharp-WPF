@@ -185,12 +185,19 @@ public sealed class IntakePageTests
         await AvaloniaTestDispatcher.RunAsync(() =>
         {
             EnsureApp();
-            var host = new ConditioningControlPanel.Avalonia.Views.Controls.WebHost
+            var url = new Uri("http://127.0.0.1:5000/intake/index.html?ccp_t=ABC&x=1");
+            const string expected = "http://127.0.0.1:5000/intake/index.html?x=1";
+            Assert.Equal(expected, ConditioningControlPanel.Avalonia.Views.Controls.WebHost.WithoutToken(url));
+            var host = new ConditioningControlPanel.Avalonia.Views.Controls.WebHost { Source = url };
+            // The panel only draws without an engine (Linux CI); the Windows runner has WebView2.
+            if (!ConditioningControlPanel.Avalonia.Views.Controls.WebHost.IsAvailable)
+                Assert.Equal(expected, host.FindControl<global::Avalonia.Controls.TextBlock>("TxtSource")!.Text);
+            // Either way, no text or tooltip anywhere in the host carries the token.
+            foreach (var c in global::Avalonia.LogicalTree.LogicalExtensions.GetSelfAndLogicalDescendants(host).OfType<Control>())
             {
-                Source = new Uri("http://127.0.0.1:5000/intake/index.html?ccp_t=ABC&x=1"),
-            };
-            var text = host.FindControl<global::Avalonia.Controls.TextBlock>("TxtSource")!.Text;
-            Assert.Equal("http://127.0.0.1:5000/intake/index.html?x=1", text);
+                Assert.DoesNotContain("ccp_t", (c as TextBlock)?.Text ?? "");
+                Assert.DoesNotContain("ccp_t", ToolTip.GetTip(c)?.ToString() ?? "");
+            }
             return Task.CompletedTask;
         });
     }

@@ -282,6 +282,7 @@ public sealed class GeneralStartupVideoTests
         var locatorType = typeof(AvaloniaObject).Assembly.GetType("Avalonia.AvaloniaLocator")!;
         var locator = locatorType.GetProperty("CurrentMutable")!.GetValue(null)!;
         var scope = (IDisposable)locator.GetType().GetMethod("EnterScope")!.Invoke(locator, null)!;
+        locator = locatorType.GetProperty("CurrentMutable")!.GetValue(null)!; // bind into the new scope, not the root
         var bind = locator.GetType().GetMethods()
             .Single(method => method.Name == "Bind" && method.IsGenericMethodDefinition
                               && method.GetGenericArguments().Length == 1

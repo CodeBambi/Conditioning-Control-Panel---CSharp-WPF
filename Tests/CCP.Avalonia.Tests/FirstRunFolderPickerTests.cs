@@ -121,6 +121,9 @@ public sealed class FirstRunFolderPickerTests
         var locatorType = typeof(AvaloniaObject).Assembly.GetType("Avalonia.AvaloniaLocator")!;
         var locator = locatorType.GetProperty("CurrentMutable")!.GetValue(null)!;
         var scope = (IDisposable)locator.GetType().GetMethod("EnterScope")!.Invoke(locator, null)!;
+        // EnterScope is static and swaps CurrentMutable: bind into the NEW scope, or the factory lands in
+        // the root locator for good and every later window in this testhost gets the picker proxy.
+        locator = locatorType.GetProperty("CurrentMutable")!.GetValue(null)!;
         var registration = locator.GetType().GetMethods()
             .Single(m => m.Name == "Bind" && m.IsGenericMethodDefinition && m.GetParameters().Length == 0)
             .MakeGenericMethod(typeof(IStorageProviderFactory)).Invoke(locator, null)!;
