@@ -182,7 +182,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
             bool hold = false;
             try { hold = EmiLineEngine.Instance.HoldActive; }
             catch (Exception ex) { Log.Debug(ex, "[EmiDesk] hold probe threw"); }
-            return EmiAlive.CanPerk(busy: Busy(), chainLive: ChainLive, askLive: false,
+            return EmiAlive.CanPerk(busy: Busy(), chainLive: ChainLive, askLive: AskLive,
                 holdActive: hold, dragging: _dragging, resizing: _resizing);
         }
 

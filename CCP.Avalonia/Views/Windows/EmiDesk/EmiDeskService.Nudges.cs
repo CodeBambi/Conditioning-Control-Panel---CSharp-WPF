@@ -49,6 +49,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                 var win = _window;
                 if (win == null || !win.IsVisible) return false;
                 if (win.PresentationActive || win.InputLocked || win.Transiting) return false;
+                if (win.AskLive) return false;
 
                 if (CoreEngine.Video?.IsPlaying == true) return false;
                 if (CoreSession.IsSessionRunning) return false;

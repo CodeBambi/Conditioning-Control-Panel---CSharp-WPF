@@ -31,6 +31,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
 
         partial void OnTearDownCore()
         {
+            TearDownAsk();
             try { _ring?.CloseRing(); }
             catch (Exception ex) { Log.Debug(ex, "[EmiDesk] ring tear-down failed"); }
         }

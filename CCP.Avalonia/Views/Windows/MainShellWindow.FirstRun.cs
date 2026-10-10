@@ -52,8 +52,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             try
             {
+                HookEmiKnock();   // before any stamp of LastSeenVersion (MainShellWindow.EmiKnock.cs)
                 if (FirstRunWizard.ShouldRunAndClaim())
                 {
+                    EmiFirstRunBegan();   // WPF :563 firstLaunchEver hold
                     Opened += OnFirstRunShellOpened;
                     // WPF MainWindow.xaml.cs:566: a fresh install never needs "What moved".
                     OfferWhatMovedIfNeeded(freshInstall: true);
@@ -166,6 +168,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 {
                     Log.Warning(ex, "[FirstRun] The first-run wizard failed to run");
                 }
+                finally { EmiFirstRunEnded(); }   // WPF :590-601 the hold comes off
             }, DispatcherPriority.Normal);
         }
     }
