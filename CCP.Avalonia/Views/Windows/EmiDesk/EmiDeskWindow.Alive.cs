@@ -102,6 +102,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                 _apInside = false;
                 _lingerFrom = DateTime.MinValue;
                 _lingerStage = 0;
+                _pokes.Reset();   // WPF :166: a fresh arrival starts the poke ladder over
                 ResetGaze();
                 _fidgetDue = DateTime.UtcNow.AddMilliseconds(FidgetDelayMs());
 
