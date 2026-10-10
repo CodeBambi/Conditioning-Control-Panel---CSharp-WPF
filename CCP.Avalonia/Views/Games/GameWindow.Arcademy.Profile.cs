@@ -47,7 +47,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
         /// alpha onto black (JPEG has none; Discord serves an opaque square), encode JPEG. Null on failure.</summary>
         internal static byte[]? ArcEncodeAvatarJpeg(byte[] raw, int width, int quality)
         {
-            using var src = SKBitmap.Decode(raw);
+            SKBitmap? decoded;
+            try { decoded = SKBitmap.Decode(raw); }
+            catch (Exception) { return null; }   // Skia throws on bytes that are no image at all
+            using var src = decoded;
             if (src == null || src.Width <= 0 || src.Height <= 0) return null;
             int w = Math.Min(width, src.Width);
             int h = Math.Max(1, (int)Math.Round(src.Height * (w / (double)src.Width)));
