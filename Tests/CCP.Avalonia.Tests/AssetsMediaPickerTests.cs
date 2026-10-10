@@ -138,6 +138,8 @@ public sealed class AssetsMediaPickerTests
         AssetsTabView.ProbeSub = (name, _) => Task.FromResult(name == "goodsub"
             ? new SubProbe { Ok = true, VideoCount = 7 }
             : new SubProbe { Ok = false, Error = null });
+        s.MediaSource = "online";   // the details (and the rows) only show off "local"
+        view.RefreshRemoteMediaPicker();
         var box = view.FindControl<TextBox>("TxtRemoteCustomSub")!;
         var add = view.FindControl<Button>("BtnRemoteAddSub")!;
 
@@ -147,6 +149,14 @@ public sealed class AssetsMediaPickerTests
         Assert.True(s.LibraryHasSub("goodsub"));
         Assert.Contains("goodsub", s.FypOnlineCustomSubs);
         Assert.True(add.IsEnabled);
+        // The row fills its column (WPF stretching Border): the ✕ sits at the row's end, not after the name.
+        view.FindControl<Button>("BtnRemoteFineTune")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        TopLevel.GetTopLevel(view)!.UpdateLayout();
+        var host = view.FindControl<UniformGrid>("RemoteCustomSubChips")!;
+        var row = host.Children.OfType<Button>().Single();
+        var content = (Grid)row.Content!;   // the grid whose last column is the ✕
+        Assert.True(content.Bounds.Width > host.Bounds.Width / 2 - 40, $"row content {content.Bounds.Width} in host {host.Bounds.Width}");
+        view.FindControl<Button>("BtnRemoteFineTune")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));   // closed again
 
         box.Text = "nosuchsub";
         add.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));

@@ -437,7 +437,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 grid.Children.Add(close);
             }
             // The same row look as RemoteNichePill (WPF :2906), as a Button so it is keyboard-reachable.
-            var row = new Button { Template = RowTemplate, Content = grid, IsEnabled = onToggle != null, Cursor = new Cursor(StandardCursorType.Hand) };
+            var row = new Button
+            {
+                Template = RowTemplate, Content = grid, IsEnabled = onToggle != null, Cursor = new Cursor(StandardCursorType.Hand),
+                HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch
+            };
             if (onToggle != null) row.Click += (_, _) => onToggle();
             return row;
         }
