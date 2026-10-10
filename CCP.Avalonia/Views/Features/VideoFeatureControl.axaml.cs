@@ -49,6 +49,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             CmbMercyAfter.SelectionChanged += CmbMercyAfter_Changed;
             SliderPerHour.ValueChanged += SliderPerHour_Changed;
             ChkStrict.IsCheckedChanged += ChkStrict_Changed;
+            // WPF Lab.cs:640-647 / 726-732: greyed while a Lockdown forces Strict Lock, given back on exit.
+            Windows.MainShellWindow.HoldWhileLockdown(ChkStrict, () => ConditioningControlPanel.Services.LockdownStrictHold.HoldsNow);
             SliderVideoMinDur.ValueChanged += SliderVideoMinDur_Changed;
             SliderVideoMaxDur.ValueChanged += SliderVideoMaxDur_Changed;
             ChkMiniGame.IsCheckedChanged += ChkMiniGame_Changed;

@@ -180,4 +180,25 @@ public class IntakeRunTests
         }
         finally { Directory.Delete(root, true); }
     }
+
+    /// <summary>WPF Lab.cs:195 first-ever rule, read from the card WPF writes (PascalCase System.Text.Json).</summary>
+    [Fact]
+    public void EverCompletedIntakeReadsTheWpfPunchCard()
+    {
+        var root = Directory.CreateTempSubdirectory("intake-card-").FullName;
+        try
+        {
+            var card = Path.Combine(root, IntakePunchCardState.FileName);
+            Assert.False(IntakePunchCardState.ReadEverCompletedIntake(root));                 // no card yet
+            File.WriteAllText(card, "{\"PunchedCount\":1,\"PendingDrafts\":[]}");
+            Assert.False(IntakePunchCardState.ReadEverCompletedIntake(root));                 // the free first hole
+            File.WriteAllText(card, "{\"PunchedCount\":1,\"PendingDrafts\":[{\"SessionId\":\"s\"}]}");
+            Assert.True(IntakePunchCardState.ReadEverCompletedIntake(root));                  // a stamp pending
+            File.WriteAllText(card, "{\"PunchedCount\":3}");
+            Assert.True(IntakePunchCardState.ReadEverCompletedIntake(root));
+            File.WriteAllText(card, "{not json");
+            Assert.False(IntakePunchCardState.ReadEverCompletedIntake(root));
+        }
+        finally { Directory.Delete(root, true); }
+    }
 }
