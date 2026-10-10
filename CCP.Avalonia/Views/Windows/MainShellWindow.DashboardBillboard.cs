@@ -1,222 +1,118 @@
-// PORTED from ConditioningControlPanel/MainWindow/MainWindow.DashboardBillboard.cs (296 lines).
-// One full-size promo slide in the row the folded browser gives back (Core DashboardBillboard roster,
-// one slot). The 12 s clock runs only while the billboard is on screen, motion allows ambient loops,
-// and it is neither paused, hovered nor keyboard-focused; manual navigation works at every motion level.
+// PORTED from ConditioningControlPanel/MainWindow/MainWindow.DashboardBillboard.cs (the Tonight Board
+// on Home). This file only hosts the deck: it makes the deck and the card host once, keeps the snoozes
+// in AppSettings and runs a card's button. The rules are Core DashboardBillboard/BillboardDeck, the
+// drawing is Controls/Billboard/BillboardCardHost. Providers so far: the house cards and the Prime
+// tips; Live/Waiting/Resume/Event/Board/Showcase are sync6-tonight-board-b.
 
 using System;
-using System.Linq;
-using System.Threading;
-using Avalonia;
-using Avalonia.Animation;
-using Avalonia.Animation.Easings;
-using Avalonia.Automation;
+using System.Collections.Generic;
 using Avalonia.Controls;
-using Avalonia.Media.Imaging;
-using Avalonia.Platform;
-using Avalonia.Styling;
-using Avalonia.Threading;
+using ConditioningControlPanel.Avalonia.Controls.Billboard;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Services;
+using ConditioningControlPanel.Services.Billboard;
+using ConditioningControlPanel.Services.Billboard.Providers;
 using Serilog;
-using Env = ConditioningControlPanel.Avalonia.Controls.AmbientFxCanvas.Env;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
     public partial class MainShellWindow
     {
-        private const int BillboardFadeMs = 220;   // WPF :73
+        private BillboardCardHost? _billboardHost;
 
-        private DispatcherTimer? _billboardTimer;
-        private int _billboardIndex;
-        private bool _billboardPointerOver;
-        private bool _billboardWired;
-        private bool _billboardPaused;
-        private CancellationTokenSource? _billboardFade;
-
-        /// <summary>The roster index on screen (test seam).</summary>
-        internal int BillboardIndex => _billboardIndex;
-
-        /// <summary>True while the rotation clock runs (test seam).</summary>
-        internal bool BillboardClockRunning => _billboardTimer != null;
+        /// <summary>The card host once Home has shown the board (test seam).</summary>
+        internal BillboardCardHost? BillboardHost => _billboardHost;
 
         private Tabs.SettingsTabView? Dash => Named<Tabs.SettingsTabView>("SettingsTab");
 
-        /// <summary>WPF ApplyBillboard (:89): the fold's hook - the billboard exists only while the
-        /// browser is shut.</summary>
+        /// <summary>WPF ApplyBillboard: the fold's hook - the board exists only while the browser is shut.</summary>
         private void ApplyBillboard(bool show)
         {
             var host = Dash?.FindControl<Border>("DashBillboard");
             if (host == null) return;
             host.IsVisible = show;
-            if (!show) { StopBillboardClock(); return; }
-            EnsureBillboardWired();
-            RestartBillboardClock();
+            if (show) EnsureBillboard();
+            _billboardHost?.RefreshMotion();
         }
 
-        /// <summary>WPF EnsureBillboardWired (:110): the slide, the dots, navigation and every
-        /// reason the clock stops (pointer, keyboard focus, pause, visibility, motion gate).</summary>
-        private void EnsureBillboardWired()
+        /// <summary>WPF EnsureBillboard: the deck over the saved snoozes, the host in its slot, the
+        /// first card still.</summary>
+        private void EnsureBillboard()
         {
-            if (_billboardWired) return;
-            var dash = Dash;
-            var host = dash?.FindControl<Border>("DashBillboard");
-            var dots = dash?.FindControl<StackPanel>("BillboardDots");
-            if (dash == null || host == null || dots == null) return;
-            _billboardWired = true;
+            if (_billboardHost != null) return;
+            var slot = Dash?.FindControl<Grid>("BillboardHostSlot");
+            if (slot == null) return;
 
-            for (int i = 0; i < LegacyBillboard.Roster.Count; i++)
-            {
-                int index = i;
-                var dot = new RadioButton { GroupName = "DashboardSlides", Classes = { "dot" } };
-                var key = LegacyBillboard.CardAt(i).TitleKey;
-                BindLoc(dot, ToolTip.TipProperty, key);
-                BindLoc(dot, AutomationProperties.NameProperty, key);
-                dot.Click += (_, _) => StepBillboard(index - _billboardIndex, automatic: false);
-                dots.Children.Add(dot);
-            }
-            FillBillboard();
-            dash.FindControl<Button>("BillboardPrevious")!.Click += (_, _) => StepBillboard(-1, automatic: false);
-            dash.FindControl<Button>("BillboardNext")!.Click += (_, _) => StepBillboard(1, automatic: false);
-            dash.FindControl<Button>("BillboardCard")!.Click += (_, _) => OpenBillboardCard();
-            var pause = dash.FindControl<Button>("BillboardPause")!;
-            pause.Click += (_, _) =>
-            {
-                _billboardPaused = !_billboardPaused;
-                dash.FindControl<TextBlock>("TxtBillboardPause")!.Text = _billboardPaused ? "▶" : "Ⅱ";
-                var key = _billboardPaused ? "btn_program_resume" : "btn_program_pause";
-                BindLoc(pause, ToolTip.TipProperty, key);
-                BindLoc(pause, AutomationProperties.NameProperty, key);
-                RestartBillboardClock();
-            };
-            host.PointerEntered += (_, _) => { _billboardPointerOver = true; StopBillboardClock(); };
-            host.PointerExited += (_, _) => { _billboardPointerOver = false; RestartBillboardClock(); };
-            host.PropertyChanged += (_, e) =>
-            {
-                if (e.Property == IsKeyboardFocusWithinProperty) RestartBillboardClock();
-            };
-            // Tab hidden / shown (P01): the shell hides the whole tab with IsVisible.
-            dash.PropertyChanged += (_, e) => { if (e.Property == IsVisibleProperty) RestartBillboardClock(); };
+            // A static seam: hold the shell weakly so a closed shell is never rooted by it.
+            var weak = new WeakReference<MainShellWindow>(this);
+            HouseProvider.OpenBackRoom = () => { if (weak.TryGetTarget(out var shell)) shell.OpenBillboardBackRoom(); };
+            var settings = CoreSettings.Current;
+            var snoozes = settings.BillboardSnoozedUntil ??= new Dictionary<string, DateTime>(StringComparer.Ordinal);
+            if (DashboardBillboard.PruneSnoozes(snoozes, DateTime.UtcNow)) SaveBillboardSnoozes();
+
+            var providers = new IBillboardProvider[] { new HouseProvider(), new TipCardsProvider() };
+            var deck = new BillboardDeck(() => providers, BillboardContextNow, snoozes, SaveBillboardSnoozes);
+            var cardHost = new BillboardCardHost(deck);
+            cardHost.ActionRequested += RunBillboardAction;
+            slot.Children.Clear();
+            slot.Children.Add(cardHost);
+            _billboardHost = cardHost;
+            cardHost.Begin();
         }
 
-        private static void BindLoc(AvaloniaObject target, AvaloniaProperty property, string key) =>
-            target.Bind(property, new global::Avalonia.Data.Binding($"[{key}]")
-                { Source = LocalizationManager.Instance, Mode = global::Avalonia.Data.BindingMode.OneWay });
+        /// <summary>The motion gate or the tab's visibility changed: the board re-reads its gates.</summary>
+        private void RefreshBillboardMotion() => _billboardHost?.RefreshMotion();
 
-        private bool BillboardMayAdvance(Border host) =>
-            IsVisible && host.IsEffectivelyVisible && !_billboardPaused && !host.IsKeyboardFocusWithin && Env.AllowAmbientLoops
-            && LegacyBillboard.ShouldAdvance(_billboardPointerOver, onScreen: true);
-
-        /// <summary>WPF RestartBillboardClock (:172).</summary>
-        private void RestartBillboardClock()
+        /// <summary>WPF BillboardWiring.Context: Prime = Lab access, Basic = Premium access.</summary>
+        private static BillboardContext BillboardContextNow()
         {
-            StopBillboardClock();
-            var host = Dash?.FindControl<Border>("DashBillboard");
-            if (host == null || !BillboardMayAdvance(host)) return;
-            _billboardTimer = new DispatcherTimer(DispatcherPriority.Background)
-            {
-                Interval = TimeSpan.FromSeconds(LegacyBillboard.RotateSeconds),
-            };
-            _billboardTimer.Tick += (_, _) => BillboardTick();
-            _billboardTimer.Start();
+            var tier = CoreAccount.HasLabAccess ? BillboardTier.Prime
+                : CoreAccount.HasPremiumAccess ? BillboardTier.Basic : BillboardTier.Free;
+            return new BillboardContext(tier, DateTime.UtcNow, DateTime.Now);
         }
 
-        private void StopBillboardClock()
+        private static void SaveBillboardSnoozes()
         {
-            _billboardTimer?.Stop();
-            _billboardTimer = null;
+            try { CoreSettings.Save(); }
+            catch (Exception ex) { Log.Debug("Billboard snooze save failed: {E}", ex.Message); }
         }
 
-        /// <summary>One clock tick (the timer's handler; tests step it directly).</summary>
-        internal void BillboardTick() => StepBillboard(1, automatic: true);
-
-        /// <summary>WPF StepBillboardRack (:195): one slide step; an automatic step re-checks every
-        /// gate first, a manual one restarts the clock.</summary>
-        private void StepBillboard(int direction, bool automatic)
+        /// <summary>WPF RunBillboardAction: Tab navigates, Link leaves through the one opener, Callback
+        /// goes back to its provider. Launch cards come from providers not on this head yet.</summary>
+        private void RunBillboardAction(DeckCard card)
         {
             try
             {
-                var host = Dash?.FindControl<Border>("DashBillboard");
-                if (host?.IsEffectivelyVisible != true) return;
-                if (automatic && !BillboardMayAdvance(host)) { StopBillboardClock(); return; }
-                _billboardIndex = DashboardBillboard.SlideIndex(_billboardIndex, direction, LegacyBillboard.Roster.Count);
-                FillBillboard();
-                FadeBillboard();
-                if (!automatic) RestartBillboardClock();
-            }
-            catch (Exception ex) { Log.Warning(ex, "Dashboard billboard: step failed"); }
-        }
-
-        /// <summary>WPF FillBillboardSlot + UpdateBillboardPosition (:221/:228).</summary>
-        private void FillBillboard()
-        {
-            var dash = Dash;
-            if (dash == null) return;
-            var card = LegacyBillboard.CardAt(_billboardIndex);
-            BindLoc(dash.FindControl<TextBlock>("BillboardEyebrow")!, TextBlock.TextProperty, card.EyebrowKey);
-            BindLoc(dash.FindControl<TextBlock>("BillboardTitle")!, TextBlock.TextProperty, card.TitleKey);
-            BindLoc(dash.FindControl<TextBlock>("BillboardLine")!, TextBlock.TextProperty, card.LineKey);
-            var button = dash.FindControl<Button>("BillboardCard")!;
-            var tip = Loc.Get(card.TitleKey) + "  ·  " + Loc.Get(card.LineKey);
-            ToolTip.SetTip(button, tip);
-            AutomationProperties.SetName(button, tip);
-
-            bool plate = card.Art == SlideArt.Plate;
-            var art = LoadBillboardArt(card);
-            dash.FindControl<Image>("BillboardCover")!.IsVisible = !plate;
-            dash.FindControl<Grid>("BillboardPlate")!.IsVisible = plate;
-            dash.FindControl<Image>("BillboardCover")!.Source = art;
-            dash.FindControl<Image>("BillboardPlateGround")!.Source = art;
-            dash.FindControl<Image>("BillboardPlateMark")!.Source = art;
-
-            var dots = dash.FindControl<StackPanel>("BillboardDots")!;
-            for (int i = 0; i < dots.Children.Count; i++)
-                ((RadioButton)dots.Children[i]).IsChecked = i == _billboardIndex;
-        }
-
-        /// <summary>Missing art leaves the words readable over the shade, never a throw (WPF :241).</summary>
-        private static Bitmap? LoadBillboardArt(SlideCard card)
-        {
-            try { return new Bitmap(AssetLoader.Open(new Uri("avares://CCP.Avalonia/Resources/" + card.Poster))); }
-            catch (Exception ex)
-            {
-                Log.Debug("Billboard art {Poster} did not load: {E}", card.Poster, ex.Message);
-                return null;
-            }
-        }
-
-        /// <summary>WPF FadeBillboardSlot (:259): only when the motion gate allows transitions.</summary>
-        private void FadeBillboard()
-        {
-            var button = Dash?.FindControl<Button>("BillboardCard");
-            if (button == null || !Env.AllowTransitions) return;
-            _billboardFade?.Cancel();
-            _billboardFade = new CancellationTokenSource();
-            _ = new Animation
-            {
-                Duration = TimeSpan.FromMilliseconds(BillboardFadeMs),
-                Easing = new CubicEaseOut(),
-                Children =
+                var action = card.Action;
+                switch (action.Kind)
                 {
-                    new KeyFrame { Cue = new Cue(0d), Setters = { new Setter(OpacityProperty, 0d) } },
-                    new KeyFrame { Cue = new Cue(1d), Setters = { new Setter(OpacityProperty, 1d) } },
-                },
-            }.RunAsync(button, _billboardFade.Token);
+                    case BillboardActionKind.Tab: ShowTab(action.Target); break;
+                    case BillboardActionKind.Link: BillboardOpenUrl(action.Target); break;
+                    case BillboardActionKind.Callback: card.Provider?.Invoke(action.Target); break;
+                    case BillboardActionKind.Launch: Log.Information("Billboard: launch {Id} not on this head", action.Target); break;
+                }
+            }
+            catch (Exception ex) { Log.Warning(ex, "Dashboard billboard: card action failed ({Id})", card.Spec.Id); }
         }
 
-        /// <summary>WPF BillboardCard_Click (:278): a Link leaves through the one opener, a Tab is
-        /// an in-app navigation.</summary>
-        private void OpenBillboardCard()
+        /// <summary>WPF OpenBackRoomInApp: signed out, sign-in first. The Back Room itself is not on
+        /// this head, so a signed-in player lands on Play, where its door will live.</summary>
+        private void OpenBillboardBackRoom()
         {
-            try
-            {
-                var card = LegacyBillboard.CardAt(_billboardIndex);
-                if (card.Kind == SlideTarget.Link) BillboardOpenUrl(card.Target);
-                else ShowTab(card.Target);
-            }
-            catch (Exception ex) { Log.Warning(ex, "Dashboard billboard: card click failed"); }
+            if (Platform.FriendsHead.Identity() == null) { _ = OpenUnifiedLoginDialog(); return; }
+            ShowTab("play");
         }
 
         /// <summary>The link opener (seam: tests never launch a browser).</summary>
         internal static Action<string> BillboardOpenUrl = url => Platform.ExternalOpener.Open(url);
+
+        /// <summary>WPF TipProvider: the tier is all it reads.</summary>
+        private sealed class TipCardsProvider : IBillboardProvider
+        {
+            public string Id => "tip";
+            public IEnumerable<BillboardCardSpec> Current(BillboardContext context) => TipCards.Decide(context.Tier, context.NowUtc, Loc.Get);
+            public void Invoke(string actionTarget) { }
+            public event EventHandler? Changed { add { } remove { } }
+        }
     }
 }

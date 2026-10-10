@@ -42,8 +42,10 @@ namespace ConditioningControlPanel.Services.Billboard
             new HouseCard("house.backroom", "backroom", "billboard/backroom.png", "#ffc94a", BackRoomCallback, "billboard_deck_btn_take_seat", Callback: true),
         };
 
-        /// <summary>Test seam: what opening the Back Room runs (sign-in first, then the room).</summary>
-        internal static Action OpenBackRoom { get; set; } = OpenBackRoomInApp;
+        /// <summary>What opening the Back Room runs (sign-in first, then the room). Each head sets
+        /// it at startup (WPF BillboardWiring.Start, Avalonia MainShellWindow.DashboardBillboard);
+        /// tests replace it.</summary>
+        internal static Action OpenBackRoom { get; set; } = () => { };
 
         private readonly Func<string, string> _loc;
 
@@ -81,18 +83,7 @@ namespace ConditioningControlPanel.Services.Billboard
         {
             if (actionTarget != BackRoomCallback) return;
             try { OpenBackRoom(); }
-            catch (Exception ex) { App.Logger?.Warning(ex, "[Billboard] Back Room from the house card failed"); }
-        }
-
-        /// <summary>
-        /// The room's own door, the one the Play tab uses (its open-failed prompt included).
-        /// Signed out, the sign-in dialog comes first, the way the live join card does it.
-        /// </summary>
-        private static void OpenBackRoomInApp()
-        {
-            if (BackRoom.BackRoomApi.AppIdentity() == null) { App.MainWindowRef?.OpenUnifiedLoginDialog(); return; }
-            if (App.MainWindowRef is { } main) main.LaunchPlayBackRoom();
-            else BackRoom.BackRoomHostService.Launch();
+            catch (Exception ex) { Serilog.Log.Warning(ex, "[Billboard] Back Room from the house card failed"); }
         }
     }
 }
