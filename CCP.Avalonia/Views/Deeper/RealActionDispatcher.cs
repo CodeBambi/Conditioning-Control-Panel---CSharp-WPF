@@ -70,7 +70,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             if (any) BrainDrainOverlay.EndTimed();
             SyncPinkHold(null);
             SyncSpiralHold(null);
+            ScreenShake.Stop();   // engine stop and panic: every window at rest now
         });
+
+        /// <summary>The shake (tests swap it).</summary>
+        internal static Action<double, int> ShakeDoor = (intensity, ms) => ScreenShake.Shake(intensity, ms);
 
         private void SyncHold(string kind, double? opacity)
         {
@@ -188,7 +192,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
                         break;
 
                     case ScreenShakeAction shake:
-                        LogNoTwin("screen_shake");
+                        ShakeDoor(shake.Intensity, shake.DurationMs);   // WPF App.ScreenShake.Shake
                         break;
 
                     case SetIntensityAction:

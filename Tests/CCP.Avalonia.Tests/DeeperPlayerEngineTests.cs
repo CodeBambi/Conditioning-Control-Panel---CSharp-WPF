@@ -270,9 +270,24 @@ public sealed class DeeperPlayerEngineTests
             d.ResetOverlayBands();                                          // engine Stop's safety belt
             Assert.Null(PinkFilterOverlay.BandHold);
 
-            await d.DispatchAsync(Band(EffectPhase.Start, 0.3, OverlayKinds.Spiral), ctx);
-            await d.DispatchAsync(new ScreenShakeAction(), ctx);
-            Assert.Equal(new[] { "overlay spiral", "screen_shake" }, d.NoTwin.OrderBy(x => x));
+            // A spiral band and a screen shake have surfaces on this head now (k12): neither is logged as missing.
+            var (shakeDoor, shakes) = (RealActionDispatcher.ShakeDoor, new System.Collections.Generic.List<(double, int)>());
+            RealActionDispatcher.ShakeDoor = (i, ms) => shakes.Add((i, ms));
+            var (spiralHold, spiralRelease) = (RealActionDispatcher.SpiralHold, RealActionDispatcher.SpiralRelease);
+            (RealActionDispatcher.SpiralHold, RealActionDispatcher.SpiralRelease) = ((_, _) => { }, _ => { });
+            try
+            {
+                await d.DispatchAsync(Band(EffectPhase.Start, 0.3, OverlayKinds.Spiral), ctx);
+                await d.DispatchAsync(new ScreenShakeAction { Intensity = 0.4, DurationMs = 300 }, ctx);
+                Assert.Empty(d.NoTwin);
+                Assert.Equal(new[] { (0.4, 300) }, shakes);
+                await d.DispatchAsync(Band(EffectPhase.Stop, 0.3, OverlayKinds.Spiral), ctx);
+            }
+            finally
+            {
+                RealActionDispatcher.ShakeDoor = shakeDoor;
+                (RealActionDispatcher.SpiralHold, RealActionDispatcher.SpiralRelease) = (spiralHold, spiralRelease);
+            }
             Assert.Null(PinkFilterOverlay.BandHold);
         }
         finally
