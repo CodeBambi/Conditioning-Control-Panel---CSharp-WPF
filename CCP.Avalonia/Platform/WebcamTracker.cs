@@ -211,6 +211,9 @@ namespace ConditioningControlPanel.Avalonia.Platform
             : "rf_webcam_stopped";
         /// <summary>Why the last start failed, for the user; null after a good start.</summary>
         public string? LastError { get; private set; }
+
+        /// <summary>Test seam: a failed start in one test must not read as "error" in the next.</summary>
+        internal void ClearErrorForTests() { LastError = null; StartWasStopped = false; }
         /// <summary>Frames whose processing threw (the loop logs and carries on); tests assert zero.</summary>
         internal int FrameErrors;
 
