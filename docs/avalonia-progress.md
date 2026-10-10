@@ -1777,3 +1777,15 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/sync6-tonight-board-b: +651
 - Tonight Board: Waiting/Resume/Event providers on the Avalonia Home deck. Pure cards (git mv) and adapters are now in Core behind a `BillboardHead` seam both heads fill; tests are fail-proven.
 - Live/Board/Showcase, drawn art and animation polish are left for sync6-tonight-board-c (all 20 rows moved there).
+
+## avalonia-port/sync6-home-layout-b: +774
+- Home account strip + quick pills -> one line of hover bubbles (HoverBubbleBar, WPF 41288a884/acd51fcf9); drawer handle gains the Embers layer.
+- Rail icons left for nav-rail-b; Sparkle pill blocked on the wallet; banner FX/drum not started.
+
+## avalonia-port/sync6-nav-search: +864
+- Ctrl+K palette brought up to the 7.1 nav rework: recent picks, no-hits Try/All, "(was X)" hints, each row opens through its own action, right-click pin, click-away re-activate; GameAvailableProvider set at startup. 10 tests, each proven to fail when broken.
+- What moved card (plan moved to Core): offered once on upgrade through StartupLadder, Help replay, Show me; glow and Games zone (rows 38/46 partial) wait on sync6-nav-rail.
+
+## avalonia-port/sync6-drone-mod: +2
+- Ledger row 110 (drone-mode.ccpmod emotes + voice) marked n/a: content-only, ships via the shared mod-drone pack.
+- Drone outfit emotes folded into avatar-tube-window (this head has no emote mode).

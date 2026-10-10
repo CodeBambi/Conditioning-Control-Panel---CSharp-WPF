@@ -166,10 +166,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             _drawerModHooked = false;
         }
 
-        private static AmbientFxConfig FavoritesDrawerFxConfig() => new()
+        internal static AmbientFxConfig FavoritesDrawerFxConfig() => new()
         {
-            // ponytail: WPF adds AmbientFxLayers.Embers; the Avalonia canvas has no Embers layer yet.
-            Layers = AmbientFxLayers.DustField,
+            Layers = AmbientFxLayers.Embers | AmbientFxLayers.DustField,   // WPF SettingsTabView.xaml.cs:260
             Intensity = 0.9,
             DustDensity = 0.35,
         };
@@ -183,6 +182,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 if (FavoritesDrawerFx.IsRunning) FavoritesDrawerFx.Resume();
                 else FavoritesDrawerFx.StartLayers(FavoritesDrawerFxConfig());
                 ApplyFavoritesDrawerGlow();
+                HomeBubbleBar.SetPulseActive(true);   // the bubbles' idle cue parks with the rest of Home
                 if (AmbientFxCanvas.Env.AllowAmbientLoops)
                 {
                     _drawerTwinkle ??= new DispatcherTimer(TimeSpan.FromMilliseconds(FavoritesTwinkleEveryMs), DispatcherPriority.Background, (_, _) =>
@@ -198,6 +198,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private void StopFavoritesDrawerFx()
         {
             try { FavoritesDrawerFx.Pause(); } catch { }
+            HomeBubbleBar.SetPulseActive(false);
             _drawerTwinkle?.Stop();
             _drawerBreath?.Stop();
         }
