@@ -15,7 +15,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
     /// height up, a 10 px tail, width 1.5x her body clamped 220..380, font 11 at a 220 px body
     /// (floor 10), line height 1.4x. Every chain frame that carries a bubble lands here through
     /// <see cref="OnBubbleTextCore"/>.
-    /// ponytail: the Blipese voice (WPF EmiVox.cs), asks/offer chips, the book-side flip and the
+    /// ponytail: the Blipese voice (WPF EmiVox.cs), the book-side flip and the
     /// monitor work-area clamp are not ported yet; the bubble is clamped to her own window.
     /// </summary>
     public partial class EmiDeskWindow
@@ -139,6 +139,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                 Canvas.SetLeft(_bubble, Math.Round(left));
                 Canvas.SetTop(_bubble, Math.Round(top));
                 LayoutTail(left, top + size.Height, size.Width, flip);
+                LayoutChips();
             }
             catch (Exception ex) { Log.Debug(ex, "[EmiDesk] bubble layout failed"); }
         }

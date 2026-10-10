@@ -158,6 +158,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             ArmKeepClear(s.BrainDrainKeepPicturesClear);
             Log.Information("Brain Drain haze up on {Count} screen(s): strength {Intensity}%, melt {Melt}",
                 Windows.Count, intensity, melt);
+            Views.Windows.EmiDesk.EmiDrainWatch.Up(intensity, melt);   // WPF OverlayService.cs:2188
         }
 
         private static void SetIntensity(int intensity)
@@ -191,6 +192,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                 catch (Exception ex) { Log.Debug("Brain Drain: failed to close a haze window: {E}", ex.Message); }
             }
             if (Windows.Count > 0) Log.Information("Brain Drain haze down");
+            Views.Windows.EmiDesk.EmiDrainWatch.Down();   // WPF OverlayService.cs:2504
             Windows.Clear();
             _shownOn = Array.Empty<PixelRect>();
             if (_hookedOwner is not null) { _hookedOwner.Closed -= OnOwnerClosed; _hookedOwner = null; }

@@ -9,7 +9,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
     /// How a drawn line looks: WPF EmiDeskWindow.Bubble.cs SpeakLine :503, HoldFace :545,
     /// CancelHold :574. The engine already decided she may speak. A wordless hold face is a face
     /// held with no bubble, and it acks with <c>spoke: false</c>, so it never stamps the 45 s floor.
-    /// not ported: the one-slot park behind an open ask and the channel close (no asks, no glass
+    /// A line behind an open ask parks (EmiDeskWindow.Ask.cs). not ported: the channel close (no glass
     /// channels on this head yet).
     /// </summary>
     public partial class EmiDeskWindow
@@ -30,6 +30,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
             if (line == null) return;
             try
             {
+                if (AskLive)
+                {
+                    _parked = line;   // she does not talk over her own offer (WPF :509)
+                    Log.Debug("[EmiDesk] {Line} parked behind the open ask", line.Id);
+                    return;
+                }
                 CancelHold();
 
                 // On screen from the first dot, so spent from the first dot (WPF :520).

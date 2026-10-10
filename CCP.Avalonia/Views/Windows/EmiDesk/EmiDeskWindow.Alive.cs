@@ -19,7 +19,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
     /// <para>The cursor is read from the OS (user32 GetCursorPos / X11 XQueryPointer through
     /// Platform/X11Pointer), because she watches it while it is over OTHER windows.</para>
     ///
-    /// <para>not ported: the weight shift and the rare stretch (body squash tweens) and the
+    /// <para>The weight shift and the rare stretch are EmiDeskWindow.AliveMoves.cs. not ported: the
     /// screen beat (no glass channels): a scheduler pick of one of those
     /// declines and the next fidget runs instead, which is WPF's own decline path.</para>
     /// </summary>
@@ -105,6 +105,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                 _pokes.Reset();   // WPF :166: a fresh arrival starts the poke ladder over
                 ResetGaze();
                 _fidgetDue = DateTime.UtcNow.AddMilliseconds(FidgetDelayMs());
+                _stretchDue = DateTime.UtcNow.AddMilliseconds(_fidgets.NextStretchDelayMs());
 
                 _aliveTimer = new DispatcherTimer(DispatcherPriority.Background)
                 {
@@ -182,7 +183,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
             bool hold = false;
             try { hold = EmiLineEngine.Instance.HoldActive; }
             catch (Exception ex) { Log.Debug(ex, "[EmiDesk] hold probe threw"); }
-            return EmiAlive.CanPerk(busy: Busy(), chainLive: ChainLive, askLive: false,
+            return EmiAlive.CanPerk(busy: Busy(), chainLive: ChainLive, askLive: AskLive,
                 holdActive: hold, dragging: _dragging, resizing: _resizing);
         }
 
@@ -267,6 +268,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
 
         private void StepFidgets(DateTime now)
         {
+            if (now >= _stretchDue)
+            {
+                if (!CanPerk()) return;   // due, not forced: it waits for a quiet moment
+                _stretchDue = now.AddMilliseconds(_fidgets.NextStretchDelayMs());
+                _fidgetDue = now.AddMilliseconds(FidgetDelayMs());
+                RunStretch();
+                return;
+            }
             if (now < _fidgetDue) return;
             if (!CanPerk()) return;   // due, not forced: it waits for a quiet moment
             _fidgetDue = now.AddMilliseconds(FidgetDelayMs());
@@ -296,6 +305,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                         AnimateOffset(EmiAlive.TwitchDip, 0, 0.22, 1);
                         return true;
 
+                    case EmiFidget.WeightShift:
+                        return RunWeightShift();   // EmiDeskWindow.AliveMoves.cs; declines below Full
+
                     case EmiFidget.Glance:
                         PlayChain("glance", bodyFrameOverride: "idle");
                         NudgeGaze(Rng.Next(2) == 0 ? -1 : 1, 0, 900);
@@ -306,7 +318,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                         NudgeGaze(1, 1, EmiProps.HoldMs);
                         return true;
                 }
-                return false;   // weight shift, screen: not on this head yet, the next one runs
+                return false;   // screen: no glass channels on this head yet, the next one runs
             }
             catch (Exception ex)
             {

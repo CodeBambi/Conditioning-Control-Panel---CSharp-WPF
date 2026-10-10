@@ -566,6 +566,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private void CompleteCard()
         {
             var completionTime = (DateTime.Now - _startTime).TotalSeconds;
+            if (!_isTest) ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("lockCardSolved");   // WPF LockCardService.cs:65; no try count on this head, so no {n}
 
             // The XP award, WPF's body verbatim including the !_isTest gate and the strict 1.5x
             // multiplier. App.Progression is CoreProgression here; the WPF call is already a

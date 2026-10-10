@@ -105,11 +105,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             base.OnAttachedToVisualTree(e);
             LocalizationManager.Instance.LanguageChanged += OnLanguageChanged;
             RefreshLocalizedDetails();
+            HookTakeaway();   // PresetsTabView.Takeaway.cs
+            RefreshTakeawayShelf();
         }
 
         protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
         {
             LocalizationManager.Instance.LanguageChanged -= OnLanguageChanged;
+            UnhookTakeaway();
             base.OnDetachedFromVisualTree(e);
         }
 
@@ -1366,6 +1369,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             TxtTakeawayCount.Text = "";
             TakeawayShelf.IsVisible = false;
             TxtTakeawayEmpty.IsVisible = true;
+            RefreshTakeawayShelf();   // the drawer answers later; signed out it is the same empty state
         }
 
         // ---- shared shapes (MakeRackPill / MakeRackMeta) ---------------------------

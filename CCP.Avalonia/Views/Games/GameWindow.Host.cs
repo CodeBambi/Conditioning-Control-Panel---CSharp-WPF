@@ -38,10 +38,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             if (Spec.Id == "arcademy") OpenArcademy();
             if (Spec.Id == "dtrh") OpenDtrhHost();
             if (Spec.Id == LoomId) OpenLoom();
+            EmiGameOpened();   // GameWindow.Emi.cs
         }
 
         private void OnGameClosed()
         {
+            EmiGameClosed();   // GameWindow.Emi.cs
             StopHeartbeatWatch();
             try { CloseBackRoom(); } catch (Exception ex) { Log.Debug("[Game] backroom close: {E}", ex.Message); }
             try { CloseDtrh(); } catch (Exception ex) { Log.Debug("[Game] dtrh close: {E}", ex.Message); }

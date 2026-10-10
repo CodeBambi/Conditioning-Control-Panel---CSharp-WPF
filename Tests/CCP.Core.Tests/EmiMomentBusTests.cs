@@ -12,6 +12,7 @@ namespace ConditioningControlPanel.Tests;
 /// feeds her the app-wide funnel. Every engine here is an in-memory <c>FromJson</c> instance, so
 /// nothing reads or writes the user's emi-desk.json.
 /// </summary>
+[Collection(global::CCP.Core.Tests.SessionStatics.Name)]
 public class EmiMomentBusTests
 {
     private const string File =

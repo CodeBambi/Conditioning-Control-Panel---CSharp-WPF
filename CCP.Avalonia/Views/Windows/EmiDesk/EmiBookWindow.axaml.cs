@@ -943,7 +943,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
             var cards = EmiBookCards.All;
             if (_index < 0 || _index >= cards.Count) return;
             var card = cards[_index];
-            if (card.Target != null) { EmiTargets.Find(card.Target)?.Open(); return; }
+            if (card.Target != null)
+            {
+                if (EmiTargets.Find(card.Target) is not { } door) return;
+                door.Open();
+                EmiDeskService.Instance.Fire("effectFired", new { channel = "bookGo", target = card.Target });   // WPF :810
+                return;
+            }
             if (card.Tour == null) return;
             // WPF EmiBookWindow.Go: a NAME, never an ordinal. The book closes first: a book sitting on
             // top of the coach marks is exactly the thing the coach marks point at.
@@ -954,6 +960,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
             }
             try { Close(); } catch { /* it is going away either way */ }
             CoreTutorial.Start(card.Tour);
+            EmiDeskService.Instance.Fire("effectFired", new { channel = "bookTour", tour = card.Tour });   // WPF :829
         }
 
         private void RenderTabs()

@@ -13,10 +13,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
     /// WHETHER she speaks; the window decides how it looks. A line is text in her bubble with her
     /// Blipese blips only: there is no spoken word here, so there is nothing to synthesise.
     ///
-    /// <para>not ported: offers (WPF ShowAsk / EmiOffers): the port's widget has no chip row, so
-    /// <see cref="EmiLineEngine.AskSituationProbe"/> stays unset and the engine never deals an ask.
-    /// The knock's contact opener, the book offer and the empty-library beat ride those and wait
-    /// with them. The goodbye window (FarewellForArcademy) has no caller on this head.</para>
+    /// <para>Offers: the engine deals an ask through <see cref="EmiLineEngine.AskSituationProbe"/> and
+    /// the window puts the chips up (EmiDeskService.Offers.cs, EmiDeskWindow.Ask.cs). The goodbye window (FarewellForArcademy) has no caller on this head.</para>
     /// </summary>
     internal sealed partial class EmiDeskService
     {
@@ -48,6 +46,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
             ConditioningControlPanel.Services.HapticService.EmiDeskFire = Fire;
             EmiNames.TargetLabelProbe = id => EmiTargets.Find(id) is { } t ? ConditioningControlPanel.Localization.Loc.Get(t.LabelKey) : null;
             SeedKnockProbes();
+            SeedOffers();
         }
 
         /// <summary>
@@ -107,7 +106,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                 var win = _window;
                 if (win == null || win.PresentationActive || !win.IsVisible) return;
 
-                var line = EmiLineEngine.Instance.Draw(momentId, EmiLineEngine.ToCtx(ctx));
+                var dict = EmiLineEngine.ToCtx(ctx);
+                var line = EmiLineEngine.Instance.Draw(momentId, dict);
+                var ask = EmiLineEngine.Instance.DrawAsk(momentId, dict);
+                if (ask != null)
+                {
+                    if (NeverSpeaks.Contains(momentId)) return;
+                    win.ShowAsk(ask);
+                    return;
+                }
                 if (line == null) return;
 
                 // A hold is a face, never a bubble, so it plays even on a locked-silent moment.
@@ -162,6 +169,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
             try
             {
                 StartNudges(summons);
+                MaybeOfferBookOnSummon(summons);
                 _summonMoment = ChooseGreetMoment();
                 if (TakeKnockContact() is { } contact) _summonMoment = contact;   // WPF :340: the knock picks by population
                 _summonVia = string.Equals(why, "hotkey", StringComparison.OrdinalIgnoreCase) ? "hotkey" : "rail";
@@ -193,6 +201,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         {
             try
             {
+                CancelOfferBeats();
                 CancelSummonMoment();
                 Fire("dismissed", new { minutes = MinutesOut() });
                 _lastDismissUtc = DateTime.UtcNow;
@@ -227,6 +236,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                 _summonMoment = null;
                 bool touring = _summonTouring;
                 _summonTouring = false;
+                ScheduleEmptyLibraryBeat();   // WPF :930: a few seconds behind the hello, never inside it
                 if (string.IsNullOrEmpty(moment)) return;
                 Fire(moment!, new { via = _summonVia, minutes = MinutesOut(), touring });
             }
