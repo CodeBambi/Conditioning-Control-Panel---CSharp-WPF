@@ -889,5 +889,6 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
   offscreen (the LeashExplainRenderTests trick), at the design size or 1280x800; controls at their size or 900x600.
   A type that throws or exceeds 30 s is a line in `_failures.txt`, never a failed run.
 - Pairing maps a file to its type by basename up to the first `.`, so shell partials pair `MainWindow` with
-  `MainShellWindow`; the first file per side that has a render wins. These images are evidence for a reviewer, not a
+  `MainShellWindow`; a type rendered on both heads wins (e.g.
+  `AchievementsTabView` on a MainWindow partial row), else the first file per side that has a render. These images are evidence for a reviewer, not a
   verdict: a row still needs the ledger's Keincheck run to become `verified`.

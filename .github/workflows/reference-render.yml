@@ -35,10 +35,15 @@ jobs:
           dotnet-version: |
             10.0.x
       # Same -p: flag as build.yml's windows job (NETSDK1151); see the comment there.
+      - name: Build the WPF suite
+        run: dotnet build Tests/ConditioningControlPanel.Tests/ConditioningControlPanel.Tests.csproj -c Release -p:ValidateExecutableReferencesMatchSelfContained=false
+      # Built first so the render step can run behind a dead proxy: no view reaches the network.
       - name: Render every WPF view
         env:
           CCP_REFERENCE_RENDER_DIR: ${{ runner.temp }}/wpf
-        run: dotnet test Tests/ConditioningControlPanel.Tests/ConditioningControlPanel.Tests.csproj -c Release -p:ValidateExecutableReferencesMatchSelfContained=false --filter "Category=ReferenceRender"
+          HTTP_PROXY: http://127.0.0.1:9
+          HTTPS_PROXY: http://127.0.0.1:9
+        run: dotnet test Tests/ConditioningControlPanel.Tests/ConditioningControlPanel.Tests.csproj -c Release --no-build --filter "Category=ReferenceRender"
       - name: Counts
         if: always()
         shell: bash
