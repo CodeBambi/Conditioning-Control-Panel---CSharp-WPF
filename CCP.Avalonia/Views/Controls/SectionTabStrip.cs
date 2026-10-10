@@ -3,9 +3,12 @@
 // that section's last tab), the section's pills (filled = the tab on screen), the accent line.
 // The rules are Core's NavStripTable, the table Core's NavSections, so both heads draw one truth.
 //
-// ponytail: not yet here (lane sync6-nav-rail-b): the per-tab tints, depth plates and sliding
-// active fill (NavStripRules TabTint/PlateBrush, PaintDepthPages, PlaceFill), the leading MDL2
-// glyphs (absent on Linux; WPF also drops a glyph its font lacks), the "Moved" note, the "?" help
+// Pill paint (polish waves 2/3/7/9, sync6-nav-polish-b): the tray, the per-tab tints, the raised
+// plates with their bevelled rim, the active ring and glow, the sliding active fill (NavStripRules).
+//
+// ponytail: not yet here (lane sync6-nav-polish-c): the depth plates and drop bands
+// (SectionTabStrip.Depth.cs, PaintDepthPages), the hover lift / choose sparks / idle sheen
+// (SectionTabStrip.Fx.cs), the leading MDL2 glyphs (absent on Linux; WPF also drops a glyph its font lacks), the "Moved" note, the "?" help
 // badges and Just Drop's ask-first, the right-click pin menu.
 
 using System;
@@ -22,17 +25,28 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using ConditioningControlPanel.Avalonia.Controls;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services.UI;
 
 namespace ConditioningControlPanel.Avalonia.Views.Controls
 {
     public sealed class SectionTabStrip : UserControl
     {
-        private static readonly IBrush RestFace = new SolidColorBrush(Color.FromArgb(0x1A, 0xFF, 0xFF, 0xFF));
-        private static readonly IBrush HoverFace = new SolidColorBrush(Color.FromArgb(0x2E, 0xFF, 0xFF, 0xFF));
-        private static readonly IBrush RestText = new SolidColorBrush(Color.FromRgb(0xF0, 0xF0, 0xF5));
-        private static readonly IBrush DarkInk = new SolidColorBrush(Color.FromRgb(0x15, 0x12, 0x1F));
         private static readonly IBrush FocusRing = new SolidColorBrush(Color.FromArgb(0xCC, 0xFF, 0xFF, 0xFF));
+        private static readonly IBrush BadgePlate = new SolidColorBrush(NavStripRules.WithAlpha(NavStripRules.DarkInk, 0.85));
+
+        /// <summary>One pill's parts and its paint (WPF PillParts :141).</summary>
+        internal sealed class PillParts
+        {
+            public NavTab Tab = null!;
+            public Button Pill = null!;
+            public Border Ring = null!, Face = null!;
+            public TextBlock Label = null!;
+            public Color Tint;
+            public IBrush RestText = Brushes.Gainsboro, Outline = Brushes.Transparent, ActiveRing = Brushes.Transparent;
+            public IBrush Plate = Brushes.Transparent, Hover = Brushes.Transparent;
+            public Thickness RestPadding;
+        }
 
         private readonly TextBlock _crumbSectionText = new() { FontSize = 14, FontWeight = FontWeight.ExtraBold };
         private readonly TextBlock _crumbSep = new() { FontSize = 14, Margin = new Thickness(4, 0), VerticalAlignment = VerticalAlignment.Center, Opacity = 0.6 };
@@ -41,9 +55,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
         private readonly StackPanel _pillRow = new() { Orientation = Orientation.Horizontal, Spacing = 6 };
         private readonly Border _track;
         private readonly Border _accentLine = new() { Height = 2, CornerRadius = new CornerRadius(1), Opacity = 0.85 };
-        private readonly List<(NavTab Tab, Button Pill, Border Face, TextBlock Label)> _pills = new();
+        // The lit tab's solid hue, sliding under the pills (WPF ActiveFill + PlaceFill :1018).
+        private readonly Border _activeFill = new()
+        {
+            CornerRadius = new CornerRadius(19), HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Center, Width = 0, IsVisible = false, IsHitTestVisible = false,
+        };
+        private readonly List<PillParts> _pills = new();
         private string? _section, _tab, _activePill;
-        private IBrush _accent = Brushes.Transparent;
+        private IBrush _accent = Brushes.Transparent, _activeText = Brushes.Black;
+        private Color _hue;
 
         /// <summary>A pill was chosen (click, Enter/Space, or a Left/Right/Home/End move).</summary>
         public event Action<NavTab>? TabRequested;
@@ -66,7 +87,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
         internal string? Section => _section;
         internal string? ActivePillKey => _activePill;
         internal IReadOnlyList<string> PillKeys => _pills.Select(p => p.Tab.Key).ToArray();
-        internal Button? PillFor(string key) => _pills.FirstOrDefault(p => p.Tab.Key == key).Pill;
+        internal Button? PillFor(string key) => Part(key)?.Pill;
+        internal PillParts? Part(string key) => _pills.FirstOrDefault(p => p.Tab.Key == key);
+        internal Border ActiveFill => _activeFill;
+        internal Border Track => _track;
+        internal MotionLevel? MotionOverride { get; set; }
+        private MotionLevel Level => MotionOverride ?? CoreSettings.Current.MotionLevel;
         internal string CrumbText => $"{_crumbSectionText.Text} {_crumbSep.Text} {_crumbPage.Text}".Trim();
         internal bool PillsShown => _track.IsVisible && _track.Opacity > 0;
 
@@ -91,8 +117,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
                 BorderThickness = new Thickness(1.5), BorderBrush = new SolidColorBrush(Color.FromArgb(0x22, 0xFF, 0xFF, 0xFF)),
                 Background = new SolidColorBrush(Color.FromArgb(0x12, 0xFF, 0xFF, 0xFF)),
                 HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Center,
-                Child = _pillRow,
+                Child = new Panel { Children = { _activeFill, _pillRow } },
             };
+            _pillRow.LayoutUpdated += (_, _) => PositionFill(animate: false, onlyIfMoved: true);
             _pillRow.AddHandler(KeyDownEvent, PillRow_KeyDown, RoutingStrategies.Tunnel);
             var row = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), Margin = new Thickness(0, 0, 0, 6) };
             Grid.SetColumn(_track, 1);
@@ -130,6 +157,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
         public void Show(string? section, string? tab, string? pageLabel = null)
         {
             _tab = tab;
+            bool sectionChanged = !string.Equals(section, _section, StringComparison.OrdinalIgnoreCase);
             if (!NavStripTable.ShowsHeader(section))
             {
                 IsVisible = false;
@@ -142,7 +170,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
             {
                 _section = section;
                 var hue = Hue(section);
+                _hue = hue;
                 _accent = new SolidColorBrush(hue);
+                _activeText = new SolidColorBrush(NavStripRules.ActiveTextOn(hue));
+                _activeFill.Background = _accent;
+                // The tray: darker than the page wash, its top edge shaded so the pills sit IN it (WPF PaintFor :276).
+                _track.Background = new SolidColorBrush(NavStripRules.TrackFill(hue));
+                _track.BorderBrush = NavStripRules.TrackBorderBrush(hue);
                 _crumbSectionText.Foreground = _accent;
                 _accentLine.Background = new LinearGradientBrush
                 {
@@ -166,7 +200,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
             _crumbPage.Text = page;
             ToolTip.SetTip(_crumbSection, sectionLabel);
 
-            SetActive(NavStripTable.ActivePill(tab));
+            SetActive(NavStripTable.ActivePill(tab), animate: !sectionChanged);
         }
 
         internal static Color Hue(string? section)
@@ -197,35 +231,72 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
             _pillRow.Children.Clear();
             _pills.Clear();
             _activePill = null;
-            foreach (var tab in NavStripTable.Pills(section).Where(CanOpen))
+            _activeFill.Width = 0;
+            _activeFill.IsVisible = false;
+            var tabs = NavStripTable.Pills(section);
+            var hue = Hue(section);
+            for (int index = 0; index < tabs.Count; index++)
             {
+                var tab = tabs[index];
+                if (!CanOpen(tab)) continue;
+                // WPF :665: the tab's own near-hue paints its outline, hover and the active ring; the
+                // active FILL and the label rule stay the section's. The index is WPF's (every pill),
+                // so a pill this head hides does not shift its neighbours' colours.
+                var tint = NavStripRules.TabTint(section, index, tabs.Count);
+                var parts = new PillParts
+                {
+                    Tab = tab, Tint = tint,
+                    RestText = new SolidColorBrush(NavStripRules.RestTextOn(hue, tint)),
+                    Outline = NavStripRules.OutlineBrush(tint),
+                    ActiveRing = NavStripRules.ActiveRingBrush(tint),
+                    Plate = NavStripRules.PlateBrush(tint, NavStripRules.RestFillAlpha),
+                    Hover = NavStripRules.PlateBrush(tint, NavStripRules.HoverFillAlpha),
+                };
                 var labelText = SafeLoc(tab.LabelKey, tab.Key);
                 var label = new TextBlock
                 {
-                    Text = labelText, FontSize = 14.5, FontWeight = FontWeight.SemiBold,
-                    VerticalAlignment = VerticalAlignment.Center, Foreground = RestText,
+                    Text = labelText, FontSize = NavStripRules.PillFontSize, FontWeight = FontWeight.SemiBold,
+                    VerticalAlignment = VerticalAlignment.Center, Foreground = parts.RestText,
                 };
                 var content = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Children = { label } };
                 bool locked = PillLocked(tab.Tier);
                 // Locked stays visible: the tier sign sits in the pill, the click still navigates
                 // and the page's own gate explains the lock. Static on chrome.
+                // A dark plate under the sign, so a neon tier sign reads the same on the solid hue
+                // of the active pill as on the dark track (WPF :720).
                 if (locked)
-                    content.Children.Add(new TierBadge
+                    content.Children.Add(new Border
                     {
-                        MotionOverride = false, Tier = tab.Tier, MaxWidthOverride = 54,
-                        Margin = new Thickness(8, 0, -6, 0), VerticalAlignment = VerticalAlignment.Center,
+                        Width = NavStripRules.BadgePlateWidth, Height = NavStripRules.BadgePlateHeight,
+                        Margin = new Thickness(NavStripRules.BadgeGap, 0, -6, 0), CornerRadius = new CornerRadius(7),
+                        Background = BadgePlate, VerticalAlignment = VerticalAlignment.Center,
+                        Child = new TierBadge
+                        {
+                            MotionOverride = false, Tier = tab.Tier, MaxWidthOverride = NavStripRules.BadgeMaxWidth,
+                            HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
+                        },
                     });
+                // The face: a raised plate in the tab's tint inside a bevelled rim; the 1 px ring
+                // around it is the focus ring, so border + ring never grow the pill (WPF :744).
+                double rightPad = NavStripRules.PillPadding + (locked ? NavStripRules.BadgePadExtra : 0);
                 var face = new Border
                 {
-                    CornerRadius = new CornerRadius(18), Padding = new Thickness(16, 0), MinHeight = 36,
-                    Background = RestFace, BorderThickness = new Thickness(1), BorderBrush = Brushes.Transparent,
-                    Child = content,
+                    CornerRadius = new CornerRadius(NavStripRules.PillHeight / 2 - 1),
+                    Padding = new Thickness(NavStripRules.PillPadding, 0, rightPad, 0),
+                    MinHeight = NavStripRules.PillHeight - 2,
+                    Background = parts.Plate, BorderThickness = new Thickness(NavStripRules.RestFaceThickness),
+                    BorderBrush = parts.Outline, Child = content,
+                };
+                var ring = new Border
+                {
+                    CornerRadius = new CornerRadius(NavStripRules.PillHeight / 2), BorderThickness = new Thickness(1),
+                    BorderBrush = Brushes.Transparent, Child = face,
                 };
                 // A real named Button (UIA: invokable, AutomationId NavPill_<key>), so the click
                 // always reaches it (WPF 56b707252).
                 var pill = new Button
                 {
-                    Name = "NavPill_" + tab.Key, Content = face, Padding = new Thickness(0),
+                    Name = "NavPill_" + tab.Key, Content = ring, Padding = new Thickness(0),
                     Background = Brushes.Transparent, BorderThickness = new Thickness(0),
                     Cursor = new Cursor(StandardCursorType.Hand), Focusable = true, Tag = tab.Key,
                     Template = PlainTemplate(),
@@ -233,13 +304,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
                 ToolTip.SetTip(pill, PillToolTip(section, tab, labelText, locked));
                 global::Avalonia.Automation.AutomationProperties.SetName(pill, labelText);
                 global::Avalonia.Automation.AutomationProperties.SetAutomationId(pill, "NavPill_" + tab.Key);
-                pill.PointerEntered += (_, _) => { if (!IsActive(tab.Key)) face.Background = HoverFace; };
-                pill.PointerExited += (_, _) => { if (!IsActive(tab.Key)) face.Background = RestFace; };
-                pill.GotFocus += (_, _) => face.BorderBrush = FocusRing;
-                pill.LostFocus += (_, _) => face.BorderBrush = Brushes.Transparent;
+                pill.PointerEntered += (_, _) => { if (!IsActive(tab.Key)) face.Background = parts.Hover; };
+                pill.PointerExited += (_, _) => { if (!IsActive(tab.Key)) face.Background = parts.Plate; };
+                pill.GotFocus += (_, _) => ring.BorderBrush = FocusRing;
+                pill.LostFocus += (_, _) => ring.BorderBrush = Brushes.Transparent;
                 pill.Click += (_, e) => { e.Handled = true; Choose(tab, focus: false); };
                 _pillRow.Children.Add(pill);
-                _pills.Add((tab, pill, face, label));
+                parts.Pill = pill;
+                parts.Ring = ring;
+                parts.Face = face;
+                parts.Label = label;
+                parts.RestPadding = face.Padding;
+                _pills.Add(parts);
                 PillCreated?.Invoke(tab, pill);
             }
         }
@@ -261,23 +337,76 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
         private void Choose(NavTab tab, bool focus)
         {
             // Launchers and windows open something else; the page on screen keeps its pill.
-            if (tab.Kind is NavTabKind.Tab or NavTabKind.Zone) SetActive(tab.Key);
+            if (tab.Kind is NavTabKind.Tab or NavTabKind.Zone) SetActive(tab.Key, animate: true);
             if (focus) PillFor(tab.Key)?.Focus();
             TabRequested?.Invoke(tab);
         }
 
-        private void SetActive(string? key)
+        private void SetActive(string? key, bool animate)
         {
             _activePill = key;
             foreach (var p in _pills)
             {
                 bool on = IsActive(p.Tab.Key);
-                p.Face.Background = on ? _accent : (p.Pill.IsPointerOver ? HoverFace : RestFace);
-                p.Label.Foreground = on ? DarkInk : RestText;
+                // WPF SetActive :983: active = ink on the solid hue the fill slides under (the plate
+                // steps aside) and a near-white gloss ring in the tint; rest = the label on a raised
+                // plate inside the bevelled rim. The heavier lit rim takes its half pixel back from
+                // the padding, so nothing moves.
+                p.Label.Foreground = on ? _activeText : p.RestText;
+                p.Face.BorderBrush = on ? p.ActiveRing : p.Outline;
+                double grow = on ? NavStripRules.ActiveFaceThickness - NavStripRules.RestFaceThickness : 0;
+                p.Face.BorderThickness = new Thickness(on ? NavStripRules.ActiveFaceThickness : NavStripRules.RestFaceThickness);
+                var pad = p.RestPadding;
+                p.Face.Padding = new Thickness(Math.Max(0, pad.Left - grow), pad.Top, Math.Max(0, pad.Right - grow), pad.Bottom);
+                p.Face.Background = on ? Brushes.Transparent : (p.Pill.IsPointerOver ? p.Hover : p.Plate);
                 // One Tab stop for the strip (ARIA tabs): the active pill, else the first. WPF :991.
                 p.Pill.IsTabStop = on || (key == null && p.Pill == _pills[0].Pill);
                 global::Avalonia.Automation.AutomationProperties.SetItemStatus(p.Pill, on ? "selected" : string.Empty);
             }
+            PositionFill(animate);
+        }
+
+        /// <summary>WPF SlideMs (:123): 180 ms, halved at Reduced, 0 at Off.</summary>
+        internal static int SlideMs(MotionLevel level) => level switch
+        {
+            MotionLevel.Off => 0,
+            MotionLevel.Reduced => 90,
+            _ => 180,
+        };
+
+        private double _fillX = double.NaN, _fillW;
+
+        /// <summary>WPF PositionFill/PlaceFill (:999, :1018): the solid hue slides (cubic ease-out)
+        /// under the lit pill and glows softly in the hue (none at Motion Off). Before the first
+        /// layout the pill has no bounds; LayoutUpdated places it once they land.</summary>
+        private void PositionFill(bool animate, bool onlyIfMoved = false)
+        {
+            var p = _activePill == null ? null : Part(_activePill);
+            if (p == null) { _activeFill.IsVisible = false; _fillX = double.NaN; return; }
+            var b = p.Pill.Bounds;
+            if (b.Width <= 0) return;
+            if (onlyIfMoved && b.X == _fillX && b.Width == _fillW && _activeFill.IsVisible) return;
+            var level = Level;
+            int ms = animate && _activeFill.IsVisible && _activeFill.Width > 0 ? SlideMs(level) : 0;
+            if (ms > 0)
+            {
+                var d = TimeSpan.FromMilliseconds(ms);
+                _activeFill.Transitions = new global::Avalonia.Animation.Transitions
+                {
+                    new global::Avalonia.Animation.DoubleTransition { Property = WidthProperty, Duration = d, Easing = new global::Avalonia.Animation.Easings.CubicEaseOut() },
+                    new global::Avalonia.Animation.ThicknessTransition { Property = MarginProperty, Duration = d, Easing = new global::Avalonia.Animation.Easings.CubicEaseOut() },
+                };
+            }
+            else _activeFill.Transitions = null;
+            _fillX = b.X;
+            _fillW = b.Width;
+            _activeFill.IsVisible = true;
+            _activeFill.Height = b.Height;
+            _activeFill.Margin = new Thickness(b.X, 0, 0, 0);
+            _activeFill.Width = b.Width;
+            _activeFill.BoxShadow = level == MotionLevel.Off
+                ? default
+                : new BoxShadows(new BoxShadow { Blur = NavStripRules.ActiveGlowBlur, Color = NavStripRules.WithAlpha(_hue, NavStripRules.ActiveGlowOpacity) });
         }
 
         /// <summary>WPF PillRow_PreviewKeyDown: Enter/Space choose, Left/Right wrap, Home/End jump.

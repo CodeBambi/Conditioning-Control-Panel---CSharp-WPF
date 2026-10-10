@@ -160,6 +160,9 @@ public sealed class AssetsTabTests
 
             history.RecordImages(new[] { "/x/a.png" });
             shell.ShowTab("settings");
+            // Freshen the shared animation clock (a running section crossfade would hand the
+            // pulse the whole real-time gap since its last tick as one frame).
+            global::Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick();
             shell.ShowTab("assets");
             Dispatcher.UIThread.RunJobs();
             Assert.True(tab.MediaLogPulsing);
