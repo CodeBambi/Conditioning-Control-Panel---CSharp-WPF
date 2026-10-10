@@ -116,3 +116,63 @@ public sealed class RemoteDirectoryOptInTests
         Assert.Empty(f.OptIns());
     }
 }
+
+/// <summary>The controller side of the directory: WPF AvailableSubjectsService.TryClaimAsync, on Core
+/// RemoteDirectoryApi. The session url carries a PIN in its fragment, so only a plain web address comes back.</summary>
+public sealed class RemoteDirectoryClaimTests
+{
+    private sealed class Fake : HttpMessageHandler
+    {
+        public HttpStatusCode Status = HttpStatusCode.OK;
+        public string Body = "{}";
+        public HttpRequestMessage? Last;
+        public string? LastBody;
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage r, CancellationToken ct)
+        {
+            Last = r;
+            LastBody = await r.Content!.ReadAsStringAsync(ct);
+            return new HttpResponseMessage(Status) { Content = new StringContent(Body) };
+        }
+    }
+
+    private static ConditioningControlPanel.Services.Lobby.RemoteDirectoryApi Api(Fake f, bool signedIn = true) =>
+        new(new HttpClient(f), () => signedIn ? ("me-1", "tok") : null, "http://127.0.0.1:1");
+
+    [Fact]
+    public async Task A_claim_posts_the_subject_with_the_callers_headers_and_returns_the_session_url()
+    {
+        var f = new Fake { Body = "{\"session_url\":\"https://cclabs.app/remote/#code=ABC123&pin=0420\"}" };
+        var (url, lost) = await Api(f).ClaimAsync("sub-9");
+        Assert.Equal("https://cclabs.app/remote/#code=ABC123&pin=0420", url);
+        Assert.False(lost);
+        Assert.Equal("/v2/directory/claim", f.Last!.RequestUri!.AbsolutePath);
+        Assert.Equal("tok", f.Last.Headers.GetValues("X-Auth-Token").Single());
+        Assert.Equal("me-1", f.Last.Headers.GetValues("X-Caller-Unified-Id").Single());
+        Assert.Equal("sub-9", (string?)JObject.Parse(f.LastBody!)["unified_id"]);
+    }
+
+    [Fact]
+    public async Task Someone_claiming_first_is_a_lost_race_and_a_refusal_or_no_account_is_nothing()
+    {
+        var f = new Fake { Status = HttpStatusCode.Conflict };
+        Assert.Equal((null, true), await Api(f).ClaimAsync("sub-9"));
+        f.Status = HttpStatusCode.TooManyRequests;
+        Assert.Equal((null, false), await Api(f).ClaimAsync("sub-9"));
+        f.Last = null;
+        Assert.Equal((null, false), await Api(f, signedIn: false).ClaimAsync("sub-9"));
+        Assert.Equal((null, false), await Api(f).ClaimAsync(""));
+        Assert.Null(f.Last);   // neither asked the server
+    }
+
+    [Theory]
+    [InlineData("https://cclabs.app/remote/#code=A&pin=1", true)]
+    [InlineData("http://127.0.0.1:9000/remote/#code=A", true)]
+    [InlineData("file:///C:/Windows/System32/calc.exe", false)]
+    [InlineData("calc.exe", false)]
+    [InlineData("https://cclabs.app/\" & calc", false)]
+    [InlineData("https://cclabs.app/\nfoo", false)]
+    [InlineData("", false)]
+    [InlineData(null, false)]
+    public void Only_a_plain_web_address_reaches_the_browser(string? url, bool ok) =>
+        Assert.Equal(ok, ConditioningControlPanel.Services.Lobby.RemoteDirectoryApi.SafeSessionUrl(url) != null);
+}

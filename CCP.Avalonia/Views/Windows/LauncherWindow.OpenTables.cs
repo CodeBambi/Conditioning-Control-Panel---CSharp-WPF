@@ -66,9 +66,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 if (_openTablesTimer == null)
                 {
                     _openTablesTimer = new DispatcherTimer { Interval = OpenTablesPoll };
-                    _openTablesTimer.Tick += (_, _) => _ = GoonOpenTables.RefreshAsync();
+                    _openTablesTimer.Tick += (_, _) => { _ = GoonOpenTables.RefreshAsync(); try { _ = MainShellWindow.Lobby.RefreshAsync(); } catch { } };
                 }
                 _openTablesTimer.Start();
+                StartLobbyChip();   // LauncherWindow.Lobby.cs (WPF OpenTables.cs:68)
             }
             catch (Exception ex) { Log.Debug(ex, "[Launcher] open tables start failed"); }
         }
@@ -76,6 +77,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private void StopOpenTables()
         {
             _openTablesTimer?.Stop();
+            StopLobbyChip();
             if (_openTablesHooked) { GoonOpenTables.Changed -= OnOpenTablesChanged; _openTablesHooked = false; }
         }
 
