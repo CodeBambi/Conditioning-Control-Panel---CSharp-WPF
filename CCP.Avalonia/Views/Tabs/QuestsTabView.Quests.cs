@@ -70,13 +70,30 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private void OnQuestProgressChanged(object? sender, QuestProgressEventArgs e) =>
             Dispatcher.UIThread.Post(() => { if (IsVisible) RefreshQuestUI(); });
 
-        /// <summary>MainWindow.Quests.cs:40. ponytail: no flash voice line (App.Flash.PlayRandomSound
-        /// - FlashService audio is not on this head; the service's own chime still plays) and no header
-        /// stamps (MainWindow.QuestStamps.cs).</summary>
+        /// <summary>WPF App.Flash.PlayRandomSound on a quest completion: the next clip of the flash voice pool
+        /// (the active mod's RECORDED lines, ModAudioPolicy applied) at the flash volume curve. An empty pool, a
+        /// missing file or a muted voice stays silent: never synthetic speech. Tests swap the player.</summary>
+        internal static Action<string, float> PlayQuestVoice = (path, volume) => CoreAudio.PlayOneShot(path, volume, "quest-complete");
+
+        internal static void PlayQuestCompleteVoice()
+        {
+            try
+            {
+                var s = CoreSettings.Current;
+                if (Services.Flash.FlashVoicePool.Silenced(s)) return;
+                var path = Services.Flash.FlashVoicePool.Next(s);
+                if (string.IsNullOrEmpty(path) || !System.IO.File.Exists(path)) return;
+                PlayQuestVoice(path, Services.Flash.FlashVoicePool.Volume(s.MasterVolume));
+            }
+            catch (Exception ex) { Serilog.Log.Debug("Failed to play quest voice line: {Error}", ex.Message); }
+        }
+
+        /// <summary>MainWindow.Quests.cs:40. ponytail: no header stamps (MainWindow.QuestStamps.cs).</summary>
         private void OnQuestCompleted(object? sender, QuestCompletedEventArgs e) => Dispatcher.UIThread.Post(() =>
         {
             // Perk-announcement opt-out: the popup goes, the in-tab banner stays (WPF :47).
             bool announce = !CoreSettings.Current.SuppressPerkNotifications;
+            if (announce) PlayQuestCompleteVoice();   // WPF :52, before the popup
             try { _questCompletePopup?.Close(); } catch { }
             _questCompletePopup = null;
             if (announce)
