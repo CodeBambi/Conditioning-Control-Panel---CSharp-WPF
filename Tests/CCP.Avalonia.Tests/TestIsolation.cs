@@ -69,6 +69,11 @@ internal sealed class IsolateProcessStateAttribute : BeforeAfterTestAttribute
             ConditioningControlPanel.Avalonia.Platform.StartupLadder.ResetForTests();
             // A Ctrl+K a test pressed and never released would swallow the next test's press (P02).
             ConditioningControlPanel.Avalonia.Views.Windows.SettingsPaletteWindow.ChordReleased();
+            // The shell paints the section ink into the app resources (PaintSectionInk); drop the
+            // overrides so the next test sees the authored (Home) ink (P02).
+            if (global::Avalonia.Application.Current?.Resources is { } res)
+                foreach (var k in new[] { "SectionInk", "SectionTint", "SectionRule", "SectionOutline" })
+                { res.Remove(k); res.Remove(k + "Brush"); }
             Current?.Restore();
             Current = null;
         });

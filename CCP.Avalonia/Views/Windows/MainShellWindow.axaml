@@ -634,6 +634,14 @@
             </Grid>
         </Border>
 
+        <!-- THE HUD BAND (WPF MainWindow.xaml:805, nav polish wave 2): the header row and the XP row
+             read as one zone - 20% black over the window ground and a 1px TextMuted divider at 30%
+             under the XP row. Drawn before the header so its controls sit on it; never hit-testable.
+             (The depth well along its top is sync6-nav-polish-c.) -->
+        <Border x:Name="HudBand" Grid.Row="1" Grid.RowSpan="3" Grid.Column="1" Background="#33000000" IsHitTestVisible="False">
+            <Border Height="1" VerticalAlignment="Bottom" Background="{DynamicResource TextMutedBrush}" Opacity="0.3"/>
+        </Border>
+
         <!-- Header Bar - Row 1 -->
         <!-- 2026-08-13: was an opaque PanelBg slab; its square edges read as sharp corners
              against the darker base coat. Every child is a self-contained rounded pill, so
@@ -1693,6 +1701,21 @@
              which is all Row 4 / Column 1 ever was, so the per-view Grid.Row/Grid.Column
              moved onto the wrapper. Nothing about tab visibility, ShowTab or any x:Name
              changed. -->
+        <!-- THE SECTION WASH (WPF MainWindow.xaml:2013, nav polish wave 2): a soft gradient in the
+             section hue behind the tab canvas plus a 1px hue line along its top, painted by
+             MainShellWindow.SectionChrome.cs PaintSectionWash. The gradient is a solid hue under an
+             opacity mask, so the colour change can be a BrushTransition. Never hit-testable. -->
+        <Panel x:Name="SectionPageWash" Grid.Row="4" Grid.Column="1" IsHitTestVisible="False">
+            <Border x:Name="SectionWashFill" Background="#24B79CFF">
+                <Border.OpacityMask>
+                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                        <GradientStop Color="#FF000000" Offset="0"/>
+                        <GradientStop Color="#00000000" Offset="0.66"/>
+                    </LinearGradientBrush>
+                </Border.OpacityMask>
+            </Border>
+            <Border x:Name="SectionWashLine" Height="1" VerticalAlignment="Top" Background="#59B79CFF"/>
+        </Panel>
         <Grid Grid.Row="4" Grid.Column="1" RowDefinitions="Auto,*">
             <!-- Nav rework 2026-10-06 (WPF MainWindow.xaml:2039): row 0 = the section's pill strip +
                  breadcrumb (hidden on Home), row 1 = the one-cell stack of tab views, unchanged. -->
@@ -2653,9 +2676,51 @@
          re-tints with the mod. CornerRadius matches the DWMWCP_ROUND corner DWM already
          clips the window to. Below EventFxHost (9998) and the fullscreen browser overlay
          (9999) on purpose. -->
-    <Border x:Name="GlassWindowEdge" Grid.RowSpan="6" Grid.ColumnSpan="2" ZIndex="9997"
-            BorderBrush="{DynamicResource PinkBrush}" BorderThickness="3" CornerRadius="8"
-            IsHitTestVisible="False"/>
+    <!-- Nav polish wave 9 (WPF MainWindow.xaml:3018, 8f4bb7814): the frame wears the SECTION hue,
+         not the mod accent, and a faint band of that hue fades 28 px into the window. Authored in
+         Home's Lilac; MainShellWindow.SectionChrome.cs PaintSectionEdge repaints it with the page
+         wash. Each band is a solid hue under a fade mask (WPF's three stops A / 0.42 A / 0), so
+         the retint is a BrushTransition. The lift sits at the top centre (WPF's Fixed motion). -->
+    <Panel x:Name="SectionEdgeHost" Grid.RowSpan="6" Grid.ColumnSpan="2" ZIndex="9997" IsHitTestVisible="False">
+        <Panel x:Name="SectionEdgeGlow">
+            <Border Height="28" VerticalAlignment="Top" Background="#32B79CFF">
+                <Border.OpacityMask>
+                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                        <GradientStop Offset="0" Color="#FF000000"/><GradientStop Offset="0.45" Color="#6B000000"/><GradientStop Offset="1" Color="#00000000"/>
+                    </LinearGradientBrush>
+                </Border.OpacityMask>
+            </Border>
+            <Border Height="28" VerticalAlignment="Bottom" Background="#32B79CFF">
+                <Border.OpacityMask>
+                    <LinearGradientBrush StartPoint="0%,100%" EndPoint="0%,0%">
+                        <GradientStop Offset="0" Color="#FF000000"/><GradientStop Offset="0.45" Color="#6B000000"/><GradientStop Offset="1" Color="#00000000"/>
+                    </LinearGradientBrush>
+                </Border.OpacityMask>
+            </Border>
+            <Border Width="28" HorizontalAlignment="Left" Background="#32B79CFF">
+                <Border.OpacityMask>
+                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
+                        <GradientStop Offset="0" Color="#FF000000"/><GradientStop Offset="0.45" Color="#6B000000"/><GradientStop Offset="1" Color="#00000000"/>
+                    </LinearGradientBrush>
+                </Border.OpacityMask>
+            </Border>
+            <Border Width="28" HorizontalAlignment="Right" Background="#32B79CFF">
+                <Border.OpacityMask>
+                    <LinearGradientBrush StartPoint="100%,0%" EndPoint="0%,0%">
+                        <GradientStop Offset="0" Color="#FF000000"/><GradientStop Offset="0.45" Color="#6B000000"/><GradientStop Offset="1" Color="#00000000"/>
+                    </LinearGradientBrush>
+                </Border.OpacityMask>
+            </Border>
+        </Panel>
+        <Border x:Name="GlassWindowEdge" BorderBrush="#E6B79CFF" BorderThickness="3" CornerRadius="8"/>
+        <Border x:Name="SectionEdgeLiftTop" Height="3" VerticalAlignment="Top" Margin="8,0,8,0" Background="#FFD0BFFF">
+            <Border.OpacityMask>
+                <LinearGradientBrush StartPoint="0%,50%" EndPoint="100%,50%">
+                    <GradientStop Offset="0.4" Color="#00000000"/><GradientStop Offset="0.5" Color="#FF000000"/><GradientStop Offset="0.6" Color="#00000000"/>
+                </LinearGradientBrush>
+            </Border.OpacityMask>
+        </Border>
+    </Panel>
 
     <!-- THE FUSE's corner readout (CONTRACT-FUSE-0816 2.2). From T-1h the T-minus stops being a
          hover reward and becomes a thing in the room: a small clock in the corner that does not go

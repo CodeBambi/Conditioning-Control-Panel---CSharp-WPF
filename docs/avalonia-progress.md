@@ -1836,3 +1836,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/distro-check: +292
 - Clean-distro Docker check of the linux-x64 tarball (6 distros, real Xvfb, offline run, screenshots + result.json) and a distro-check.yml CI matrix (run 38061705873 green).
 - Findings F1-F6 (tumbleweed no-font abort, WPE not packaged, libvlc P/Invoke, emoji tofu, HiDPI wizard, pactl) in evidence/distro-check/findings.md.
+
+## avalonia-port/sync6-nav-polish-b: +839
+- Section strip in its hue (tray, per-tab tints, bevelled plates, sliding glowing lit fill), page wash + ink, window edge line/band/lift and HUD band per section; SectionPaintShellTests, Keincheck strip-*.png.
+- Strip colour math in Core NavStripPaint (both heads wrap it); ledger rows 47/49/70/75/77 ported, 48/50/54/80 partial; the rest -> sync6-nav-polish-c (depth, fx, fog/embers, rail coins).

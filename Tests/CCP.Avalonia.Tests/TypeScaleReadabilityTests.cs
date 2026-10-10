@@ -76,10 +76,11 @@ public sealed class TypeScaleReadabilityTests
                 var play = shell.GetLogicalDescendants().OfType<global::ConditioningControlPanel.Avalonia.Views.Tabs.PlayTabView>().First();
                 var zone = ByText(play, "rf_play_zone_games");           // PlayZoneTag on Type.SectionHeader
                 Assert.Equal(11, zone.FontSize);
-                Assert.Equal(SectionInk, Ink(zone));
+                // The Play page wears Play's ink (PaintSectionInk on navigation, WPF SectionChrome :192).
+                Assert.Equal(global::ConditioningControlPanel.Avalonia.Views.Controls.NavStripRules.Ink("play"), Ink(zone));
                 // GAMES gets its rule too, painted with the section rule through a fade mask.
                 var rule = Assert.IsType<Border>(((Grid)zone.Parent!).Children[1]);
-                Assert.Equal(Color.Parse("#59B79CFF"), Assert.IsAssignableFrom<ISolidColorBrush>(rule.Background).Color);
+                Assert.Equal(global::ConditioningControlPanel.Avalonia.Views.Controls.NavStripRules.Rule("play"), Assert.IsAssignableFrom<ISolidColorBrush>(rule.Background).Color);
                 Assert.NotNull(rule.OpacityMask);
                 var cardTitle = ByText(play, "launcher_game_breakout_title"); // PlayCardTitle on Type.CardTitle
                 Assert.Equal(18, cardTitle.FontSize);

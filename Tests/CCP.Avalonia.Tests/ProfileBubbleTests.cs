@@ -175,6 +175,10 @@ public sealed class ProfileBubbleTests
             shell.ShowTab("settings");                          // the tab hides: the loop stops (P01)
             Dispatcher.UIThread.RunJobs();
             Assert.False(shell.OgBorderLoopRunning);
+            // Freshen the shared animation clock first: a transition still running on it (the
+            // section wash/edge crossfade of an earlier navigation) would hand the stagger the
+            // whole real-time gap since its last tick as one frame.
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
             shell.ShowTab("discord");
             Dispatcher.UIThread.RunJobs();
             AvaloniaHeadlessPlatform.ForceRenderTimerTick();
