@@ -226,7 +226,7 @@ public sealed partial class FriendsDrawer
         var g = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
         var box = new TextBox
         {
-            MaxLength = 8, FontFamily = Mono, FontSize = 13, Foreground = Text, Background = Ground, BorderBrush = Line2,
+            FontFamily = Mono, FontSize = 13, Foreground = Text, Background = Ground, BorderBrush = Line2,
             CaretBrush = Lilac, Padding = new Thickness(6, 3, 6, 3), Tag = "friends-ht-box",
         };
         ToolTip.SetTip(box, Loc.Get("friends_watch_ht_hint"));

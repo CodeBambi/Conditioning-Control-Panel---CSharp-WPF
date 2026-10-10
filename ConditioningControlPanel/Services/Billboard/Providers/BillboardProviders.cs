@@ -1,8 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
-using System.Windows;
-using System.Windows.Threading;
 
 namespace ConditioningControlPanel.Services.Billboard.Providers
 {
@@ -19,72 +16,24 @@ namespace ConditioningControlPanel.Services.Billboard.Providers
         public static IReadOnlyList<IBillboardProvider> CreateAll() => new IBillboardProvider[]
         {
             new LiveProvider(),
-            new WaitingProvider(),
-            new ResumeProvider(),
-            new EventProvider(),
+            new WaitingProvider(Head),
+            new ResumeProvider(Head),
+            new EventProvider(Head),
             new TipProvider(),
         };
-    }
 
-    /// <summary>Text helpers for the pure halves. <c>loc</c> is <c>Loc.Get</c> in the app, identity in tests.</summary>
-    internal static class CardText
-    {
-        public static string F(Func<string, string> loc, string key, params object[] args)
+        /// <summary>What the Core adapters (CCP.Core BillboardAppProviders) read and do on this head.</summary>
+        private static readonly BillboardHead Head = new()
         {
-            var pattern = loc(key);
-            try { return string.Format(CultureInfo.CurrentCulture, pattern, args); }
-            catch (FormatException) { return pattern; }
-        }
-
-        /// <summary>"a", "a and b", "a, b and c".</summary>
-        public static string JoinAnd(Func<string, string> loc, IReadOnlyList<string> parts)
-        {
-            if (parts.Count == 0) return string.Empty;
-            if (parts.Count == 1) return parts[0];
-            var head = string.Join(", ", System.Linq.Enumerable.Take(parts, parts.Count - 1));
-            return F(loc, "billboard_card_and", head, parts[parts.Count - 1]);
-        }
-    }
-
-    /// <summary>Shared plumbing for the adapters: Changed is raised on the UI thread when there is one.</summary>
-    public abstract class BillboardProviderBase : IBillboardProvider
-    {
-        public abstract string Id { get; }
-
-        public abstract IEnumerable<BillboardCardSpec> Current(BillboardContext context);
-
-        public virtual void Invoke(string actionTarget) { }
-
-        public event EventHandler? Changed;
-
-        protected void RaiseChanged()
-        {
-            try
-            {
-                var dispatcher = Application.Current?.Dispatcher;
-                if (dispatcher == null || dispatcher.CheckAccess()) { Fire(); return; }
-                dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(Fire));
-            }
-            catch (Exception ex) { App.Logger?.Debug("Billboard provider {Id}: Changed failed: {E}", Id, ex.Message); }
-        }
-
-        private void Fire()
-        {
-            try { Changed?.Invoke(this, EventArgs.Empty); }
-            catch (Exception ex) { App.Logger?.Debug("Billboard provider {Id}: Changed handler threw: {E}", Id, ex.Message); }
-        }
-
-        /// <summary>Wraps a provider body so a broken service never takes the deck down.</summary>
-        protected IEnumerable<BillboardCardSpec> Safe(Func<IEnumerable<BillboardCardSpec>> body)
-        {
-            try { return body() ?? Array.Empty<BillboardCardSpec>(); }
-            catch (Exception ex)
-            {
-                App.Logger?.Debug("Billboard provider {Id}: Current threw: {E}", Id, ex.Message);
-                return Array.Empty<BillboardCardSpec>();
-            }
-        }
-
-        protected static Func<string, string> Loc => global::ConditioningControlPanel.Localization.Loc.Get;
+            Quests = () => App.Quests,
+            Programs = () => App.Programs,
+            SessionLog = () => App.SessionLog,
+            Chaster = () => App.Chaster,
+            SessionRunning = () => App.MainWindowRef?.CompanionSessionRunning == true,
+            StartSession = id => App.MainWindowRef?.StartSessionFromCompanion(id) == true,
+            PlayDeeper = path => App.MainWindowRef?.OpenDeeperEnhancementInPlayer(path),
+            ShowTab = tab => App.MainWindowRef?.ShowTab(tab),
+            OpenInvites = () => App.MainWindowRef?.OpenInvitesCard(),
+        };
     }
 }

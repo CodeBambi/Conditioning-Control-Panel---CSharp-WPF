@@ -57,7 +57,8 @@ namespace ConditioningControlPanel.Services
             to.VideosPerHour = from.VideosPerHour;
             to.LockCardEnabled = from.LockCardEnabled;
             to.LockCardFrequency = from.LockCardFrequency;
-            to.PopQuizEnabled = from.PopQuizEnabled;
+            // Not PopQuizEnabled: sessions never change it, so restoring it only undid a player who
+            // switched quizzes off mid-session (WPF f30b54f31, 7.1.5).
             to.PopQuizFrequency = from.PopQuizFrequency;
             to.BubbleCountEnabled = from.BubbleCountEnabled;
             to.BubbleCountFrequency = from.BubbleCountFrequency;
