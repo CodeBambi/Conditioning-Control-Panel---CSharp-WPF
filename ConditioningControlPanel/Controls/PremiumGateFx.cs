@@ -49,7 +49,7 @@ namespace ConditioningControlPanel.Controls
         private const double LockGlowMaxOpacity = 0.85;
         private const double LockGlowSeconds = 3.6;
         private const double LockGlowBlurRadius = 22;
-        private const int AmbientFrameRate = 24;
+        private const int AmbientFrameRate = 30;
 
         /// <summary>The CTA's corner radius. Both gate families use pill-ish buttons; 8 sits inside
         /// the smaller of the two so the sheen never bleeds past a corner.</summary>

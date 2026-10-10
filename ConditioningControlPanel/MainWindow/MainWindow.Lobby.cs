@@ -11,6 +11,7 @@ using ConditioningControlPanel.Services.BackRoom;
 using ConditioningControlPanel.Services.GoonGame;
 using ConditioningControlPanel.Services.Lobby;
 using ConditioningControlPanel.Services.PieceByPiece;
+using ConditioningControlPanel.Services.UI;
 using ConditioningControlPanel.Views.Tabs;
 
 namespace ConditioningControlPanel
@@ -26,6 +27,49 @@ namespace ConditioningControlPanel
     {
         private IDisposable? _lobbyLease;
         private bool _lobbyHooked;
+
+        /// <summary>The rail badge's own lease ("3 open" on Social): held while the panel is on
+        /// screen, released when it hides to the tray, minimises or closes. LobbyService counts
+        /// leases and runs ONE timer, so this lease and the Lobby tab's (or the launcher's) never
+        /// poll twice; each new lease only asks for one round at once.</summary>
+        private IDisposable? _lobbyBadgeLease;
+        private bool _lobbyBadgeHooked;
+
+        /// <summary>True when the panel should hold the badge lease.</summary>
+        internal static bool LobbyBadgeWanted(bool visible, WindowState state) =>
+            visible && state != WindowState.Minimized;
+
+        /// <summary>Once, at startup (RegisterSocialTabs): follow the panel's visibility.</summary>
+        internal void HookLobbyBadge()
+        {
+            if (_lobbyBadgeHooked) return;
+            _lobbyBadgeHooked = true;
+            IsVisibleChanged += (_, _) => SyncLobbyBadgeLease();
+            StateChanged += (_, _) => SyncLobbyBadgeLease();
+            Closed += (_, _) => { _lobbyBadgeLease?.Dispose(); _lobbyBadgeLease = null; };
+            SyncLobbyBadgeLease();
+        }
+
+        private void SyncLobbyBadgeLease()
+        {
+            try
+            {
+                var lobby = App.Lobby;
+                if (lobby == null) return;
+                if (!_lobbyHooked) { lobby.Changed += OnLobbyChanged; _lobbyHooked = true; }
+                if (LobbyBadgeWanted(IsVisible, WindowState))
+                {
+                    _lobbyBadgeLease ??= lobby.Watch();
+                    NavBadges.Set(NavSections.Social, lobby.Snapshot.OpenCount);
+                }
+                else
+                {
+                    _lobbyBadgeLease?.Dispose();
+                    _lobbyBadgeLease = null;
+                }
+            }
+            catch (Exception ex) { App.Logger?.Debug("Lobby badge lease: {E}", ex.Message); }
+        }
 
         /// <summary>The gates as each game reads them today.</summary>
         internal static LobbyGates CurrentLobbyGates()
@@ -53,6 +97,8 @@ namespace ConditioningControlPanel
 
         private void OnLobbyChanged(LobbySnapshot snap)
         {
+            // The rail badge: NavBadges marshals nothing itself, the rail does (contract 3).
+            try { NavBadges.Set(NavSections.Social, snap.OpenCount); } catch { }
             try { Dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(() => PaintLobby(snap))); }
             catch { }
         }

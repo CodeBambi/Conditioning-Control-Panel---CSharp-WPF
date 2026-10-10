@@ -9,22 +9,44 @@
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
              mc:Ignorable="d"
              d:DesignHeight="450" d:DesignWidth="800">
+    <UserControl.Resources>
+        <!-- Account strip (nav polish wave 5): a thin dot of a divider between the line's
+             groups (name + phone + logout | Discord + status | the five bubbles). -->
+        <Style x:Key="AccountStripDividerStyle" TargetType="Border">
+            <Setter Property="Width" Value="1"/>
+            <Setter Property="Height" Value="18"/>
+            <Setter Property="Margin" Value="12,0,4,0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Background" Value="#40FFFFFF"/>
+        </Style>
+        <!-- Polish wave 10 (depth): Home's raised things throw their shadow through these two keys.
+             They start as copies of the neutral DepthDropBand / DepthDropDisc ink; SettingsTabView.PaintDepthHome(hue) swaps in a
+             shadow pulled toward the section hue (DepthRules.ShadowColor). -->
+        <LinearGradientBrush x:Key="HomeDepthDropBand" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Offset="0.0" Color="#9E06020F"/>
+            <GradientStop Offset="1.0" Color="#0006020F"/>
+        </LinearGradientBrush>
+        <RadialGradientBrush x:Key="HomeDepthDropDisc" Center="0.5,0.5" GradientOrigin="0.5,0.5" RadiusX="0.5" RadiusY="0.5">
+            <GradientStop Offset="0.0" Color="#9E06020F"/>
+            <GradientStop Offset="0.6" Color="#5C06020F"/>
+            <GradientStop Offset="1.0" Color="#0006020F"/>
+        </RadialGradientBrush>
+    </UserControl.Resources>
         <Grid>
         <Grid.ColumnDefinitions>
-            <!-- #860: 84 of rail + 8 reserved for the rail's scrollbar. The chips used to be
-                 laid out against the full 84 and then squeezed the moment the ScrollViewer
-                 decided it needed a bar (short windows, or the Programs "Today" card taking a
-                 bite out of row 1), cropping the chip art and wrapping the captions. The gutter
-                 is reserved here and the chip stack is pinned to its old width, so a scrollbar
-                 costs the chips nothing.
-                 8, not the 17 of an OS scrollbar: Resources/Theme/MainWindow.xaml restyles
-                 every ScrollBar and sets Width=8 on the vertical one, so 17 over-reserved the
-                 gutter by 9 and pushed the whole settings grid right.
-                 Keep in sync with the FavoritesRail stack: 92 - 5 rail margin - 2 border
-                 - 8 scrollbar - 8 stack margin = 69. -->
-            <ColumnDefinition Width="92"/>
+            <!-- Nav polish wave 3 (owner, 2026-10-06: "move the favourite rail on the other side,
+                 and make it collapsable ... we click to open it and to close as a drawer, same
+                 layout"). Column 0 held the FAVORITES + RECENT column at 92 px, right beside the
+                 section rail; it is 0 now and kept only so every Grid.Column index below stays
+                 put. The column lives in the FAVORITES DRAWER at the right edge (column 3, Auto):
+                 a 22 px handle that is always there plus a body that opens to the same 92 px
+                 (the arithmetic is written on FavoritesDrawerBody). The drawer PUSHES column 2
+                 rather than floating over the browser, and column 1 is a fixed 640, so the
+                 mosaic never moves when it opens or closes. -->
+            <ColumnDefinition Width="0"/>
             <ColumnDefinition Width="640"/>
             <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="Auto"/>
         </Grid.ColumnDefinitions>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>   <!-- Training Programs "Today" card -->
@@ -40,7 +62,7 @@
         <!-- it opens the Programs tab.                                    -->
         <!-- ============================================================ -->
         <Button x:Name="ProgramTodayCard" x:FieldModifier="internal"
-                Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3"
+                Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="4"
                 Margin="5,5,5,0" Visibility="Collapsed" Cursor="Hand"
                 HorizontalContentAlignment="Stretch"
                 BorderBrush="{DynamicResource PinkBrush}"
@@ -148,7 +170,7 @@
         </Button>
 
         <!-- ============================================================ -->
-        <!-- FAVORITES + RECENT RAIL (col 0). Owner call, Discord "New UI  -->
+        <!-- FAVORITES + RECENT RAIL (drawer body, col 3). Owner call, Discord "New UI  -->
         <!-- Feedback", 2026-09-11: the premium quick-toggle rail that sat  -->
         <!-- here is gone. The column remembers where the user goes instead -->
         <!-- - pinned destinations on top, the last seven opened below. The -->
@@ -166,8 +188,106 @@
              gesture line, so the card owns the column and the line is docked at its foot: the
              lists scroll inside the row above it, and the line stays put however many chips are
              pinned. Nothing is hidden by count. -->
-        <Border x:Name="FavoritesRail" x:FieldModifier="internal" Grid.Column="0" Grid.Row="1" Margin="5,5,0,5"
-                Background="{DynamicResource ElevatedSurfaceBrush}" BorderBrush="{DynamicResource GlassBorderBrush}"
+        <!-- THE FAVORITES DRAWER (nav polish wave 3). Column 3 is Auto and holds two things:
+             the HANDLE (22 px, always visible, a real Button) and the BODY, whose Width is the
+             only thing that moves: 0 closed, 92 open, animated over 200 ms by
+             SettingsTabView.SetFavoritesDrawer (instant under Motion Off). Closed by default;
+             the state is AppSettings.FavoritesDrawerOpen and only the handle writes it. A pin
+             while it is closed opens it for 2.5 s with the glow ring on the new chip
+             (MainWindow.TogglePinned -> PeekFavoritesDrawer) and writes nothing.
+             The body PUSHES column 2 (the browser column gives up 92 px), it never floats over
+             it, and the mosaic in column 1 does not move. -->
+        <Grid x:Name="FavoritesDrawer" x:FieldModifier="internal" Grid.Column="3" Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="22"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <!-- THE MOD'S COLOUR (owner, 2026-10-06): the handle and the rail border wear the
+                 active mod's glow colour, not Home's lilac. The six keys below are defaults
+                 only; SettingsTabView.PaintFavoritesDrawer overwrites them from FxTheme at
+                 start and on every mod change, and every DynamicResource repaints. -->
+            <Grid.Resources>
+                <SolidColorBrush x:Key="FavHandleFill" Color="#1FB79CFF"/>
+                <SolidColorBrush x:Key="FavHandleBorder" Color="#66B79CFF"/>
+                <SolidColorBrush x:Key="FavHandleFillHover" Color="#40B79CFF"/>
+                <SolidColorBrush x:Key="FavHandleBorderHover" Color="#FFB79CFF"/>
+                <SolidColorBrush x:Key="FavHandleText" Color="#FFB79CFF"/>
+                <SolidColorBrush x:Key="FavHandleTextHover" Color="#FFE4DAFF"/>
+            </Grid.Resources>
+            <!-- The star sits at the top, the word runs up the bar, the chevron at the foot says
+                 which way a click goes (set in code). The juice (a breathing glow, the star's
+                 twinkle, the motes and the burst on a click) is all code: SettingsTabView.xaml.cs,
+                 "the favorites drawer" region, gated on MotionFx. -->
+            <Button x:Name="FavoritesDrawerHandle" x:FieldModifier="internal" Grid.Column="0"
+                    Margin="2,5,2,5" Cursor="Hand" Click="FavoritesDrawerHandle_Click"
+                    AutomationProperties.Name="{loc:Str rail_favorites_drawer}"
+                    AutomationProperties.HelpText="{loc:Str tooltip_rail_favorites_drawer}"
+                    ToolTip="{loc:Str tooltip_rail_favorites_drawer}">
+                <Button.Style>
+                    <Style TargetType="Button">
+                        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+                        <Setter Property="Foreground" Value="{DynamicResource FavHandleText}"/>
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="Button">
+                                    <Border x:Name="hb" CornerRadius="9" BorderThickness="1.5"
+                                            Background="{DynamicResource FavHandleFill}" BorderBrush="{DynamicResource FavHandleBorder}">
+                                        <ContentPresenter HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="hb" Property="Background" Value="{DynamicResource FavHandleFillHover}"/>
+                                            <Setter TargetName="hb" Property="BorderBrush" Value="{DynamicResource FavHandleBorderHover}"/>
+                                            <Setter Property="Foreground" Value="{DynamicResource FavHandleTextHover}"/>
+                                        </Trigger>
+                                        <Trigger Property="IsKeyboardFocused" Value="True">
+                                            <Setter TargetName="hb" Property="BorderBrush" Value="{DynamicResource FavHandleBorderHover}"/>
+                                        </Trigger>
+                                        <Trigger Property="IsPressed" Value="True">
+                                            <Setter TargetName="hb" Property="Opacity" Value="0.82"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </Button.Style>
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <TextBlock x:Name="FavoritesDrawerStar" x:FieldModifier="internal" Grid.Row="0" Text="&#x2605;" FontSize="13" Margin="0,9,0,0"
+                               HorizontalAlignment="Center" RenderTransformOrigin="0.5,0.5"
+                               Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}">
+                        <TextBlock.RenderTransform>
+                            <ScaleTransform/>
+                        </TextBlock.RenderTransform>
+                    </TextBlock>
+                    <TextBlock Grid.Row="1" Text="{loc:Str rail_favorites_drawer}" FontSize="12" FontWeight="SemiBold"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                               Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}">
+                        <TextBlock.LayoutTransform>
+                            <RotateTransform Angle="-90"/>
+                        </TextBlock.LayoutTransform>
+                    </TextBlock>
+                    <TextBlock x:Name="FavoritesDrawerChevron" x:FieldModifier="internal" Grid.Row="2"
+                               Text="&#x2039;" FontSize="16" FontWeight="Bold" Margin="0,0,0,7"
+                               HorizontalAlignment="Center" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+                </Grid>
+            </Button>
+            <!-- THE BODY. Width 92 open = the old column 0, so the chip arithmetic is unchanged:
+                 92 - 5 rail margin - 2 border - 8 scrollbar - 8 stack margin = 69, the chip
+                 stack's Width below (#860: 8 of scrollbar gutter, not the 17 of an OS bar,
+                 because Resources/Theme/MainWindow.xaml restyles every vertical ScrollBar to
+                 Width 8). The rail is pinned at 92 - 5 = 87 and right-aligned, so while the body
+                 is narrower it slides in from the edge instead of squeezing the chips.
+                 FavoritesRailArtTests re-does this sum from this file. -->
+            <Grid x:Name="FavoritesDrawerBody" x:FieldModifier="internal" Grid.Column="1"
+                  Width="0" ClipToBounds="True">
+        <Border x:Name="FavoritesRail" x:FieldModifier="internal" Width="87" HorizontalAlignment="Right" Margin="0,5,5,5"
+                Background="{DynamicResource ElevatedSurfaceBrush}" BorderBrush="{DynamicResource FavHandleBorder}"
                 BorderThickness="1" CornerRadius="12">
             <Border.Resources>
                 <Style x:Key="RailSectionCaption" TargetType="TextBlock">
@@ -357,7 +477,7 @@
                             <TextBlock Text="{loc:Str dash_click_choice}" TextWrapping="Wrap" TextAlignment="Center"/>
                         </Button>
                         <Popup x:Name="ClickChoicePopup" PlacementTarget="{Binding ElementName=ClickChoiceAnchor}"
-                               Placement="Right" HorizontalOffset="6" StaysOpen="True" Closed="ClickChoiceClosed"
+                               Placement="Left" HorizontalOffset="-6" StaysOpen="True" Closed="ClickChoiceClosed"
                                AllowsTransparency="True" PopupAnimation="None">
                             <Border x:Name="ClickChoiceBody" Width="290" Padding="18" CornerRadius="12"
                                     Background="#FF1B1B30" BorderBrush="{DynamicResource SecondaryBrush}" BorderThickness="1"
@@ -380,6 +500,15 @@
                 </Border>
             </Grid>
         </Border>
+            </Grid>
+            <!-- THE MOTES. Embers rising along the handle and a few dust sprites, in the mod's
+                 particle colour (AmbientFxCanvas reads FxTheme itself), plus the burst a click
+                 and a new pin fire at the handle. Drawn last so it sits over the handle, hit-test
+                 off, and 36 px wider to the left so a burst can spill over the page. Registered
+                 against the dashboard tab beside MosaicFx so ShowTab parks it. -->
+            <fx:AmbientFxCanvas x:Name="FavoritesDrawerFx" x:FieldModifier="internal" Grid.Column="0" Grid.ColumnSpan="2"
+                                Margin="-36,0,0,0" IsHitTestVisible="False"/>
+        </Grid>
 
         <!-- ============================================================ -->
         <!-- VELVET MOSAIC DASHBOARD - 4x4 hybrid wall (col 1)             -->
@@ -547,11 +676,21 @@
                          1.0 mid-animation. This border sits between them and is otherwise
                          untouched, so the three transforms compose instead of fighting. -->
                     <Border x:Name="LogoFaceLogo" x:FieldModifier="internal" CornerRadius="12" ClipToBounds="True" Margin="24"
-                            RenderTransformOrigin="0.5,0.5">
+                            RenderTransformOrigin="0.5,0.5"
+                            Background="{DynamicResource DepthWellFloorBrush}"
+                            BorderBrush="{DynamicResource DepthPressedBevel}" BorderThickness="1">
                         <Border.RenderTransform>
                             <ScaleTransform x:Name="LogoDriftScale" ScaleX="1" ScaleY="1"/>
                         </Border.RenderTransform>
                         <Grid>
+                            <!-- The deepest WELL on the page (polish wave 10): the plate is sunk, its
+                                 top band runs half again as deep as any other well and the lit foot
+                                 catches the lamp. Hit-test off; the wordmark sits in it. -->
+                            <Rectangle x:Name="LogoWellTop" x:FieldModifier="internal" Fill="{DynamicResource DepthWellTop}"
+                                       Height="14" VerticalAlignment="Top" IsHitTestVisible="False"/>
+                            <Rectangle x:Name="LogoWellLeft" x:FieldModifier="internal" Fill="{DynamicResource DepthWellLeft}"
+                                       Width="9" HorizontalAlignment="Left" IsHitTestVisible="False"/>
+                            <Rectangle Fill="{DynamicResource DepthWellFoot}" Height="1" VerticalAlignment="Bottom" IsHitTestVisible="False"/>
                             <fx:AnimatedLogoImage x:Name="ImgLogo" x:FieldModifier="internal" Stretch="Uniform"
                                    HorizontalAlignment="Stretch" VerticalAlignment="Center"
                                    RenderOptions.BitmapScalingMode="HighQuality"/>
@@ -584,7 +723,7 @@
                             <TextBlock x:Name="DashToggleHint" x:FieldModifier="internal"
                                        Text="{loc:Str dash_toggle_hint}"
                                        VerticalAlignment="Bottom" HorizontalAlignment="Center"
-                                       Margin="12,0,12,8" FontSize="10" Opacity="0.85"
+                                       Margin="12,0,12,8" FontSize="10"
                                        Foreground="{DynamicResource TextMutedBrush}"
                                        TextAlignment="Center" TextWrapping="Wrap"
                                        IsHitTestVisible="False"/>
@@ -705,7 +844,7 @@
 
                                 <TextBlock Text="{loc:Str intake_pass_card_footnote}"
                                            Foreground="{DynamicResource TextMutedBrush}"
-                                           FontSize="9" Opacity="0.75"
+                                           FontSize="9"
                                            TextAlignment="Center" TextWrapping="Wrap"
                                            Margin="0,6,0,0"/>
                             </StackPanel>
@@ -1028,7 +1167,6 @@
                 <RowDefinition x:Name="BrowserCardRow" x:FieldModifier="internal" Height="*"/>
                 <RowDefinition x:Name="BrowserFoldRow" x:FieldModifier="internal" Height="0"/>
                 <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
             <!-- Browser Section -->
@@ -1076,12 +1214,16 @@
                          own window, mute still mutes audio the hidden page is playing. Nothing here
                          is hidden on fold - the controls keep their own Visibility owners
                          (DeeperBrowserBadge, the webcam label) and a second writer would fight them. -->
+                    <!-- The bezel's LIP (polish wave 10): a raised strip behind the header row,
+                         lit top edge and shaded foot. Behind the controls, hit-test off. -->
+                    <Border x:Name="BrowserLip" x:FieldModifier="internal" Grid.Row="0" Margin="-4,-4,-4,1"
+                            CornerRadius="9" BorderThickness="1" IsHitTestVisible="False"
+                            BorderBrush="{DynamicResource DepthRaisedBevel}" Background="{DynamicResource DepthRaisedSheen}"/>
                     <Grid Grid.Row="0" Margin="0,0,0,4">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
@@ -1092,7 +1234,8 @@
                             <Button x:Name="HelpBtnBrowser" x:FieldModifier="internal" Style="{StaticResource HelpButtonStyle}" Tag="Browser"/>
                         </StackPanel>
                         <!-- Site Toggle - inline -->
-                        <Border Grid.Column="1" Background="{DynamicResource PanelAccentBrush}" CornerRadius="10" Padding="2" Margin="10,0,0,0" VerticalAlignment="Center">
+                        <Border Grid.Column="1" Background="{DynamicResource PanelAccentBrush}" CornerRadius="10" Padding="1" Margin="10,0,0,0" VerticalAlignment="Center"
+                                BorderBrush="{DynamicResource DepthPressedBevel}" BorderThickness="1">
                             <StackPanel Orientation="Horizontal">
                                 <!-- #867: Click, not Checked. A RadioButton raises Checked only when
                                      it CHANGES, so clicking the site you are already on did nothing -
@@ -1105,15 +1248,33 @@
                                              Foreground="{DynamicResource TextLightBrush}" FontSize="10" Cursor="Hand" Margin="2,1">
                                     <RadioButton.Template>
                                         <ControlTemplate TargetType="RadioButton">
-                                            <Border x:Name="border" Background="Transparent" CornerRadius="8" Padding="8,3">
-                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                            </Border>
-                                            <ControlTemplate.Triggers>
-                                                <Trigger Property="IsChecked" Value="True">
-                                                    <Setter TargetName="border" Property="Background" Value="{DynamicResource PinkBrush}"/>
-                                                    <Setter Property="Foreground" Value="White"/>
-                                                    <Setter Property="FontWeight" Value="SemiBold"/>
-                                                </Trigger>
+                                    <!-- Polish wave 10: a raised pill (bevel + sheen) that sits PRESSED IN
+                                         (ActiveSinkPx, pressed bevel and shade) while it is the site. -->
+                                    <Border x:Name="border" Background="Transparent" CornerRadius="8"
+                                            BorderBrush="{DynamicResource DepthRaisedBevel}" BorderThickness="1">
+                                        <Border.RenderTransform>
+                                            <TranslateTransform/>
+                                        </Border.RenderTransform>
+                                        <Border x:Name="face" CornerRadius="7" Padding="7,2" Background="{DynamicResource DepthRaisedSheen}">
+                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="border" Property="RenderTransform"><Setter.Value><TranslateTransform Y="-1"/></Setter.Value></Setter>
+                                        </Trigger>
+                                        <Trigger Property="IsChecked" Value="True">
+                                            <Setter TargetName="border" Property="Background" Value="{DynamicResource PinkBrush}"/>
+                                            <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource DepthPressedBevel}"/>
+                                            <Setter TargetName="face" Property="Background" Value="{DynamicResource DepthPressedShade}"/>
+                                            <Setter TargetName="border" Property="RenderTransform"><Setter.Value><TranslateTransform Y="1"/></Setter.Value></Setter>
+                                            <Setter Property="Foreground" Value="White"/>
+                                            <Setter Property="FontWeight" Value="SemiBold"/>
+                                        </Trigger>
+                                        <Trigger Property="IsPressed" Value="True">
+                                            <Setter TargetName="border" Property="RenderTransform"><Setter.Value><TranslateTransform Y="2"/></Setter.Value></Setter>
+                                            <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource DepthPressedBevel}"/>
+                                        </Trigger>
                                             <Trigger Property="IsMouseOver" Value="True">
                                                 <Setter TargetName="border" Property="Background" Value="#353565"/>
                                             </Trigger>
@@ -1133,14 +1294,32 @@
                                          Foreground="{DynamicResource TextLightBrush}" FontSize="10" Cursor="Hand" Margin="2,1">
                                 <RadioButton.Template>
                                     <ControlTemplate TargetType="RadioButton">
-                                        <Border x:Name="border" Background="Transparent" CornerRadius="8" Padding="8,3">
-                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        <!-- Polish wave 10: a raised pill (bevel + sheen) that sits PRESSED IN
+                                             (ActiveSinkPx, pressed bevel and shade) while it is the site. -->
+                                        <Border x:Name="border" Background="Transparent" CornerRadius="8"
+                                                BorderBrush="{DynamicResource DepthRaisedBevel}" BorderThickness="1">
+                                            <Border.RenderTransform>
+                                                <TranslateTransform/>
+                                            </Border.RenderTransform>
+                                            <Border x:Name="face" CornerRadius="7" Padding="7,2" Background="{DynamicResource DepthRaisedSheen}">
+                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
                                         </Border>
                                         <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="border" Property="RenderTransform"><Setter.Value><TranslateTransform Y="-1"/></Setter.Value></Setter>
+                                            </Trigger>
                                             <Trigger Property="IsChecked" Value="True">
                                                 <Setter TargetName="border" Property="Background" Value="{DynamicResource PinkBrush}"/>
+                                                <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource DepthPressedBevel}"/>
+                                                <Setter TargetName="face" Property="Background" Value="{DynamicResource DepthPressedShade}"/>
+                                                <Setter TargetName="border" Property="RenderTransform"><Setter.Value><TranslateTransform Y="1"/></Setter.Value></Setter>
                                                 <Setter Property="Foreground" Value="White"/>
                                                 <Setter Property="FontWeight" Value="SemiBold"/>
+                                            </Trigger>
+                                            <Trigger Property="IsPressed" Value="True">
+                                                <Setter TargetName="border" Property="RenderTransform"><Setter.Value><TranslateTransform Y="2"/></Setter.Value></Setter>
+                                                <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource DepthPressedBevel}"/>
                                             </Trigger>
                                             <Trigger Property="IsMouseOver" Value="True">
                                                 <Setter TargetName="border" Property="Background" Value="#353565"/>
@@ -1194,6 +1373,54 @@
                                 </Style>
                             </Button.Style>
                             <helpers:EmojiTextBlock Text="🔄"/>
+                        </Button>
+                        <!-- The fold arrow (owner, 2026-10-06: "put an unmissable dropdown arrow here on
+                             top of the browser, the little grey icon we got is basically invisible").
+                             It lives in the header's empty middle, the star column the reload button
+                             only uses the left edge of; the left margin keeps it clear of that button.
+                             Down arrow + "Show browser" = the card is shut and this opens it, up arrow +
+                             "Hide browser" = it is open and this shuts it. The hue, the label, the
+                             tooltip and the breathing glow while folded are all painted by
+                             SettingsTabView.PaintFoldArrow from MainWindow.DashboardFold.cs, because the
+                             setting (AppSettings.DashboardBrowserCollapsed), not this button, is the
+                             truth. The values below are only the first paint: Home's lilac at 24% fill,
+                             a 70% border, 40% fill on hover (Tag carries the hover brush). -->
+                        <Button Grid.Column="2" x:Name="BtnFoldBrowser" x:FieldModifier="internal"
+                                Click="BtnFoldBrowser_Click" Cursor="Hand"
+                                HorizontalAlignment="Center" VerticalAlignment="Center"
+                                MinWidth="120" Height="26" Padding="12,0" Margin="48,0,8,0"
+                                Background="#3DB79CFF" BorderBrush="#B3B79CFF" BorderThickness="1.5"
+                                ToolTip="{loc:Str tooltip_browser_unfold}"
+                                AutomationProperties.Name="{loc:Str btn_browser_fold_show}">
+                            <Button.Tag>
+                                <SolidColorBrush Color="#66B79CFF"/>
+                            </Button.Tag>
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border x:Name="FoldPlate" Background="{TemplateBinding Background}"
+                                            BorderBrush="{TemplateBinding BorderBrush}"
+                                            BorderThickness="{TemplateBinding BorderThickness}"
+                                            CornerRadius="13" Padding="{TemplateBinding Padding}">
+                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="FoldPlate" Property="Background"
+                                                    Value="{Binding Tag, RelativeSource={RelativeSource TemplatedParent}}"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Button.Template>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock x:Name="TxtFoldBrowser" x:FieldModifier="internal"
+                                           Text="&#xE70D;" FontSize="16"
+                                           FontFamily="Segoe MDL2 Assets, Segoe UI Symbol, Segoe UI"
+                                           Foreground="White" VerticalAlignment="Center" Margin="0,1,8,0"/>
+                                <TextBlock x:Name="TxtFoldBrowserLabel" x:FieldModifier="internal"
+                                           Text="{loc:Str btn_browser_fold_show}"
+                                           FontSize="12" FontWeight="SemiBold"
+                                           Foreground="White" VerticalAlignment="Center"/>
+                            </StackPanel>
                         </Button>
                         <!-- Status indicator -->
                         <TextBlock Grid.Column="3" x:Name="TxtBrowserStatus" x:FieldModifier="internal" Text="{loc:Str label_loading}"
@@ -1301,30 +1528,6 @@
                                 </Style>
                             </Button.Style>
                         </Button>
-                        <!-- The fold chevron. Down arrow = the card is shut and this opens it, up
-                             arrow = it is open and this shuts it; the glyph, the tooltip and the
-                             animation all live in MainWindow.DashboardFold.cs, because the setting
-                             (AppSettings.DashboardBrowserCollapsed), not this button, is the truth. -->
-                        <Button Grid.Column="7" x:Name="BtnFoldBrowser" x:FieldModifier="internal"
-                                Click="BtnFoldBrowser_Click" Cursor="Hand"
-                                Background="Transparent" BorderThickness="0" Padding="6,2" Margin="6,0,0,0"
-                                VerticalAlignment="Center">
-                            <Button.Template>
-                                <ControlTemplate TargetType="Button">
-                                    <Border Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}">
-                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                    </Border>
-                                    <ControlTemplate.Triggers>
-                                        <Trigger Property="IsMouseOver" Value="True">
-                                            <Setter Property="Background" Value="{DynamicResource TransparentPink50Brush}"/>
-                                        </Trigger>
-                                    </ControlTemplate.Triggers>
-                                </ControlTemplate>
-                            </Button.Template>
-                            <TextBlock x:Name="TxtFoldBrowser" x:FieldModifier="internal"
-                                       Text="&#x25B4;" FontSize="13"
-                                       Foreground="{DynamicResource TextMutedBrush}"/>
-                        </Button>
                     </Grid>
 
                     <!-- Browser Container. No fixed Height on purpose - see the Grid note above.
@@ -1339,7 +1542,22 @@
                          which hides the native window itself; the control is never re-parented and
                          never disposed, so the page, its audio pipeline and the pop-out flow all
                          survive a fold and re-expanding shows the same page with no reload. -->
-                    <Border x:Name="BrowserFoldBody" x:FieldModifier="internal"
+                    <!-- THE BEZEL (polish wave 10). The screen below is inset 5 px into a SUNKEN
+                         ring; the ring wears the well bands. Airspace: the bands are declared
+                         BEFORE the screen and live in the ring, so nothing is drawn over the
+                         WebView2 rect. Follows the fold, so a folded card stays header-only. -->
+                    <Border x:Name="BrowserBezel" x:FieldModifier="internal" Grid.Row="1"
+                            Visibility="{Binding Visibility, ElementName=BrowserFoldBody}"
+                            CornerRadius="9" ClipToBounds="True" IsHitTestVisible="False"
+                            Background="{DynamicResource DepthWellFloorBrush}"
+                            BorderBrush="{DynamicResource DepthPressedBevel}" BorderThickness="1">
+                        <Grid>
+                            <Rectangle Fill="{DynamicResource DepthWellTop}" Height="9" VerticalAlignment="Top"/>
+                            <Rectangle Fill="{DynamicResource DepthWellLeft}" Width="6" HorizontalAlignment="Left"/>
+                            <Rectangle Fill="{DynamicResource DepthWellFoot}" Height="1" VerticalAlignment="Bottom"/>
+                        </Grid>
+                    </Border>
+                    <Border x:Name="BrowserFoldBody" x:FieldModifier="internal" Margin="5"
                             Grid.Row="1" Background="{DynamicResource SurfaceBgBrush}" CornerRadius="6" ClipToBounds="True">
                         <Grid>
                             <Grid.RowDefinitions>
@@ -1578,254 +1796,46 @@
             </Border>
 
             <!-- ============================================================ -->
-            <!-- THE BILLBOARD (2026-09-12, reshaped after the first desk    -->
-            <!-- pass).                                                      -->
-            <!--                                                             -->
-            <!-- What sits in the row the folded browser gave back. Modelled -->
-            <!-- on the doors on the CC Labs remix page (remix/ui/doors.js): -->
-            <!-- art with a dark shade at the bottom, a small mono eyebrow,  -->
-            <!-- a title, one line and a chevron.                            -->
-            <!--                                                             -->
-            <!-- One full-size poster, with navigation over the artwork. The clock pauses
-                 during hover or keyboard focus and follows the shared motion setting.
-                 Wide posters use cover fit; square marks keep the bounded plate treatment. -->
+            <!-- THE TONIGHT BOARD (2026-10-07). What sits in the row the     -->
+            <!-- folded browser gives back: a deck of cards ranked Live,      -->
+            <!-- Board, Waiting, Resume, Event, Showcase/Tip, House, one at a -->
+            <!-- time, with labelled chips under it. The card host is code   -->
+            <!-- (Controls/Billboard/BillboardCardHost), dropped into         -->
+            <!-- BillboardHostSlot by MainWindow.DashboardBillboard.cs, so it -->
+            <!-- carries no namescope of its own.                             -->
+            <!-- ============================================================ -->
             <Border x:Name="DashBillboard" x:FieldModifier="internal" Grid.Row="1"
                     Visibility="Collapsed" Margin="0,0,0,12"
                     CornerRadius="12" ClipToBounds="True"
-                    Background="{DynamicResource ElevatedSurfaceBrush}"
-                    BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
+                    Background="{DynamicResource DepthWellFloorBrush}"
+                    BorderBrush="{DynamicResource DepthPressedBevel}" BorderThickness="1">
                 <Grid>
-                    <Grid.Resources>
-                        <Style x:Key="SlideControl" TargetType="Button">
-                            <Setter Property="Width" Value="40"/>
-                            <Setter Property="Height" Value="40"/>
-                            <Setter Property="Foreground" Value="White"/>
-                            <Setter Property="Background" Value="#D918182B"/>
-                            <Setter Property="BorderBrush" Value="#80FFFFFF"/>
-                            <Setter Property="Cursor" Value="Hand"/>
-                            <Setter Property="Opacity" Value="0"/>
-                            <Setter Property="Template">
-                                <Setter.Value>
-                                    <ControlTemplate TargetType="Button">
-                                        <Border Background="{TemplateBinding Background}" CornerRadius="20"
-                                                BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1">
-                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                        </Border>
-                                    </ControlTemplate>
-                                </Setter.Value>
-                            </Setter>
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding IsMouseOver, ElementName=DashBillboard}" Value="True">
-                                    <Setter Property="Opacity" Value="1"/>
-                                </DataTrigger>
-                                <DataTrigger Binding="{Binding IsKeyboardFocusWithin, ElementName=DashBillboard}" Value="True">
-                                    <Setter Property="Opacity" Value="1"/>
-                                </DataTrigger>
-                                <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter Property="Background" Value="{DynamicResource PinkBrush}"/>
-                                </Trigger>
-                                <Trigger Property="IsKeyboardFocused" Value="True">
-                                    <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
-                                </Trigger>
-                            </Style.Triggers>
-                        </Style>
-                        <Style x:Key="SlideDot" TargetType="RadioButton">
-                            <Setter Property="Width" Value="24"/>
-                            <Setter Property="Height" Value="28"/>
-                            <Setter Property="Cursor" Value="Hand"/>
-                            <Setter Property="Template">
-                                <Setter.Value>
-                                    <ControlTemplate TargetType="RadioButton">
-                                        <Grid Background="Transparent">
-                                            <Ellipse x:Name="dot" Width="7" Height="7" Fill="#99FFFFFF"/>
-                                        </Grid>
-                                        <ControlTemplate.Triggers>
-                                            <Trigger Property="IsChecked" Value="True">
-                                                <Setter TargetName="dot" Property="Fill" Value="{DynamicResource PinkBrush}"/>
-                                                <Setter TargetName="dot" Property="Width" Value="10"/>
-                                                <Setter TargetName="dot" Property="Height" Value="10"/>
-                                            </Trigger>
-                                            <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter TargetName="dot" Property="Fill" Value="White"/>
-                                            </Trigger>
-                                            <Trigger Property="IsKeyboardFocused" Value="True">
-                                                <Setter TargetName="dot" Property="Stroke" Value="White"/>
-                                                <Setter TargetName="dot" Property="StrokeThickness" Value="2"/>
-                                            </Trigger>
-                                        </ControlTemplate.Triggers>
-                                    </ControlTemplate>
-                                </Setter.Value>
-                            </Setter>
-                        </Style>
-                    </Grid.Resources>
-                <ItemsControl x:Name="BillboardRackHost" x:FieldModifier="internal" Margin="5">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <UniformGrid Rows="1" Columns="1"/>
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <!-- A Button so the whole card is the hit target, keyboard focus works
-                                 and the click lands in one handler; the template IS the card, so
-                                 none of the default chrome shows through. -->
-                            <Button Click="BillboardCard_Click" Cursor="Hand" Margin="3"
-                                    Padding="0" MinHeight="74" ToolTip="{Binding Tip}"
-                                    AutomationProperties.Name="{Binding Tip}"
-                                    HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
-                                <Button.Template>
-                                    <ControlTemplate TargetType="Button">
-                                        <Border x:Name="card" CornerRadius="10" ClipToBounds="True"
-                                                Background="{DynamicResource SurfaceBgBrush}"
-                                                BorderThickness="1"
-                                                BorderBrush="{DynamicResource GlassBorderBrush}">
-                                            <ContentPresenter/>
-                                        </Border>
-                                        <ControlTemplate.Triggers>
-                                            <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter TargetName="card" Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
-                                            </Trigger>
-                                            <Trigger Property="IsKeyboardFocused" Value="True">
-                                                <Setter TargetName="card" Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
-                                            </Trigger>
-                                        </ControlTemplate.Triggers>
-                                    </ControlTemplate>
-                                </Button.Template>
-                                <Grid SizeChanged="BillboardArtwork_SizeChanged">
-                                    <!-- Cover: wide feature art, UniformToFill inside the clipping
-                                         border above. -->
-                                    <Image Source="{Binding Art}" Stretch="UniformToFill"
-                                           Visibility="{Binding CoverVisibility}"
-                                           RenderOptions.BitmapScalingMode="HighQuality"/>
-                                    <!-- Plate: the same file twice. Behind, blurred and dimmed so
-                                         it is a ground rather than a picture; in front, the mark at
-                                         its own size. Box kernel on purpose - a Gaussian blur of a
-                                         full-bleed bitmap is the expensive one, and this is static
-                                         art that never animates. -->
-                                    <Grid Visibility="{Binding PlateVisibility}">
-                                        <Image Source="{Binding Art}" Stretch="UniformToFill" Opacity="0.28"
-                                               RenderOptions.BitmapScalingMode="LowQuality">
-                                            <Image.Effect>
-                                                <BlurEffect Radius="28" KernelType="Box" RenderingBias="Performance"/>
-                                            </Image.Effect>
-                                        </Image>
-                                        <Image Source="{Binding Art}" Width="72" Height="72" Stretch="Uniform"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center"
-                                               Margin="0,0,0,24"
-                                               RenderOptions.BitmapScalingMode="HighQuality"/>
-                                    </Grid>
-                                    <!-- The shade. Same job as .door-shade: the words need ground
-                                         under them whatever the art happens to be. -->
-                                    <Border IsHitTestVisible="False">
-                                        <Border.Background>
-                                            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-                                                <GradientStop Color="#0014142B" Offset="0.30"/>
-                                                <GradientStop Color="#8C14142B" Offset="0.56"/>
-                                                <GradientStop Color="#E614142B" Offset="0.80"/>
-                                                <GradientStop Color="#FA14142B" Offset="1"/>
-                                            </LinearGradientBrush>
-                                        </Border.Background>
-                                    </Border>
-                                    <StackPanel VerticalAlignment="Bottom" HorizontalAlignment="Left"
-                                                Margin="24,0,54,58" IsHitTestVisible="False">
-                                        <TextBlock Text="{Binding Eyebrow}"
-                                                   FontFamily="{DynamicResource Font.Mono}" FontSize="11"
-                                                   Foreground="{DynamicResource PinkBrush}"
-                                                   TextTrimming="CharacterEllipsis"/>
-                                        <TextBlock Text="{Binding Title}"
-                                                   FontSize="24" FontWeight="Bold" Margin="0,1,0,0"
-                                                   Foreground="{DynamicResource TextLightBrush}"
-                                                   TextTrimming="CharacterEllipsis"/>
-                                        <TextBlock Text="{Binding Line}"
-                                                   FontSize="13" Margin="0,5,0,0"
-                                                   Foreground="{DynamicResource TextMutedBrush}"
-                                                   TextTrimming="CharacterEllipsis"/>
-                                    </StackPanel>
-                                    <Border Width="20" Height="20" CornerRadius="10" IsHitTestVisible="False"
-                                            HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                                            Margin="0,0,22,24" BorderThickness="1"
-                                            Background="#8C14142B" BorderBrush="{DynamicResource PinkBrush}">
-                                        <TextBlock Text="›" FontSize="13" Margin="0,-3,0,0"
-                                                   HorizontalAlignment="Center" VerticalAlignment="Center"
-                                                   Foreground="{DynamicResource PinkBrush}"/>
-                                    </Border>
-                                </Grid>
-                            </Button>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-                    <Button x:Name="BillboardPrevious" x:FieldModifier="internal" Style="{StaticResource SlideControl}"
-                            HorizontalAlignment="Left" VerticalAlignment="Center" Margin="20,0,0,0"
-                            ToolTip="{loc:Str btn_previous}" AutomationProperties.Name="{loc:Str btn_previous}">
-                        <Path Data="M 8,0 L 0,8 L 8,16" Stroke="White" StrokeThickness="2"
-                              StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
-                    </Button>
-                    <Button x:Name="BillboardNext" x:FieldModifier="internal" Style="{StaticResource SlideControl}"
-                            HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,20,0"
-                            ToolTip="{loc:Str btn_next}" AutomationProperties.Name="{loc:Str btn_next}">
-                        <Path Data="M 0,0 L 8,8 L 0,16" Stroke="White" StrokeThickness="2"
-                              StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
-                    </Button>
-                    <Border HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,18"
-                            CornerRadius="16" Background="#D918182B" Padding="8,0">
-                        <StackPanel x:Name="BillboardDots" x:FieldModifier="internal" Orientation="Horizontal"/>
-                    </Border>
-                    <Button x:Name="BillboardPause" x:FieldModifier="internal" Style="{StaticResource SlideControl}"
-                            HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,20,20,0"
-                            Content="Ⅱ" FontSize="17" ToolTip="{loc:Str btn_program_pause}"
-                            AutomationProperties.Name="{loc:Str btn_program_pause}"/>
+                    <Grid x:Name="BillboardHostSlot" x:FieldModifier="internal" Margin="8,8,8,4"/>
+                    <!-- The billboard is a SUNKEN well (polish wave 10): the bands lie over the
+                         card's rim, under nothing that is pressed. -->
+                    <Rectangle x:Name="BillboardWellTop" x:FieldModifier="internal" Fill="{DynamicResource DepthWellTop}"
+                               Height="9" VerticalAlignment="Top" IsHitTestVisible="False"/>
+                    <Rectangle Fill="{DynamicResource DepthWellLeft}" Width="6" HorizontalAlignment="Left" IsHitTestVisible="False"/>
+                    <Rectangle Fill="{DynamicResource DepthWellFoot}" Height="1" VerticalAlignment="Bottom" IsHitTestVisible="False"/>
                 </Grid>
             </Border>
 
             <!-- ============================================================ -->
-            <!-- COMPANION STRIP (Phase 3, new).                              -->
-            <!--                                                              -->
-            <!-- The Companion door owns her portrait, her status dots and    -->
-            <!-- her breathe loop (CompanionHeroCard), and CompanionTheme.xaml -->
-            <!-- budgets exactly ONE Forever storyboard for the companion     -->
-            <!-- app-wide. A second breathing portrait here would spend that   -->
-            <!-- budget twice and would need Start/Stop/RefreshAmbientState    -->
-            <!-- wiring from the shell. So this is deliberately a QUIET strip: -->
-            <!-- a standing affordance into her door, no art, no clock,        -->
-            <!-- nothing for the motion kill-switch or the ShowTab teardown to -->
-            <!-- have to reach. Give it a portrait later, with the loop.       -->
-            <!-- ============================================================ -->
-            <Border x:Name="CompanionStrip" x:FieldModifier="internal" Grid.Row="2"
-                    CornerRadius="12" Padding="10,9" Margin="0,0,0,12"
-                    Background="{DynamicResource ElevatedSurfaceBrush}"
-                    BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1"
-                    Cursor="Hand" MouseLeftButtonDown="CompanionStrip_Click"
-                    ToolTip="{loc:Str tooltip_companion_settings}">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <!-- WPF cannot draw COLR/CPAL colour-emoji fonts, so every emoji in this app
-                         is an Image routed through EmojiToImageSource. Same glyph as the sidebar's
-                         Companion door, so the two read as one place. -->
-                    <Image Grid.Column="0" Width="18" Height="18" VerticalAlignment="Center" Margin="0,0,9,0"
-                           RenderOptions.BitmapScalingMode="HighQuality"
-                           Source="{Binding Source='🤖', Converter={StaticResource EmojiToImageSource}}"/>
-                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                        <TextBlock Text="{loc:Str nav_door_companion}"
-                                   Foreground="{DynamicResource PinkBrush}"
-                                   FontSize="12" FontWeight="Bold"
-                                   TextTrimming="CharacterEllipsis"/>
-                        <TextBlock Text="{loc:Str hm3_companion_strip_sub}"
-                                   Foreground="{DynamicResource TextMutedBrush}"
-                                   FontSize="11" Margin="0,1,0,0"
-                                   TextTrimming="CharacterEllipsis"/>
-                    </StackPanel>
-                    <TextBlock Grid.Column="2" Text="›" VerticalAlignment="Center" Margin="12,0,2,0"
-                               Foreground="{DynamicResource TextMutedBrush}" FontSize="18"/>
-                </Grid>
-            </Border>
-
-            <!-- ============================================================ -->
-            <!-- ACCOUNT STRIP (Phase 3) - the old "Quick Links" card,         -->
-            <!-- compressed from a four-row tile into one line.                -->
+            <!-- ACCOUNT STRIP (Phase 3, one line since nav polish wave 5).    -->
+            <!--                                                               -->
+            <!-- Owner, 2026-10-06, after the wave-4 build: compact the strip  -->
+            <!-- and the bubble row under it into ONE line. Left to right:     -->
+            <!-- the starred name alone (the "Logged in as" caption is its     -->
+            <!-- tooltip now, the pink card around it is gone: the line is the -->
+            <!-- card), Link phone and Logout as glass bubbles (Logout keeps a -->
+            <!-- pink fill: it is the dangerous one), a divider, the Discord   -->
+            <!-- pill (the one call to action a newcomer should see without    -->
+            <!-- hovering, so it keeps its label), the Rich Presence switch as -->
+            <!-- a status bubble (lit when on; nobody read "RP"), a divider,   -->
+            <!-- the five quick bubbles, and the "?" at the end. One           -->
+            <!-- HoverBubbleBar dresses every glyph button so one label opens  -->
+            <!-- at a time and the idle pulse walks the whole line. The row    -->
+            <!-- the bubbles used to take (40 px) went back to the mosaic.     -->
             <!--                                                               -->
             <!-- Settings - Account has been the real account page since        -->
             <!-- Phase 2, so this is the glance-and-go surface, not the editor. -->
@@ -1833,17 +1843,31 @@
             <!-- live code and none may be dropped before Phase 8 -             -->
             <!--   BtnUnifiedLogin ............ Login.cs:337, UiUpdates.cs      -->
             <!--                                offline gating (:3022)          -->
-            <!--   LoggedInStatusPanel ........ Login.cs:338                    -->
+            <!--   LoggedInStatusPanel ........ Login.cs:338 (Link phone and    -->
+            <!--                                Logout follow its Visibility)   -->
             <!--   TxtLoggedInName ............ Login.cs:346/:351 (incl. the    -->
             <!--                                OG star prefix)                 -->
             <!--   ChkQuickDiscordRichPresence  AccountShell.cs:291/:302 mirror -->
             <!--                                + MainWindow.xaml.cs:2397 load  -->
             <!--   HelpBtnQuickLinks .......... Presets.cs:49 SetHelpContent    -->
             <!--                                ("QuickLinks")                  -->
-            <!-- The card's old section_quick_links caption is gone with the    -->
-            <!-- header row; the "?" popover still explains the strip.          -->
+            <!--   VelvetBtnSystem is the ONLY route to MainWindow.CardSystem_  -->
+            <!--   Click (the System popup, its mod-aware title, Notify-        -->
+            <!--   FeatureOpened "System"): never retire it without moving the  -->
+            <!--   handler. VelvetBtnSchedulerRamp navigates to the Studio rack;-->
+            <!--   VelvetBtnCatalogue opens app.cclabs.app/catalogue.           -->
+            <!-- The "?" popover still explains the strip.                      -->
             <!-- ============================================================ -->
-            <Border Grid.Row="3" CornerRadius="12" Padding="9,7"
+            <!-- THE LEDGE (polish wave 10): the strip throws LedgeUpPx of shadow up onto what
+                 sits above it (in the card's bottom margin, clear of the WebView2 rect) and a
+                 RaisedPx drop band onto the sheet below it. Both hit-test off. -->
+            <Rectangle x:Name="AccountLedgeUp" x:FieldModifier="internal" Grid.Row="2" Height="14"
+                       VerticalAlignment="Top" Margin="8,-14,8,0" IsHitTestVisible="False"
+                       Fill="{DynamicResource DepthLedgeUp}"/>
+            <Rectangle x:Name="AccountStripDrop" x:FieldModifier="internal" Grid.Row="2" Height="3"
+                       VerticalAlignment="Bottom" Margin="6,0,6,-3" IsHitTestVisible="False"
+                       RadiusX="3" RadiusY="3" Fill="{DynamicResource HomeDepthDropBand}"/>
+            <Border x:Name="AccountStrip" x:FieldModifier="internal" Grid.Row="2" CornerRadius="12" Padding="9,6"
                     Background="{DynamicResource ElevatedSurfaceBrush}"
                     BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
                 <Grid>
@@ -1851,13 +1875,16 @@
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
+
+                    <!-- The ledge's lit top (polish wave 10): the raised sheen, under every control. -->
+                    <Border x:Name="AccountStripSheen" x:FieldModifier="internal" Grid.ColumnSpan="3" Margin="-9,-6"
+                            CornerRadius="11" IsHitTestVisible="False" Background="{DynamicResource DepthRaisedSheen}"/>
 
                     <!-- The logged-out and logged-in faces share ONE cell: MainWindow.Login.cs
                          flips exactly these two Visibilities against each other, so they must
                          never be able to claim two slots' worth of width between them. -->
-                    <Grid Grid.Column="0">
+                    <Grid Grid.Column="0" Margin="0,0,10,0">
                         <!-- Unified Login Button -->
                         <Button x:Name="BtnUnifiedLogin" x:FieldModifier="internal" Content="{loc:Str btn_login_2}"
                                 Click="BtnUnifiedLogin_Click"
@@ -1892,318 +1919,137 @@
                                 </Style>
                             </Button.Style>
                         </Button>
-    
-                        <!-- Logged In Status (shown when logged in) -->
+
+                        <!-- Logged In Status (shown when logged in): the name alone. No caption,
+                             no card; the "Logged in as" line is the name's tooltip. -->
                         <Border x:Name="LoggedInStatusPanel" x:FieldModifier="internal" Visibility="Collapsed"
-                                Background="{DynamicResource PanelBgBrush}" CornerRadius="6" Padding="9,4"
-                                VerticalAlignment="Center"
-                                BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <StackPanel VerticalAlignment="Center">
-                                    <TextBlock x:Name="TxtLoggedInAs" Text="{loc:Str label_logged_in_as}"
-                                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"/>
-                                    <TextBlock x:Name="TxtLoggedInName" x:FieldModifier="internal" Text="{loc:Str label_username}"
-                                               Foreground="White" FontWeight="Bold" FontSize="14" Margin="0,1,0,0"
-                                               TextTrimming="CharacterEllipsis">
-                                        <TextBlock.Effect>
-                                            <DropShadowEffect Color="#FF69B4" BlurRadius="10" ShadowDepth="0" Opacity="0.65"/>
-                                        </TextBlock.Effect>
-                                    </TextBlock>
-                                </StackPanel>
-                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                                <Button x:Name="BtnLinkPhone" Content="📱 Link phone"
-                                        Click="BtnLinkPhone_Click" Margin="0,0,6,0" VerticalAlignment="Center"
-                                        ToolTip="Sign in to the CCP mobile app by scanning a QR code"
-                                        Padding="8,3" Background="{DynamicResource AccentTintedBgBrush}" Foreground="{DynamicResource PinkBrush}"
-                                        BorderThickness="0" FontSize="10" Cursor="Hand"/>
-                                <!-- Prominent, high-contrast Logout button -->
-                                <Button x:Name="BtnQuickLogout" Content="{loc:Str btn_logout}"
-                                        Click="BtnQuickLogout_Click" VerticalAlignment="Center"
-                                        Padding="12,4" FontSize="11" FontWeight="Bold" Cursor="Hand"
-                                        ToolTip="{loc:Str btn_logout}">
-                                    <Button.Style>
-                                        <Style TargetType="Button">
-                                            <Setter Property="Foreground" Value="White"/>
-                                            <Setter Property="Background" Value="{DynamicResource PinkBrush}"/>
-                                            <Setter Property="BorderThickness" Value="0"/>
-                                            <Setter Property="Template">
-                                                <Setter.Value>
-                                                    <ControlTemplate TargetType="Button">
-                                                        <Border x:Name="lborder" Background="{TemplateBinding Background}"
-                                                                CornerRadius="6" Padding="{TemplateBinding Padding}">
-                                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                                        </Border>
-                                                        <ControlTemplate.Triggers>
-                                                            <Trigger Property="IsMouseOver" Value="True">
-                                                                <Setter TargetName="lborder" Property="Background" Value="#E055A0"/>
-                                                            </Trigger>
-                                                            <Trigger Property="IsPressed" Value="True">
-                                                                <Setter TargetName="lborder" Property="Background" Value="#C04888"/>
-                                                            </Trigger>
-                                                        </ControlTemplate.Triggers>
-                                                    </ControlTemplate>
-                                                </Setter.Value>
-                                            </Setter>
-                                        </Style>
-                                    </Button.Style>
-                                </Button>
-                                </StackPanel>
-                            </Grid>
+                                Background="Transparent" Padding="4,0" HorizontalAlignment="Left"
+                                VerticalAlignment="Center" ToolTip="{loc:Str label_logged_in_as}">
+                            <TextBlock x:Name="TxtLoggedInName" x:FieldModifier="internal" Text="{loc:Str label_username}"
+                                       Foreground="White" FontWeight="Bold" FontSize="15" MaxWidth="220"
+                                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
+                                <TextBlock.Effect>
+                                    <DropShadowEffect Color="#FF69B4" BlurRadius="10" ShadowDepth="0" Opacity="0.65"/>
+                                </TextBlock.Effect>
+                            </TextBlock>
                         </Border>
                     </Grid>
 
-                    <!-- Discord Join Button -->
-                    <Button Grid.Column="1" Click="BtnDiscord_Click"
-                            ToolTip="{loc:Str tooltip_join_the_discord_community}" Cursor="Hand"
-                            VerticalAlignment="Center" Margin="10,0,0,0">
-                                <Button.Style>
-                                    <Style TargetType="Button">
-                                        <Setter Property="Background" Value="Transparent"/>
-                                        <Setter Property="BorderThickness" Value="0"/>
-                                        <Setter Property="Template">
-                                            <Setter.Value>
-                                                <ControlTemplate TargetType="Button">
-                                                    <Border x:Name="border" Background="#5865F2" CornerRadius="5"
-                                                            Padding="12,5" HorizontalAlignment="Stretch">
-                                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                                                            <Image Width="13" Height="13" VerticalAlignment="Center"
-                                                                   Source="{Binding Source='💬', Converter={StaticResource EmojiToImageSource}}"/>
-                                                            <TextBlock Text="{loc:Str label_join_discord}" Foreground="White" FontSize="10" FontWeight="Bold"
-                                                                       VerticalAlignment="Center" Margin="5,0,0,0"/>
-                                                        </StackPanel>
-                                                    </Border>
-                                                    <ControlTemplate.Triggers>
-                                                        <Trigger Property="IsMouseOver" Value="True">
-                                                            <Setter TargetName="border" Property="Background" Value="#6C75F2"/>
-                                                        </Trigger>
-                                                    </ControlTemplate.Triggers>
-                                                </ControlTemplate>
-                                            </Setter.Value>
-                                        </Setter>
-                                    </Style>
-                                </Button.Style>
-                            </Button>
-                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="10,0,0,0">
-                                <StackPanel.ToolTip>
-                                    <ToolTip Background="{DynamicResource SurfaceBgBrush}" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" Padding="10">
-                                        <StackPanel MaxWidth="280">
-                                            <TextBlock Text="{loc:Str label_discord_rich_presence}" Foreground="{DynamicResource PinkBrush}" FontSize="12" FontWeight="Bold" Margin="0,0,0,6"/>
-                                            <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8">
-                                                Shows "Playing Conditioning Control Panel" in your Discord status, along with your current level and session time.
-                                            </TextBlock>
-                                            <TextBlock Text="{loc:Str label_who_can_see_this}" Foreground="{DynamicResource SecondaryBrush}" FontSize="11" FontWeight="Bold" Margin="0,0,0,4"/>
-                                            <TextBlock Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap">
-                                                Only people who can already see your Discord activity status (friends, server members if enabled in your Discord privacy settings). This does NOT send notifications - it simply updates your "Currently Playing" status like any other game.
-                                            </TextBlock>
-                                        </StackPanel>
-                                    </ToolTip>
-                                </StackPanel.ToolTip>
-                                <CheckBox x:Name="ChkQuickDiscordRichPresence" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}"
-                                          Checked="ChkDiscordRichPresence_Changed" Unchecked="ChkDiscordRichPresence_Changed">
-                                    <CheckBox.LayoutTransform>
-                                        <ScaleTransform ScaleX="0.85" ScaleY="0.85"/>
-                                    </CheckBox.LayoutTransform>
-                                </CheckBox>
-                                <TextBlock Text="{loc:Str label_rp}" Foreground="{DynamicResource TextMutedBrush}" FontSize="9"
-                                           VerticalAlignment="Center" Margin="4,0,0,0"/>
-                    </StackPanel>
+                    <!-- The line: every button with a Glyph is a 34 px bubble (HoverBubbleBar
+                         dresses them); the Discord pill and the dividers carry no Glyph and are
+                         left alone. Link phone, Logout and their divider follow the logged-in
+                         face's Visibility, so a signed-out strip reads Login | Discord | ... -->
+                    <fx:HoverBubbleBar x:Name="HomeBubbleBar" x:FieldModifier="internal" Grid.Column="1"
+                                       HorizontalAlignment="Right" VerticalAlignment="Center">
+                        <Button x:Name="BtnLinkPhone" x:FieldModifier="internal"
+                                Click="BtnLinkPhone_Click"
+                                Visibility="{Binding Visibility, ElementName=LoggedInStatusPanel}"
+                                ToolTip="Sign in to the CCP mobile app by scanning a QR code"
+                                fx:HoverBubbleBar.Glyph="&#xE8EA;"
+                                fx:HoverBubbleBar.LabelKeys="btn_home_link_phone"/>
+                        <!-- Logout keeps the pink fill: still the dangerous one at a glance. -->
+                        <Button x:Name="BtnQuickLogout" x:FieldModifier="internal"
+                                Click="BtnQuickLogout_Click"
+                                Visibility="{Binding Visibility, ElementName=LoggedInStatusPanel}"
+                                ToolTip="{loc:Str btn_logout}"
+                                fx:HoverBubbleBar.Glyph="&#xE7E8;"
+                                fx:HoverBubbleBar.Fill="#FF69B4"
+                                fx:HoverBubbleBar.LabelKeys="btn_logout"/>
+                        <Border x:Name="AccountStripDivider" x:FieldModifier="internal" Style="{StaticResource AccountStripDividerStyle}"
+                                Visibility="{Binding Visibility, ElementName=LoggedInStatusPanel}"/>
 
-                    <Button x:Name="HelpBtnQuickLinks" x:FieldModifier="internal" Grid.Column="3"
+                        <!-- Discord Join Button: the one labelled pill on the line. -->
+                        <Button x:Name="BtnJoinDiscord" x:FieldModifier="internal" Click="BtnDiscord_Click"
+                                ToolTip="{loc:Str tooltip_join_the_discord_community}" Cursor="Hand"
+                                VerticalAlignment="Center">
+                            <Button.Style>
+                                <Style TargetType="Button">
+                                    <Setter Property="Background" Value="Transparent"/>
+                                    <Setter Property="BorderThickness" Value="0"/>
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border x:Name="border" Background="#5865F2" CornerRadius="17" Height="34"
+                                                        Padding="14,0" HorizontalAlignment="Stretch">
+                                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                        <Image Width="13" Height="13" VerticalAlignment="Center"
+                                                               Source="{Binding Source='💬', Converter={StaticResource EmojiToImageSource}}"/>
+                                                        <TextBlock Text="{loc:Str label_join_discord}" Foreground="White" FontSize="11" FontWeight="Bold"
+                                                                   VerticalAlignment="Center" Margin="6,0,0,0"/>
+                                                    </StackPanel>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="border" Property="Background" Value="#6C75F2"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+
+                        <!-- Rich Presence as a status bubble: lit when on. Still the CheckBox the
+                             AccountShell mirror writes (IsChecked), just dressed by the bar. -->
+                        <CheckBox x:Name="ChkQuickDiscordRichPresence" x:FieldModifier="internal"
+                                  Checked="ChkDiscordRichPresence_Changed" Unchecked="ChkDiscordRichPresence_Changed"
+                                  fx:HoverBubbleBar.Glyph="&#xE7FC;"
+                                  fx:HoverBubbleBar.LabelKeys="btn_home_discord_status">
+                            <CheckBox.ToolTip>
+                                <ToolTip Background="{DynamicResource SurfaceBgBrush}" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" Padding="10">
+                                    <StackPanel MaxWidth="280">
+                                        <TextBlock Text="{loc:Str label_discord_rich_presence}" Foreground="{DynamicResource PinkBrush}" FontSize="12" FontWeight="Bold" Margin="0,0,0,6"/>
+                                        <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8">
+                                            Shows "Playing Conditioning Control Panel" in your Discord status, along with your current level and session time.
+                                        </TextBlock>
+                                        <TextBlock Text="{loc:Str label_who_can_see_this}" Foreground="{DynamicResource SecondaryBrush}" FontSize="11" FontWeight="Bold" Margin="0,0,0,4"/>
+                                        <TextBlock Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap">
+                                            Only people who can already see your Discord activity status (friends, server members if enabled in your Discord privacy settings). This does NOT send notifications - it simply updates your "Currently Playing" status like any other game.
+                                        </TextBlock>
+                                    </StackPanel>
+                                </ToolTip>
+                            </CheckBox.ToolTip>
+                        </CheckBox>
+                        <Border Style="{StaticResource AccountStripDividerStyle}"/>
+
+                        <!-- The five quick bubbles (nav polish wave 4). -->
+                        <Button x:Name="VelvetBtnWebcam" x:FieldModifier="internal"
+                                Click="VelvetBtnWebcam_Click"
+                                fx:HoverBubbleBar.Glyph="&#xE722;"
+                                fx:HoverBubbleBar.LabelKeys="btn_home_webcam_mic"/>
+                        <Button x:Name="VelvetBtnSystem" x:FieldModifier="internal"
+                                Click="VelvetBtnSystem_Click"
+                                fx:HoverBubbleBar.Glyph="&#xE713;"
+                                fx:HoverBubbleBar.LabelKeys="section_system"/>
+                        <Button x:Name="VelvetBtnSchedulerRamp" x:FieldModifier="internal"
+                                Click="VelvetBtnSchedulerRamp_Click"
+                                fx:HoverBubbleBar.Glyph="&#xE787;"
+                                fx:HoverBubbleBar.LabelKeys="section_scheduler+section_intensity_ramp"/>
+                        <Button x:Name="VelvetBtnCatalogue" x:FieldModifier="internal"
+                                Click="VelvetBtnCatalogue_Click"
+                                ToolTip="Opens app.cclabs.app/catalogue in your browser"
+                                fx:HoverBubbleBar.Glyph="&#xE8F1;"
+                                fx:HoverBubbleBar.LabelKeys="btn_home_catalogue"/>
+                        <Button x:Name="VelvetBtnAppInfo" x:FieldModifier="internal"
+                                Click="VelvetBtnAppInfo_Click"
+                                fx:HoverBubbleBar.Glyph="&#xE946;"
+                                fx:HoverBubbleBar.LabelKeys="label_app_info"/>
+                    </fx:HoverBubbleBar>
+
+                    <Button x:Name="HelpBtnQuickLinks" x:FieldModifier="internal" Grid.Column="2"
                             Style="{StaticResource HelpButtonStyle}" Tag="QuickLinks"
-                            VerticalAlignment="Center" Margin="8,0,0,0"/>
+                            VerticalAlignment="Center" Margin="10,0,0,0"/>
                 </Grid>
             </Border>
         </Grid>
     
-        <!-- ============================================================ -->
-        <!-- QUICK TOGGLES ROW - full width, under both the feature grid  -->
-        <!-- AND the right half. (Historic x:Name VelvetHelperButtonRow.) -->
-        <!--                                                               -->
-        <!-- Phase 3 added the fifth pill: "System" used to be a mosaic    -->
-        <!-- tile, but it is not a feature - it is the display/video       -->
-        <!-- switches - so it traded its tile for Brain Drain and became a -->
-        <!-- pill. Same handler, same popup, new caller. Keep this row at  -->
-        <!-- Height=30: it sits between the mosaic and the marquee inside  -->
-        <!-- the fixed 1489x901 canvas, and every unit it grows comes off  -->
-        <!-- the mosaic's star row (WPF clips silently - #860).            -->
-        <!-- ============================================================ -->
-        <Grid Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" x:Name="VelvetHelperButtonRow"
-              Height="30" Margin="5,10,5,0">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="10"/>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="10"/>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="10"/>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="10"/>
-                <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
-            <!-- Webcam card — surfaced from the Lab for discoverability.
-                 Distinct Secondary (cyan) accent + tinted fill so it stands
-                 out from the two neutral cards beside it. -->
-            <Button Grid.Column="0" x:Name="VelvetBtnWebcam"
-                    Click="VelvetBtnWebcam_Click"
-                    Cursor="Hand" FontSize="12" FontWeight="Bold">
-                <Button.Template>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="b"
-                                Background="{DynamicResource AccentTintedBgBrush}"
-                                BorderBrush="{DynamicResource SecondaryBrush}"
-                                BorderThickness="1.5"
-                                CornerRadius="14">
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <Image Width="16" Height="16" VerticalAlignment="Center" Margin="0,0,8,0"
-                                       Source="{Binding Source='📷', Converter={StaticResource EmojiToImageSource}}"/>
-                                <TextBlock Text="Webcam &amp; Mic" Foreground="White" VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="b" Property="BorderBrush" Value="{DynamicResource SecondaryBrush}"/>
-                                <Setter TargetName="b" Property="Background" Value="{DynamicResource TransparentPinkBrush}"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Button.Template>
-            </Button>
-    
-            <!-- System — the display / video switches (multi-monitor, GPU decode, blurred
-                 video background, browser video engine) plus the read-only jumps Phase 2 added
-                 into Settings. It used to be the ⚙ mosaic tile; the tile went to Brain Drain
-                 and the entry point came here. Phase 8 deleted the Collapsed tile, so this pill
-                 is now the ONLY route to MainWindow.CardSystem_Click - the popup, its title, and
-                 its NotifyFeatureOpened("System") bark are unchanged, but this button is the last
-                 thing holding them: never retire it without moving the handler somewhere else. -->
-            <Button Grid.Column="2" x:Name="VelvetBtnSystem"
-                    Click="VelvetBtnSystem_Click"
-                    Cursor="Hand" FontSize="12" FontWeight="Bold">
-                <Button.Template>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="b"
-                                Background="{DynamicResource ElevatedSurfaceBrush}"
-                                BorderBrush="{DynamicResource GlassBorderBrush}"
-                                BorderThickness="1"
-                                CornerRadius="14">
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <!-- No separate cog image and no x:Name: section_system already
-                                     starts with the gear glyph (same idiom as the Scheduler pill
-                                     below), and a name inside a ControlTemplate belongs to the
-                                     template's namescope, not the UserControl's, so it would
-                                     generate no field and reach nothing. -->
-                                <helpers:EmojiTextBlock Text="{loc:Str section_system}" Foreground="White" VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="b" Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
-                                <Setter TargetName="b" Property="Background" Value="{DynamicResource TransparentPinkBrush}"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Button.Template>
-            </Button>
-
-            <Button Grid.Column="8" x:Name="VelvetBtnAppInfo"
-                    Click="VelvetBtnAppInfo_Click"
-                    Cursor="Hand" FontSize="12" FontWeight="Bold">
-                <Button.Template>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="b"
-                                Background="{DynamicResource ElevatedSurfaceBrush}"
-                                BorderBrush="{DynamicResource GlassBorderBrush}"
-                                BorderThickness="1"
-                                CornerRadius="14">
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <TextBlock Text="ℹ" FontSize="16" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,8,0"
-                                           Foreground="{DynamicResource PinkBrush}"/>
-                                <TextBlock Text="{loc:Str label_app_info}" Foreground="White" VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="b" Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
-                                <Setter TargetName="b" Property="Background" Value="{DynamicResource TransparentPinkBrush}"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Button.Template>
-            </Button>
-    
-            <!-- Combined Scheduler + Intensity Ramp card. Label is two live-localized
-                 strings joined by " + " so both halves stay translated.
-                 Phase 3: this no longer opens a second popup around the old
-                 SchedulerRampFeatureControl wrapper - Phase 4 gave both panels rack entries
-                 ("scheduler" / "ramp") and Phase 8 deleted the wrapper, so the pill navigates
-                 to the rack instead. One surface,
-                 nothing lost: the rack fires the same single "SchedulerRamp"
-                 NotifyFeatureOpened key the popup did (StudioTabView.xaml.cs:229-230). -->
-            <Button Grid.Column="4" x:Name="VelvetBtnSchedulerRamp"
-                    Click="VelvetBtnSchedulerRamp_Click"
-                    Cursor="Hand" FontSize="12" FontWeight="Bold">
-                <Button.Template>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="b"
-                                Background="{DynamicResource ElevatedSurfaceBrush}"
-                                BorderBrush="{DynamicResource GlassBorderBrush}"
-                                BorderThickness="1"
-                                CornerRadius="14">
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <!-- No separate 📅 image: section_scheduler already starts with the
-                                     calendar emoji (matches the inline ⚡ on Intensity Ramp). -->
-                                <helpers:EmojiTextBlock Text="{loc:Str section_scheduler}" Foreground="White" VerticalAlignment="Center"/>
-                                <TextBlock Text=" + " Foreground="White" VerticalAlignment="Center"/>
-                                <helpers:EmojiTextBlock Text="{loc:Str section_intensity_ramp}" Foreground="White" VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="b" Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
-                                <Setter TargetName="b" Property="Background" Value="{DynamicResource TransparentPinkBrush}"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Button.Template>
-            </Button>
-
-            <!-- CCP Catalogue card — opens the web catalogue to browse/share
-                 community presets and sessions. Pink-tinted to flag it as the
-                 community/social action of the row. -->
-            <Button Grid.Column="6" x:Name="VelvetBtnCatalogue"
-                    Click="VelvetBtnCatalogue_Click"
-                    Cursor="Hand" FontSize="12" FontWeight="Bold"
-                    ToolTip="Opens app.cclabs.app/catalogue in your browser">
-                <Button.Template>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="b"
-                                Background="{DynamicResource TransparentPinkBrush}"
-                                BorderBrush="{DynamicResource PinkBrush}"
-                                BorderThickness="1.5"
-                                CornerRadius="14">
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <Image Width="16" Height="16" VerticalAlignment="Center" Margin="0,0,8,0"
-                                       Source="{Binding Source='📚', Converter={StaticResource EmojiToImageSource}}"/>
-                                <TextBlock Text="CCP Catalogue" Foreground="White" VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="b" Property="BorderBrush" Value="{DynamicResource SecondaryBrush}"/>
-                                <Setter TargetName="b" Property="Background" Value="{DynamicResource AccentTintedBgBrush}"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Button.Template>
-            </Button>
-        </Grid>
+        <!-- Row 2 (Auto) is empty since nav polish wave 5: the five quick bubbles that sat here
+             after wave 4 live on the account strip's one line now (see ACCOUNT STRIP above), and
+             the 40 px went back to the mosaic. -->
 
         <!-- Scrolling Marquee Banner - row 3, spans all columns -->
-        <Border x:Name="MarqueeBanner" Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="3"
+        <Border x:Name="MarqueeBanner" Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="4"
                 Background="#1A0A1A" BorderBrush="{DynamicResource DarkPinkBrush}" BorderThickness="2"
                 CornerRadius="8" Height="48" Margin="5,10,5,0" ClipToBounds="True">
             <Border.Effect>

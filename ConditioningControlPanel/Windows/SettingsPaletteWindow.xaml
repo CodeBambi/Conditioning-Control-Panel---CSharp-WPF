@@ -30,8 +30,14 @@
             <Setter Property="Margin" Value="6,1"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <!-- Screen readers hear the row (caption, then where it goes), never the type name. -->
+            <Setter Property="AutomationProperties.Name" Value="{Binding AutomationName}"/>
             <!-- Single click activates: a palette row is a destination, not a selection. -->
             <EventSetter Event="PreviewMouseLeftButtonUp" Handler="Item_Click"/>
+            <!-- Right-click pins or unpins the row to the dashboard's Favourites, the same verb as
+                 right-clicking a rail entry. The only pin door for games and rack modules whose
+                 cards carry no x:Name. -->
+            <EventSetter Event="PreviewMouseRightButtonUp" Handler="Item_RightClick"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ListBoxItem">
@@ -86,7 +92,7 @@
                                  FontSize="16" VerticalContentAlignment="Center"
                                  TextChanged="TxtQuery_TextChanged"/>
                         <TextBlock x:Name="TxtPlaceholder" IsHitTestVisible="False"
-                                   Text="{loc:Str set2_palette_placeholder}"
+                                   Text="{loc:Str nav_search_placeholder}"
                                    Foreground="{DynamicResource TextDimBrush}"
                                    FontSize="16" VerticalAlignment="Center"/>
                     </Grid>
@@ -116,9 +122,13 @@
                                            Visibility="{Binding Glyph, Converter={StaticResource EmojiFallbackVisibility}}"/>
                             </Grid>
                             <StackPanel Grid.Column="1">
-                                <TextBlock Text="{Binding Label}" FontSize="13"
-                                           Foreground="{DynamicResource TextLightBrush}"
-                                           TextTrimming="CharacterEllipsis"/>
+                                <!-- Caption, then the retired name it was found under ("(was Premium)"). -->
+                                <TextBlock FontSize="13" TextTrimming="CharacterEllipsis"
+                                           Foreground="{DynamicResource TextLightBrush}">
+                                    <Run Text="{Binding Label, Mode=OneWay}"/>
+                                    <Run Text="{Binding WasHint, Mode=OneWay}" FontSize="11"
+                                         Foreground="{DynamicResource TextDimBrush}"/>
+                                </TextBlock>
                                 <TextBlock Text="{Binding Context}" FontSize="11"
                                            Foreground="{DynamicResource TextDimBrush}"
                                            TextTrimming="CharacterEllipsis"
@@ -129,11 +139,48 @@
                 </ListBox.ItemTemplate>
             </ListBox>
 
-            <!-- Empty state (shown instead of the list when nothing matches) -->
-            <TextBlock x:Name="TxtEmpty" Grid.Row="1" Visibility="Collapsed"
-                       Text="{loc:Str set2_palette_no_results}"
-                       Foreground="{DynamicResource TextDimBrush}" FontSize="13"
-                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            <!-- Empty state (shown instead of the list when nothing matches): what was typed, the
+                 nearest thing it might have meant as a clickable row, and a way to see every page. -->
+            <StackPanel x:Name="PanelEmpty" Grid.Row="1" Visibility="Collapsed"
+                        HorizontalAlignment="Center" VerticalAlignment="Center">
+                <TextBlock x:Name="TxtEmpty" Text="{loc:Str set2_palette_no_results}"
+                           Foreground="{DynamicResource TextDimBrush}" FontSize="13"
+                           HorizontalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="520"/>
+                <Button x:Name="BtnTry" Click="BtnTry_Click" Margin="0,12,0,0" Cursor="Hand"
+                        HorizontalAlignment="Center" Visibility="Collapsed"
+                        Background="{DynamicResource AccentTintedBgBrush}"
+                        Foreground="{DynamicResource TextLightBrush}" BorderThickness="0"
+                        Padding="14,7" FontSize="13">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="b" Background="{TemplateBinding Background}" CornerRadius="7"
+                                    Padding="{TemplateBinding Padding}">
+                                <ContentPresenter HorizontalAlignment="Center"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="b" Property="Background"
+                                            Value="{DynamicResource AccentTintedBgHoverBrush}"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+                    <TextBlock x:Name="TxtTry" Foreground="{DynamicResource TextLightBrush}"/>
+                </Button>
+                <Button x:Name="BtnAll" Click="BtnAll_Click" Margin="0,8,0,0" Cursor="Hand"
+                        HorizontalAlignment="Center" Background="Transparent" BorderThickness="0"
+                        Padding="10,5" FontSize="12">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
+                                <ContentPresenter HorizontalAlignment="Center"/>
+                            </Border>
+                        </ControlTemplate>
+                    </Button.Template>
+                    <TextBlock Text="{loc:Str nav_search_all}" TextDecorations="Underline"
+                               Foreground="{DynamicResource PinkBrush}"/>
+                </Button>
+            </StackPanel>
 
             <!-- Footer hint -->
             <Border Grid.Row="2" Background="{DynamicResource SurfaceBgBrush}"

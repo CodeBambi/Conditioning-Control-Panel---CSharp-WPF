@@ -6,6 +6,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
              xmlns:ctrl="clr-namespace:ConditioningControlPanel.Controls"
+             xmlns:tabs="clr-namespace:ConditioningControlPanel.Views.Tabs"
              mc:Ignorable="d" d:DesignWidth="760">
 
     <!-- ================================================================
@@ -51,7 +52,7 @@
 
     <StackPanel>
 
-        <TextBlock Text="{loc:Str set2_section_account}" Style="{StaticResource SectionHeader}"/>
+        <TextBlock Text="{loc:Str settings_section_plans}" Style="{StaticResource SectionHeader}"/>
 
         <!-- Net-new: who you are, and which bar you clear. Painted by
              RefreshTierBadge() in the code-behind - no settings property,
@@ -91,6 +92,15 @@
                 </Grid>
             </Grid>
         </Border>
+
+        <!-- ==== PLANS (nav rework 2026-10-06, REHOME lane) ====
+             The retired Premium / Exclusives page lives here now: the vault header
+             with the tier plates, the spotlight (its veil pill is the upgrade door)
+             and the invites card. The 17-card shelf is not carried; every card on it
+             has its own home on the rail. MainWindow.Exclusives.cs paints this view
+             (VaultView) and starts / parks its motion from IsVisibleChanged below. -->
+        <tabs:ExclusivesTabView x:Name="PlansView" x:FieldModifier="internal" PlansMode="True"
+                                Margin="0,0,0,12"/>
 
         <!-- ==== MOVED from PatreonTabView.xaml:25-47 ====
              Brand card: keeps Patreon red, takes the shared edge-bar pattern in that colour. -->

@@ -50,9 +50,9 @@ namespace ConditioningControlPanel.Avalonia
         /// <summary>The Core quest board (WPF App.Quests), built by StartQuests before the shell.</summary>
         internal static QuestService? Quests { get; set; }
 
-        /// <summary>WPF App.Programs (App.xaml.cs:2704), LOAD-ONLY on this head until the run panel and
-        /// the session runner land (docs/avalonia-decisions.md 2026-10-09): no rollover, no timers, never
-        /// writes programs.json. CoreQuests.TrackProgramVerifierProvider stays unseeded (it mutates).</summary>
+        /// <summary>WPF App.Programs (App.xaml.cs:2704), the full writing instance since programs 3a
+        /// (docs/avalonia-decisions.md): timers, startup repair + rollover, Dispose flush. A file stamped by
+        /// a newer build loads read-only (IsReadOnly) and the Programs tab greys its lifecycle controls.</summary>
         internal static Services.Program.ProgramService? Programs { get; set; }
 
         /// <summary>The typed mantra game (WPF App.Mantra, built unconditionally at App.xaml.cs:3260).</summary>
@@ -62,8 +62,8 @@ namespace ConditioningControlPanel.Avalonia
 
         /// <summary>WPF App.xaml.cs:2527-2536 plus the CoreQuests seeds of :398-421. Seeded where this
         /// head has the service. The streak shield is WPF SkillTreeService.UseStreakShield (:378) over
-        /// Core settings; perfect-week bonus and Programs (TrackVerifier) stay unseeded: no bonus,
-        /// no program tracking - the WPF "service is null" answers.</summary>
+        /// Core settings; the perfect-week bonus stays unseeded (the WPF "service is null" answer).
+        /// Programs (TrackVerifier) is seeded next to the ProgramService below.</summary>
         private static void StartQuests()
         {
             CoreQuests.PatreonVerifyingProvider = () => Platform.AccountSeed.Patreon?.IsVerifying;
@@ -395,6 +395,14 @@ namespace ConditioningControlPanel.Avalonia
                 // Lock back from lockdown_recovery.json before anything reads them.
                 LockdownService.RecoverIfNeeded();
                 LockdownService.Current = new LockdownService();
+                // WPF App.xaml.cs:3295: quest credit for each completed lockdown of 20+ minutes.
+                // LastActiveDuration is set in Deactivate before the event fires.
+                var lockdown = LockdownService.Current;
+                lockdown.LockdownDeactivated += () =>
+                {
+                    try { Quests?.TrackLockdownCompleted(lockdown.LastActiveDuration); }
+                    catch (Exception ex) { Serilog.Log.Debug(ex, "Lockdown quest credit failed"); }
+                };
 
                 // Mod art: the same Core chain WPF's ModResourceResolver walks. Answers from the
                 // active mod once StartMods (below) seeds CoreMods; before that every answer is "no override".
@@ -690,7 +698,11 @@ namespace ConditioningControlPanel.Avalonia
                 };
                 SeedLevelAchievements(Achievements);
                 StartQuests();
-                Programs = Services.Program.ProgramService.CreateReadOnly();
+                // programs-3a decision: refuse programs whose required tasks this head never raises
+                // (WPF leaves it unseeded = all available). Seeded before the service so it is never unset.
+                CoreProgram.TaskAvailableProvider = Platform.ProgramCapabilities.IsAvailable;
+                Programs = new Services.Program.ProgramService();
+                CoreQuests.TrackProgramVerifierProvider = (category, amount) => Programs?.TrackVerifier(category, amount);   // WPF App.xaml.cs:413
 
                 // CoreProgram: its pack-video and roadmap providers stay unseeded - this head has no
                 // ContentPackService or RoadmapService, so it answers "no pack videos, no roadmap".
@@ -1061,7 +1073,7 @@ namespace ConditioningControlPanel.Avalonia
             // never rewrites the file (or rotates its .bak) - it may be shared with the WPF head.
             try { if (Achievements is { IsDirty: true } a) a.Save(); } catch { /* the store logs write failures */ }
             try { Quests?.Dispose(); } catch { /* WPF App.OnExit:6104; saves only when dirty */ }
-            try { Programs?.Dispose(); } catch { /* WPF App.OnExit:6309; read-only here, so it never writes */ }
+            try { Programs?.Dispose(); } catch { /* WPF App.OnExit:6309; flushes unsaved program state */ }
             try { MediaHistory?.Dispose(); } catch { /* WPF App.OnExit:6231; flushes the final entries */ }
             try { (Platform.FriendsHead.Service as IDisposable)?.Dispose(); } catch { /* WPF App.OnExit: the friends poll stops */ }
             try { Brain?.Dispose(); } catch { /* WPF App.OnExit:6121; flushes the turn log */ }

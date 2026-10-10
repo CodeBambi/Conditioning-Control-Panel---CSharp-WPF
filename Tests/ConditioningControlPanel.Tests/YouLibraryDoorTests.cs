@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using ConditioningControlPanel.Services;
 using Xunit;
 
 namespace ConditioningControlPanel.Tests;
@@ -76,18 +77,6 @@ public class YouLibraryDoorTests
         new object[] { "BtnNavMediaLog", "BtnNavMediaLog_Click",  "yl7_nav_medialog",  "yl7_nav_medialog_tip" },
     };
 
-    /// <summary>The Library door's rail panel, Assets row included.</summary>
-    private static string LibraryDoorPanel()
-    {
-        var xaml = MainWindowXaml();
-        // Anchored on </StackPanel></Border>, not the first </StackPanel>: every row's content is
-        // itself a StackPanel, so a lazy match to the first close tag stops inside row one.
-        var m = Regex.Match(xaml, "<StackPanel x:Name=\"DoorEntriesLibrary\".*?</StackPanel>\\s*</Border>",
-                            RegexOptions.Singleline);
-        Assert.True(m.Success, "DoorEntriesLibrary is gone from MainWindow.xaml — the Library door has no rail panel");
-        return m.Value;
-    }
-
     // =====================================================================================
     //  1. the Library door's four launcher rows
     // =====================================================================================
@@ -97,38 +86,29 @@ public class YouLibraryDoorTests
     public void EachLibraryLauncherIsOneRowBoundToOneExistingHandler(
         string buttonName, string handler, string labelKey, string tipKey)
     {
-        var panel = LibraryDoorPanel();
+        // Nav rework (2026-10-06): the Library door's rail rows left the rail. Each launcher is
+        // a Launcher pill in the section table now, labelled with the same key, and it still
+        // opens through the one existing handler (the strip calls it). No rail row remains.
+        Assert.DoesNotContain("x:Name=\"" + buttonName + "\"", MainWindowXaml());
+        var key = labelKey.Substring("yl7_nav_".Length);
+        var tab = ConditioningControlPanel.Services.UI.NavSections.Find("library")!.Tabs.SingleOrDefault(t => t.Key == key);
+        Assert.True(tab != null, key + " is not a Library tab in NavSections");
+        Assert.Equal(ConditioningControlPanel.Services.UI.NavTabKind.Launcher, tab!.Kind);
+        Assert.Equal(labelKey, tab.LabelKey);
+        Assert.True(Language("en.json").ContainsKey(tipKey), tipKey + " is gone from en.json");
 
-        var row = Regex.Match(panel, "<Button x:Name=\"" + buttonName + "\".*?</Button>", RegexOptions.Singleline);
-        Assert.True(row.Success, buttonName + " is not in the Library door's rail panel");
-
-        Assert.Contains("Click=\"" + handler + "\"", row.Value);
-        Assert.Contains("{loc:Str " + labelKey + "}", row.Value);
-        Assert.Contains("{loc:Str " + tipKey + "}", row.Value);
-
-        // Exactly one row per window. A second surface for the same launcher is how the Media Log
-        // "unseen" badge ends up armed forever: only the Assets tab's own button banks the count.
-        Assert.Single(Regex.Matches(MainWindowXaml(), "x:Name=\"" + buttonName + "\""));
-
-        // The handler has to exist somewhere in the product. XAML Click= is compile-checked, so
-        // this is belt-and-braces — but it is also the assertion that fails loudly if someone
-        // "simplifies" a row by pointing it at a new duplicate launcher instead of the real one.
         var sources = SourceRoots.EnumerateProductSources("*.cs");
-
         var found = sources.Any(f => Regex.IsMatch(File.ReadAllText(f), @"\bvoid\s+" + handler + @"\s*\("));
-        Assert.True(found, handler + " is bound in MainWindow.xaml but defined nowhere");
+        Assert.True(found, handler + " is defined nowhere: the Library pill has nothing to open");
     }
 
     [Fact]
     public void AssetsStaysTheLibraryDoorsFirstRow()
     {
-        // NavDoorMap routes the door header to "assets"; ShowTab then moves the active indicator
-        // onto whichever row owns that key. If a launcher were first, the door would open with the
-        // indicator on the second row — the rail would look like it navigated somewhere it didn't.
-        var names = Regex.Matches(LibraryDoorPanel(), "<Button x:Name=\"(\\w+)\"")
-                         .Select(m => m.Groups[1].Value).ToArray();
-        Assert.Equal("BtnOpenAssetsTop", names.First());
-        Assert.Equal(5, names.Length);
+        // The Library row opens Assets, and Assets is the strip's first pill.
+        var lib = ConditioningControlPanel.Services.UI.NavSections.Find("library")!;
+        Assert.Equal("assets", lib.DefaultTab);
+        Assert.Equal("assets", lib.Tabs.First().Key);
     }
 
     [Fact]
@@ -136,10 +116,12 @@ public class YouLibraryDoorTests
     {
         // A rail row that claims a key the app has no view for leaves the active indicator
         // pointing at nothing. These four open a dialog, a website, a dialog and a window.
-        var nav = ReadSource("MainWindow", "MainWindow.TabNavigation.cs");
-        var row = Regex.Match(nav, @"\(""library"",\s*""assets"",\s*new\[\]\s*\{([^}]*)\}");
-        Assert.True(row.Success, "the NavDoorMap row for the Library door has moved or changed shape");
-        Assert.Equal("\"assets\"", row.Groups[1].Value.Trim());
+        // Nav rework (2026-10-06): NavSections is the map; the four are Launcher tabs, which
+        // the strip opens through OpenLibraryLauncher and ShowTab never sees.
+        var lib = ConditioningControlPanel.Services.UI.NavSections.Find("library")!;
+        Assert.Equal("assets", lib.DefaultTab);
+        foreach (var key in new[] { "mods", "catalogue", "phrases", "medialog" })
+            Assert.Equal(ConditioningControlPanel.Services.UI.NavTabKind.Launcher, lib.Tabs.Single(t => t.Key == key).Kind);
     }
 
     [Fact]
@@ -212,7 +194,6 @@ public class YouLibraryDoorTests
         // RequiresTab steps, RegisterTabFx and the Ctrl+K palette all spell it "enhancements".
         var nav = ReadSource("MainWindow", "MainWindow.TabNavigation.cs");
         Assert.Contains("\"enhancements\"", nav);
-        Assert.Contains("x:Name=\"BtnEnhancements\"", MainWindowXaml());
 
         var tutorial = ReadSource("Services", "TutorialService.cs");
         Assert.Contains("[\"BtnEnhancements\"] = \"enhancements\"", tutorial);
@@ -261,24 +242,26 @@ public class YouLibraryDoorTests
     [Fact]
     public void EveryRailRowIsSubscribedToTheIconHoverNudge()
     {
-        // MainWindow.ChromeFx.NavButtons is the ONLY thing that wires a rail row to the nudge.
-        // The list is null-tolerant, so an omission is silent: the row keeps the style's hover
-        // background and simply never moves. Phase 4's BtnNavStudio sat outside it for two phases.
+        // Nav rework (2026-10-06): the rail rows are the section buttons (Door*). ChromeFx's
+        // NavButtons wires the nudge; the new Social row is wired in MainWindow.NavRail.cs until
+        // that list carries it. An omission is silent (the row just never moves), hence this test.
         var xaml = MainWindowXaml();
-        var rows = Regex.Matches(xaml, "<StackPanel x:Name=\"DoorEntries\\w+\".*?</StackPanel>\\s*</Border>",
-                                 RegexOptions.Singleline)
-                        .SelectMany(p => Regex.Matches(p.Value, "<Button x:Name=\"(\\w+)\"")
-                                              .Select(b => b.Groups[1].Value))
-                        .ToArray();
-        Assert.True(rows.Length >= 25, "the door panels stopped parsing — found only " + rows.Length + " rows");
+        var sidebar = Regex.Match(xaml, @"x:Name=""NavSidebar"".*?<!-- Header Bar", RegexOptions.Singleline);
+        Assert.True(sidebar.Success, "the NavSidebar block stopped parsing");
+        var rows = Regex.Matches(sidebar.Value, @"<Button x:Name=""(Door\w+)""").Select(b => b.Groups[1].Value).ToArray();
+        Assert.Equal(8, rows.Length);
 
         var chromeFx = ReadSource("MainWindow", "MainWindow.ChromeFx.cs");
         var list = Regex.Match(chromeFx, @"IEnumerable<Button> NavButtons.*?return all", RegexOptions.Singleline);
         Assert.True(list.Success, "the NavButtons list has changed shape");
+        var navRail = ReadSource("MainWindow", "MainWindow.NavRail.cs");
+        bool socialWiredHere = navRail.Contains("ReferenceEquals(btn, DoorSocial)", StringComparison.Ordinal)
+                               && navRail.Contains("btn.MouseEnter += NavButton_MouseEnter", StringComparison.Ordinal);
 
-        var missing = rows.Where(r => !Regex.IsMatch(list.Value, @"\b" + r + @"\b")).ToArray();
+        var missing = rows.Where(r => !Regex.IsMatch(list.Value, @"\b" + r + @"\b")
+                                      && !(r == "DoorSocial" && socialWiredHere)).ToArray();
         Assert.True(missing.Length == 0,
-            "rail rows missing from ChromeFx.NavButtons (no hover nudge): " + string.Join(", ", missing));
+            "rail rows with no hover nudge: " + string.Join(", ", missing));
     }
 
     // =====================================================================================
@@ -286,26 +269,23 @@ public class YouLibraryDoorTests
     // =====================================================================================
 
     [Fact]
-    public void TheLibraryPaletteRowsPointAtElementsThatExist()
+    public void TheLibraryPaletteRowsOpenTheLaunchersThemselves()
     {
-        // Navigate() logs a miss at Debug and returns — correct behaviour, invisible in review.
-        var palette = ReadSource("Services", "SettingsPaletteIndex.cs");
-        var xaml = MainWindowXaml();
+        // Nav rework (2026-10-06): the rail rows these rows used to pulse are gone. Each row now
+        // carries a LauncherKey that MainWindow.OpenLibraryLauncher handles; an unhandled key
+        // would fall back to the Assets page and open nothing, silently.
+        var chrome = ReadSource("MainWindow", "MainWindow.SectionChrome.cs");
         var en = Language("en.json");
+        var rows = SettingsPaletteIndex.All.Where(e => e.Id.StartsWith("launch.", StringComparison.Ordinal)).ToList();
 
-        // Explicitly Match, not var: MatchCollection's pattern-based GetEnumerator is the
-        // non-generic one, so `var` here binds to object.
-        foreach (Match launcher in Regex.Matches(palette, @"Launcher\(""(\w+)"",\s*""(\w+)"",\s*""[^""]+"",\s*""(\w+)"""))
+        foreach (var row in rows)
         {
-            var id = launcher.Groups[1].Value;
-            var labelKey = launcher.Groups[2].Value;
-            var element = launcher.Groups[3].Value;
-
-            Assert.True(en.ContainsKey(labelKey), $"palette row launch.{id} labels itself with the unknown key {labelKey}");
-            Assert.Contains("x:Name=\"" + element + "\"", xaml);
+            Assert.True(en.ContainsKey(row.LabelKey), $"palette row {row.Id} labels itself with the unknown key {row.LabelKey}");
+            Assert.False(string.IsNullOrEmpty(row.LauncherKey), $"palette row {row.Id} has no LauncherKey");
+            Assert.Contains("case \"" + row.LauncherKey + "\":", chrome);
         }
 
         // All four, not three: a dropped row is a feature nobody can search for.
-        Assert.Equal(4, Regex.Matches(palette, @"\n\s*Launcher\(""").Count);
+        Assert.Equal(4, rows.Count);
     }
 }

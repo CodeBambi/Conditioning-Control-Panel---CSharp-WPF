@@ -8,8 +8,17 @@
              MouseRightButtonUp="OnRightClick">
 
     <Grid>
-        <Border x:Name="DepthSocket" Margin="6,9,6,2" CornerRadius="12" Background="#FF080811"
-                BorderBrush="#803B3B55" BorderThickness="1,1,1,2" Visibility="Collapsed" IsHitTestVisible="False"/>
+        <!-- The socket a mosaic tile sits in: a SUNKEN well (polish wave 10), the well floor
+             with its top band, left band and lit foot, so an on tile reads as pressed into it. -->
+        <Border x:Name="DepthSocket" Margin="6,9,6,2" CornerRadius="12" Background="{DynamicResource DepthWellFloorBrush}"
+                BorderBrush="{DynamicResource DepthPressedBevel}" BorderThickness="1" ClipToBounds="True"
+                Visibility="Collapsed" IsHitTestVisible="False">
+            <Grid>
+                <Rectangle Fill="{DynamicResource DepthWellTop}" Height="9" VerticalAlignment="Top" RadiusX="11" RadiusY="11"/>
+                <Rectangle Fill="{DynamicResource DepthWellLeft}" Width="6" HorizontalAlignment="Left"/>
+                <Rectangle Fill="{DynamicResource DepthWellFoot}" Height="1" VerticalAlignment="Bottom"/>
+            </Grid>
+        </Border>
         <Grid x:Name="PressFace">
     <!-- ContentRoot owns the rounded clip. Leave the outer glow unclipped so it has no square cutoff. -->
     <Border x:Name="RootBorder"
@@ -217,16 +226,12 @@
                 </Border>
             </StackPanel>
 
-            <Border x:Name="DepthBevel" CornerRadius="11" BorderThickness="1,2,1,1"
-                    IsHitTestVisible="False" Visibility="Collapsed">
-                <Border.BorderBrush>
-                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-                        <GradientStop Color="#80FFFFFF" Offset="0"/>
-                        <GradientStop Color="#10FFFFFF" Offset="0.45"/>
-                        <GradientStop Color="#C0000000" Offset="1"/>
-                    </LinearGradientBrush>
-                </Border.BorderBrush>
-            </Border>
+            <!-- The shared lamp (polish wave 10): a 1 px bevel, DepthRaisedBevel while the tile
+                 stands off its socket, DepthPressedBevel while it is on or pressed. The brush is
+                 swapped by Services/UI/DashboardCardDepth.Refresh; this is the resting look. -->
+            <Border x:Name="DepthBevel" CornerRadius="11" BorderThickness="1"
+                    BorderBrush="{DynamicResource DepthRaisedBevel}"
+                    IsHitTestVisible="False" Visibility="Collapsed"/>
             <!-- Help icon overlay (top-right corner) -->
             <Button x:Name="BtnHelp"
                     Style="{DynamicResource HelpButtonStyle}"
