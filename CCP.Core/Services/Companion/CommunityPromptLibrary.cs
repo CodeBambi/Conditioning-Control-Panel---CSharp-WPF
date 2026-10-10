@@ -22,6 +22,11 @@ namespace ConditioningControlPanel.Services
     internal sealed class CommunityPromptLibrary : IDisposable
     {
         private readonly HttpClient _httpClient;
+        private readonly bool _realTransport;
+
+        /// <summary>Offline mode, or the real network from a sandbox (SandboxNet, as Chaster and the
+        /// catalogue fail closed): the cache only, no request is made.</summary>
+        private bool NetworkOff => SandboxNet.FeedBlocked(Settings?.OfflineMode == true, _realTransport);
         private readonly string _promptsFolder;
         private readonly string _manifestCachePath;
         private List<CommunityPromptManifestEntry> _availablePrompts = new();
@@ -51,6 +56,7 @@ namespace ConditioningControlPanel.Services
         /// <param name="handler">Tests: the transport. Null = the network.</param>
         public CommunityPromptLibrary(string? promptsFolder = null, HttpMessageHandler? handler = null)
         {
+            _realTransport = handler == null;
             _httpClient = handler == null ? new HttpClient() : new HttpClient(handler, disposeHandler: false);
             _httpClient.Timeout = TimeSpan.FromSeconds(30);
 
@@ -67,9 +73,9 @@ namespace ConditioningControlPanel.Services
         /// <summary>Fetches the available community prompts. Offline mode: the cache only.</summary>
         public async Task<List<CommunityPromptManifestEntry>> GetAvailablePromptsAsync(bool forceRefresh = false)
         {
-            if (Settings?.OfflineMode == true)
+            if (NetworkOff)
             {
-                Log.Debug("Offline mode enabled, using cached prompts only");
+                Log.Debug("Offline mode or sandbox, using cached prompts only");
                 return _availablePrompts;
             }
 
@@ -124,9 +130,9 @@ namespace ConditioningControlPanel.Services
         /// <summary>Downloads and installs a community prompt by id. Blocked in offline mode.</summary>
         public async Task<CommunityPrompt?> InstallPromptAsync(string promptId)
         {
-            if (Settings?.OfflineMode == true)
+            if (NetworkOff)
             {
-                Log.Information("Offline mode enabled, prompt download blocked");
+                Log.Information("Offline mode or sandbox, prompt download blocked");
                 return null;
             }
             if (!IsSafeId(promptId)) return null;

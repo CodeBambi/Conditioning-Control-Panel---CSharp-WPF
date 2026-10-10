@@ -26,6 +26,16 @@ namespace ConditioningControlPanel.Services.Billboard.Showcase
         private readonly string _root;
         private readonly Uri _manifestUri;
         private readonly HttpClient _http;
+        private readonly bool _realTransport;
+
+        /// <summary>hunt3 IC9: no request in Offline mode, and none on the real transport from a
+        /// CCP_USERDATA_DIR sandbox (SandboxNet). What is already on disk still plays.</summary>
+        internal bool NetworkOff =>
+            ConditioningControlPanel.Services.SandboxNet.FeedBlocked(OfflineMode(), _realTransport);
+
+        /// <summary>Test seam: the Offline-mode switch.</summary>
+        internal static Func<bool> OfflineMode { get; set; } =
+            () => ConditioningControlPanel.CoreSettings.Service?.Current?.OfflineMode == true;
         private readonly ConcurrentDictionary<string, Task<bool>> _inFlight = new(StringComparer.OrdinalIgnoreCase);
         private readonly ConcurrentDictionary<string, bool> _verified = new(StringComparer.OrdinalIgnoreCase);
 
@@ -34,6 +44,7 @@ namespace ConditioningControlPanel.Services.Billboard.Showcase
             _root = root;
             _manifestUri = manifestUri;
             _http = http ?? SharedHttp;
+            _realTransport = http == null;
         }
 
         public string Root => _root;
@@ -147,6 +158,7 @@ namespace ConditioningControlPanel.Services.Billboard.Showcase
         /// <summary>Reads a response body up to <paramref name="cap"/> bytes; null when it is bigger or fails.</summary>
         private async Task<byte[]?> DownloadAsync(Uri uri, long cap, CancellationToken ct)
         {
+            if (NetworkOff) return null;   // the one door every manifest and clip fetch goes through
             using var resp = await _http.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
             if (!resp.IsSuccessStatusCode) return null;
             if (resp.Content.Headers.ContentLength is long declared && declared > cap) return null;
