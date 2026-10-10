@@ -1,5 +1,6 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:depth="clr-namespace:ConditioningControlPanel.Controls">
 
     <!-- ============================================================
          Velvet Kit 2 · FX lane A — "make lines pop".
@@ -101,49 +102,74 @@
         <Setter Property="BorderThickness" Value="0"/>
         <Setter Property="Template">
             <Setter.Value>
+                <!-- Depth (nav polish wave 10, lane B): opt-in through depth:HudPlank.Kind="Plank"
+                     (Save on the START row). It adds a drop band (DepthDrop), the lamp's sheen and
+                     bevel over the plate, and lets HudPlank.cs move the face (DepthFace); the old
+                     0.97 press squash then stands down so a press is ONE motion, the travel. -->
                 <ControlTemplate TargetType="Button">
-                    <Border x:Name="border" CornerRadius="8" Padding="{TemplateBinding Padding}"
-                            Background="{TemplateBinding Background}"
-                            RenderTransformOrigin="0.5,0.5">
-                        <Border.RenderTransform>
-                            <ScaleTransform x:Name="borderScale" ScaleX="1" ScaleY="1"/>
-                        </Border.RenderTransform>
-                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                    </Border>
+                    <Grid>
+                        <Border x:Name="DepthDrop" VerticalAlignment="Bottom" Height="5" Margin="6,0,6,-5"
+                                CornerRadius="0,0,7,7" Background="{DynamicResource DepthDropBand}"
+                                IsHitTestVisible="False" Visibility="Collapsed"/>
+                        <Grid x:Name="DepthFace">
+                            <Border x:Name="border" CornerRadius="8" Padding="{TemplateBinding Padding}"
+                                    Background="{TemplateBinding Background}"
+                                    RenderTransformOrigin="0.5,0.5">
+                                <Border.RenderTransform>
+                                    <ScaleTransform x:Name="borderScale" ScaleX="1" ScaleY="1"/>
+                                </Border.RenderTransform>
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <Border x:Name="DepthSheen" CornerRadius="8" Background="{DynamicResource DepthRaisedSheen}"
+                                    IsHitTestVisible="False" Visibility="Collapsed"/>
+                            <Border x:Name="DepthBevel" CornerRadius="8" BorderThickness="1"
+                                    BorderBrush="{DynamicResource DepthRaisedBevel}"
+                                    IsHitTestVisible="False" Visibility="Collapsed"/>
+                        </Grid>
+                    </Grid>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="border" Property="Background" Value="{DynamicResource PanelAccentHoverBrush}"/>
                         </Trigger>
-                        <Trigger Property="IsPressed" Value="True">
-                            <Trigger.EnterActions>
-                                <BeginStoryboard>
-                                    <Storyboard>
-                                        <DoubleAnimation Storyboard.TargetName="borderScale" Storyboard.TargetProperty="ScaleX"
-                                                         To="0.97" Duration="0:0:0.08"/>
-                                        <DoubleAnimation Storyboard.TargetName="borderScale" Storyboard.TargetProperty="ScaleY"
-                                                         To="0.97" Duration="0:0:0.08"/>
-                                    </Storyboard>
-                                </BeginStoryboard>
-                            </Trigger.EnterActions>
-                            <Trigger.ExitActions>
-                                <BeginStoryboard>
-                                    <Storyboard>
-                                        <DoubleAnimation Storyboard.TargetName="borderScale" Storyboard.TargetProperty="ScaleX"
-                                                         To="1.0" Duration="0:0:0.15">
-                                            <DoubleAnimation.EasingFunction>
-                                                <BackEase Amplitude="0.3" EasingMode="EaseOut"/>
-                                            </DoubleAnimation.EasingFunction>
-                                        </DoubleAnimation>
-                                        <DoubleAnimation Storyboard.TargetName="borderScale" Storyboard.TargetProperty="ScaleY"
-                                                         To="1.0" Duration="0:0:0.15">
-                                            <DoubleAnimation.EasingFunction>
-                                                <BackEase Amplitude="0.3" EasingMode="EaseOut"/>
-                                            </DoubleAnimation.EasingFunction>
-                                        </DoubleAnimation>
-                                    </Storyboard>
-                                </BeginStoryboard>
-                            </Trigger.ExitActions>
+                        <Trigger Property="depth:HudPlank.Kind" Value="Plank">
+                            <Setter TargetName="DepthDrop" Property="Visibility" Value="Visible"/>
+                            <Setter TargetName="DepthSheen" Property="Visibility" Value="Visible"/>
+                            <Setter TargetName="DepthBevel" Property="Visibility" Value="Visible"/>
                         </Trigger>
+                        <MultiTrigger>
+                            <MultiTrigger.Conditions>
+                                <Condition Property="IsPressed" Value="True"/>
+                                <Condition Property="depth:HudPlank.Kind" Value="None"/>
+                            </MultiTrigger.Conditions>
+                            <MultiTrigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="borderScale" Storyboard.TargetProperty="ScaleX"
+                                                         To="0.97" Duration="0:0:0.08"/>
+                                        <DoubleAnimation Storyboard.TargetName="borderScale" Storyboard.TargetProperty="ScaleY"
+                                                         To="0.97" Duration="0:0:0.08"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </MultiTrigger.EnterActions>
+                            <MultiTrigger.ExitActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="borderScale" Storyboard.TargetProperty="ScaleX"
+                                                         To="1.0" Duration="0:0:0.15">
+                                            <DoubleAnimation.EasingFunction>
+                                                <BackEase Amplitude="0.3" EasingMode="EaseOut"/>
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                        <DoubleAnimation Storyboard.TargetName="borderScale" Storyboard.TargetProperty="ScaleY"
+                                                         To="1.0" Duration="0:0:0.15">
+                                            <DoubleAnimation.EasingFunction>
+                                                <BackEase Amplitude="0.3" EasingMode="EaseOut"/>
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </MultiTrigger.ExitActions>
+                        </MultiTrigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
@@ -351,16 +377,50 @@
         <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
         <Setter Property="Template">
             <Setter.Value>
+                <!-- Depth (nav polish wave 10, lane B): opt-in through depth:HudPlank.Kind, so every
+                     PinkButton without it draws exactly as before. With it the plate is a raised
+                     PLANK: a drop band under it (DepthDrop, sized and pressed by HudPlank.cs), the
+                     lamp's bevel and sheen over the plate colour, the label above both, and the
+                     whole face (DepthFace) travels on hover / press / release. Depth brushes are
+                     DynamicResource: Depth.xaml merges after this dictionary. -->
                 <ControlTemplate TargetType="Button">
-                    <Border Background="{TemplateBinding Background}"
-                        BorderBrush="{TemplateBinding BorderBrush}"
-                        BorderThickness="{TemplateBinding BorderThickness}"
-                        CornerRadius="8" Padding="{TemplateBinding Padding}">
-                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                    </Border>
+                    <Grid>
+                        <Border x:Name="DepthDrop" VerticalAlignment="Bottom" Height="5" Margin="6,0,6,-5"
+                                CornerRadius="0,0,7,7" Background="{DynamicResource DepthDropBand}"
+                                IsHitTestVisible="False" Visibility="Collapsed"/>
+                        <Grid x:Name="DepthFace">
+                            <Border x:Name="Plate" Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="8"/>
+                            <Border x:Name="DepthSheen" CornerRadius="8" Background="{DynamicResource DepthRaisedSheen}"
+                                    IsHitTestVisible="False" Visibility="Collapsed"/>
+                            <Border x:Name="DepthBevel" CornerRadius="8" BorderThickness="1"
+                                    BorderBrush="{DynamicResource DepthRaisedBevel}"
+                                    IsHitTestVisible="False" Visibility="Collapsed"/>
+                            <Border BorderThickness="{TemplateBinding BorderThickness}" BorderBrush="Transparent"
+                                    Padding="{TemplateBinding Padding}">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                        </Grid>
+                    </Grid>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter Property="Background" Value="{DynamicResource DarkPinkBrush}"/>
+                        </Trigger>
+                        <Trigger Property="depth:HudPlank.Kind" Value="Plank">
+                            <Setter TargetName="DepthDrop" Property="Visibility" Value="Visible"/>
+                            <Setter TargetName="DepthSheen" Property="Visibility" Value="Visible"/>
+                            <Setter TargetName="DepthBevel" Property="Visibility" Value="Visible"/>
+                            <Setter TargetName="Plate" Property="BorderThickness" Value="0"/>
+                        </Trigger>
+                        <Trigger Property="depth:HudPlank.Kind" Value="Chunky">
+                            <Setter TargetName="DepthDrop" Property="Visibility" Value="Visible"/>
+                            <Setter TargetName="DepthSheen" Property="Visibility" Value="Visible"/>
+                            <Setter TargetName="DepthSheen" Property="Background" Value="{DynamicResource DepthPlankSheen}"/>
+                            <Setter TargetName="DepthBevel" Property="Visibility" Value="Visible"/>
+                            <Setter TargetName="DepthBevel" Property="BorderBrush" Value="{DynamicResource DepthPlankBevel}"/>
+                            <Setter TargetName="Plate" Property="BorderThickness" Value="0"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>

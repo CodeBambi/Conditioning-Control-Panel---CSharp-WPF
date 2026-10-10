@@ -129,63 +129,19 @@ namespace ConditioningControlPanel
             if (_isLoading) return;
             var enabled = AppSettingsTab.ChkEnableDeeper.IsChecked ?? true;
             if (App.Settings?.Current is { } s) s.EnableDeeper = enabled;
-            if (BtnDeeper != null) BtnDeeper.Visibility = enabled ? Visibility.Visible : Visibility.Collapsed;
             // If the user just disabled Deeper while it's the active tab, fall back to Settings.
             if (!enabled && DeeperTab?.Visibility == Visibility.Visible) ShowTab("settings");
             App.Settings?.Save();
         }
 
-        private bool _deeperPulseRunning;
-
         private void StartDeeperTabPulse()
         {
-            // Same story as the Programs pulse: Phase 1 moved BtnDeeper into DoorPanelPlay, which is
-            // ClipToBounds at Height 0 unless the Play door is open, so on a first launch (rail opens
-            // on Home) this scale would be invisible. Escalate to the door header when it is shut.
-            if (StartNavDoorHeaderPulse("deeper")) return;
-
-            if (BtnDeeperScale == null || _deeperPulseRunning) return;
-            _deeperPulseRunning = true;
-            var anim = new System.Windows.Media.Animation.DoubleAnimation
-            {
-                From = 1.0,
-                To = 1.12,
-                Duration = TimeSpan.FromMilliseconds(700),
-                AutoReverse = true,
-                RepeatBehavior = new System.Windows.Media.Animation.RepeatBehavior(4),
-                EasingFunction = new System.Windows.Media.Animation.SineEase
-                {
-                    EasingMode = System.Windows.Media.Animation.EasingMode.EaseInOut
-                }
-            };
-            anim.Completed += (_, _) =>
-            {
-                _deeperPulseRunning = false;
-                if (BtnDeeperScale != null)
-                {
-                    BtnDeeperScale.ScaleX = 1.0;
-                    BtnDeeperScale.ScaleY = 1.0;
-                }
-            };
-            BtnDeeperScale.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, anim);
-            BtnDeeperScale.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, anim);
+            // Nav rework (2026-10-06): the Deeper row left the rail; the announcement rides the
+            // Play section row (a bounded four-beat pulse, not a loop).
+            StartNavDoorHeaderPulse("deeper");
         }
 
-        private void StopDeeperTabPulse()
-        {
-            // The announcement may be riding the Play door's header rather than this button.
-            StopNavDoorHeaderPulse("deeper");
-
-            if (!_deeperPulseRunning && BtnDeeperScale == null) return;
-            _deeperPulseRunning = false;
-            if (BtnDeeperScale != null)
-            {
-                BtnDeeperScale.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, null);
-                BtnDeeperScale.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, null);
-                BtnDeeperScale.ScaleX = 1.0;
-                BtnDeeperScale.ScaleY = 1.0;
-            }
-        }
+        private void StopDeeperTabPulse() => StopNavDoorHeaderPulse("deeper");
 
         internal void BtnDeeperNewEnhancement_Click(object sender, RoutedEventArgs e)
         {

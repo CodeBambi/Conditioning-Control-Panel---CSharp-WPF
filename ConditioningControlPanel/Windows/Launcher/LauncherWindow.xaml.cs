@@ -566,8 +566,36 @@ public partial class LauncherWindow : Window
                 ? VerticalAlignment.Top
                 : VerticalAlignment.Center;
             if (GamesGrid.VerticalAlignment != seat) GamesGrid.VerticalAlignment = seat;
+            if (seat == VerticalAlignment.Top) GrowToFitTiles(available, height);
         }
         catch (Exception ex) { Log.Debug(ex, "[Launcher] tile fit failed"); }
+    }
+
+    private bool _grewToFitTiles;
+
+    /// <summary>
+    /// 7.1.5: the default 1280x800 cut the third row of tiles off. The first time the tiles
+    /// overflow, the window grows (once per window, so it never fights a hand resize) by the
+    /// overflow, capped at the monitor's work area, and stays centred on it. A short screen keeps
+    /// the scroller.
+    /// </summary>
+    private void GrowToFitTiles(double available, double gridHeight)
+    {
+        if (_grewToFitTiles || WindowState != WindowState.Normal || !IsVisible) return;
+        _grewToFitTiles = true;
+        var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+        if (hwnd == IntPtr.Zero) return;
+        var wa = System.Windows.Forms.Screen.FromHandle(hwnd).WorkingArea;
+        double dpiY = VisualTreeHelper.GetDpi(this).DpiScaleY;
+        if (dpiY <= 0) dpiY = 1;
+        double waTop = wa.Top / dpiY, waHeight = wa.Height / dpiY;
+        double old = ActualHeight > 0 ? ActualHeight : Height;
+        double grown = LauncherGridLayout.FitWindowHeight(old, available, gridHeight, waHeight);
+        if (grown <= old + 0.5) return;
+        double top = Top - (grown - old) / 2;
+        Height = grown;
+        Top = Math.Max(waTop, Math.Min(top, waTop + waHeight - grown));
+        Log.Debug("[Launcher] grew {Old:0} -> {New:0} px to seat every tile row", old, grown);
     }
 
     // ------------------------------------------------------------------ the stats strip

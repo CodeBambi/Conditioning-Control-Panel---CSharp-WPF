@@ -261,9 +261,8 @@
                     <Image Grid.Column="0" Width="15" Height="15" Margin="0,0,10,0" VerticalAlignment="Center"
                            Source="{Binding Source='🔥', Converter={StaticResource CmpEmojiToImage}}"/>
                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                        <TextBlock Text="{Binding SpiceTitle}" FontSize="12.5" Foreground="White"/>
-                        <TextBlock Text="{Binding SpiceSubtitle}" FontSize="10" Margin="0,1,0,0"
-                                   Foreground="{StaticResource CmpFaintBrush}" TextWrapping="Wrap"/>
+                        <TextBlock Text="{Binding SpiceTitle}" Style="{StaticResource Type.Body}" Foreground="{DynamicResource TextLightBrush}" TextWrapping="NoWrap"/>
+                        <TextBlock Text="{Binding SpiceSubtitle}" Style="{StaticResource Type.Caption}" Margin="0,1,0,0"/>
                     </StackPanel>
                     <ToggleButton Grid.Column="2" Style="{StaticResource CmpToggleSwitchStyle}"
                                   VerticalAlignment="Center" ToolTip="{Binding SpiceSubtitle}"
@@ -277,8 +276,7 @@
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0" Text="{Binding ActivePersonalityLine}" FontSize="11"
-                           Foreground="{StaticResource CmpMutedBrush}" TextWrapping="Wrap"/>
+                <TextBlock Grid.Column="0" Text="{Binding ActivePersonalityLine}" Style="{StaticResource Type.Body}"/>
                 <Button Grid.Column="1" Content="{Binding ResetLabel}" Style="{StaticResource CmpLinkButtonStyle}"
                         Command="{Binding ResetPersonalityCommand}" Padding="8,2,0,2"
                         Visibility="{Binding CanResetPersonality, Converter={StaticResource CmpBoolToVis}}"/>

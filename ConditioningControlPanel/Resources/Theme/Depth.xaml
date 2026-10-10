@@ -1,0 +1,185 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- The depth pass (nav polish wave 10, 2026-10-06). One lamp, top-left. Three heights:
+         Raised (you press it), Floating (you read it), Sunken (it holds things). The numbers are
+         pinned in Controls/Depth/DepthRules.cs; these brushes are those numbers as paint. No
+         Effect anywhere: bevels are 1 px gradient borders, shadows are gradient rectangles and
+         ellipses UNDER the element, wells are inner bands on the frame. Motion Off looks the same.
+
+         Shadows here are the NEUTRAL ink. A lane that knows its section hue paints its own shadow
+         from DepthRules.ShadowColor(hue) instead (the owner's default is a hue-tinted shadow).
+
+         How to compose a RAISED thing (chip, coin, plank, pill):
+           Grid
+             Rectangle/Ellipse  Fill=DepthDropBand (or DepthDropDisc for a coin), Margin pushes it
+                                RaisedPx down, IsHitTestVisible=False
+             Border  Background=the plate colour, BorderBrush=DepthRaisedBevel, BorderThickness=1
+               Border  Background=DepthRaisedSheen (the lit top)  >  content
+           Pressed: swap bevel to DepthPressedBevel, sheen to DepthPressedShade, drop the shadow,
+           TranslateTransform Y = DepthRules.TravelFor(...).
+
+         How to compose a SUNKEN thing (track, well, tray, bezel screen):
+           Border  Background=the well floor, CornerRadius as the owner
+             Grid
+               content
+               Rectangle  Fill=DepthWellTop   Height=9  VerticalAlignment=Top    (hit-test off)
+               Rectangle  Fill=DepthWellLeft  Width=6   HorizontalAlignment=Left
+               Rectangle  Fill=DepthWellFoot  Height=1  VerticalAlignment=Bottom
+           For a WebView2 screen the three bands go on the BEZEL ring around the screen's rect,
+           never over it (airspace).
+
+         How to compose a FLOATING thing (card, quest row, lobby table):
+           Grid
+             Border  Fill=DepthFloatBand  Height=12  VerticalAlignment=Bottom  Margin=6,0,6,-8
+             Border  Background=plate, BorderBrush=DepthFloatRim, BorderThickness=1  >  content
+
+         A LEDGE (toolbar under a screen): DepthLedgeUp as a Rectangle ABOVE the ledge, inside the
+         well it shades, plus DepthRaisedSheen on the ledge's own top edge. -->
+
+    <!-- Lamp: lit top edge and shaded bottom edge of a raised face. -->
+    <Color x:Key="DepthHighlight">#42FFFFFF</Color>
+    <Color x:Key="DepthShade">#80000000</Color>
+    <SolidColorBrush x:Key="DepthHighlightBrush" Color="#42FFFFFF"/>
+    <SolidColorBrush x:Key="DepthShadeBrush" Color="#80000000"/>
+
+    <!-- RAISED: bevel for BorderThickness="1" (top catches the lamp, bottom shades). -->
+    <LinearGradientBrush x:Key="DepthRaisedBevel" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Offset="0.0" Color="#42FFFFFF"/>
+        <GradientStop Offset="0.5" Color="#10FFFFFF"/>
+        <GradientStop Offset="1.0" Color="#80000000"/>
+    </LinearGradientBrush>
+    <!-- RAISED: the sheen laid over the plate from its top (SheenAlpha 0.09, gone by 55%). -->
+    <LinearGradientBrush x:Key="DepthRaisedSheen" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Offset="0.00" Color="#17FFFFFF"/>
+        <GradientStop Offset="0.55" Color="#00FFFFFF"/>
+    </LinearGradientBrush>
+    <!-- RAISED, strong: the START plank only (StartPx). -->
+    <LinearGradientBrush x:Key="DepthPlankSheen" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Offset="0.00" Color="#47FFFFFF"/>
+        <GradientStop Offset="0.50" Color="#00FFFFFF"/>
+        <GradientStop Offset="1.00" Color="#2E000000"/>
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="DepthPlankBevel" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Offset="0.0" Color="#80FFFFFF"/>
+        <GradientStop Offset="0.5" Color="#14FFFFFF"/>
+        <GradientStop Offset="1.0" Color="#A6000000"/>
+    </LinearGradientBrush>
+
+    <!-- PRESSED / ON: the face sits in its socket. Dark band inside the top, a faint lit foot. -->
+    <LinearGradientBrush x:Key="DepthPressedBevel" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Offset="0.0" Color="#99000000"/>
+        <GradientStop Offset="0.5" Color="#26000000"/>
+        <GradientStop Offset="1.0" Color="#12FFFFFF"/>
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="DepthPressedShade" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Offset="0.00" Color="#2E000000"/>
+        <GradientStop Offset="0.60" Color="#00000000"/>
+    </LinearGradientBrush>
+
+    <!-- Drop shadows UNDER a raised thing (neutral ink, ShadowAlpha 0.62 at the contact edge). -->
+    <LinearGradientBrush x:Key="DepthDropBand" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Offset="0.0" Color="#9E06020F"/>
+        <GradientStop Offset="1.0" Color="#0006020F"/>
+    </LinearGradientBrush>
+    <RadialGradientBrush x:Key="DepthDropDisc" Center="0.5,0.5" GradientOrigin="0.5,0.5" RadiusX="0.5" RadiusY="0.5">
+        <GradientStop Offset="0.0" Color="#9E06020F"/>
+        <GradientStop Offset="0.6" Color="#5C06020F"/>
+        <GradientStop Offset="1.0" Color="#0006020F"/>
+    </RadialGradientBrush>
+
+    <!-- SUNKEN: inner bands on a well's frame. Top is the strongest (the lamp is above). -->
+    <LinearGradientBrush x:Key="DepthWellTop" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Offset="0.0" Color="#A6000000"/>
+        <GradientStop Offset="1.0" Color="#00000000"/>
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="DepthWellLeft" StartPoint="0,0" EndPoint="1,0">
+        <GradientStop Offset="0.0" Color="#59000000"/>
+        <GradientStop Offset="1.0" Color="#00000000"/>
+    </LinearGradientBrush>
+    <SolidColorBrush x:Key="DepthWellFoot" Color="#12FFFFFF"/>
+    <!-- A well's floor: deeper than SurfaceBg so the page reads as the sheet above it. -->
+    <SolidColorBrush x:Key="DepthWellFloorBrush" Color="#FF120D20"/>
+
+    <!-- FLOATING: a card's rim and the soft band under it (FloatAlpha 0.40, FloatPx long). -->
+    <LinearGradientBrush x:Key="DepthFloatRim" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Offset="0.0" Color="#1AFFFFFF"/>
+        <GradientStop Offset="1.0" Color="#33000000"/>
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="DepthFloatBand" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Offset="0.0" Color="#6606020F"/>
+        <GradientStop Offset="1.0" Color="#0006020F"/>
+    </LinearGradientBrush>
+
+    <!-- LEDGE: shadow thrown UPWARD onto the screen above a toolbar (LedgeUpAlpha 0.70). -->
+    <LinearGradientBrush x:Key="DepthLedgeUp" StartPoint="0,1" EndPoint="0,0">
+        <GradientStop Offset="0.0" Color="#B3000000"/>
+        <GradientStop Offset="1.0" Color="#00000000"/>
+    </LinearGradientBrush>
+
+    <!-- RAIL: the rail column's shadow onto the page to its right (RailShadowPx wide). -->
+    <LinearGradientBrush x:Key="DepthRailShadow" StartPoint="0,0" EndPoint="1,0">
+        <GradientStop Offset="0.0" Color="#BF000000"/>
+        <GradientStop Offset="1.0" Color="#00000000"/>
+    </LinearGradientBrush>
+
+    <!-- TUBE: the glossy fill of a progress groove (XP bar, quest bars). Lay it over the fill's
+         own colour: a bright top band, clear middle, a shaded foot. -->
+    <LinearGradientBrush x:Key="DepthTubeGloss" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Offset="0.00" Color="#8CFFFFFF"/>
+        <GradientStop Offset="0.38" Color="#1FFFFFFF"/>
+        <GradientStop Offset="0.55" Color="#00000000"/>
+        <GradientStop Offset="1.00" Color="#47000000"/>
+    </LinearGradientBrush>
+    <!-- TUBE: the bead at the leading edge of a fill (an Ellipse over the fill's end).
+         Polish wave 11: CENTRED, so its glow lands where the bead is placed (the XP bead
+         hangs half past the fill, centre on the tip). The lamp still reads top-left through
+         a nudged GradientOrigin, under half a pixel on an 8 px bead; radius .5 fades it out
+         at its own edge instead of the ellipse cutting the gradient off. -->
+    <RadialGradientBrush x:Key="DepthTubeBead" Center="0.5,0.5" GradientOrigin="0.44,0.38" RadiusX="0.5" RadiusY="0.5">
+        <GradientStop Offset="0.00" Color="#FFFFFFFF"/>
+        <GradientStop Offset="0.55" Color="#80FFFFFF"/>
+        <GradientStop Offset="1.00" Color="#00FFFFFF"/>
+    </RadialGradientBrush>
+
+    <!-- COIN: the dish a rail medallion's art sits in (over the tile, under the art). -->
+    <RadialGradientBrush x:Key="DepthCoinDish" Center="0.5,0.42" GradientOrigin="0.5,0.42" RadiusX="0.6" RadiusY="0.6">
+        <GradientStop Offset="0.00" Color="#00000000"/>
+        <GradientStop Offset="0.70" Color="#1A000000"/>
+        <GradientStop Offset="1.00" Color="#66000000"/>
+    </RadialGradientBrush>
+    <!-- COIN: the rim catching the lamp (BorderThickness="1" on an Ellipse-shaped Border). -->
+    <LinearGradientBrush x:Key="DepthCoinRim" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Offset="0.0" Color="#4DFFFFFF"/>
+        <GradientStop Offset="0.5" Color="#0AFFFFFF"/>
+        <GradientStop Offset="1.0" Color="#99000000"/>
+    </LinearGradientBrush>
+
+    <!-- COIN (polish wave 11, "more 3d, less pastel"). The lit coin's socket: deeper than
+         DepthPressedShade (NavRailRules.SocketTopAlpha at the top, clear by 70%). -->
+    <LinearGradientBrush x:Key="DepthCoinSocket" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Offset="0.00" Color="#66000000"/>
+        <GradientStop Offset="0.35" Color="#26000000"/>
+        <GradientStop Offset="0.70" Color="#00000000"/>
+    </LinearGradientBrush>
+    <!-- COIN: the inner shadow ring where the art meets the dish (a BorderBrush, 2.5 px). The rim
+         overhangs the lamp side, so the top-left is the darkest. -->
+    <LinearGradientBrush x:Key="DepthCoinInnerShadow" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Offset="0.0" Color="#A6000000"/>
+        <GradientStop Offset="0.55" Color="#4D000000"/>
+        <GradientStop Offset="1.0" Color="#26000000"/>
+    </LinearGradientBrush>
+    <!-- COIN: the outer hairline that cuts the coin out of the rail (a BorderBrush, 1 px). -->
+    <LinearGradientBrush x:Key="DepthCoinOuterRim" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Offset="0.0" Color="#40000000"/>
+        <GradientStop Offset="1.0" Color="#D9000000"/>
+    </LinearGradientBrush>
+    <!-- COIN: the specular crescent's fill, bright at the top-left corner, gone past the middle
+         (NavRailRules.SpecularAlpha at the peak). Small and crisp, never a veil over the face. -->
+    <RadialGradientBrush x:Key="DepthCoinSpecular" Center="0.12,0.12" GradientOrigin="0.12,0.12" RadiusX="0.62" RadiusY="0.62">
+        <GradientStop Offset="0.00" Color="#C8FFFFFF"/>
+        <GradientStop Offset="0.45" Color="#59FFFFFF"/>
+        <GradientStop Offset="1.00" Color="#00FFFFFF"/>
+    </RadialGradientBrush>
+
+</ResourceDictionary>

@@ -110,7 +110,7 @@
                         <StackPanel VerticalAlignment="Center">
                             <helpers:EmojiTextBlock Style="{StaticResource SectionHeader}"
                                                     Foreground="{StaticResource SectionHueDevicesBrush}"
-                                                    Text="{loc:Str set2_devices_webcam_title}" FontSize="14" Margin="0"/>
+                                                    Text="{loc:Str set2_devices_webcam_title}" Margin="0"/>
                             <TextBlock Text="{loc:Str set2_devices_webcam_sub}"
                                        Foreground="{DynamicResource TextMutedBrush}" FontFamily="Consolas, Courier New" FontSize="11"/>
                         </StackPanel>
@@ -344,7 +344,7 @@
                         <StackPanel VerticalAlignment="Center">
                             <helpers:EmojiTextBlock Style="{StaticResource SectionHeader}"
                                                     Foreground="{StaticResource SectionHueDevicesBrush}"
-                                                    Text="{loc:Str set2_devices_mic_title}" FontSize="14" Margin="0"/>
+                                                    Text="{loc:Str set2_devices_mic_title}" Margin="0"/>
                             <TextBlock Text="{loc:Str set2_devices_mic_sub}"
                                        Foreground="{DynamicResource TextMutedBrush}" FontFamily="Consolas, Courier New" FontSize="11"/>
                         </StackPanel>
@@ -518,7 +518,7 @@
                         </Border>
                         <helpers:EmojiTextBlock Style="{StaticResource SectionHeader}" VerticalAlignment="Center"
                                                 Foreground="{StaticResource SectionHueDevicesBrush}"
-                                                Text="{loc:Str set2_devices_safety_title}" FontSize="14" Margin="0"/>
+                                                Text="{loc:Str set2_devices_safety_title}" Margin="0"/>
                     </StackPanel>
 
                     <!-- Panic key rebind. THE rebind surface; the System popup shows it read-only. -->

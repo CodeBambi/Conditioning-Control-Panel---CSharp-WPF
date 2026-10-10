@@ -15,12 +15,14 @@
 
      Buttons carry a TextBlock child rather than Content, the repo convention (CLAUDE.md trap 1);
      neither label has an underscore, so that is convention here, not necessity.
-     Every string is a literal exactly as in the WPF original - there are no loc keys to carry
-     over, and no bindings, hence no x:DataType. -->
+     Strings carry the WPF loc keys; "Close" stays a literal as in WPF. TxtStatus has no
+     markup text because code owns every state of it (WPF sets it from code too). No
+     bindings, hence no x:DataType. -->
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
         x:Class="ConditioningControlPanel.Avalonia.Views.Dialogs.LinkPhoneDialog"
-        Title="Link your phone" Height="560" Width="420"
+        Title="{loc:Str label_link_phone_title}" Height="560" Width="420"
         WindowStartupLocation="CenterOwner" CanResize="False"
         Background="{DynamicResource DarkerBgBrush}"
         SystemDecorations="None" TransparencyLevelHint="Transparent">
@@ -35,10 +37,10 @@
 
             <!-- Title -->
             <StackPanel Grid.Row="0" Margin="0,0,0,15">
-                <TextBlock Text="Link your phone"
+                <TextBlock Text="{loc:Str label_link_phone_title}"
                            FontSize="24" FontWeight="Bold" Foreground="{DynamicResource PinkBrush}"
                            HorizontalAlignment="Center"/>
-                <TextBlock Text="Scan this code with the CCP mobile app to sign in as this account."
+                <TextBlock Text="{loc:Str label_link_phone_sub}"
                            FontSize="12" Foreground="{DynamicResource TextMutedBrush}" TextWrapping="Wrap" TextAlignment="Center"
                            HorizontalAlignment="Center" Margin="0,5,0,0"/>
             </StackPanel>
@@ -52,7 +54,7 @@
                 </Border>
 
                 <!-- Manual fallback code -->
-                <TextBlock Text="No camera? Enter this code in the app:"
+                <TextBlock Text="{loc:Str label_link_phone_no_camera}"
                            FontSize="11" Foreground="{DynamicResource TextMutedBrush}"
                            HorizontalAlignment="Center" Margin="0,0,0,4"/>
                 <Border BorderBrush="{DynamicResource PinkBrush}" BorderThickness="2" CornerRadius="6"
@@ -64,7 +66,7 @@
                                HorizontalAlignment="Center" TextAlignment="Center"/>
                 </Border>
 
-                <TextBlock x:Name="TxtStatus" Text="Fetching code..."
+                <TextBlock x:Name="TxtStatus"
                            FontSize="12" Foreground="{DynamicResource TextMutedBrush}" TextWrapping="Wrap"
                            HorizontalAlignment="Center" TextAlignment="Center" Margin="0,0,0,10"/>
 
@@ -72,7 +74,7 @@
                         Padding="14,8" HorizontalAlignment="Center"
                         Background="{DynamicResource AccentTintedBgBrush}" Foreground="{DynamicResource PinkBrush}"
                         BorderThickness="0" FontSize="12" FontWeight="Bold" Cursor="Hand">
-                    <TextBlock Text="Get a new code"/>
+                    <TextBlock Text="{loc:Str btn_link_phone_new_code}"/>
                 </Button>
             </StackPanel>
 

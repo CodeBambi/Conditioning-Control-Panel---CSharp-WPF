@@ -31,6 +31,100 @@ namespace ConditioningControlPanel.Controls
         /// nothing.
         /// </summary>
         Embers = 1 << 5,
+        /// <summary>
+        /// Section-hued motes drifting clockwise along a thin window-edge strip (nav polish 9).
+        /// The strip's side comes from <see cref="AmbientFxConfig.EdgeSide"/>; the maths is
+        /// <see cref="EdgeDriftMath"/>. Additive like the rest: no other surface pays for it.
+        /// </summary>
+        EdgeDrift = 1 << 6,
+        /// <summary>
+        /// Soft section-hued puffs drifting and breathing along a window-edge strip (nav polish 11):
+        /// the section edge's fog. Side from <see cref="AmbientFxConfig.EdgeSide"/>, maths in
+        /// <see cref="EdgeFogMath"/>, sim and paint in AmbientFxCanvas.EdgeFog.cs. The one layer that
+        /// may also run at Reduced motion, and only when <see cref="AmbientFxConfig.EdgeFogReduced"/>
+        /// asks for it (half the puffs at half the speed).
+        /// </summary>
+        EdgeFog = 1 << 7,
+        /// <summary>
+        /// The Premium page's motes (polish 12 round 2): gold glitter rising off the Basic cards,
+        /// cyan diamonds off the Prime ones, a few loose sparkles anywhere. Zones from
+        /// <see cref="AmbientFxCanvas.SetVaultZones"/>, numbers in <see cref="VaultMoteMath"/>, sim and
+        /// paint in AmbientFxCanvas.Vault.cs. May tick at Reduced (a few slow motes) like EdgeFog.
+        /// </summary>
+        VaultMotes = 1 << 8,
+    }
+
+    /// <summary>Which window edge an <see cref="AmbientFxLayers.EdgeDrift"/> strip lines.</summary>
+    public enum EdgeSide
+    {
+        Top,
+        Right,
+        Bottom,
+        Left,
+    }
+
+    /// <summary>
+    /// The edge drift's numbers and its pure step (nav polish 9, proposal section 4). No WPF, no
+    /// Skia: tests pin the band, the clockwise direction and the budget without a canvas.
+    ///
+    /// <para>Coordinates: <c>along</c> runs 0 to 1 in the CLOCKWISE direction of the strip's side
+    /// (Top left to right, Right top to bottom, Bottom right to left, Left bottom to top);
+    /// <c>depth</c> runs 0 at the window's outer edge to 1 at the band's inner edge.</para>
+    /// </summary>
+    public static class EdgeDriftMath
+    {
+        /// <summary>Strip lengths per second: one full side in about 35 to 55 s.</summary>
+        public const double SpeedMin = 0.018, SpeedMax = 0.030;
+        /// <summary>Depth band across the strip, so no mote sits on the line or bleeds inward.</summary>
+        public const double DepthMin = 0.15, DepthMax = 0.85;
+        /// <summary>Mote diameter in NATIVE pixels (never min-scaled: the strip is 30 px thin).</summary>
+        public const double SizeMinPx = 1.5, SizeMaxPx = 3.0;
+        /// <summary>Life in seconds, on a sine envelope.</summary>
+        public const double LifeMin = 9.0, LifeMax = 16.0;
+        /// <summary>Peak alpha before flicker and intensity.</summary>
+        public const double BaseAlpha = 0.30;
+        /// <summary>Flicker floor; the ceiling is 1.0.</summary>
+        public const double FlickerMin = 0.85;
+        /// <summary>Share of the canvas's live particle budget one strip may spend.</summary>
+        public const double BudgetShare = 0.30;
+        /// <summary>Hard cap per strip (24 across the four sides).</summary>
+        public const int MaxPerStrip = 6;
+        /// <summary>Along-axis fade at each strip end, so a mote leaves a corner instead of popping.</summary>
+        public const double EndFade = 0.05;
+        /// <summary>Seconds between spawns while a strip is under target: fills over a few seconds.</summary>
+        public const double SpawnEverySeconds = 0.6;
+
+        /// <summary>Motes one strip may hold at this live budget: round(budget x 0.30), capped 6.</summary>
+        public static int Target(int liveBudget) =>
+            liveBudget <= 0 ? 0 : Math.Min(MaxPerStrip, (int)Math.Round(liveBudget * BudgetShare));
+
+        /// <summary>Clockwise drift: along only ever grows.</summary>
+        public static double Advance(double along, double speed, double dt) =>
+            along + Math.Max(0.0, speed) * Math.Max(0.0, dt);
+
+        /// <summary>A mote is spent when its life runs out or it reaches the strip's end.</summary>
+        public static bool IsSpent(double along, double life) => life <= 0.0 || along >= 1.0;
+
+        /// <summary>Element-normalized (x, y) of a mote on a strip of the given side.</summary>
+        public static (double X, double Y) Position(EdgeSide side, double along, double depth) => side switch
+        {
+            EdgeSide.Top => (along, depth),
+            EdgeSide.Right => (1.0 - depth, along),
+            EdgeSide.Bottom => (1.0 - along, 1.0 - depth),
+            _ => (depth, 1.0 - along),
+        };
+
+        /// <summary>
+        /// Alpha: 0.30 x sine life envelope x flicker 0.85..1.0 x intensity x end fade.
+        /// </summary>
+        public static double Alpha(double along, double life, double max, double flickerPhase, double intensity)
+        {
+            if (max <= 0) return 0;
+            double env = Math.Sin(Math.PI * Math.Clamp(1.0 - life / max, 0.0, 1.0));
+            double flicker = FlickerMin + (1.0 - FlickerMin) * (0.5 + 0.5 * Math.Sin(flickerPhase));
+            double ends = Math.Clamp(Math.Min(along, 1.0 - along) / EndFade, 0.0, 1.0);
+            return BaseAlpha * env * flicker * Math.Clamp(intensity, 0.0, 1.5) * ends;
+        }
     }
 
     /// <summary>Per-surface tuning for <see cref="AmbientFxCanvas.StartLayers(AmbientFxConfig)"/>.</summary>
@@ -74,11 +168,37 @@ namespace ConditioningControlPanel.Controls
         /// rest of that panel is already painted in.
         /// </summary>
         public System.Windows.Media.Color? Tint { get; set; }
+
+        /// <summary>The window edge an <see cref="AmbientFxLayers.EdgeDrift"/> strip lines.</summary>
+        public EdgeSide EdgeSide { get; set; } = EdgeSide.Top;
+
+        /// <summary>
+        /// The depth, in DIPs, the <see cref="AmbientFxLayers.EdgeDrift"/> motes keep to on a strip
+        /// thicker than their band (the fog's strip). 0, the default, spreads them over the whole
+        /// strip exactly as before.
+        /// </summary>
+        public double EdgeDriftBandPx { get; set; }
+
+        /// <summary><see cref="AmbientFxLayers.EdgeFog"/> at Reduced: half the puffs at half the
+        /// speed, and the canvas may tick at Reduced motion for this layer.</summary>
+        public bool EdgeFogReduced { get; set; }
+
+        /// <summary>Alpha gain on the fog (the section edge balances light and dark hues), 0-1.5.</summary>
+        public double EdgeFogGain { get; set; } = 1.0;
+
+        /// <summary>
+        /// Keep ticking while the host window is NOT the active window (polish wave 13). Only for a
+        /// host that already repaints every frame on its own, so the clock adds no wake-ups: the
+        /// companion tube, whose breathing / bob timer redraws the layered window at 60 fps
+        /// whether or not it has focus. Minimised, hidden, Motion below Full and the tier budget
+        /// still stop it. Never set it on a surface inside MainWindow (#550 idle parking).
+        /// </summary>
+        public bool RunWhileInactive { get; set; }
     }
 
     /// <summary>
     /// The one reusable in-window FX surface: a hit-test-invisible Skia canvas running a
-    /// self-stopping ~30fps <see cref="DispatcherTimer"/>, composed from the layer vocabulary in
+    /// self-stopping ~30fps frame-locked <see cref="FrameClock"/>, composed from the layer vocabulary in
     /// <see cref="AmbientFxLayers"/>. Deliberately NOT the fullscreen compositor - that is
     /// per-monitor topmost overlay windows, and keeping its shared tick alive for ambient loops
     /// would undo the idle-parking that fixed #550. This control spawns no window of any kind.
@@ -96,7 +216,7 @@ namespace ConditioningControlPanel.Controls
     /// Viewbox-agnostic, while the two one-shot entry points (<see cref="Burst"/> and
     /// <see cref="BankTokens"/>) take plain element-local coordinates.
     /// </summary>
-    public class AmbientFxCanvas : Decorator
+    public partial class AmbientFxCanvas : Decorator
     {
         private const int MaxBurstParticles = 150;
         private const int FaultLimit = 5;
@@ -127,8 +247,16 @@ namespace ConditioningControlPanel.Controls
         /// <summary>Fade-in after a token's stagger delay expires, so it arrives instead of popping.</summary>
         private const float BankTokenFadeInMs = 90f;
 
-        private readonly SKElement _sk;
-        private readonly DispatcherTimer _timer;
+        private readonly FxSurface _sk;
+        private readonly FrameClock _timer;
+
+        /// <summary>
+        /// Share of the screen's pixels the ambient layers raster at (perf pass, 2026-10-07). Fog,
+        /// aurora, dust and embers are soft sprites and read the same at half resolution for a
+        /// quarter of the CPU fill and of the per-frame bitmap upload. A live burst or token flight
+        /// paints at full resolution, because sparks and coins are crisp.
+        /// </summary>
+        public const double AmbientResolution = 0.5;
         private AmbientFxConfig _config = new();
 
         // ---- cached at (re)start: never read per tick ----
@@ -167,6 +295,12 @@ namespace ConditioningControlPanel.Controls
         private int _emberN;
         private float _emberT;
         private SKColorFilter? _emberTint;
+
+        // Edge drift (nav polish 9): along/depth are strip-normalized (see EdgeDriftMath), size is px.
+        private struct EdgeMote { public float Along, Depth, Speed, Life, Max, SizePx, Phase, PhaseSpd; }
+        private EdgeMote[] _edge = Array.Empty<EdgeMote>();
+        private int _edgeN;
+        private float _edgeT;
 
         private struct Spark { public float X, Y, VX, VY, Life, Max, Size; public uint Rgb; }
         private Spark[]? _burst;
@@ -229,13 +363,14 @@ namespace ConditioningControlPanel.Controls
         public AmbientFxCanvas()
         {
             IsHitTestVisible = false;
-            _sk = new SKElement { IsHitTestVisible = false };
+            _sk = new FxSurface { IsHitTestVisible = false, ResolutionScale = AmbientResolution };
             _sk.PaintSurface += OnPaintSurface;
             Child = _sk;
 
-            // Default (Background) priority on purpose: ambient FX must yield to input and layout,
-            // and the frame gaps that causes are exactly what the governor reads to degrade itself.
-            _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(33) };
+            // Frame-locked (perf pass): the tick lands right before a frame is composed and holds
+            // the tier's rate on whole frames, so motion steps evenly. Late frames still show up
+            // as gaps, which is what the governor reads to degrade itself.
+            _timer = new FrameClock { Interval = TimeSpan.FromMilliseconds(33) };
             _timer.Tick += (_, _) => Tick();
 
             Loaded += OnLoaded;
@@ -248,6 +383,33 @@ namespace ConditioningControlPanel.Controls
 
         /// <summary>True while the clock is actually ticking.</summary>
         public bool IsRunning => _timer.IsEnabled;
+
+        /// <summary>The tint override this canvas is painting with, if any.</summary>
+        public System.Windows.Media.Color? Tint => _config.Tint;
+
+        /// <summary>The side an edge drift strip was started on.</summary>
+        public EdgeSide EdgeSide => _config.EdgeSide;
+
+        /// <summary>Edge motes alive right now (tests).</summary>
+        internal int EdgeMoteCount => _edgeN;
+
+        /// <summary>
+        /// Swap the tint override without reseeding: live particles take the new colour on the
+        /// next frame. The section edge calls it on every section change, under its own fade.
+        /// </summary>
+        public void Retint(System.Windows.Media.Color tint)
+        {
+            try
+            {
+                _config.Tint = tint;
+                ApplyAccent(new SKColor(tint.R, tint.G, tint.B));
+                _sk.Redraw();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("AmbientFxCanvas.Retint: {E}", ex.Message);
+            }
+        }
 
         // ================================ public API ================================
 
@@ -297,7 +459,10 @@ namespace ConditioningControlPanel.Controls
             _burstN = 0;
             _dustN = 0;
             _emberN = 0;
-            _sk.InvalidateVisual();
+            _edgeN = 0;
+            _fogN = 0;
+            _vaultN = 0;
+            _sk.Redraw();
         }
 
         /// <summary>
@@ -515,21 +680,9 @@ namespace ConditioningControlPanel.Controls
                 // layers that read as "this thing's colour" - the particles and the glow. Mist and
                 // flash stay the mod's, so the surface still sits inside the app's theme rather
                 // than becoming a coloured hole in it.
-                if (_config.Tint is { } tint)
-                {
-                    var accent = new SKColor(tint.R, tint.G, tint.B);
-                    _particle = accent;
-                    _glow = accent;
-                }
-
                 _mistTint?.Dispose(); _mistTint = SKColorFilter.CreateBlendMode(_mist, SKBlendMode.Modulate);
-                _particleTint?.Dispose(); _particleTint = SKColorFilter.CreateBlendMode(_particle, SKBlendMode.Modulate);
-                _glowTint?.Dispose(); _glowTint = SKColorFilter.CreateBlendMode(_glow, SKBlendMode.Modulate);
                 _flashTint?.Dispose(); _flashTint = SKColorFilter.CreateBlendMode(_flash, SKBlendMode.Modulate);
-                // Embers sit halfway between the mod's particle colour and a candle gold, so they
-                // read warm on every palette without leaving the theme.
-                var ember = new SKColor((byte)((_particle.Red + 255) / 2), (byte)((_particle.Green + 196) / 2), (byte)((_particle.Blue + 110) / 2));
-                _emberTint?.Dispose(); _emberTint = SKColorFilter.CreateBlendMode(ember, SKBlendMode.Modulate);
+                ApplyAccent(_config.Tint is { } tint ? new SKColor(tint.R, tint.G, tint.B) : null);
 
                 _liveBudget = _particleBudget;
                 _fogOnly = false;
@@ -539,6 +692,26 @@ namespace ConditioningControlPanel.Controls
             {
                 App.Logger?.Debug("AmbientFxCanvas.ReadEnvironment: {E}", ex.Message);
             }
+        }
+
+        /// <summary>
+        /// Rebuild the particle, glow and ember filters, optionally over an accent first. Shared by
+        /// <see cref="ReadEnvironment"/> and <see cref="Retint"/>, so a retint can never disagree
+        /// with a restart about what a tint does.
+        /// </summary>
+        private void ApplyAccent(SKColor? accent)
+        {
+            if (accent is { } a)
+            {
+                _particle = a;
+                _glow = a;
+            }
+            _particleTint?.Dispose(); _particleTint = SKColorFilter.CreateBlendMode(_particle, SKBlendMode.Modulate);
+            _glowTint?.Dispose(); _glowTint = SKColorFilter.CreateBlendMode(_glow, SKBlendMode.Modulate);
+            // Embers sit halfway between the mod's particle colour and a candle gold, so they
+            // read warm on every palette without leaving the theme.
+            var ember = new SKColor((byte)((_particle.Red + 255) / 2), (byte)((_particle.Green + 196) / 2), (byte)((_particle.Blue + 110) / 2));
+            _emberTint?.Dispose(); _emberTint = SKColorFilter.CreateBlendMode(ember, SKBlendMode.Modulate);
         }
 
         private void Reseed()
@@ -569,6 +742,12 @@ namespace ConditioningControlPanel.Controls
                 : Array.Empty<Ember>();
             _emberN = 0;
             _emberT = 0f;
+            _edge = _particleBudget > 0 && (_config.Layers & AmbientFxLayers.EdgeDrift) != 0
+                ? new EdgeMote[Math.Min(EdgeDriftMath.MaxPerStrip, _particleBudget)]
+                : Array.Empty<EdgeMote>();
+            _edgeN = 0;
+            _edgeT = 0f;
+            ReseedFog();
             _fogT = _dustT = _sheenT = _breathT = _auroraT = 0f;
             _sheenDone = false;
             _burstN = 0;
@@ -607,7 +786,7 @@ namespace ConditioningControlPanel.Controls
                 try
                 {
                     ReadEnvironment();
-                    _sk.InvalidateVisual();
+                    _sk.Redraw();
                 }
                 catch (Exception ex) { App.Logger?.Debug("AmbientFxCanvas.OnModChanged: {E}", ex.Message); }
             }
@@ -660,18 +839,20 @@ namespace ConditioningControlPanel.Controls
             // drive somebody else's counter - stopping the clock under it would strand the display.
             bool oneShotLive = (_burst != null && _burstN > 0) || _tokN > 0;
             if (_paused || _faults >= FaultLimit) return false;
+            if (Services.Diagnostics.FxBisect.Off("canvas:" + (string.IsNullOrEmpty(Name) ? _config.Layers.ToString() : Name))) return false;
             if (!_running && !oneShotLive) return false;
             if (!IsLoaded || !IsVisible) return false;
             if (!oneShotLive)
             {
                 if (_targetFps <= 0) return false;
-                if (!MotionFx.AllowAmbientLoops) return false;
+                if (!MotionFx.AllowAmbientLoops && !ReducedFogMayRun() && !ReducedVaultMayRun()) return false;
             }
             var w = _window;
             if (w != null)
             {
                 if (w.WindowState == WindowState.Minimized) return false;
-                if (!w.IsActive && !oneShotLive) return false;
+                if (!w.IsActive && !oneShotLive && !_config.RunWhileInactive
+                    && !Services.Diagnostics.FxBisect.Off("forceactive")) return false;
             }
             return true;
         }
@@ -710,10 +891,15 @@ namespace ConditioningControlPanel.Controls
                 if (!_sheenDone) _sheenT += dt;
                 StepDust(dt);
                 StepEmbers(dt);
+                StepEdge(dt);
+                StepFog(dt);
+                StepVault(dt);
                 StepBurst(dt);
                 StepTokens(dt);
 
-                _sk.InvalidateVisual();
+                bool crisp = (_burst != null && _burstN > 0) || _tokN > 0;
+                _sk.ResolutionScale = crisp ? 1.0 : AmbientResolution;
+                _sk.Redraw();
             }
             catch (Exception ex)
             {
@@ -841,6 +1027,73 @@ namespace ConditioningControlPanel.Controls
             }
         }
 
+        /// <summary>
+        /// Edge drift: every mote slides clockwise along its strip at its own speed, holds its
+        /// depth, and is retired at the strip end or when its life runs out. Refills one mote per
+        /// <see cref="EdgeDriftMath.SpawnEverySeconds"/> up to the governed target.
+        /// </summary>
+        internal void StepEdge(float dt)
+        {
+            if (_edge.Length == 0) return;
+            for (int i = _edgeN - 1; i >= 0; i--)
+            {
+                var m = _edge[i];
+                m.Along = (float)EdgeDriftMath.Advance(m.Along, m.Speed, dt);
+                m.Phase += m.PhaseSpd * dt;
+                m.Life -= dt;
+                if (EdgeDriftMath.IsSpent(m.Along, m.Life))
+                    _edge[i] = _edge[--_edgeN];
+                else
+                    _edge[i] = m;
+            }
+
+            if ((_config.Layers & AmbientFxLayers.EdgeDrift) == 0 || _fogOnly) return;
+
+            int target = Math.Min(_edge.Length, EdgeDriftMath.Target(_liveBudget));
+            if (_edgeN > target) _edgeN = Math.Max(0, target);
+
+            // The spawn clock only banks while a strip is short; a full strip holds one spawn's
+            // worth, so a mote retiring after a long full spell is replaced alone, not in a burst.
+            _edgeT = _edgeN >= target
+                ? Math.Min(_edgeT + dt, (float)EdgeDriftMath.SpawnEverySeconds)
+                : _edgeT + dt;
+            while (_edgeN < target && _edgeT > EdgeDriftMath.SpawnEverySeconds)
+            {
+                _edgeT -= (float)EdgeDriftMath.SpawnEverySeconds;
+                float life = (float)(EdgeDriftMath.LifeMin + _rng.NextDouble() * (EdgeDriftMath.LifeMax - EdgeDriftMath.LifeMin));
+                _edge[_edgeN++] = new EdgeMote
+                {
+                    Along = (float)_rng.NextDouble() * 0.9f,
+                    Depth = (float)(EdgeDriftMath.DepthMin + _rng.NextDouble() * (EdgeDriftMath.DepthMax - EdgeDriftMath.DepthMin)),
+                    Speed = (float)(EdgeDriftMath.SpeedMin + _rng.NextDouble() * (EdgeDriftMath.SpeedMax - EdgeDriftMath.SpeedMin)),
+                    Life = life, Max = life,
+                    SizePx = (float)(EdgeDriftMath.SizeMinPx + _rng.NextDouble() * (EdgeDriftMath.SizeMaxPx - EdgeDriftMath.SizeMinPx)),
+                    Phase = (float)(_rng.NextDouble() * Math.PI * 2),
+                    PhaseSpd = 1.5f + (float)_rng.NextDouble() * 1.5f,
+                };
+            }
+        }
+
+        /// <summary>
+        /// Test seam: the (along, depth) of every live edge mote, so a test can step the sim and
+        /// check the band and the direction without a paint.
+        /// </summary>
+        internal (float Along, float Depth)[] EdgeMotesForTests()
+        {
+            var r = new (float, float)[_edgeN];
+            for (int i = 0; i < _edgeN; i++) r[i] = (_edge[i].Along, _edge[i].Depth);
+            return r;
+        }
+
+        /// <summary>Test seam: seed the sim as if the tier allowed <paramref name="budget"/> particles.</summary>
+        internal void PrimeEdgeForTests(int budget)
+        {
+            _particleBudget = budget;
+            _liveBudget = budget;
+            _fogOnly = false;
+            Reseed();
+        }
+
         private void StepBurst(float dt)
         {
             if (_burst == null || _burstN == 0) return;
@@ -951,7 +1204,10 @@ namespace ConditioningControlPanel.Controls
                 if (!_fogOnly && (layers & AmbientFxLayers.GlowBreath) != 0) DrawGlowBreath(canvas, w, h, min, intensity);
                 if (!_fogOnly && (layers & AmbientFxLayers.DustField) != 0) DrawDust(canvas, w, h, min, intensity);
                 if (!_fogOnly && (layers & AmbientFxLayers.Embers) != 0) DrawEmbers(canvas, w, h, min, intensity);
+                if ((layers & AmbientFxLayers.EdgeFog) != 0) DrawEdgeFog(canvas, w, h);
+                if (!_fogOnly && (layers & AmbientFxLayers.EdgeDrift) != 0) DrawEdge(canvas, w, h, intensity);
                 if (!_fogOnly && (layers & AmbientFxLayers.SheenSweep) != 0) DrawSheen(canvas, w, h, intensity);
+                if ((layers & AmbientFxLayers.VaultMotes) != 0) DrawVault(canvas, w, h);
                 DrawBurst(canvas, w, h, min);
                 DrawTokens(canvas, w, h, min);
             }
@@ -1046,6 +1302,32 @@ namespace ConditioningControlPanel.Controls
                 float size = m.Size * min * 2f;
                 _paint.Color = SKColors.White.WithAlpha(Alpha(a));
                 DrawSprite(canvas, Dot, x * w, m.Y * h, size, size);
+            }
+            _paint.ColorFilter = null;
+        }
+
+        private void DrawEdge(SKCanvas canvas, float w, float h, float intensity)
+        {
+            if (_edgeN == 0) return;
+            // Sizes are authored in native px: scale WPF units to the surface's device pixels once.
+            double aw = ActualWidth;
+            float px = aw > 1 ? (float)(w / aw) : 1f;
+            var side = _config.EdgeSide;
+            // A band narrower than the strip (the fog's 56 px strip) keeps the motes in their
+            // authored 30 px; the default 0 spreads them over the whole strip as before.
+            double thick = side is EdgeSide.Top or EdgeSide.Bottom ? ActualHeight : aw;
+            float band = _config.EdgeDriftBandPx > 0 && thick > _config.EdgeDriftBandPx
+                ? (float)(_config.EdgeDriftBandPx / thick) : 1f;
+            _paint.ColorFilter = _particleTint;
+            for (int i = 0; i < _edgeN; i++)
+            {
+                var m = _edge[i];
+                float a = (float)EdgeDriftMath.Alpha(m.Along, m.Life, m.Max, m.Phase, intensity);
+                if (a <= 0.004f) continue;
+                var (x, y) = EdgeDriftMath.Position(side, m.Along, m.Depth * band);
+                float size = m.SizePx * px;
+                _paint.Color = SKColors.White.WithAlpha(Alpha(a));
+                DrawSprite(canvas, Dot, (float)x * w, (float)y * h, size, size);
             }
             _paint.ColorFilter = null;
         }

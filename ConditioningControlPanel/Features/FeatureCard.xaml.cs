@@ -32,7 +32,7 @@ namespace ConditioningControlPanel.Features
         private const double ActiveBreathSeconds = 3.5;
         private const double RimLightOpacity = 0.85;
         private const int RimLightMs = 150;
-        private const int AmbientFrameRate = 24;
+        private const int AmbientFrameRate = 30;
 
         /// <summary>Resting opacity for a locked card. Unchanged from the value that has always
         /// ridden on <see cref="IsLocked"/>.</summary>

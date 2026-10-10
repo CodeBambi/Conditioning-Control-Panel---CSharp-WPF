@@ -70,14 +70,18 @@
                         <Grid>
                             <!-- the key's base: the face travels down onto it when pressed -->
                             <Border CornerRadius="13" Background="#B23A6B" Margin="0,3,0,0"/>
-                            <Border x:Name="face" CornerRadius="13" Padding="{TemplateBinding Padding}" Margin="0,0,0,3">
+                            <Border x:Name="face" CornerRadius="13" Margin="0,0,0,3"
+                                    BorderThickness="1" BorderBrush="{Binding ButtonBevel}">
                                 <Border.Background>
                                     <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
                                         <GradientStop Color="#FF8CC0" Offset="0"/>
                                         <GradientStop Color="#FF5FA2" Offset="1"/>
                                     </LinearGradientBrush>
                                 </Border.Background>
-                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                <!-- the raised sheen (polish wave 10): lit from the top like every plank -->
+                                <Border CornerRadius="12" Padding="{TemplateBinding Padding}" Background="{Binding ButtonSheen}">
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
                             </Border>
                         </Grid>
                         <ControlTemplate.Triggers>
@@ -94,11 +98,14 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <!-- Polish wave 10 (depth): the three columns are WELLS (the well floor under a sunken
+             1 px rim: dark at the top where the lamp cannot reach, lit at the foot). The rows
+             inside float on them (LobbyRowTemplate), so the list reads as cards in a tray. -->
         <Style x:Key="LobbyColumn" TargetType="Border">
             <Setter Property="CornerRadius" Value="18"/>
             <Setter Property="Padding" Value="12,12,6,8"/>
-            <Setter Property="Background" Value="#0FFFFFFF"/>
-            <Setter Property="BorderBrush" Value="{StaticResource LobbyRim}"/>
+            <Setter Property="Background" Value="{DynamicResource DepthWellFloorBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource DepthPressedBevel}"/>
             <Setter Property="BorderThickness" Value="1"/>
         </Style>
         <Style x:Key="LobbyHead" TargetType="TextBlock">
@@ -128,8 +135,12 @@
                         Opacity="0" IsHitTestVisible="False" RenderTransformOrigin="0.5,0.5">
                     <Border.RenderTransform><ScaleTransform/></Border.RenderTransform>
                 </Border>
+                <!-- the float band under the card (polish wave 10): Social hue at FloatAlpha, in the
+                     row's own 8 px bottom margin, so the list pitch does not change -->
+                <Rectangle Tag="lobby-float" Fill="{Binding CardShadow}" Height="{Binding CardShadowPx}" RadiusX="7" RadiusY="7"
+                           VerticalAlignment="Bottom" Margin="8,0,8,-6" IsHitTestVisible="False"/>
                 <Border x:Name="Card" CornerRadius="14" Padding="10,9,10,9"
-                        Background="{StaticResource LobbyGlass}" BorderBrush="{StaticResource LobbyRim}" BorderThickness="1">
+                        Background="{StaticResource LobbyGlass}" BorderBrush="{Binding CardRim}" BorderThickness="1">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
@@ -220,8 +231,7 @@
 
             <!-- Header: the title and the live count -->
             <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,12">
-                <TextBlock Text="{loc:Str tab_available_subjects}" Foreground="{DynamicResource TextLightBrush}"
-                           FontFamily="/Fonts/#Fredoka, Segoe UI" FontSize="32" FontWeight="SemiBold"/>
+                <TextBlock Style="{StaticResource Type.PageTitle}" Text="{loc:Str tab_available_subjects}"/>
                 <TextBlock x:Name="TxtLobbyCount" x:FieldModifier="internal" Text="{loc:Str desc_available_subjects}"
                            Foreground="{DynamicResource PinkSoftBrush}" FontFamily="/Fonts/#Fredoka, Segoe UI"
                            FontSize="16" Margin="14,0,0,5" VerticalAlignment="Bottom"/>
@@ -274,8 +284,17 @@
                             </Border>
                         </StackPanel>
                         <Border x:Name="AvailableSubjectsEmptyPanel" x:FieldModifier="internal" DockPanel.Dock="Top" Visibility="Collapsed">
-                            <TextBlock x:Name="TxtLobbyEmpty" x:FieldModifier="internal" Text="{loc:Str lobby_empty_open}"
-                                       Style="{StaticResource LobbyColumnEmpty}"/>
+                            <!-- Empty state: one line, then the host doors right under it (nav rework). -->
+                            <StackPanel>
+                                <TextBlock x:Name="TxtLobbyEmpty" x:FieldModifier="internal" Text="{loc:Str lobby_empty_open}"
+                                           Style="{StaticResource LobbyColumnEmpty}"/>
+                                <WrapPanel x:Name="LobbyEmptyHostRow" x:FieldModifier="internal" HorizontalAlignment="Center" Margin="0,8,0,4">
+                                    <Button x:Name="BtnEmptyHostChess" x:FieldModifier="internal" Style="{StaticResource LobbyPill}"
+                                            Content="{loc:Str lobby_host_chess}" Click="BtnHostChess_Click"/>
+                                    <Button x:Name="BtnEmptyHostGoon" x:FieldModifier="internal" Style="{StaticResource LobbyPill}"
+                                            Content="{loc:Str lobby_host_goon}" Click="BtnHostGoon_Click"/>
+                                </WrapPanel>
+                            </StackPanel>
                         </Border>
                         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                             <ItemsControl x:Name="AvailableSubjectsList" x:FieldModifier="internal"

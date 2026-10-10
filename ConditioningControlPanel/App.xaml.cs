@@ -287,6 +287,8 @@ namespace ConditioningControlPanel
 
             Services.Deeper.EnhancementResolver.LibraryMatchProvider = (path, type) => EnhancementLibrary?.FindMatch(path, type);
             Services.SettingsPaletteIndex.JustDropDoorAvailableProvider = () => Services.JustDrop.JustDropService.DoorAvailable;
+            Services.SettingsPaletteIndex.GameAvailableProvider = id => Services.Launcher.LauncherCatalogue.Find(id)?.Available == true;
+            Services.Companion.ConversationDelivery.QuestsOpenProvider = () => Quests?.HasUnfinishedQuest();
             // Mod art. ResolveUri already walks event skin -> active mod -> embedded and hands
             // back a file:// URI for the first two and a pack:// one for the third, so "is there
             // an override" is "did it come back as a file", answered in ONE pass of the chain.

@@ -7,12 +7,10 @@
 // is real too, and runs inside ShowTab (MainShellWindow.AmbientFx.cs).
 //
 // What is NOT, on purpose, each named so it is not lost silently:
-//   - The transition choreography (AnimateTabIn, the Stop*Shimmer/Pulse/Motion calls) and the
-//     door open/close height animation. ponytail: panels snap open (Height =
-//     NaN) and shut (0); the WPF MeasureDoorPanel + NavDoorExpandMs tween returns with the FX
-//     partials.
+//   - The transition choreography (AnimateTabIn, the Stop*Shimmer/Pulse/Motion calls). The door
+//     height tween IS ported (SetDoorPanelExpanded), rail-gated like WPF (IsDoorPanelOpenFor).
 //   - Per-tab side effects on the way in (RefreshPresetsList, StopPolling on leaving Available Subjects,
-//     UpdatePatreonUI, RefreshIntakePassTile, RefreshPremiumRail). Those reach App.* or a service.
+//     UpdatePatreonUI, RefreshIntakePassTile, RefreshDashboardRail - its favorites half is restored). Those reach App.* or a service.
 //     The FIVE that do not are restored in OnTabShown below:
 //       * StudioTab.OnTabShown() for "studio" and StudioTab.FocusRackEntry("haptics") for the
 //         haptics alias - ported view state on StudioTabView. Without the second, ShowTab("haptics")
@@ -140,6 +138,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         internal void ShowTab(string? tab)
         {
             tab = (tab ?? string.Empty).ToLowerInvariant();
+            // The dashboard's RECENT rail, at the door before the intercepts (WPF :121), so a
+            // window key counts as an open like any tab (MainShellWindow.FavoritesRail.cs).
+            NoteDestinationOpened(tab);
             // WPF ShowTab("patreon") -> ShowAppInfoPopup -> ShowAccountSettings (MainWindow.TabNavigation.cs:126,
             // MainWindow.AccountShell.cs:73): Settings, scrolled to Account. Before the bark, as there.
             if (tab == "patreon") { OpenAppSettingsSection("account"); return; }
@@ -185,7 +186,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     // three (MainWindow.TabNavigation.cs:260/476/501): the Dashboard and the rack
                     // both host real dose dials, so a lock that was latched rather than re-derived
                     // could survive a crash, an abort or an out-of-order session event.
-                    case "settings": RefreshSessionFeatureLock(); MaybeShowFeatureIntro("daily-free", "settings"); break;
+                    case "settings": RefreshFavoritesRail(); RefreshSessionFeatureLock(); MaybeShowFeatureIntro("daily-free", "settings"); break;
+                    case "progression": RefreshFavoritesRail(); break; // WPF TabNavigation.cs:308 (RefreshDashboardRail)
                     case "studio": StudioRack?.OnTabShown(); RefreshSessionFeatureLock(); MaybeShowFeatureIntro("studio-rack", "studio"); break;
                     case "haptics": StudioRack?.FocusRackEntry("haptics"); RefreshSessionFeatureLock(); MaybeShowFeatureIntro("haptics"); break;
 
@@ -275,7 +277,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             return null;
         }
 
-        /// <summary>One door open at a time. ponytail: snaps, no height tween.</summary>
         private const int NavDoorExpandMs = 160;      // WPF MainWindow.TabNavigation.cs:653
         private const double NavEntryRowHeight = 32;  // WPF MainWindow.TabNavigation.cs:651
 
@@ -286,14 +287,41 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// in-flight value rather than the intent.</summary>
         internal string? ExpandedDoor => _expandedDoor;
 
+        /// <summary>WPF SetExpandedDoor (MainWindow.TabNavigation.cs:868): a SHUT rail opens nothing.
+        /// <c>_expandedDoor</c> is still written - it is the user's choice, and the next hover
+        /// restores it through <see cref="ApplyNavRailDoorState"/>. Without the gate a navigation
+        /// while the rail is 56px (notification, palette, quick click) left a panel open under it
+        /// (WPF Discord report v6.8.6).</summary>
         private void SetExpandedDoor(string? door)
         {
+            if (string.Equals(_expandedDoor, door, StringComparison.Ordinal)) return;
+            var previous = _expandedDoor;
             _expandedDoor = door;
+            // WPF :878 - only the two doors that change are touched; the rest are already parked.
+            foreach (var d in NavDoorMap)
+            {
+                if (d.Panel is null) continue;
+                if (!string.Equals(d.Door, door, StringComparison.Ordinal) &&
+                    !string.Equals(d.Door, previous, StringComparison.Ordinal)) continue;
+                var panel = this.FindControl<Border>(d.Panel);
+                if (panel is not null) SetDoorPanelExpanded(d.Door, panel, IsDoorPanelOpenFor(d.Door));
+            }
+        }
+
+        /// <summary>WPF IsDoorPanelOpenFor (:895): the rail is out AND this is the chosen door. Both
+        /// the accordion and the tween completion ask this, so their halves cannot disagree.</summary>
+        private bool IsDoorPanelOpenFor(string door)
+            => _navRailExpanded && string.Equals(_expandedDoor, door, StringComparison.Ordinal);
+
+        /// <summary>WPF ApplyNavRailDoorState (MainWindow.NavRail.cs:1294): every panel follows
+        /// <see cref="IsDoorPanelOpenFor"/>; called on each rail open/shut.</summary>
+        private void ApplyNavRailDoorState()
+        {
             foreach (var d in NavDoorMap)
             {
                 if (d.Panel is null) continue;
                 var panel = this.FindControl<Border>(d.Panel);
-                if (panel is not null) SetDoorPanelExpanded(d.Door, panel, d.Door == door);
+                if (panel is not null) SetDoorPanelExpanded(d.Door, panel, IsDoorPanelOpenFor(d.Door));
             }
         }
 
@@ -322,8 +350,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             var to = expand ? MeasureDoorPanel(entries) : 0d;
 
             // Snap when there is nothing to travel - first layout, or a door already where it
-            // belongs. Clearing Transitions first stops the assignment animating to NaN.
-            if (Math.Abs(panel.Bounds.Height - to) < 0.5)
+            // belongs - or when MotionLevel is Off (WPF animate = MotionFx.AllowTransitions).
+            // Clearing Transitions first stops the assignment animating to NaN.
+            if (!ConditioningControlPanel.Avalonia.Controls.AmbientFxCanvas.Env.AllowTransitions || Math.Abs(panel.Bounds.Height - to) < 0.5)
             {
                 panel.Transitions = null;
                 panel.Height = expand ? double.NaN : 0;
@@ -343,8 +372,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             DispatcherTimer.RunOnce(() =>
             {
-                var stillOwnsThePanel = string.Equals(_expandedDoor, door, StringComparison.Ordinal);
-                if (stillOwnsThePanel != expand) return;
+                if (IsDoorPanelOpenFor(door) != expand) return;
                 panel.Transitions = null;
                 panel.Height = expand ? double.NaN : 0;
             }, TimeSpan.FromMilliseconds(NavDoorExpandMs + 20));

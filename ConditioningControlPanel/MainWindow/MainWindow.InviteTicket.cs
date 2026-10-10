@@ -95,6 +95,8 @@ namespace ConditioningControlPanel
         /// card, so a code spent there updates the header too.</summary>
         private void ApplyInviteTicket(InviteMine? mine)
         {
+            // The Tonight Board's Waiting card reads the same answer (no second request).
+            try { Services.Billboard.Providers.WaitingSignals.NoteInvites(mine); } catch { }
             try
             {
                 if (BtnInviteTicket == null) return;
@@ -152,14 +154,14 @@ namespace ConditioningControlPanel
         private void BtnInviteTicket_Click(object sender, RoutedEventArgs e) => OpenInvitesCard();
 
         /// <summary>
-        /// Opens the Premium tab and brings the invites card into view after a fresh read. The
+        /// Opens Settings · Account &amp; Plans (the retired Premium tab) and brings the invites card into view after a fresh read. The
         /// header ticket and the friends drawer's "Invite them" link both come here.
         /// </summary>
         internal void OpenInvitesCard()
         {
             try
             {
-                ShowTab("exclusives");
+                OpenAppSettingsSection("account");
                 var settle = new DispatcherTimer(DispatcherPriority.Normal) { Interval = TimeSpan.FromMilliseconds(300) };
                 settle.Tick += async (_, _) =>
                 {
@@ -167,7 +169,7 @@ namespace ConditioningControlPanel
                     try
                     {
                         if (_invitePanel != null) await _invitePanel.RefreshAsync(force: true);
-                        ExclusivesTab?.InvitesHost?.BringIntoView();
+                        PlansVaultView?.InvitesHost?.BringIntoView();
                     }
                     catch (Exception ex)
                     {

@@ -35,7 +35,8 @@ public sealed class ProgramServiceReadOnlyTests : IDisposable
         var golden = File.ReadAllBytes(Fixture("programs_wpf.json"));
         File.WriteAllBytes(StatePath, golden);
 
-        using (var svc = new ProgramService(StatePath, readOnly: false))
+        using (var svc = new ProgramService(StatePath, readOnly: false,
+                   now: () => new DateTime(2026, 3, 12, 23, 0, 0, DateTimeKind.Local)))
         {
             Assert.Equal(3, svc.State.Active!.CurrentDay);
             svc.Save();

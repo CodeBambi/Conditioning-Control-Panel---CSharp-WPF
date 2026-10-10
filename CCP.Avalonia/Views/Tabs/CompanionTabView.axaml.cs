@@ -30,10 +30,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             // MainWindow); Room.ViewModel = _vm;` — needs CompanionRoomRuntimeVm, wired when it
             // moves to Core. The room seats its own per-zone sample data until then.
 
-            // ponytail: WPF hooks IsVisibleChanged here to call
-            // MainWindow.OnCompanionTabVisibilityChanged, which drives the tab-transition
-            // choreography and parks the room's clocks. Avalonia has no IsVisibleChanged event and
-            // the shell method is WPF-side; the room already parks its own clocks on unload.
+            // WPF hooks IsVisibleChanged here to call MainWindow.OnCompanionTabVisibilityChanged.
+            // Avalonia's IsVisible is local, so the room's effective-visibility watch raises the edge.
+            Room.TabVisibilityChanged += (_, visible) =>
+                (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.OnCompanionTabVisibilityChanged(visible, Room);
         }
     }
 }

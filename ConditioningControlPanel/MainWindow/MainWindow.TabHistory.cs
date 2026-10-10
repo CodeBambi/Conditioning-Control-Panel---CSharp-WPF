@@ -32,7 +32,7 @@ namespace ConditioningControlPanel
             try
             {
                 if (BtnNavBack != null)
-                    BtnNavBack.Visibility = _tabHistory.CanGoBack ? Visibility.Visible : Visibility.Collapsed;
+                    BtnNavBack.Visibility = _tabHistory.CanGoBack ? Visibility.Visible : Visibility.Hidden; // Hidden keeps its 28px: the rail must not move
             }
             catch (Exception ex) { App.Logger?.Debug("Nav back refresh failed: {E}", ex.Message); }
         }

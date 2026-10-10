@@ -63,27 +63,20 @@ namespace ConditioningControlPanel
         private static readonly (string Element, string Id)[] FavoritePinMap =
         {
             ("DoorHome", "door.home"), ("DoorStudio", "door.studio"), ("DoorCompanion", "door.companion"),
-            ("DoorPlay", "door.play"), ("DoorYou", "door.you"), ("DoorLibrary", "door.library"),
+            ("DoorPlay", "door.play"), ("DoorYou", "door.you"), ("DoorSocial", "door.social"), ("DoorLibrary", "door.library"),
             ("DoorSettings", "door.settings"),
-            ("BtnSettings", "tab.settings"), ("BtnNavStudio", "tab.studio"), ("BtnPresets", "tab.presets"),
-            ("BtnNavHaptics", "tab.haptics"), ("BtnCompanion", "tab.companion"),
-            ("BtnNavBambiTakeover", "tab.bambitakeover"), ("BtnNavSheListening", "tab.shelistening"),
-            ("BtnNavAwareness", "tab.awareness"), ("BtnLab", "tab.play"), ("BtnDeeper", "tab.deeper"),
-            ("BtnPatreonExclusives", "tab.exclusives"), ("BtnNavGradedIntake", "tab.gradedintake"),
-            ("BtnNavLockdown", "tab.lockdown"), ("BtnNavBlinkTrainer", "tab.blinktrainer"),
-            ("BtnNavRemoteControl", "tab.remotecontrol"), ("BtnAvailableSubjects", "tab.availablesubjects"),
-            ("BtnDiscordTab", "tab.discord"), ("BtnNavSpiral", "tab.spiral"), ("BtnQuests", "tab.quests"),
-            ("BtnAchievements", "tab.achievements"), ("BtnEnhancements", "tab.enhancements"),
-            ("BtnPrograms", "tab.programs"), ("BtnLeaderboard", "tab.leaderboard"),
-            ("BtnOpenAssetsTop", "tab.assets"), ("BtnNavMods", "launch.mods"),
-            ("BtnNavCatalogue", "launch.catalogue"), ("BtnNavPhrases", "launch.phrases"),
-            ("BtnNavMediaLog", "launch.medialog"),
-            // Just Drop (owner call 2026-09-11): a creator tool, so its row is under Studio.
-            ("BtnNavJustDrop", "door.justdrop"),
+            // Nav rework (2026-10-06): the door rows (BtnSettings ... BtnNavMediaLog, BtnNavJustDrop)
+            // left the rail for the pages' pill strips, so their pin rows went with them. The
+            // section rows above stay pinnable; door.social needs a palette row first (SEARCH).
             // Play wall cards (PlayTabView.xaml) - resolved through PlayTab.FindName.
             ("BtnPlayRemoteControl", "tab.remotecontrol"), ("BtnPlayBlinkTrainer", "tab.blinktrainer"),
             ("BtnPlayGradedIntake", "tab.gradedintake"), ("BtnPlayFyp", "tab.fyp"),
             ("BtnPlayLockdown", "tab.lockdown"),
+            // Nav polish (2026-10-06): the named game cards pin as their game.* palette rows. The
+            // Breakout, Goon and chess cards carry no x:Name (PlayTabView.xaml), so they pin from
+            // Ctrl+K (right-click a row) until they get one.
+            ("BtnPlayBackRoom", "game.backroom"), ("BtnPlayDtrh", "game.dtrh"),
+            ("BtnPlayArcademy", "game.arcademy"), ("BtnPlayRacingThoughts", "game.race"),
             // card.arcademy and card.backroom left with their cards (2026-09-18, the launcher
             // owns the games); a saved favourite with either id resolves to no entry and is skipped.
         };
@@ -102,6 +95,7 @@ namespace ConditioningControlPanel
             }
             WireFavoritePinMenus();
             RefreshDashboardRail();
+            SettingsTab?.ApplyFavoritesDrawerSetting();
         }
 
         /// <summary>
@@ -410,16 +404,30 @@ namespace ConditioningControlPanel
             catch (Exception ex) { App.Logger?.Debug("NoteDestinationOpened({Tab}): {E}", tabKey, ex.Message); }
         }
 
+        /// <summary>Pin state for a palette row, for the Ctrl+K row menu.</summary>
+        internal static bool IsPinned(string id) => FavoritesRailRule.IsPinned(App.Settings?.Current?.RailFavorites, id);
+
+        internal static bool FavoritesFull() => FavoritesRailRule.IsFull(App.Settings?.Current?.RailFavorites);
+
         internal void TogglePinned(string id)
         {
             var s = App.Settings?.Current;
             if (s == null) return;
-            bool changed = FavoritesRailRule.IsPinned(s.RailFavorites, id)
+            bool wasPinned = FavoritesRailRule.IsPinned(s.RailFavorites, id);
+            bool changed = wasPinned
                 ? FavoritesRailRule.Unpin(s.RailFavorites, id)
                 : FavoritesRailRule.TryPin(s.RailFavorites, id);
             if (!changed) return;
             App.Settings?.Save();
             RefreshFavoritesRail();
+            // The column is a drawer at the right edge since nav polish wave 3, closed by
+            // default: a pin the player cannot see landing reads as a pin that did nothing, so
+            // a new favorite slides the drawer out for a moment with the glow on its chip.
+            if (!wasPinned)
+            {
+                try { SettingsTab?.PeekFavoritesDrawer(id); }
+                catch (Exception ex) { App.Logger?.Debug("PeekFavoritesDrawer({Id}): {E}", id, ex.Message); }
+            }
         }
 
         /// <summary>

@@ -43,17 +43,20 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     ///  - The OAuth flow is Core's (<c>ProviderSubscription/DiscordAccount.SignInAsync</c>); the browser
     ///    opens through <c>Launcher</c>. Success applies WPF's ApplyUserDataToSettings
     ///    (Core <c>ProfileAdopt.ApplyUserData</c>: identity, linked-tier grace, XP take-higher), then the read-only load.
-    ///
-    /// ponytail: Sign in via Web still shows a fixed sample code with no polling (V2DeviceCodeService is
-    /// WPF-head; not in this unit).
+    ///  - Sign in via Web polls Core <c>V2DeviceCodeService</c> as WPF did; the waits run on <see cref="Clock"/>.
     /// </summary>
     public partial class LoginDialog : Window
     {
-        /// <summary>
-        /// ponytail: copied from ConditioningControlPanel/Services/Account/V2DeviceCodeService.cs
-        /// (VerificationUrl). Point back at that constant when the service moves to Core.
-        /// </summary>
-        private const string VerificationUrl = "https://app.cclabs.app/dashboard/link-device";
+        private const string VerificationUrl = V2DeviceCodeService.VerificationUrl;
+
+        /// <summary>Test seams: the device-code client and the clock its poll loop waits on.</summary>
+        internal static Func<V2DeviceCodeService> DeviceCodes = () => new V2DeviceCodeService();
+        internal static TimeProvider Clock = TimeProvider.System;
+        private CancellationTokenSource? _deviceCts;
+        private string? _deviceCode;
+        private DateTimeOffset _deviceCodeExpiresAt;
+        /// <summary>The device-code poll loop in flight (tests await it).</summary>
+        internal Task DevicePoll { get; private set; } = Task.CompletedTask;
 
         private const string ServerUrl = "https://codebambi-proxy.vercel.app";
         private static readonly HttpClient Http = new();
@@ -184,6 +187,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             this.FindControl<TextBlock>("BtnDeviceCodeCancel")!.PointerPressed += (_, e) =>
             {
                 e.Handled = true;
+                _deviceCts?.Cancel();
+                _deviceCode = null;
                 ShowProviderSelection();
             };
 
@@ -206,11 +211,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 
             // Cancel any in-flight availability check on dialog close so alt+F4 / parent .Close() /
             // session-end don't leave an orphan task running against a hidden window. The WPF
-            // original guarded its device-code poll loop here for the same reason; that loop needs
-            // the service and is stubbed below, so _checkCts is what is left to cancel.
+            // original guarded its device-code poll loop here for the same reason.
             Closed += (_, _) =>
             {
                 _closed = true;
+                _deviceCts?.Cancel();
                 _checkCts?.Cancel();
                 _checkCts?.Dispose();
                 _checkCts = null;
@@ -259,7 +264,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             try
             {
                 // Start OAuth flow (Core); the browser opens through Avalonia's Launcher (xdg-open on Linux).
-                Action<string> open = url => _ = OpenBrowserAsync(url);
+                var purpose = provider == "discord" ? "sign in with Discord" : provider == "substar" ? "sign in with SubscribeStar" : "sign in with Patreon";
+                Action<string> open = url => _ = OpenBrowserAsync(url, purpose);
                 string? accessToken;
                 if (provider == "discord")
                 {
@@ -337,14 +343,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             }
         }
 
-        /// <summary>WPF BrowserLauncher.OpenUrlOrPrompt: on failure the link goes to the clipboard. The listener keeps waiting.</summary>
-        private async Task OpenBrowserAsync(string url)
+        /// <summary>WPF BrowserLauncher.OpenUrlOrPrompt: on failure the link goes to the clipboard and the user is told
+        /// where it went. The listener keeps waiting.</summary>
+        internal async Task OpenBrowserAsync(string url, string purpose)
         {
             // A sandbox never opens a real provider page unless a loopback override points it home (ExternalOpener).
             if (!ExternalOpener.Allowed(url)) return;
             if (await ExternalOpener.OpenAsync(this, url)) return;
-            try { if (Clipboard is { } c) await c.SetTextAsync(url); } catch { }
-            // ponytail: WPF also shows a "link copied" prompt; the clipboard copy is the recovery here.
+            try { if (Clipboard is { } c) await c.SetTextAsync(url); } catch { /* clipboard may be locked by another app */ }
+            if (_closed) return;
+            await MessageDialog.ShowAsync(this, Loc.Get("title_open_link_in_browser"),
+                Loc.GetF("msg_browser_no_default_for", purpose) + Loc.GetF("msg_browser_link_copied", url));
         }
 
         private async Task<bool> ConfirmCreateNewDespiteExistingAccount(string provider, string? existingDisplayName)
@@ -721,13 +730,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         {
             if (_closed) { Log.Warning("Sign-in finished after the login dialog closed; ignored"); return; }
             // WPF MainWindow.Login.cs:110-141: a PROVEN different account never inherits the last one's progression.
-            var previousId = CoreSettings.Current.UnifiedId;
-            if (!string.IsNullOrEmpty(previousId) && !string.IsNullOrEmpty(user.UnifiedId) && previousId != user.UnifiedId)
-            {
-                ProgressionClear.Apply(CoreSettings.Current);
-                App.Achievements?.Reset();
-                AccountSeed.Sync?.Reset();
-            }
+            ClearIfOtherAccount(user.UnifiedId);
             ProfileAdopt.ApplyUserData(CoreSettings.Current, user, authToken, DateTime.UtcNow);
             // WPF V2AuthServiceHead: an invite week rides its own exact end date (main 6f5e76610).
             ConditioningControlPanel.Services.Invites.InviteRules.ApplyGrant(CoreSettings.Current, ConditioningControlPanel.Services.Invites.InviteRules.ParseUtc(user.InviteGrantUntilRaw), DateTime.UtcNow);
@@ -753,10 +756,25 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             Close(true);
         }
 
+        private static void ClearIfOtherAccount(string? newId)
+        {
+            var previousId = CoreSettings.Current.UnifiedId;
+            if (!string.IsNullOrEmpty(previousId) && !string.IsNullOrEmpty(newId) && previousId != newId)
+            {
+                ProgressionClear.Apply(CoreSettings.Current);
+                App.Achievements?.Reset();
+                AccountSeed.Sync?.Reset();
+            }
+        }
+
         private void BtnCancel_Click()
         {
             // Logout any providers that were authenticated during this flow
             AccountSeed.LogoutProvider(_firstProvider);
+
+            // Stop device-code polling if it's running.
+            _deviceCts?.Cancel();
+            _deviceCode = null;
 
             // Clear sensitive data (audit C1)
             ClearSensitiveData();
@@ -769,15 +787,35 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 
         #region SP3 Device-Code Flow
 
-        /// <summary>
-        /// ponytail: needs V2DeviceCodeService.InitiateAsync and its /poll loop, wired when the
-        /// service moves to Core. The panel is shown with a sample code so the layout, the ABC-DEF
-        /// split and the manual-URL fallback are all still exercised; nothing polls.
-        /// </summary>
-        private void BtnLoginDeviceCode_Click()
+        private async void BtnLoginDeviceCode_Click()
         {
-            ShowDeviceCodePanel("ABCDEF");
-            OpenVerificationUrl();
+            ShowLoading("Generating sign-in code...");
+            try
+            {
+                var resp = await DeviceCodes().InitiateAsync();
+                if (_closed) return;
+                if (!resp.Success || string.IsNullOrEmpty(resp.Code))
+                {
+                    await ShowError(SanitizeError(resp.Error));
+                    return;
+                }
+
+                _deviceCode = resp.Code;
+                _deviceCodeExpiresAt = resp.ExpiresAt;
+
+                ShowDeviceCodePanel(resp.Code);
+                OpenVerificationUrl();
+
+                _deviceCts?.Cancel();
+                _deviceCts?.Dispose();
+                _deviceCts = new CancellationTokenSource();
+                DevicePoll = PollDeviceCodeLoopAsync(_deviceCts.Token);
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "[DeviceCode] Initiate exception");
+                await ShowError(Loc.Get("login_failed_please_try_again"));
+            }
         }
 
         private void ShowDeviceCodePanel(string code)
@@ -803,12 +841,140 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
             await ExternalOpener.OpenAsync(this, VerificationUrl);   // best effort; a sandbox never opens a real page
         }
 
+        /// <summary>WPF PollDeviceCodeLoopAsync: /v2/auth/device/poll every 3 s until confirmed, expired or
+        /// failed; 429/503/unknown back off (doubling, 30 s cap); five unknowns in a row give up.</summary>
+        private async Task PollDeviceCodeLoopAsync(CancellationToken ct)
+        {
+            if (string.IsNullOrEmpty(_deviceCode)) return;
+
+            var svc = DeviceCodes();
+            int intervalMs = 3000;
+            int consecutiveUnknown = 0;
+
+            try
+            {
+                // Initial wait so the user has time to switch to the browser.
+                await Task.Delay(TimeSpan.FromMilliseconds(intervalMs), Clock, ct);
+
+                while (!ct.IsCancellationRequested)
+                {
+                    // Hard expiry against the server-issued expires_at.
+                    if (Clock.GetUtcNow() > _deviceCodeExpiresAt)
+                    {
+                        await HandleDeviceCodeError("Sign-in code expired. Please try again.");
+                        return;
+                    }
+
+                    var result = await svc.PollAsync(_deviceCode!, ct);
+                    if (ct.IsCancellationRequested) return;
+
+                    switch (result.Status)
+                    {
+                        case V2DeviceCodeService.PollStatus.Confirmed:
+                            await HandleDeviceCodeConfirmed(result);
+                            return;
+
+                        case V2DeviceCodeService.PollStatus.Pending:
+                            intervalMs = 3000;
+                            consecutiveUnknown = 0;
+                            _txtDeviceStatus.Text = "Waiting for browser confirmation...";
+                            break;
+
+                        case V2DeviceCodeService.PollStatus.Expired:
+                            await HandleDeviceCodeError("Sign-in code expired. Please try again.");
+                            return;
+
+                        case V2DeviceCodeService.PollStatus.NotFound:
+                            await HandleDeviceCodeError("Sign-in code wasn't recognized. Please try again.");
+                            return;
+
+                        case V2DeviceCodeService.PollStatus.RateLimited:
+                        case V2DeviceCodeService.PollStatus.ServiceUnavailable:
+                            intervalMs = Math.Min(intervalMs * 2, 30000);
+                            _txtDeviceStatus.Text = "Connection busy, retrying...";
+                            break;
+
+                        case V2DeviceCodeService.PollStatus.BadRequest:
+                        case V2DeviceCodeService.PollStatus.Unauthorized:
+                            await HandleDeviceCodeError("Sign-in failed. Please try again.");
+                            return;
+
+                        case V2DeviceCodeService.PollStatus.Unknown:
+                        default:
+                            consecutiveUnknown++;
+                            if (consecutiveUnknown >= 5)
+                            {
+                                await HandleDeviceCodeError("Lost connection to server. Please try again.");
+                                return;
+                            }
+                            intervalMs = Math.Min(intervalMs * 2, 30000);
+                            _txtDeviceStatus.Text = "Connection issue, retrying...";
+                            break;
+                    }
+
+                    await Task.Delay(TimeSpan.FromMilliseconds(intervalMs), Clock, ct);
+                }
+            }
+            catch (OperationCanceledException) { /* user cancelled */ }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "[DeviceCode] Poll loop crashed");
+                await HandleDeviceCodeError("Unexpected error. Please try again.");
+            }
+        }
+
+        private async Task HandleDeviceCodeConfirmed(V2DeviceCodeService.PollResponse result)
+        {
+            if (string.IsNullOrEmpty(result.AuthToken) || string.IsNullOrEmpty(result.UnifiedId))
+            {
+                await HandleDeviceCodeError("Server returned an incomplete response.");
+                return;
+            }
+            _deviceCts?.Cancel();
+            _deviceCode = null;
+
+            // The full user when the server sent it (SP3 fix): the same adopt + load as every other sign-in.
+            if (result.User != null)
+            {
+                Succeed(result.User, result.AuthToken, "device_code", legacy: false);
+                return;
+            }
+            if (_closed) return;
+            // Older proxy without the user piggyback: bare token + id, as WPF.
+            ClearIfOtherAccount(result.UnifiedId);
+            var s = CoreSettings.Current;
+            s.AuthToken = result.AuthToken;
+            s.UnifiedId = result.UnifiedId;
+            CoreSettings.Save();
+            CoreAccount.UnifiedUserId = result.UnifiedId;
+            ProfileLoad = AccountSeed.LoadProfileAsync(); // WPF MainWindow.Login.cs:170 runs after every sign-in
+            Result = new LoginResult
+            {
+                Success = true,
+                IsLegacyUser = false,
+                ShouldShowOgWelcome = false,
+                UnifiedId = result.UnifiedId,
+                DisplayName = s.UserDisplayName,
+                Provider = "device_code",
+            };
+            Close(true);
+        }
+
+        /// <summary>WPF HandleDeviceCodeExpired / HandleDeviceCodeError: stop, say why, back to the providers.</summary>
+        private Task HandleDeviceCodeError(string message)
+        {
+            _deviceCts?.Cancel();
+            _deviceCode = null;
+            return ShowError(message);
+        }
+
         private async void BtnDeviceCodeCopy_Click()
         {
+            if (string.IsNullOrEmpty(_deviceCode)) return;
             try
             {
                 if (Clipboard is null) return;
-                await Clipboard.SetTextAsync(_txtDeviceCode.Text?.Replace("-", "") ?? "");
+                await Clipboard.SetTextAsync(_deviceCode);
                 _txtDeviceStatus.Text = "Code copied. Paste in your browser.";
             }
             catch (Exception)

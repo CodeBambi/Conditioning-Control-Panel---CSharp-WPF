@@ -51,6 +51,23 @@ namespace ConditioningControlPanel.Views.Tabs
         private void BtnPlayChess_Click(object sender, RoutedEventArgs e)
             => Owner?.LaunchPlayChess();
 
+        // ---- GAMES, rehomed from the retired Premium page (nav rework 2026-10-06) ----------
+
+        private void BtnPlayBackRoom_Click(object sender, RoutedEventArgs e)
+            => Owner?.LaunchPlayBackRoom();
+
+        private void BtnPlayDtrh_Click(object sender, RoutedEventArgs e)
+            => Owner?.LaunchPlayLauncherGame("dtrh");
+
+        private void BtnPlayArcademy_Click(object sender, RoutedEventArgs e)
+            => Owner?.LaunchPlayLauncherGame("arcademy");
+
+        private void BtnPlayRacingThoughts_Click(object sender, RoutedEventArgs e)
+            => Owner?.LaunchPlayLauncherGame("race");
+
+        private void BtnPlayWebApp_Click(object sender, RoutedEventArgs e)
+            => Owner?.OpenPlayWebApp();
+
         // ---- TOGETHER --------------------------------------------------------------------
 
         private void BtnPlayRemoteControl_Click(object sender, RoutedEventArgs e)

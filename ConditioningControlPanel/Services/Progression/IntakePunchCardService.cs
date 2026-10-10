@@ -88,7 +88,7 @@ public class IntakePunchCardService : IDisposable
     {
         _statePath = statePathOverride ?? Path.Combine(
             App.UserDataPath,
-            "intake_punchcard.json");
+            IntakePunchCardState.FileName);
 
         State = LoadState();
         EnsureCardStarted();
@@ -122,7 +122,7 @@ public class IntakePunchCardService : IDisposable
     /// beyond one punch - or a stamp still pending - means a real run happened. Used to give the
     /// very first run a gentler launch (the intake normally minimizes the control panel, which on
     /// a first-ever run reads as the app crashing).</summary>
-    public bool HasEverCompletedIntake => State.PunchedCount > 1 || State.PendingDrafts.Count > 0;
+    public bool HasEverCompletedIntake => State.EverCompletedIntake();
 
     /// <summary>State of a single hole, for painting. Index is 0-based.</summary>
     public PunchHoleView HoleAt(int index)

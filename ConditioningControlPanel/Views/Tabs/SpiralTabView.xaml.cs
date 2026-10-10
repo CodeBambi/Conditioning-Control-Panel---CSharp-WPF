@@ -99,7 +99,7 @@ namespace ConditioningControlPanel.Views.Tabs
 
         /// <summary>Capped like every other ambient clock in the app (MotionFx.AmbientFrameRate).
         /// The blurred glow duplicate re-renders with the pulse, so this cap is doing real work.</summary>
-        private const int AmbientFrameRate = 24;
+        private const int AmbientFrameRate = 30;
 
         /// <summary>
         /// The embers, as fractions of the fog's own rectangle so they reflow with the window

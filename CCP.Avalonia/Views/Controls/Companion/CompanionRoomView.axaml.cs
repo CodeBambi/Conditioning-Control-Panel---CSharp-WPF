@@ -94,10 +94,43 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
             public void OnError(Exception error) { }
             public void OnNext(bool value)
             {
-                if (_owner.IsEffectivelyVisible) _owner.ResumeClocks();
+                bool shown = _owner.IsEffectivelyVisible;
+                if (shown) _owner.ResumeClocks();
                 else _owner.ParkClocks();
+                // WPF CompanionTabView.IsVisibleChanged -> MainWindow.OnCompanionTabVisibilityChanged:
+                // raised on a real edge only (the chain reports every ancestor on subscribe).
+                if (shown != _owner._shown) { _owner._shown = shown; _owner.TabVisibilityChanged?.Invoke(_owner, shown); }
             }
         }
+
+        private bool _shown;
+
+        /// <summary>The page's effective visibility flipped (tab switch, tray hide). The tab
+        /// forwards it to the shell, as WPF's tab forwards IsVisibleChanged.</summary>
+        internal event EventHandler<bool>? TabVisibilityChanged;
+
+        /// <summary>WPF MainWindow.Patreon.cs:1344 RestoreCompanionSectionStates: the two drawers'
+        /// remembered open/closed state (keys "EngineRoom" / "Workshop"; both default closed).</summary>
+        internal void RestoreDrawerStates(IDictionary<string, bool> map)
+        {
+            if (map.TryGetValue(EngineDrawerKey, out var engineOpen) && EngineZone.DataContext is EngineRoomVm e) e.IsExpanded = engineOpen;
+            if (map.TryGetValue(WorkshopDrawerKey, out var shopOpen) && WorkshopZone.DataContext is Runtime.WorkshopRuntimeVm w) w.IsExpanded = shopOpen;
+        }
+
+        /// <summary>WPF MainWindow.Patreon.cs:1364 PersistCompanionDrawerStates (the map half; the
+        /// caller saves).</summary>
+        internal void PersistDrawerStates(IDictionary<string, bool> map)
+        {
+            if (EngineZone.DataContext is EngineRoomVm e) map[EngineDrawerKey] = e.IsExpanded;
+            if (WorkshopZone.DataContext is Runtime.WorkshopRuntimeVm w) map[WorkshopDrawerKey] = w.IsExpanded;
+        }
+
+        /// <summary>WPF MainWindow.CompanionEngineDrawerKey / CompanionWorkshopDrawerKey.</summary>
+        internal const string EngineDrawerKey = "EngineRoom", WorkshopDrawerKey = "Workshop";
+
+        /// <summary>WPF OnCompanionFxModChanged's UpdateCompanionCardsUI half: the roster's names,
+        /// accent ring and supported set follow a mod switch made while the tab is open.</summary>
+        internal void RefreshRoster() => (WorkshopZone.DataContext as Runtime.WorkshopRuntimeVm)?.Parts.Roster.Refresh();
 
         // ponytail: ICompanionRoomVm (zone interfaces) lives in the WPF head; hero, chat and memory are
         // live, the other zones seed their own viewmodels until their runtime crosses.
@@ -133,6 +166,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
                 AwarenessZone.SyncCursorBlink();
                 ChatZone.ViewModel?.Sync();
                 MemoryZone.ViewModel?.Sync();
+                PersonalityZone.ViewModel.Sync();   // WPF CompanionRoomRuntimeVm.Sync -> PersonalityVm.Sync
                 AttentionZone.ViewModel?.Sync();
                 // The constellation's one-shot dormant sweep waits for the first time the tab is seen.
                 HeroZone.GetLogicalDescendants().OfType<RelationshipConstellation>().FirstOrDefault()?.PlayIntro();

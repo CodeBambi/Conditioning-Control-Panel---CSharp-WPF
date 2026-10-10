@@ -86,13 +86,15 @@
             <Style x:Key="PlayCard" TargetType="Border">
                 <Setter Property="CornerRadius" Value="16"/>
                 <Setter Property="Background" Value="{DynamicResource SurfaceBgBrush}"/>
-                <Setter Property="BorderBrush" Value="{DynamicResource PanelAccentBrush}"/>
+                <!-- Readability pass (polish 8): a 1 px glass outline on every card so it lifts
+                     off the washed page; the tier variants below keep their metal rim on top. -->
+                <Setter Property="BorderBrush" Value="{DynamicResource GlassBorderBrush}"/>
                 <Setter Property="BorderThickness" Value="1"/>
                 <Setter Property="Padding" Value="22"/>
                 <Setter Property="Margin" Value="9"/>
                 <Style.Triggers>
                     <Trigger Property="IsMouseOver" Value="True">
-                        <Setter Property="BorderBrush" Value="{DynamicResource PanelAccentHoverBrush}"/>
+                        <Setter Property="BorderBrush" Value="{DynamicResource GlassBorderHoverBrush}"/>
                     </Trigger>
                 </Style.Triggers>
             </Style>
@@ -157,32 +159,38 @@
                 <Setter Property="Margin" Value="-22,-22,-22,16"/>
                 <Setter Property="ClipToBounds" Value="True"/>
             </Style>
-            <Style x:Key="PlayZoneTag" TargetType="TextBlock">
-                <Setter Property="Foreground" Value="{DynamicResource PinkBrush}"/>
-                <Setter Property="FontFamily" Value="Consolas, Courier New"/>
-                <Setter Property="FontWeight" Value="Bold"/>
-                <Setter Property="FontSize" Value="12"/>
+            <!-- Zone eyebrow: the shared Type.SectionHeader (11 Bold Consolas in the section ink,
+                 painted per section by PaintSectionWash). Only placement is local. -->
+            <Style x:Key="PlayZoneTag" TargetType="TextBlock" BasedOn="{StaticResource Type.SectionHeader}">
                 <Setter Property="VerticalAlignment" Value="Center"/>
                 <Setter Property="Margin" Value="0,0,14,0"/>
             </Style>
             <!-- The hairline that trails off to the right of a zone tag. Geometry only: the
                  gradient stays INLINE on each Border (the same markup the Lab tab used), because
                  a Freezable carrying a DynamicResource is not a shape this codebase proves out
-                 inside a Style setter value. Four copies of four lines beats one clever one. -->
+                 inside a Style setter value. Four copies of four lines beats one clever one.
+                 Readability pass (polish 8): the rule paints the section rule ink
+                 (SectionRuleBrush, a plain brush reference) and fades out through a STATIC
+                 opacity mask, so no Freezable in a setter carries a DynamicResource. -->
             <Style x:Key="PlayZoneRule" TargetType="Border">
                 <Setter Property="Height" Value="1"/>
                 <Setter Property="VerticalAlignment" Value="Center"/>
+                <Setter Property="Background" Value="{DynamicResource SectionRuleBrush}"/>
+                <Setter Property="OpacityMask">
+                    <Setter.Value>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                            <GradientStop Color="Black" Offset="0"/>
+                            <GradientStop Color="Transparent" Offset="1"/>
+                        </LinearGradientBrush>
+                    </Setter.Value>
+                </Setter>
             </Style>
-            <Style x:Key="PlayCardTitle" TargetType="TextBlock">
-                <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
-                <Setter Property="FontWeight" Value="Bold"/>
-                <Setter Property="FontSize" Value="18"/>
+            <!-- Card name and blurb ride the shared type scale (Type.CardTitle 18 Bold Light,
+                 Type.Body 13 Secondary: the blurb carries meaning, so never TextMuted). -->
+            <Style x:Key="PlayCardTitle" TargetType="TextBlock" BasedOn="{StaticResource Type.CardTitle}">
                 <Setter Property="VerticalAlignment" Value="Center"/>
             </Style>
-            <Style x:Key="PlayCardBlurb" TargetType="TextBlock">
-                <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
-                <Setter Property="FontSize" Value="12.5"/>
-                <Setter Property="TextWrapping" Value="Wrap"/>
+            <Style x:Key="PlayCardBlurb" TargetType="TextBlock" BasedOn="{StaticResource Type.Body}">
                 <Setter Property="VerticalAlignment" Value="Top"/>
             </Style>
             <!-- A numbered step on an explainer card. The pip is a fixed 18px circle so three of
@@ -207,21 +215,21 @@
             <Style x:Key="PlayStepText" TargetType="TextBlock" BasedOn="{StaticResource PlayCardBlurb}">
                 <Setter Property="Margin" Value="0,0,0,7"/>
             </Style>
-            <!-- NEW / BETA / SOON chip. Mod-tinted, unlike the lock vocabulary below. -->
+            <!-- NEW / BETA / SOON chip. Section-tinted (polish 8): section ink on a card-surface
+                 plate inside the section outline, so it reads over the art and matches the
+                 page's eyebrows. The lock vocabulary below keeps its own colours. -->
             <Style x:Key="PlayBadgePill" TargetType="Border">
-                <Setter Property="Background" Value="{DynamicResource TransparentPink20Brush}"/>
-                <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+                <Setter Property="Background" Value="{DynamicResource ElevatedSurfaceBrush}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource SectionOutlineBrush}"/>
                 <Setter Property="BorderThickness" Value="1"/>
                 <Setter Property="CornerRadius" Value="6"/>
                 <Setter Property="Padding" Value="6,2"/>
                 <Setter Property="Margin" Value="9,0,0,0"/>
                 <Setter Property="VerticalAlignment" Value="Center"/>
             </Style>
-            <Style x:Key="PlayBadgePillText" TargetType="TextBlock">
-                <Setter Property="Foreground" Value="{DynamicResource PinkBrush}"/>
-                <Setter Property="FontFamily" Value="Consolas, Courier New"/>
-                <Setter Property="FontWeight" Value="Bold"/>
-                <Setter Property="FontSize" Value="9.5"/>
+            <Style x:Key="PlayBadgePillText" TargetType="TextBlock" BasedOn="{StaticResource Type.Label}">
+                <Setter Property="Foreground" Value="{DynamicResource SectionInkBrush}"/>
+                <Setter Property="FontSize" Value="10"/>
             </Style>
             <!-- The small square emblem plate that sits beside a title. Kept for the two Eyes
                  cards, which carry a glyph next to the name as well as a hero. -->
@@ -313,7 +321,7 @@
             </Style>
         </Grid.Resources>
 
-        <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <ScrollViewer x:Name="WallScroll" x:FieldModifier="internal" VerticalScrollBarVisibility="Auto">
             <!--
                 Entrance stagger note (MainWindow.ChromeFx.cs FindStaggerTargets): the helper
                 descends through single-child wrappers and staggers the first panel it finds with
@@ -325,20 +333,20 @@
             <StackPanel Margin="20">
 
                 <!-- ============================== HEADER ============================== -->
-                <TextBlock Text="{loc:Str nav_door_play}" Foreground="White" FontSize="24" FontWeight="Bold"
-                           Margin="0,0,0,4">
-                    <TextBlock.Effect>
-                        <!-- Mod-chain colour. The Lab header hard-coded #00FF88 here, which was the
-                             one non-mod-aware literal on that page; it is not carried forward. -->
-                        <DropShadowEffect Color="{DynamicResource FxGlowColor}" BlurRadius="20" ShadowDepth="0" Opacity="0.5"/>
-                    </TextBlock.Effect>
-                </TextBlock>
+                <!-- No "Play" H1: the section breadcrumb above the page says it (nav rework 2026-10-06). -->
                 <TextBlock Text="{loc:Str pl6_play_subtitle}" Foreground="{DynamicResource TextDimBrush}"
                            FontSize="12" Margin="0,0,0,16"/>
 
                 <!-- Breakout and Goon are also available here beside the panel features. -->
-                <TextBlock Text="{loc:Str rf_play_zone_games}" Style="{StaticResource PlayZoneTag}" Margin="2,4,2,8"/>
-                <UniformGrid Columns="2">
+                <Grid Margin="2,4,2,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock x:Name="ZoneGames" x:FieldModifier="internal" Grid.Column="0" Text="{loc:Str rf_play_zone_games}" Style="{StaticResource PlayZoneTag}"/>
+                    <Border Grid.Column="1" Style="{StaticResource PlayZoneRule}"/>
+                </Grid>
+                <UniformGrid Columns="3">
                     <Grid x:Name="SlotBreakoutDemo" x:FieldModifier="internal">
                         <Border Style="{StaticResource PlayCard}">
                             <Grid>
@@ -352,8 +360,8 @@
                                     <Border Grid.Row="0" Style="{StaticResource PlayCardArtPlate}">
                                         <Image Source="{x:Static launcher:BreakoutCardArt.Demo}" Stretch="UniformToFill"/>
                                     </Border>
-                                    <TextBlock Grid.Row="1" Text="{loc:Str launcher_game_breakoutdemo_title}" Style="{StaticResource PlayCardTitle}" Margin="0,0,0,8"/>
-                                    <TextBlock Grid.Row="2" Text="{loc:Str launcher_game_breakoutdemo_blurb}" Style="{StaticResource PlayCardBlurb}" Margin="0,0,0,16"/>
+                                    <TextBlock Grid.Row="1" Text="{loc:Str launcher_game_breakoutdemo_title}" Style="{StaticResource PlayCardTitle}" Margin="0,0,0,6"/>
+                                    <TextBlock Grid.Row="2" Text="{loc:Str launcher_game_breakoutdemo_blurb}" Style="{StaticResource PlayCardBlurb}" Margin="0,0,0,14"/>
                                     <Button Grid.Row="3" Content="{loc:Str launcher_play}" Cursor="Hand" HorizontalAlignment="Left" Padding="16,8"
                                             Background="{DynamicResource AccentGradientBrush}" Foreground="White" BorderThickness="0" FontWeight="Bold" FontSize="13"
                                             Click="BtnPlayBreakoutDemo_Click">
@@ -379,8 +387,8 @@
                                     <Border Grid.Row="0" Style="{StaticResource PlayCardArtPlate}">
                                         <Image Source="{x:Static launcher:BreakoutCardArt.Full}" Stretch="UniformToFill"/>
                                     </Border>
-                                    <TextBlock Grid.Row="1" Text="{loc:Str launcher_game_breakout_title}" Style="{StaticResource PlayCardTitle}" Margin="0,0,0,8"/>
-                                    <TextBlock Grid.Row="2" Text="{loc:Str launcher_game_breakout_blurb}" Style="{StaticResource PlayCardBlurb}" Margin="0,0,0,16"/>
+                                    <TextBlock Grid.Row="1" Text="{loc:Str launcher_game_breakout_title}" Style="{StaticResource PlayCardTitle}" Margin="0,0,0,6"/>
+                                    <TextBlock Grid.Row="2" Text="{loc:Str launcher_game_breakout_blurb}" Style="{StaticResource PlayCardBlurb}" Margin="0,0,0,14"/>
                                     <Button Grid.Row="3" Content="{loc:Str launcher_play}" Cursor="Hand" HorizontalAlignment="Left" Padding="16,8"
                                             Background="{DynamicResource AccentGradientBrush}" Foreground="White" BorderThickness="0" FontWeight="Bold" FontSize="13"
                                             Click="BtnPlayBreakout_Click">
@@ -413,8 +421,8 @@
                                     <Border Grid.Row="0" Style="{StaticResource PlayCardArtPlate}">
                                         <Border CornerRadius="16,16,0,0"><Border.Background><ImageBrush x:Name="PlayGoonHeroBrush" x:FieldModifier="internal" ImageSource="pack://application:,,,/Resources/features/goon_game_tile.png" Stretch="UniformToFill"/></Border.Background></Border>
                                     </Border>
-                                    <TextBlock Grid.Row="1" Text="{loc:Str launcher_game_goon_title}" Style="{StaticResource PlayCardTitle}" Margin="0,0,0,8"/>
-                                    <TextBlock Grid.Row="2" Text="{loc:Str launcher_game_goon_blurb}" Style="{StaticResource PlayCardBlurb}" Margin="0,0,0,16"/>
+                                    <TextBlock Grid.Row="1" Text="{loc:Str launcher_game_goon_title}" Style="{StaticResource PlayCardTitle}" Margin="0,0,0,6"/>
+                                    <TextBlock Grid.Row="2" Text="{loc:Str launcher_game_goon_blurb}" Style="{StaticResource PlayCardBlurb}" Margin="0,0,0,14"/>
                                     <Button Grid.Row="3" Content="{loc:Str launcher_play}" Cursor="Hand" HorizontalAlignment="Left" Padding="16,8"
                                             Background="{DynamicResource AccentGradientBrush}" Foreground="White" BorderThickness="0" FontWeight="Bold" FontSize="13"
                                             Click="BtnPlayGoon_Click">
@@ -438,8 +446,8 @@
                                     <Border Grid.Row="0" Style="{StaticResource PlayCardArtPlate}">
                                         <Border CornerRadius="16,16,0,0"><Border.Background><ImageBrush ImageSource="pack://application:,,,/Resources/features/piecebypiece.png" Stretch="UniformToFill"/></Border.Background></Border>
                                     </Border>
-                                    <TextBlock Grid.Row="1" Text="{loc:Str launcher_game_piecebypiece_title}" Style="{StaticResource PlayCardTitle}" Margin="0,0,0,8"/>
-                                    <TextBlock Grid.Row="2" Text="{loc:Str launcher_game_piecebypiece_blurb}" Style="{StaticResource PlayCardBlurb}" Margin="0,0,0,16"/>
+                                    <TextBlock Grid.Row="1" Text="{loc:Str launcher_game_piecebypiece_title}" Style="{StaticResource PlayCardTitle}" Margin="0,0,0,6"/>
+                                    <TextBlock Grid.Row="2" Text="{loc:Str launcher_game_piecebypiece_blurb}" Style="{StaticResource PlayCardBlurb}" Margin="0,0,0,14"/>
                                     <Button Grid.Row="3" Content="{loc:Str launcher_play}" Cursor="Hand" HorizontalAlignment="Left" Padding="16,8"
                                             Background="{DynamicResource AccentGradientBrush}" Foreground="White" BorderThickness="0" FontWeight="Bold" FontSize="13"
                                             Click="BtnPlayChess_Click">
@@ -449,6 +457,144 @@
                                 <Border Style="{StaticResource PlayBadgePill}" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="-12,-12,0,0" Panel.ZIndex="10">
                                     <TextBlock Text="{loc:Str exclusives_badge_new}" Style="{StaticResource PlayBadgePillText}"/>
                                 </Border>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                    <!-- Nav rework 2026-10-06: the Premium page retired, and for these five it was
+                         the panel's only door. Each button runs the launcher's own call
+                         (MainWindow.PlayTab.cs); tiers are decided in the handler, the bands are
+                         decoration only. -->
+                    <Grid x:Name="SlotBackRoom" x:FieldModifier="internal">
+                        <Border Style="{StaticResource PlayCard}">
+                            <Grid>
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="*"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <Border Grid.Row="0" Style="{StaticResource PlayCardArtPlate}">
+                                        <Border CornerRadius="16,16,0,0"><Border.Background><ImageBrush ImageSource="pack://application:,,,/Resources/features/backroom.png" Stretch="UniformToFill"/></Border.Background></Border>
+                                    </Border>
+                                    <TextBlock Grid.Row="1" Text="{loc:Str launcher_game_backroom_title}" Style="{StaticResource PlayCardTitle}" Margin="0,0,0,6"/>
+                                    <TextBlock Grid.Row="2" Text="{loc:Str launcher_game_backroom_blurb}" Style="{StaticResource PlayCardBlurb}" Margin="0,0,0,14"/>
+                                    <Button Grid.Row="3" x:Name="BtnPlayBackRoom" x:FieldModifier="internal" Content="{loc:Str launcher_play}" Cursor="Hand" HorizontalAlignment="Left" Padding="16,8"
+                                            Background="{DynamicResource AccentGradientBrush}" Foreground="White" BorderThickness="0" FontWeight="Bold" FontSize="13"
+                                            Click="BtnPlayBackRoom_Click">
+                                        <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="10"/></Style></Button.Resources>
+                                    </Button>
+                                </Grid>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                    <Grid x:Name="SlotDtrh" x:FieldModifier="internal">
+                        <Border Style="{StaticResource PlayCardT2}">
+                            <Grid>
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="*"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <Border Grid.Row="0" Style="{StaticResource PlayCardArtPlate}">
+                                        <Border CornerRadius="16,16,0,0"><Border.Background><ImageBrush ImageSource="pack://application:,,,/Resources/features/dtrh.png" Stretch="UniformToFill"/></Border.Background></Border>
+                                    </Border>
+                                    <TextBlock Grid.Row="1" Text="{loc:Str launcher_game_dtrh_title}" Style="{StaticResource PlayCardTitle}" Margin="0,0,0,6"/>
+                                    <TextBlock Grid.Row="2" Text="{loc:Str launcher_game_dtrh_blurb}" Style="{StaticResource PlayCardBlurb}" Margin="0,0,0,14"/>
+                                    <Button Grid.Row="3" x:Name="BtnPlayDtrh" x:FieldModifier="internal" Content="{loc:Str launcher_play}" Cursor="Hand" HorizontalAlignment="Left" Padding="16,8"
+                                            Background="{DynamicResource AccentGradientBrush}" Foreground="White" BorderThickness="0" FontWeight="Bold" FontSize="13"
+                                            Click="BtnPlayDtrh_Click">
+                                        <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="10"/></Style></Button.Resources>
+                                    </Button>
+                                </Grid>
+                                <Border x:Name="PlayLockDtrh" x:FieldModifier="internal" Style="{StaticResource PlayLockBandT2}" Margin="-22">
+                                    <StackPanel VerticalAlignment="Center">
+                                        <helpers:EmojiTextBlock Text="🔒" Style="{StaticResource PlayLockGlyph}"/>
+                                        <TextBlock Text="{loc:Str hm3_rail_lock_t2}" Style="{StaticResource PlayLockTeaserT2}"/>
+                                    </StackPanel>
+                                </Border>
+                                <fx:TierBadge x:Name="PlayBadgeDtrh" x:FieldModifier="internal" Style="{StaticResource PlayTierBadge}" Tier="2"/>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                    <Grid x:Name="SlotArcademy" x:FieldModifier="internal">
+                        <Border Style="{StaticResource PlayCardT2}">
+                            <Grid>
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="*"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <Border Grid.Row="0" Style="{StaticResource PlayCardArtPlate}">
+                                        <Border CornerRadius="16,16,0,0"><Border.Background><ImageBrush ImageSource="pack://application:,,,/Resources/features/arcademy.png" Stretch="UniformToFill"/></Border.Background></Border>
+                                    </Border>
+                                    <TextBlock Grid.Row="1" Text="{loc:Str launcher_game_arcademy_title}" Style="{StaticResource PlayCardTitle}" Margin="0,0,0,6"/>
+                                    <TextBlock Grid.Row="2" Text="{loc:Str launcher_game_arcademy_blurb}" Style="{StaticResource PlayCardBlurb}" Margin="0,0,0,14"/>
+                                    <Button Grid.Row="3" x:Name="BtnPlayArcademy" x:FieldModifier="internal" Content="{loc:Str launcher_play}" Cursor="Hand" HorizontalAlignment="Left" Padding="16,8"
+                                            Background="{DynamicResource AccentGradientBrush}" Foreground="White" BorderThickness="0" FontWeight="Bold" FontSize="13"
+                                            Click="BtnPlayArcademy_Click">
+                                        <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="10"/></Style></Button.Resources>
+                                    </Button>
+                                </Grid>
+                                <Border x:Name="PlayLockArcademy" x:FieldModifier="internal" Style="{StaticResource PlayLockBandT2}" Margin="-22">
+                                    <StackPanel VerticalAlignment="Center">
+                                        <helpers:EmojiTextBlock Text="🔒" Style="{StaticResource PlayLockGlyph}"/>
+                                        <TextBlock Text="{loc:Str hm3_rail_lock_t2}" Style="{StaticResource PlayLockTeaserT2}"/>
+                                    </StackPanel>
+                                </Border>
+                                <fx:TierBadge x:Name="PlayBadgeArcademy" x:FieldModifier="internal" Style="{StaticResource PlayTierBadge}" Tier="2"/>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                    <Grid x:Name="SlotRacingThoughts" x:FieldModifier="internal">
+                        <Border Style="{StaticResource PlayCard}">
+                            <Grid>
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="*"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <Border Grid.Row="0" Style="{StaticResource PlayCardArtPlate}">
+                                        <Border CornerRadius="16,16,0,0"><Border.Background><ImageBrush ImageSource="pack://application:,,,/Resources/features/race.png" Stretch="UniformToFill"/></Border.Background></Border>
+                                    </Border>
+                                    <TextBlock Grid.Row="1" Text="{loc:Str launcher_game_race_title}" Style="{StaticResource PlayCardTitle}" Margin="0,0,0,6"/>
+                                    <TextBlock Grid.Row="2" Text="{loc:Str launcher_game_race_blurb}" Style="{StaticResource PlayCardBlurb}" Margin="0,0,0,14"/>
+                                    <Button Grid.Row="3" x:Name="BtnPlayRacingThoughts" x:FieldModifier="internal" Content="{loc:Str launcher_play}" Cursor="Hand" HorizontalAlignment="Left" Padding="16,8"
+                                            Background="{DynamicResource AccentGradientBrush}" Foreground="White" BorderThickness="0" FontWeight="Bold" FontSize="13"
+                                            Click="BtnPlayRacingThoughts_Click">
+                                        <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="10"/></Style></Button.Resources>
+                                    </Button>
+                                </Grid>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                    <Grid x:Name="SlotWebApp" x:FieldModifier="internal">
+                        <Border Style="{StaticResource PlayCard}">
+                            <Grid>
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="*"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <Border Grid.Row="0" Style="{StaticResource PlayCardArtPlate}">
+                                        <Border CornerRadius="16,16,0,0"><Border.Background><ImageBrush ImageSource="pack://application:,,,/Resources/billboard/webapp.png" Stretch="UniformToFill"/></Border.Background></Border>
+                                    </Border>
+                                    <TextBlock Grid.Row="1" Text="{loc:Str nav_door_webapp}" Style="{StaticResource PlayCardTitle}" Margin="0,0,0,6"/>
+                                    <TextBlock Grid.Row="2" Text="{loc:Str play_card_webapp_blurb}" Style="{StaticResource PlayCardBlurb}" Margin="0,0,0,14"/>
+                                    <Button Grid.Row="3" x:Name="BtnPlayWebApp" x:FieldModifier="internal" Content="{loc:Str btn_open}" Cursor="Hand" HorizontalAlignment="Left" Padding="16,8"
+                                            Background="{DynamicResource AccentGradientBrush}" Foreground="White" BorderThickness="0" FontWeight="Bold" FontSize="13"
+                                            Click="BtnPlayWebApp_Click">
+                                        <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="10"/></Style></Button.Resources>
+                                    </Button>
+                                </Grid>
                             </Grid>
                         </Border>
                     </Grid>
@@ -464,14 +610,7 @@
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
                     <TextBlock Grid.Column="0" Text="{loc:Str rf_play_zone_together}" Style="{StaticResource PlayZoneTag}"/>
-                    <Border Grid.Column="1" Style="{StaticResource PlayZoneRule}">
-                        <Border.Background>
-                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                                <GradientStop Color="{DynamicResource PanelAccentHover}" Offset="0"/>
-                                <GradientStop Color="Transparent" Offset="1"/>
-                            </LinearGradientBrush>
-                        </Border.Background>
-                    </Border>
+                    <Border Grid.Column="1" Style="{StaticResource PlayZoneRule}"/>
                 </Grid>
                 <!-- Column counts are FIXED on every zone, deliberately: a UniformGrid with an
                      explicit Columns keeps each card the width it was authored at even while a
@@ -506,8 +645,8 @@
                                             </Border>
                                         </Grid>
                                     </Border>
-                                    <TextBlock Grid.Row="1" Text="{loc:Str tab_remote_control}" Style="{StaticResource PlayCardTitle}" Margin="0,0,0,8"/>
-                                    <TextBlock Grid.Row="2" Text="{loc:Str pl6_card_blurb_remote}" Style="{StaticResource PlayCardBlurb}" Margin="0,0,0,16"/>
+                                    <TextBlock Grid.Row="1" Text="{loc:Str tab_remote_control}" Style="{StaticResource PlayCardTitle}" Margin="0,0,0,6"/>
+                                    <TextBlock Grid.Row="2" Text="{loc:Str pl6_card_blurb_remote}" Style="{StaticResource PlayCardBlurb}" Margin="0,0,0,14"/>
                                     <!-- Navigation only. The waiver, the login check and the deferred
                                          revert all live in ChkRemoteControlEnabled_Changed on that
                                          page; a second enable path here would be a second gate. -->
@@ -552,20 +691,13 @@
                      All THREE webcam features, under the one webcam chip. Blink Trainer moved here
                      from SESSIONS on 2026-08-12: its own blurb is "your webcam is counting", so
                      filing it beside a quiz was the page telling a small lie about what it needs. -->
-                <Grid Margin="2,18,2,8">
+                <Grid x:Name="ZoneEyes" x:FieldModifier="internal" Margin="2,18,2,8">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
                     <TextBlock Grid.Column="0" Text="{loc:Str rf_play_zone_eyes}" Style="{StaticResource PlayZoneTag}"/>
-                    <Border Grid.Column="1" Style="{StaticResource PlayZoneRule}">
-                        <Border.Background>
-                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                                <GradientStop Color="{DynamicResource PanelAccentHover}" Offset="0"/>
-                                <GradientStop Color="Transparent" Offset="1"/>
-                            </LinearGradientBrush>
-                        </Border.Background>
-                    </Border>
+                    <Border Grid.Column="1" Style="{StaticResource PlayZoneRule}"/>
                 </Grid>
                 <!-- Read-only webcam status chip. Settings → Devices has owned the camera since
                      Phase 2; the Eyes cards dim against tracker state, so the state has to be
@@ -797,7 +929,7 @@
                                         </Border>
                                         <TextBlock Text="{loc:Str tab_blink_trainer}" Style="{StaticResource PlayCardTitle}"/>
                                     </StackPanel>
-                                    <TextBlock Grid.Row="2" Text="{loc:Str pl6_card_blurb_blink}" Style="{StaticResource PlayCardBlurb}" Margin="0,0,0,16"/>
+                                    <TextBlock Grid.Row="2" Text="{loc:Str pl6_card_blurb_blink}" Style="{StaticResource PlayCardBlurb}" Margin="0,0,0,14"/>
                                     <Button Grid.Row="3" x:Name="BtnPlayBlinkTrainer" Content="{loc:Str btn_open}" Cursor="Hand"
                                             HorizontalAlignment="Left" Padding="16,8"
                                             Background="{DynamicResource AccentGradientBrush}" Foreground="White"
@@ -826,20 +958,13 @@
                      hand over the keys on a timer. Lockdown Mode arrived here on 2026-08-12 when
                      the RITUAL zone was dissolved (its other two cards, Mantras and Deeper, left
                      this page); it is a timed session and it reads as one next to these two. -->
-                <Grid Margin="2,18,2,8">
+                <Grid x:Name="ZoneSessions" x:FieldModifier="internal" Margin="2,18,2,8">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
                     <TextBlock Grid.Column="0" Text="{loc:Str rf_play_zone_sessions}" Style="{StaticResource PlayZoneTag}"/>
-                    <Border Grid.Column="1" Style="{StaticResource PlayZoneRule}">
-                        <Border.Background>
-                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                                <GradientStop Color="{DynamicResource PanelAccentHover}" Offset="0"/>
-                                <GradientStop Color="Transparent" Offset="1"/>
-                            </LinearGradientBrush>
-                        </Border.Background>
-                    </Border>
+                    <Border Grid.Column="1" Style="{StaticResource PlayZoneRule}"/>
                 </Grid>
                 <!-- Columns FIXED at 3 (see the note on the first zone), but Rows deliberately
                      UNSET here, unlike its neighbours. This zone used to be the one whose card
@@ -881,7 +1006,7 @@
                                             </Border>
                                         </Grid>
                                     </Border>
-                                    <TextBlock Grid.Row="1" Text="{loc:Str tab_gradedintake}" Style="{StaticResource PlayCardTitle}" Margin="0,0,0,8"/>
+                                    <TextBlock Grid.Row="1" Text="{loc:Str tab_gradedintake}" Style="{StaticResource PlayCardTitle}" Margin="0,0,0,6"/>
                                     <TextBlock Grid.Row="2" Text="{loc:Str pl6_card_blurb_intake}" Style="{StaticResource PlayCardBlurb}" Margin="0,0,0,10"/>
                                     <StackPanel Grid.Row="3">
                                         <!-- The state line: written by RefreshPlayCards from the SAME
@@ -966,8 +1091,8 @@
                                             </Border>
                                         </Grid>
                                     </Border>
-                                    <TextBlock Grid.Row="1" Text="{loc:Str tab_fyp}" Style="{StaticResource PlayCardTitle}" Margin="0,0,0,8"/>
-                                    <TextBlock Grid.Row="2" Text="{loc:Str pl6_card_blurb_fyp}" Style="{StaticResource PlayCardBlurb}" Margin="0,0,0,16"/>
+                                    <TextBlock Grid.Row="1" Text="{loc:Str tab_fyp}" Style="{StaticResource PlayCardTitle}" Margin="0,0,0,6"/>
+                                    <TextBlock Grid.Row="2" Text="{loc:Str pl6_card_blurb_fyp}" Style="{StaticResource PlayCardBlurb}" Margin="0,0,0,14"/>
                                     <!-- ShowTab("fyp"), never FypHostService.Launch(): ShowTab
                                          intercepts that key into OpenFypFeed, which owns the premium
                                          gate and is the same launch path the dashboard chip uses. -->
@@ -1027,8 +1152,8 @@
                                             </Border>
                                         </Grid>
                                     </Border>
-                                    <TextBlock Grid.Row="1" Text="{loc:Str tab_lockdown_mode}" Style="{StaticResource PlayCardTitle}" Margin="0,0,0,8"/>
-                                    <TextBlock Grid.Row="2" Text="{loc:Str pl6_card_blurb_lockdown}" Style="{StaticResource PlayCardBlurb}" Margin="0,0,0,16"/>
+                                    <TextBlock Grid.Row="1" Text="{loc:Str tab_lockdown_mode}" Style="{StaticResource PlayCardTitle}" Margin="0,0,0,6"/>
+                                    <TextBlock Grid.Row="2" Text="{loc:Str pl6_card_blurb_lockdown}" Style="{StaticResource PlayCardBlurb}" Margin="0,0,0,14"/>
                                     <!-- Navigation only. The duration dial, the double warning and
                                          App.Lockdown.Activate stay on that page - this card must not
                                          be a second way to take someone's keys away for an hour. -->
@@ -1066,14 +1191,7 @@
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
                     <TextBlock Grid.Column="0" Text="{loc:Str rf_play_zone_more}" Style="{StaticResource PlayZoneTag}"/>
-                    <Border Grid.Column="1" Style="{StaticResource PlayZoneRule}">
-                        <Border.Background>
-                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                                <GradientStop Color="{DynamicResource PanelAccentHover}" Offset="0"/>
-                                <GradientStop Color="Transparent" Offset="1"/>
-                            </LinearGradientBrush>
-                        </Border.Background>
-                    </Border>
+                    <Border Grid.Column="1" Style="{StaticResource PlayZoneRule}"/>
                 </Grid>
                 <!-- Loom NAVIGATES, it does not launch. Its only entry today is BtnOpenLoom on the
                      Spiral module of the Studio rack (Features\SpiralFeatureControl.xaml:135), and a

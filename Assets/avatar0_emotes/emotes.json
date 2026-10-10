@@ -4,7 +4,6 @@
   "fadeMs": 1000,
   "idleRotation": [
     { "clip": "idle",  "weight": 6 },
-    { "clip": "idle2", "weight": 6 },
     { "clip": "idle3", "weight": 6 },
     { "clip": "idle4", "weight": 6 },
     { "clip": "idle5", "weight": 6 },
@@ -31,12 +30,11 @@
   "minClipMs": 2500,
   "clickEmotes": ["shy", "sultry", "adoring", "tender", "blowkiss"],
   "clipScale": {
-    "_comment": "Per-clip extra scale multiplier on top of layout.scale. talkB renders 10% smaller than the rest.",
-    "talkB": 0.9
+    "_comment": "Per-clip extra scale multiplier on top of layout.scale. Empty since the cel set (2026-10-07): every clip shares one crop box."
   },
   "layout": {
-    "_comment": "Delta on top of the mod's avatar layout. scale = multiplier (0.855 = ~14.5% smaller total); offsetX += right (negative = left); offsetY += DOWN. Applies to BambiSleep, Sissy and CCP Default (the avatar0 set).",
-    "scale": 0.855,
+    "_comment": "Delta on top of the mod's avatar layout. scale = multiplier (0.79 since the cel set of 2026-10-07: she fills more of her frame than the pixel sprite did); offsetX += right (negative = left); offsetY += DOWN. Applies to BambiSleep, Sissy and CCP Default (the avatar0 set).",
+    "scale": 0.79,
     "offsetX": 10,
     "offsetY": -30,
     "detachedX": 10,
