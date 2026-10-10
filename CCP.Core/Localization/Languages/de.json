@@ -2059,6 +2059,7 @@
   "tooltip_exit_the_application_completely": "Die App schließen.",
   "label_remote_controlled": "FERNGESTEUERT",
   "label_someone_else_is_controlling_your_app": "Jemand anderes steuert deine App",
+  "label_controller_may_be_idle": "Der Controller ist vielleicht inaktiv...",
   "label_no_active_session": "Keine aktive Sitzung",
   "btn_end_session": "Sitzung beenden",
   "label_drop_to_import": "Zum Importieren ablegen",
@@ -7604,5 +7605,13 @@
   "kwt_effect_image_flash": "Bildblitz",
   "kwt_effect_overlay_pulse": "Overlay-Puls",
   "kwt_effect_mind_wipe": "Mind Wipe",
-  "kwt_effect_bubbles": "Blasen"
+  "kwt_effect_bubbles": "Blasen",
+  "label_asset_preset_default_0": "Preset {0}",
+  "msg_asset_preset_saved_0": "Preset '{0}' gespeichert!\n\n{1} Bilder, {2} Videos aktiviert.\n{3} Dateien deaktiviert.",
+  "msg_asset_preset_updated_0": "Preset '{0}' aktualisiert!\n\n{1} Bilder, {2} Videos aktiviert.\n{3} Dateien deaktiviert.",
+  "msg_update_asset_preset_confirm_0": "Preset '{0}' mit der aktuellen Auswahl aktualisieren?",
+  "title_no_preset_selected": "Kein Preset ausgewählt",
+  "title_cannot_update_default": "Standard kann nicht aktualisiert werden",
+  "title_cannot_delete_default": "Standard kann nicht gelöscht werden",
+  "title_update_preset": "Preset aktualisieren"
 }

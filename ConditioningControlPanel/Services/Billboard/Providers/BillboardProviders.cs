@@ -26,31 +26,6 @@ namespace ConditioningControlPanel.Services.Billboard.Providers
         };
     }
 
-    /// <summary>The card hues, one per section (the mockup's).</summary>
-    public static class CardHues
-    {
-        public const string Live = "#5fe3ff";
-        public const string Waiting = "#ffc94a";
-        public const string Resume = "#ff4fa8";
-        public const string Event = "#ff4fa8";
-        public const string Tip = "#9b7bff";
-    }
-
-    /// <summary>The art keys a provider may name (registered by the deck lane).</summary>
-    public static class CardArt
-    {
-        public const string Tables = "tables";
-        public const string Wheel = "wheel";
-        public const string Spiral = "spiral";
-        public const string Calendar = "calendar";
-        public const string Tip = "tip";
-        public const string Poster = "poster";
-        public const string Invite = "invite";
-        public const string Quests = "quests";
-
-        public static readonly IReadOnlyList<string> All = new[] { Tables, Wheel, Spiral, Calendar, Tip, Poster, Invite, Quests };
-    }
-
     /// <summary>Text helpers for the pure halves. <c>loc</c> is <c>Loc.Get</c> in the app, identity in tests.</summary>
     internal static class CardText
     {

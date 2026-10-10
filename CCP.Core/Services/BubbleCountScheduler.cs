@@ -252,6 +252,10 @@ namespace ConditioningControlPanel.Services
             CoreBubbles.Resume();
         }
 
+        /// <summary>WPF BubbleCountService.ReloadAssets: drop the dealt queue so the next game re-reads
+        /// the enabled library (#130).</summary>
+        public void ReloadAssets() => _queue = new Queue<string>();
+
         internal string? PickNext()
         {
             if (_queue.Count == 0) _queue = new Queue<string>(_library().OrderBy(_ => _random.Next()));

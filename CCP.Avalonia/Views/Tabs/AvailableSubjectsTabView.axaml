@@ -115,9 +115,7 @@
             <TextBlock Grid.Column="0" Text="🛰️" FontSize="30" Width="44"
                        TextAlignment="Center" VerticalAlignment="Center" Margin="0,0,16,0"/>
             <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                <TextBlock Text="{loc:Str tab_available_subjects}"
-                           Foreground="{DynamicResource NeonPurpleBrush}"
-                           FontSize="26" FontWeight="Bold"/>
+                <TextBlock Theme="{StaticResource Type.PageTitle}" Text="{loc:Str tab_available_subjects}"/>
                 <TextBlock Text="{loc:Str desc_available_subjects}"
                            Foreground="{DynamicResource TextMutedBrush}"
                            FontSize="13" Margin="0,4,0,0" TextWrapping="Wrap"/>

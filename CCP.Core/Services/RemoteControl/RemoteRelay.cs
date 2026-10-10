@@ -17,7 +17,7 @@ namespace ConditioningControlPanel.Services
     /// /v2/remote/*, the PIN, the 429 backoff, the 401/404 endings, the controller connect/idle state
     /// and the 120 s idle auto-disconnect. Commands go through <see cref="RemoteCommandGate"/> first and
     /// then to the executor on the UI thread (<see cref="CoreDispatch.Invoke"/>).
-    /// ponytail: directory opt-in, emotes, session list/progress in the status push are not here yet;
+    /// ponytail: directory opt-in, session list/progress in the status push are not here yet;
     /// add them with the tab parts that use them.
     /// </summary>
     public sealed class RemoteRelay : IDisposable
@@ -335,6 +335,44 @@ namespace ConditioningControlPanel.Services
                 return;
             }
             CommandReceived?.Invoke(this, action);
+        }
+
+        public const int EmoteDebounceMs = 300;   // WPF RemoteControlService.cs:434
+        private DateTime _lastEmoteSent = DateTime.MinValue;
+
+        /// <summary>WPF IsWithinDebounceWindow: a send now would be swallowed as a double click.</summary>
+        public bool IsWithinDebounceWindow => (Now() - _lastEmoteSent).TotalMilliseconds < EmoteDebounceMs;
+
+        /// <summary>WPF SendEmoteAsync (RemoteControlService.cs:848): POST /v2/remote/emote. Errors as WPF:
+        /// "session not active", "no unified id", "debounced" (silent), "rate_limited" + retry seconds, "http N".</summary>
+        public async Task<(bool ok, string? error, int? retryAfterSeconds)> SendEmoteAsync(string text, string icon, string kind)
+        {
+            if (!IsActive) return (false, "session not active", null);
+            var uid = _unifiedId();
+            if (string.IsNullOrEmpty(uid)) return (false, "no unified id", null);
+            if (IsWithinDebounceWindow) return (false, "debounced", null);
+            _lastEmoteSent = Now();
+            var trimmed = (text ?? "").Trim();
+            if (trimmed.Length == 0) return (false, "text required", null);
+            if (trimmed.Length > 60) trimmed = trimmed.Substring(0, 60);
+            var safeIcon = icon ?? "";
+            if (safeIcon.Length > 8) safeIcon = safeIcon.Substring(0, 8);
+            if (kind is not ("preset" or "custom")) return (false, "invalid kind", null);
+            try
+            {
+                using var resp = await PostAsync("/v2/remote/emote", new { unified_id = uid, text = trimmed, icon = safeIcon, kind }).ConfigureAwait(false);
+                if (resp.IsSuccessStatusCode) { Log.Information("[RemoteControl] Emote sent (kind={Kind}, len={Len})", kind, trimmed.Length); return (true, null, null); }
+                if ((int)resp.StatusCode == 429)
+                {
+                    int? retry = null;
+                    try { if (int.TryParse(JObject.Parse(await resp.Content.ReadAsStringAsync().ConfigureAwait(false))["retry_after_seconds"]?.ToString(), out var n)) retry = n; }
+                    catch { }
+                    return (false, "rate_limited", retry);
+                }
+                Log.Warning("[RemoteControl] Emote send failed: {Status}", resp.StatusCode);
+                return (false, $"http {(int)resp.StatusCode}", null);
+            }
+            catch (Exception ex) { Log.Warning(ex, "[RemoteControl] Emote send error"); return (false, ex.Message, null); }
         }
 
         /// <summary>WPF PushStatusNowAsync: a settings change (share avatar) reaches the controller now,

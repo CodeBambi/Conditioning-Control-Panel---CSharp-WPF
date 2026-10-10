@@ -126,11 +126,9 @@
                                            Margin="0,0,18,0"/>
                             </Border>
                             <StackPanel VerticalAlignment="Center" Margin="18,0,0,0">
-                                <TextBlock Text="{loc:Str premium_page_title}"
-                                           FontWeight="Bold"
-                                           FontSize="17" Foreground="{StaticResource TextLightBrush}"/>
+                                <TextBlock Theme="{StaticResource Type.CardTitle}" Text="{loc:Str premium_page_title}"/>
                                 <TextBlock Text="{loc:Str premium_page_sub}"
-                                           FontSize="11.5" Foreground="{StaticResource TextMutedBrush}"
+                                           FontSize="11.5" Foreground="{StaticResource TextSecondaryBrush}"
                                            Margin="0,1,0,0" MaxWidth="620" HorizontalAlignment="Left"
                                            TextTrimming="CharacterEllipsis"/>
                             </StackPanel>
