@@ -2,8 +2,9 @@
 // on Home). This file only hosts the deck: it makes the deck and the card host once, keeps the snoozes
 // in AppSettings and runs a card's button. The rules are Core DashboardBillboard/BillboardDeck, the
 // drawing is Controls/Billboard/BillboardCardHost. Providers so far: the house cards and the Prime
-// tips, and Core's Waiting/Resume/Event adapters over this head's services.
-// ponytail: Live (no Lobby service on this head), Board and Showcase are sync6-tonight-board-c.
+// tips, Core's Waiting/Resume/Event adapters over this head's services, and the premium showcase.
+// ponytail: Live waits on a Lobby service (none on this head); the Board card waits on BoardTileView
+// and the marquee hand-off (neither on this head), so it offers no card here.
 
 using System;
 using System.Collections.Generic;
@@ -14,6 +15,7 @@ using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Services;
 using ConditioningControlPanel.Services.Billboard;
 using ConditioningControlPanel.Services.Billboard.Providers;
+using ConditioningControlPanel.Services.Billboard.Showcase;
 using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
@@ -53,9 +55,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (DashboardBillboard.PruneSnoozes(snoozes, DateTime.UtcNow)) SaveBillboardSnoozes();
 
             var providers = BillboardProviders(weak);
-            // A set per shell (WPF has one per process): a closed shell unhooks its providers from the
-            // long-lived services, or every shell ever opened stays subscribed (P41).
-            Closed += (_, _) => { foreach (var p in providers) (p as BillboardProviderBase)?.Detach(); };
+            _billboardProviders = providers;
+            // A method, not a lambda: a closure here would share the one OpenBackRoom (static) holds.
+            Closed += ReleaseBillboard;
             var deck = new BillboardDeck(() => providers, BillboardContextNow, snoozes, SaveBillboardSnoozes);
             var cardHost = new BillboardCardHost(deck);
             cardHost.ActionRequested += RunBillboardAction;
@@ -63,6 +65,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             slot.Children.Add(cardHost);
             _billboardHost = cardHost;
             cardHost.Begin();
+        }
+
+        private IBillboardProvider[] _billboardProviders = Array.Empty<IBillboardProvider>();
+
+        /// <summary>A set per shell (WPF has one per process): a closed shell unhooks its providers from
+        /// the long-lived services (P41/P68) and its art frees its player.</summary>
+        private void ReleaseBillboard(object? sender, EventArgs e)
+        {
+            foreach (var p in _billboardProviders) (p as BillboardProviderBase)?.Detach();
+            _billboardHost?.ReleaseArt();
         }
 
         /// <summary>WPF BillboardWiring.Start + BillboardProviders.CreateAll, in deck order, over this
@@ -84,14 +96,26 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 ShowTab = tab => Shell()?.ShowTab(tab),
                 OpenInvites = () => Shell()?.OpenInvitesCard(),
             };
+            _ = ShowcaseArt.Value;
             var providers = new IBillboardProvider[]
             {
-                new HouseProvider(), new WaitingProvider(head), new ResumeProvider(head), new EventProvider(head), new TipCardsProvider(),
+                new HouseProvider(), MakeShowcase(), new WaitingProvider(head), new ResumeProvider(head), new EventProvider(head), new TipCardsProvider(),
             };
             foreach (var p in providers)
                 p.Changed += (_, _) => Dispatcher.UIThread.Post(() => Shell()?._billboardHost?.MarkDirty());
             return providers;
         }
+
+        /// <summary>WPF ShowcaseArtRegistration.Register, once per process.</summary>
+        private static readonly Lazy<bool> ShowcaseArt = new(() =>
+        {
+            BillboardArt.Register(ShowcaseRules.ArtKey, data => new ClipArtView(data as ShowcaseClipArt));
+            return true;
+        });
+
+        /// <summary>WPF new ShowcaseProvider(): the manifest and clips cached under user data (seam).
+        /// It holds no service subscription, so a closed shell has nothing to detach from it.</summary>
+        internal static Func<IBillboardProvider> MakeShowcase = () => new ShowcaseProvider();
 
         /// <summary>WPF MainWindow.StartSessionFromCompanion: the Sessions page's own Start path (it
         /// asks first). False while a session runs or when the session is gone.</summary>

@@ -238,7 +238,7 @@ namespace ConditioningControlPanel.Services.Billboard.Showcase
 
         private static void Log(string what, Exception ex)
         {
-            try { App.Logger?.Warning("Showcase {What} failed: {Message}", what, ex.Message); }
+            try { Serilog.Log.Warning("Showcase {What} failed: {Message}", what, ex.Message); }
             catch { }
         }
     }
