@@ -60,6 +60,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // WPF NavStripRules.PillLocked: a paying account sees no tier sign on pages it owns.
             strip.PillLocked = tier => tier > 0 && (tier == 1 ? !CoreAccount.HasPremiumAccess : !CoreAccount.HasLabAccess);
             strip.CanOpen = CanOpenNavTab;
+            strip.SettingsPageLabel = CurrentSettingsSectionLabel;
             strip.TabRequested += OnSectionPillChosen;
             strip.SectionRequested += section =>
                 ShowTab(section == NavSections.Settings ? "appsettings" : NavLastTabFor(section));

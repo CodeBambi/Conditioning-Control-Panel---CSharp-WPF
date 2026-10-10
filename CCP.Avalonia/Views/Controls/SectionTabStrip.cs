@@ -6,7 +6,7 @@
 // ponytail: not yet here (lane sync6-nav-rail-b): the per-tab tints, depth plates and sliding
 // active fill (NavStripRules TabTint/PlateBrush, PaintDepthPages, PlaceFill), the leading MDL2
 // glyphs (absent on Linux; WPF also drops a glyph its font lacks), the "Moved" note, the "?" help
-// badges and Just Drop's ask-first, the right-click pin menu, the fixed crumb width.
+// badges and Just Drop's ask-first, the right-click pin menu.
 
 using System;
 using System.Collections.Generic;
@@ -42,7 +42,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
         private readonly Border _track;
         private readonly Border _accentLine = new() { Height = 2, CornerRadius = new CornerRadius(1), Opacity = 0.85 };
         private readonly List<(NavTab Tab, Button Pill, Border Face, TextBlock Label)> _pills = new();
-        private string? _section, _tab, _pageLabel, _activePill;
+        private string? _section, _tab, _activePill;
         private IBrush _accent = Brushes.Transparent;
 
         /// <summary>A pill was chosen (click, Enter/Space, or a Left/Right/Home/End move).</summary>
@@ -56,6 +56,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
 
         /// <summary>Tabs this head can open; a pill it cannot is not drawn (no dead clicks).</summary>
         public Func<NavTab, bool> CanOpen { get; set; } = _ => true;
+
+        /// <summary>The Settings page word, re-read on a rebuild so a language switch renames it.</summary>
+        public Func<string?>? SettingsPageLabel { get; set; }
 
         internal string? Section => _section;
         internal string? ActivePillKey => _activePill;
@@ -116,7 +119,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
         {
             var section = _section;
             _section = null;
-            Show(section, _tab, _pageLabel);
+            Show(section, _tab, section == NavSections.Settings ? SettingsPageLabel?.Invoke() : null);
         }
 
         /// <summary>Show the header for a tab. <paramref name="pageLabel"/> overrides the
@@ -124,7 +127,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
         public void Show(string? section, string? tab, string? pageLabel = null)
         {
             _tab = tab;
-            _pageLabel = pageLabel;
             if (!NavStripTable.ShowsHeader(section))
             {
                 IsVisible = false;
@@ -145,6 +147,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
                     EndPoint = new RelativePoint(1, 0, RelativeUnit.Relative),
                     GradientStops = { new GradientStop(hue, 0), new GradientStop(Color.FromArgb(0, 0, 0, 0), 1) },
                 };
+                FixCrumbWidth(section!);
                 BuildPills(section!);
             }
             // Hidden, not collapsed: the track keeps the row's height, so Settings (no pills) has
@@ -167,6 +170,23 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
         {
             var rgb = NavStripTable.AccentRgb(section);
             return Color.FromRgb((byte)(rgb >> 16), (byte)(rgb >> 8), (byte)rgb);
+        }
+
+        /// <summary>WPF FixCrumbWidth: the page word gets one fixed width per section (its longest
+        /// page name), so the pills never move sideways when the page changes.</summary>
+        private void FixCrumbWidth(string section)
+        {
+            double widest = 0;
+            try
+            {
+                var typeface = new Typeface(_crumbPage.FontFamily, FontStyle.Normal, FontWeight.SemiBold);
+                foreach (var t in NavSections.Find(section)?.Tabs ?? Array.Empty<NavTab>())
+                    widest = Math.Max(widest, new FormattedText(SafeLoc(t.LabelKey, t.Key),
+                        System.Globalization.CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
+                        typeface, _crumbPage.FontSize, Brushes.White).WidthIncludingTrailingWhitespace);
+            }
+            catch (Exception ex) { Serilog.Log.Debug("FixCrumbWidth({Section}): {E}", section, ex.Message); }
+            _crumbPage.Width = widest > 0 ? Math.Ceiling(widest) + 2 : double.NaN;
         }
 
         private void BuildPills(string section)
@@ -250,6 +270,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
                 bool on = IsActive(p.Tab.Key);
                 p.Face.Background = on ? _accent : (p.Pill.IsPointerOver ? HoverFace : RestFace);
                 p.Label.Foreground = on ? DarkInk : RestText;
+                // One Tab stop for the strip (ARIA tabs): the active pill, else the first. WPF :991.
+                p.Pill.IsTabStop = on || (key == null && p.Pill == _pills[0].Pill);
+                global::Avalonia.Automation.AutomationProperties.SetItemStatus(p.Pill, on ? "selected" : string.Empty);
             }
         }
 

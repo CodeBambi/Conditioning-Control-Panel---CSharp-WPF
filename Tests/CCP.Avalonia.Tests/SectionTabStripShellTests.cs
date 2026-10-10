@@ -56,9 +56,16 @@ public sealed class SectionTabStripShellTests
                 Assert.Equal("presets", strip.ActivePillKey);
                 Assert.Equal($"{Loc.Get("nav_door_studio")} {Loc.Get("nav_crumb_sep")} {Loc.Get("tab_presets")}", strip.CrumbText);
 
+                w.UpdateLayout();
+                var hapticsAt = strip.PillFor("haptics")!.TranslatePoint(new Point(0, 0), strip);
                 strip.PillFor("ramp")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 Assert.Equal("ramp", w.CurrentTab);
                 Assert.Equal("ramp", strip.ActivePillKey);
+                // The page word has one width per section (WPF FixCrumbWidth): pills never move.
+                w.UpdateLayout();
+                Assert.Equal(hapticsAt, strip.PillFor("haptics")!.TranslatePoint(new Point(0, 0), strip));
+                // One Tab stop for the strip: the active pill (WPF SetIsTabStop(p.Pill, on)).
+                Assert.Equal(new[] { "ramp" }, strip.PillKeys.Where(k => strip.PillFor(k)!.IsTabStop));
                 Assert.Equal("ramp", MainShellWindow.NavLastTabFor("studio"));
 
                 // Arrow keys wrap and activate pages: Right from the last pill lands on the first.
