@@ -2,9 +2,8 @@
 // keeper, Install). The keeper itself is Core (Services/Haptics/LockdownDoseKeeper.cs); this is the
 // head's half of it: the live shell's wall toggles and engine, the takeover read and the bark.
 //
-// ponytail: StartEngine here has no systemInitiated flag (WPF uses it to skip the Relapse achievement,
-// the session count and the video enhancement prompt on a keeper start). Possession's edge pulse has
-// no director on this head, so a conscription is announced by the bark alone.
+// A keeper start is StartEngine(systemInitiated: true); a conscription pulses the window edge through
+// the Possession director when it is haunting, and is announced by the bark alone otherwise.
 
 using System;
 using System.Collections.Generic;
@@ -45,6 +44,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 sh.RefreshWallActiveStates();
             },
             IsSessionFeatureLockActive = () => shell()?.IsSessionFeatureLockActive == true,
+            PulseEdges = strength => ConditioningControlPanel.Services.Possession.PossessionDirector.Current?.PulseEdges(strength),   // WPF LockdownDoseKeeper.cs:380
             Bark = (features, round, engineStarted) => CoreBark.Raise("LockdownConscript", new Dictionary<string, object>
             {
                 ["features"] = string.IsNullOrWhiteSpace(features) ? "something" : features,
