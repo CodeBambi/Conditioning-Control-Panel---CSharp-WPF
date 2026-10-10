@@ -137,6 +137,7 @@ internal static class FriendsLanding
 
             // The landing windows are unowned: none may outlive the panel.
             var mw = MainShellWindow.Current;
+            FriendsFeedTray.Refresh(mw?.Tray);   // WPF TrayIconService: the tooltip's "N new from friends" line
             if (mw != null && !ReferenceEquals(mw, _hookedPanel))
             {
                 _hookedPanel = mw;

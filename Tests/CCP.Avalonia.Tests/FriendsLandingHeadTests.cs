@@ -405,6 +405,16 @@ public sealed class FriendsLandingHeadTests : IDisposable
             Assert.True(ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk.EmiChains.FaceBodyFrame.ContainsKey(LandingRules.PokeFace(id)), id);
     }
 
+    [Fact]
+    public void TheTrayTooltipGainsTheNewLineOnlyWhileTheFeedHasUnread()
+    {
+        Assert.Equal("Conditioning Control Panel", FriendsFeedTray.Text("Conditioning Control Panel", 0));
+        var two = FriendsFeedTray.Text("Conditioning Control Panel", 2);
+        Assert.StartsWith("Conditioning Control Panel\n", two);
+        Assert.Contains("2", two);
+        Assert.True(two.Length <= FriendsFeedRules.TrayTextMax);
+    }
+
     // WPF FriendsKnockTests "the blocked move": once the server lists blocks, this PC's old copy for that
     // account is dropped and nothing is sent again; another account's list is never touched.
     [Fact]
