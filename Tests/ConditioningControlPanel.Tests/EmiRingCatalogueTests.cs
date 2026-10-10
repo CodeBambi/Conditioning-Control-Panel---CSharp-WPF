@@ -236,7 +236,9 @@ public class EmiRingCatalogueTests
             (SourceRoots.FindProductFile("Services", "Chaos", "LoomHostService.cs"), "loom"),
             (SourceRoots.FindProductFile("Services", "Fyp", "FypHostService.cs"), "fyp"),
             (SourceRoots.FindProductFile("Services", "Quiz", "IntakeHostService.cs"), "intake"),
-            (SourceRoots.FindProductFile("Services", "GoonGame", "GoonHostService.cs"), "goon"),
+            // Pinned to the WPF head: CCP.Core carries the windowless half under the same file name.
+            (Path.Combine(SourceRoots.ProductDirectories.Single(d => Path.GetFileName(d) == "ConditioningControlPanel"),
+                "Services", "GoonGame", "GoonHostService.cs"), "goon"),
             (SourceRoots.FindProductFile("Services", "JustDrop", "JustDropHostService.cs"), "justdrop"),
             (SourceRoots.FindProductFile("Services", "BackRoom", "BackRoomHostService.cs"), "backroom"),
         };

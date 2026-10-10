@@ -442,7 +442,7 @@ public class BillboardProvidersTests
         // Every product root (SourceRoots): the tip table moved to CCP.Core/Services/Billboard/BillboardCards.cs.
         var sep = Path.DirectorySeparatorChar;
         var keys = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var file in SourceRoots.EnumerateProductSources("*.cs").Where(f => f.Contains($"{sep}Services{sep}Billboard{sep}")))
+        foreach (var file in SourceRoots.EnumerateProductSources("*.cs").Where(f => f.Contains($"{sep}Services{sep}Billboard{sep}") || f.Contains($"{sep}CCP.Core{sep}Board{sep}")))
             foreach (Match m in Regex.Matches(File.ReadAllText(file), "\"(billboard_card_[a-z0-9_]+)\""))
                 if (!m.Groups[1].Value.EndsWith("_", StringComparison.Ordinal)) keys.Add(m.Groups[1].Value);
         foreach (var tip in TipCards.Table)
