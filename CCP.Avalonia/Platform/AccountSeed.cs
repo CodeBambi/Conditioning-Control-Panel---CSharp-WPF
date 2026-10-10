@@ -202,6 +202,8 @@ internal static class AccountSeed
             ProfileAdopt.AdoptReadBeforeWrite(s, user);
         // Consent: the account's values in, before anything is pushed (never share more than the account holds).
         ProfileAdopt.AdoptConsent(s, node);
+        // hunt3 IC4 (WPF ProfileSyncService.cs:3382): Sparkles earned elsewhere. Raises only, never lowers.
+        ProfileAdopt.AdoptSkillPoints(s, node?["skill_points"], "Profile load");
         CoreSettings.Save();
         Log.Information("Profile load: Level {Level} ({Xp} XP into level) after adopt", s.PlayerLevel, (int)s.PlayerXP);
         if (Sync is { } sync)

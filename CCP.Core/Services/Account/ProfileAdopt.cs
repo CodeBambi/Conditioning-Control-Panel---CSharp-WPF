@@ -163,6 +163,10 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public static void ApplySyncResponse(AppSettings settings, JObject response, DateTime nowUtc)
         {
+            // WPF ProfileSyncService.cs:2032-2046. A pending force_skills_reset is the server's own
+            // reset (not handled on this head): never raise over it.
+            var skillsReset = response["force_skills_reset"]?.Type == JTokenType.Boolean && response.Value<bool>("force_skills_reset");
+            if (!skillsReset) AdoptSkillPoints(settings, response["skill_points"], "V2 sync");
             if (response["user"] is not JObject node) return;
             var user = node.ToObject<V2User>()!;
             ApplyCurveEpoch(settings, user.CurveEpoch);
@@ -198,6 +202,26 @@ namespace ConditioningControlPanel.Services
                 }
             }
             RecordAgreedServerXp(settings, user.Xp, TotalXp(settings), "V2 sync");
+        }
+
+        /// <summary>
+        /// Sparkles earned elsewhere (web Back Room, phone, another install) reach this one: WPF
+        /// ProfileSyncService.cs:2040-2046 and :3382, the higher of server and local.
+        /// WALLET RULE: a snapshot only RAISES <see cref="AppSettings.SkillPoints"/>. It never lowers it:
+        /// only a debited receipt may (SkillPurchase, V2WalletAdoption), plus the one adoption after a
+        /// balance refusal (<see cref="SparklePoints.AdoptAfterRefusal"/>), and neither runs here.
+        /// Only a JSON integer counts. True when the balance rose (the caller saves).
+        /// </summary>
+        public static bool AdoptSkillPoints(AppSettings settings, JToken? serverSkillPoints, string site)
+        {
+            if (serverSkillPoints is null || serverSkillPoints.Type != JTokenType.Integer) return false;
+            var server = (int)Math.Clamp(serverSkillPoints.Value<long>(), 0, SparklePoints.Cap);
+            var local = settings.SkillPoints;
+            var max = SparklePoints.MergeMax(server, local);
+            if (max <= local) return false;
+            Log.Information("{Site}: Skill points server={Server}, local={Local}, taking max ({Max})", site, server, local, max);
+            settings.SkillPoints = max;
+            return true;
         }
 
         /// <summary>
