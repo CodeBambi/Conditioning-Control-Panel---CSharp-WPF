@@ -317,7 +317,7 @@ namespace ConditioningControlPanel.Services
                 case "stop_session":
                     return Head is { } hs ? hs.Session(action, p) : NotOnThisBuild;
                 case "trigger_bubble_count": if (CoreEngine.BubbleCount == null) return NotOnThisBuild; CoreEngine.BubbleCount.Trigger(forceTest: true); return null;
-                case "start_lock_card": s.LockCardEnabled = true; LockCardScheduler.Instance.Start(); return null;
+                case "start_lock_card": s.LockCardEnabled = true; LockCardScheduler.Instance.StartFromRemote(); return null;   // its cards are never strict
                 case "stop_lock_card": LockCardScheduler.Instance.Stop(); return null;
                 case "trigger_haptic":
                     if (CoreHaptics.Service?.IsConnected != true) return "no_device";   // WPF 7b22ece8c (ccp-bugs #1065): never a silent "ok"

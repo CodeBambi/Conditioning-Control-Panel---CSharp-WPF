@@ -93,6 +93,33 @@ public sealed class LockCardStrictOriginTests
         Assert.True(LockCardWindow.Primary!.IsStrict);
     });
 
+    [Theory]
+    [InlineData(true, false, false)]    // a leash task is running: the holder's card
+    [InlineData(false, true, false)]    // a controller switched the schedule on
+    [InlineData(false, false, true)]    // the player's own schedule follows the setting
+    public Task AScheduledCardIsStrictOnlyWhenItIsThePlayersOwn(bool leashTask, bool remoteSchedule, bool strict) => WithStrictSetting(() =>
+    {
+        var s = CoreSettings.Current;
+        var (oldLeash, oldEnabled, sched) = (LockCardWindow.LeashTaskRunning, s.LockCardEnabled, LockCardScheduler.Instance);
+        sched.Stop();
+        LockCardWindow.LeashTaskRunning = () => leashTask;
+        try
+        {
+            s.LockCardEnabled = true;
+            if (remoteSchedule) sched.StartFromRemote();
+            LockCardWindow.ShowScheduled(isTest: false);
+            Dispatcher.UIThread.RunJobs();
+            Assert.NotNull(LockCardWindow.Primary);
+            Assert.Equal(strict, LockCardWindow.Primary!.IsStrict);
+        }
+        finally
+        {
+            sched.Stop();
+            LockCardWindow.LeashTaskRunning = oldLeash;
+            s.LockCardEnabled = oldEnabled;
+        }
+    });
+
     /// <summary>The tripwire: any leash or remote source file that opens a lock card must name its
     /// origin (ShowNext with LockCardOrigin.Leash / Remote) and may never call ShowOnAllMonitors,
     /// which takes a raw strict flag.</summary>

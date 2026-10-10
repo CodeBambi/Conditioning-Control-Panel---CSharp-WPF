@@ -460,7 +460,7 @@ namespace ConditioningControlPanel.Avalonia
                 // including the phrase draw - therefore runs on the UI thread, which is what keeps
                 // the scheduler's rotation state single-threaded.
                 CoreLockCard.ShowHandler = isTest => global::Avalonia.Threading.Dispatcher.UIThread.Post(
-                    () => Views.Windows.LockCardWindow.ShowNext(isTest));
+                    () => Views.Windows.LockCardWindow.ShowScheduled(isTest));   // never strict for a leash / remote schedule
 
                 // Pop quiz: Core schedules, PopQuizHost opens the window (WPF App.PopQuiz).
                 CoreEngine.PopQuiz = Views.Windows.PopQuizHost.Instance.Scheduler;

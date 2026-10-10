@@ -1158,6 +1158,22 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// player's own setting says (a participant can never raise restraint).</remarks>
         internal static void ShowNext(bool isTest) => ShowNext(isTest, LockCardOrigin.Local);
 
+        /// <summary>SAFETY (hunt3 IC1): who a scheduled card belongs to. A leash task running (lines,
+        /// or the session a holder started) makes it the holder's; a schedule a controller switched on
+        /// makes it the controller's; neither is ever strict. Otherwise the player's own.</summary>
+        internal static LockCardOrigin ScheduledOrigin() =>
+            LeashTaskRunning() ? LockCardOrigin.Leash
+            : LockCardScheduler.Instance.StartedByRemote ? LockCardOrigin.Remote
+            : LockCardOrigin.Local;
+
+        /// <summary>Test seam: a leash task is running on this machine.</summary>
+        internal static Func<bool> LeashTaskRunning { get; set; } = () => Platform.LeashTaskHost.Runner?.IsRunning == true;
+
+        /// <summary>The CoreLockCard seam's entry (schedule, Test button, autonomy, voice): the Test
+        /// button is always the player's own; anything else asks <see cref="ScheduledOrigin"/>.</summary>
+        internal static void ShowScheduled(bool isTest) =>
+            ShowNext(isTest, isTest ? LockCardOrigin.Local : ScheduledOrigin());
+
         /// <inheritdoc cref="ShowNext(bool)"/>
         internal static void ShowNext(bool isTest, LockCardOrigin origin)
         {

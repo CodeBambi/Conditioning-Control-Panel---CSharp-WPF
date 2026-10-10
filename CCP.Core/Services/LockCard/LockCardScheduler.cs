@@ -53,6 +53,21 @@ namespace ConditioningControlPanel.Services
         /// <summary>The window the last Start was given (tests: #736).</summary>
         internal double? LastWindowMinutes { get; private set; }
 
+        /// <summary>SAFETY (hunt3 IC1): this schedule was switched on by a remote controller
+        /// (start_lock_card), so its cards are the controller's doing and are never strict
+        /// (<see cref="LockCardStrictRule"/>). False again at the next <see cref="Stop"/>. A schedule the
+        /// player's own engine already had running stays the player's.</summary>
+        public bool StartedByRemote { get; private set; }
+
+        /// <summary>The remote verb's start: marks the schedule as the controller's when this call is
+        /// what set it running.</summary>
+        public void StartFromRemote()
+        {
+            var was = _isRunning;
+            Start();
+            if (!was && _isRunning) StartedByRemote = true;
+        }
+
         public void Start(double? windowMinutes = null)
         {
             if (_isRunning) return;
@@ -88,6 +103,7 @@ namespace ConditioningControlPanel.Services
         /// typing.</summary>
         public void Stop()
         {
+            StartedByRemote = false;
             if (!_isRunning) return;
             _isRunning = false;
 
