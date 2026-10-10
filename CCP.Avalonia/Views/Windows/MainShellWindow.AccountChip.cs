@@ -37,6 +37,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             RefreshAccountChip();
             RefreshProfileBubble();
             RefreshPremiumSpark();
+            UpdateXPBarLoginState();   // WPF UpdateXPBarLoginState's bar half (MainShellWindow.XpBar.cs)
         }
 
         /// <summary>Signed-out CTA, or display name plus a tier badge (gold lock = Tier 1, violet

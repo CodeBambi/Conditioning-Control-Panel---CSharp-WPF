@@ -528,6 +528,13 @@ namespace ConditioningControlPanel.Avalonia
                         sanitizeCosmetics: Views.Windows.MainShellWindow.SanitizeOwnWardrobe)
                         { Countdown = DescentCountdown };
                     CoreProgression.AddXPProvider = ProgressionBank.Add;
+                    // WPF App.SkillTree + ProfileSync.PurchaseSkillAsync: the Skill Tree's buy (k2).
+                    SkillPurchase.Current = new SkillPurchase
+                    {
+                        SyncBeforeRetry = sync.SyncBeforeRetryAsync,
+                        PointsSpent = cost => Achievements?.TrackSkillPointsSpent(cost),
+                        LifetimeSpentReconciled = total => Achievements?.ReconcileLifetimePointsSpent(total),
+                    };
                     ProgressionBank.LevelUp += level => sync.PushAsync($"level-up {level}");
                     ProgressionBank.Awarded += (amount, source) =>
                     {

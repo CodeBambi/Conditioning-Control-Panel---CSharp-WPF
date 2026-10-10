@@ -133,6 +133,25 @@ internal sealed class AchievementEngine
     /// <summary>WPF AchievementService.BubbleSaveEveryNPops (#1071): the pop count flushes every 50 pops.</summary>
     internal const int BubbleSaveEveryNPops = 50;
 
+    /// <summary>WPF AchievementService.TrackSkillPointsSpent: the lifetime spend (Prestige) and Window Shopping.</summary>
+    public void TrackSkillPointsSpent(int amount)
+    {
+        if (amount <= 0) return;
+        Progress.LifetimeSkillPointsSpent += amount;
+        _isDirty = true;
+        if (Progress.LifetimeSkillPointsSpent >= AchievementRules.WindowShoppingPointsSpent) TryUnlock("window_shopping");
+    }
+
+    /// <summary>WPF AchievementService.ReconcileLifetimePointsSpent: adopt the server total when it is ahead.
+    /// Never lowers the local value: Prestige is monotonic.</summary>
+    public void ReconcileLifetimePointsSpent(long serverValue)
+    {
+        if (serverValue <= Progress.LifetimeSkillPointsSpent) return;
+        Progress.LifetimeSkillPointsSpent = serverValue;
+        _isDirty = true;
+        if (Progress.LifetimeSkillPointsSpent >= AchievementRules.WindowShoppingPointsSpent) TryUnlock("window_shopping");
+    }
+
     /// <summary>WPF AchievementService.TrackBubblePopped (AchievementService.cs:596): the lifetime count,
     /// pop_the_thought, 1 Sparkle Point every 100 bubbles. Quest credit stays with the caller (the head
     /// already calls QuestService.TrackBubblePopped beside this).

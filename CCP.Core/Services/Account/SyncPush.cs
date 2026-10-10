@@ -39,6 +39,30 @@ namespace ConditioningControlPanel.Services
         private int _nudgePending;
         private readonly Func<ProfileCosmetics?, ProfileCosmetics>? _sanitizeCosmetics;
         private volatile bool _pendingCosmeticsClear;
+        private int _privacyVersion, _privacyDelivered;   // a consent switch changed / the last change a sync delivered
+
+        /// <summary>The six consent flags a Privacy and Sharing switch pushes on change (WPF sends them on every
+        /// sync because it adopts the server's values on load; this head does not adopt them, so they go ONLY after
+        /// the user changed one here, and stay on every push until a sync delivers them - a stale local default can
+        /// never overwrite what the account holds).</summary>
+        public const SyncBody.Field Privacy = SyncBody.Field.AllowDiscordDm | SyncBody.Field.ShowOnlineStatus
+            | SyncBody.Field.ShareProfilePicture | SyncBody.Field.PublicShareAvatar | SyncBody.Field.GoonShareAvatar
+            | SyncBody.Field.GoonShareDm;
+
+        /// <summary>A consent change is waiting for a sync to carry it.</summary>
+        public bool PendingPrivacy => Volatile.Read(ref _privacyVersion) != Volatile.Read(ref _privacyDelivered);
+
+        /// <summary>WPF ChkAllowDiscordDm_Changed and its five siblings: push now so a REVOKE lands at once. Inside
+        /// the cooldown (or with a push in flight) one coalesced push follows it.</summary>
+        public async Task<bool> PushPrivacyAsync()
+        {
+            if (!Loaded || !SignedIn(CoreSettings.Current)) return false;   // signed out: the switch is local, nothing is owed
+            Interlocked.Increment(ref _privacyVersion);
+            if (await PushAsync("privacy", waitForGate: true)) return true;
+            Nudge("privacy");
+            return false;
+        }
+
 
         /// <summary>WPF ProfileSyncService.PendingCosmeticsClear: set by an EMPTY Customize save (unequip everything),
         /// cleared once a sync carrying the clear succeeds. In memory, as WPF.</summary>
@@ -98,6 +122,7 @@ namespace ConditioningControlPanel.Services
             Loaded = false;
             _serverAchievements = null;
             _pendingCosmeticsClear = false;   // never carry one account's unequip into the next
+            Volatile.Write(ref _privacyDelivered, Volatile.Read(ref _privacyVersion));   // nor its consent change
             LastSyncTime = null;
         }
 
@@ -107,16 +132,23 @@ namespace ConditioningControlPanel.Services
         /// shrunk to local-only). Xp is the TOTAL, as WPF sends it.</summary>
         /// <param name="cosmetics">An explicit loadout save (WPF BuildCosmeticsPayload after a load: the sanitized
         /// loadout, the empty one included - that is the unequip-everything clear). Null leaves the key out.</param>
-        public static SyncBody Body(AppSettings s, IEnumerable<string>? achievements, ProfileCosmetics? cosmetics = null) => new()
+        public static SyncBody Body(AppSettings s, IEnumerable<string>? achievements, ProfileCosmetics? cosmetics = null, bool privacy = false) => new()
         {
             Known = (achievements == null ? Sent & ~SyncBody.Field.Achievements : Sent)
-                    | (cosmetics == null ? SyncBody.Field.None : SyncBody.Field.Cosmetics),
+                    | (cosmetics == null ? SyncBody.Field.None : SyncBody.Field.Cosmetics)
+                    | (privacy ? Privacy : SyncBody.Field.None),
             UnifiedId = s.UnifiedId,
             Xp = (int)ProfileAdopt.TotalXp(s),
             Level = s.PlayerLevel,
             DescentEpoch = Descent.DescentEpochs.ClientEpoch,
             Achievements = achievements?.Distinct().OrderBy(a => a, StringComparer.Ordinal).ToList(),
             Cosmetics = cosmetics,
+            AllowDiscordDm = s.AllowDiscordDm,
+            ShowOnlineStatus = s.ShowOnlineStatus,
+            ShareProfilePicture = s.ShareProfilePicture,
+            PublicShareAvatar = s.PublicShareRealAvatar,
+            GoonShareAvatar = s.GoonShareAvatar,
+            GoonShareDm = s.GoonShareDiscordDm,
         };
 
         /// <summary>WPF PersistOwnCosmetics' push, after <paramref name="chosen"/> was saved to settings. Every push
@@ -169,7 +201,9 @@ namespace ConditioningControlPanel.Services
                 var server = _serverAchievements;
                 var clearing = _pendingCosmeticsClear;
                 var cosmetics = CosmeticsPayload(s, clearing);
-                var body = JsonConvert.SerializeObject(Body(s, server?.Concat(_localAchievements() ?? Array.Empty<string>()), cosmetics));
+                var privacyVersion = Volatile.Read(ref _privacyVersion);
+                var privacy = privacyVersion != Volatile.Read(ref _privacyDelivered);
+                var body = JsonConvert.SerializeObject(Body(s, server?.Concat(_localAchievements() ?? Array.Empty<string>()), cosmetics, privacy));
                 var tokenUsed = s.AuthToken;
                 HttpRequestMessage NewRequest()
                 {
@@ -221,6 +255,7 @@ namespace ConditioningControlPanel.Services
                 (_backoffFailures, _blockedUntilUtc) = (0, null);
                 // The clear has reached the server; an empty loadout goes back to meaning "no change" (WPF).
                 if (clearing && cosmetics?.IsEmpty == true) _pendingCosmeticsClear = false;
+                if (privacy) Volatile.Write(ref _privacyDelivered, privacyVersion);   // a change made in flight stays pending
                 Log.Information("V2 Profile synced successfully ({Bytes} bytes)", json.Length);
                 try
                 {
@@ -247,6 +282,20 @@ namespace ConditioningControlPanel.Services
                 return false;
             }
             finally { _gate.Release(); }
+        }
+
+        /// <summary>WPF ProfileSyncService.SyncBeforeRetryAsync (#1300): one real sync before a balance refusal is
+        /// asked again. Waits for a push already running; inside the 30 s cooldown waits out the rest of it once.
+        /// True only when a sync reached the server.</summary>
+        public async Task<bool> SyncBeforeRetryAsync()
+        {
+            var before = LastSyncTime;
+            if (await PushAsync("purchase-retry", waitForGate: true)) return true;
+            if (LastSyncTime != before) return true;   // the push we waited behind landed
+            var left = LastSyncTime is { } last ? Cooldown - (UtcNow() - last) : TimeSpan.Zero;
+            if (left <= TimeSpan.Zero || left > Cooldown) return false;
+            await Task.Delay(left + TimeSpan.FromMilliseconds(250));
+            return await PushAsync("purchase-retry", waitForGate: true);
         }
 
         /// <summary>WPF NudgeSyncSoon: one coalesced push, 3 s out or just past the cooldown.</summary>
