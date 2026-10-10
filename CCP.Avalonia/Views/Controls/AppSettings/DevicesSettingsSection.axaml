@@ -257,7 +257,7 @@
                                     </Grid>
 
                                     <TextBlock x:Name="TxtWebcamDebugCounters"
-                                               Text="Face: — | Blinks: 0 | Gaze: —"
+                                               Text="Face: - | Blinks: 0 | Gaze: -"
                                                Foreground="{DynamicResource SuccessGreenBrush}" FontFamily="Consolas, Courier New" FontSize="12"
                                                FontWeight="SemiBold" Margin="0,2,0,0"/>
                                     <Border Background="{DynamicResource PreviewBgBrush}" CornerRadius="8" Padding="10" Margin="0,8,0,0">

@@ -356,7 +356,7 @@
                         <StackPanel Orientation="Horizontal">
                             <Ellipse x:Name="DirectoryStatusDot" Width="8" Height="8"
                                      Fill="#B47BFF" Margin="0,0,6,0" VerticalAlignment="Center"/>
-                            <TextBlock x:Name="TxtDirectoryStatus" Text="Private only"
+                            <TextBlock x:Name="TxtDirectoryStatus" Text="{loc:Str titlebar_directory_private}"
                                        Foreground="White" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Border>
@@ -368,14 +368,14 @@
                             VerticalAlignment="Center"
                             Background="#5A2E7A" CornerRadius="12" Padding="10,4"
                             Margin="0,0,12,0"
-                            ToolTip.Tip="Takeover is active.">
+                            ToolTip.Tip="{loc:Str titlebar_takeover_tip}">
                         <StackPanel Orientation="Horizontal">
                             <Ellipse Width="8" Height="8" Fill="#C9A0FF" Margin="0,0,6,0" VerticalAlignment="Center">
                                 <Ellipse.Effect>
                                     <DropShadowEffect Color="#C9A0FF" BlurRadius="6" OffsetX="0" OffsetY="0" Opacity="0.8"/>
                                 </Ellipse.Effect>
                             </Ellipse>
-                            <TextBlock Text="Takeover active" Foreground="White" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            <TextBlock Text="{loc:Str titlebar_takeover_label}" Foreground="White" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Border>
 
@@ -391,14 +391,14 @@
                             Cursor="Hand"
                             PointerPressed="MicActivePill_Click"
                             Focusable="True" IsTabStop="True"
-                            ToolTip.Tip="Microphone is active. Click to stop listening.">
+                            ToolTip.Tip="{loc:Str titlebar_mic_tip}">
                         <StackPanel Orientation="Horizontal">
                             <Ellipse Width="8" Height="8" Fill="#FFA726" Margin="0,0,6,0" VerticalAlignment="Center">
                                 <Ellipse.Effect>
                                     <DropShadowEffect Color="#FFA726" BlurRadius="6" OffsetX="0" OffsetY="0" Opacity="0.8"/>
                                 </Ellipse.Effect>
                             </Ellipse>
-                            <TextBlock Text="Mic active" Foreground="White" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            <TextBlock Text="{loc:Str titlebar_mic_label}" Foreground="White" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Border>
 
@@ -411,14 +411,14 @@
                             Margin="0,0,12,0"
                             Cursor="Hand"
                             PointerPressed="WebcamActivePill_Click"
-                            ToolTip.Tip="Webcam tracking is active. Click to stop.">
+                            ToolTip.Tip="{loc:Str titlebar_camera_tip}">
                         <StackPanel Orientation="Horizontal">
                             <Ellipse Width="8" Height="8" Fill="#FF4444" Margin="0,0,6,0" VerticalAlignment="Center">
                                 <Ellipse.Effect>
                                     <DropShadowEffect Color="#FF4444" BlurRadius="6" OffsetX="0" OffsetY="0" Opacity="0.8"/>
                                 </Ellipse.Effect>
                             </Ellipse>
-                            <TextBlock Text="Camera active" Foreground="White" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            <TextBlock Text="{loc:Str titlebar_camera_label}" Foreground="White" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Border>
 
@@ -2261,7 +2261,7 @@
                 <Button x:Name="BtnRemember" fx:HudPlank.Kind="Plank" Grid.Column="0" Width="68" Height="50" Margin="0,0,8,0"
                         Theme="{StaticResource PinkButton}" FontSize="20" Click="BtnRemember_Click"
                         PointerReleased="BtnRemember_RightClick"
-                        ToolTip.Tip="Remember my current setup">
+                        ToolTip.Tip="{loc:Str tooltip_remember_save}">
                     <TextBlock x:Name="TxtRememberIcon" Text="☆" FontSize="24" VerticalAlignment="Center" TextAlignment="Center"/>
                 </Button>
 
@@ -2369,7 +2369,7 @@
                 <Button x:Name="BtnStartMenu" fx:HudPlank.Kind="Plank" Grid.Column="2" Width="68" Height="50" Margin="8,0,0,0"
                         Theme="{StaticResource PinkButton}" Background="{DynamicResource AccentGradientBrush}"
                         FontSize="22" Click="BtnStartMenu_Click"
-                        ToolTip.Tip="Start options">
+                        ToolTip.Tip="{loc:Str tooltip_start_options}">
                     <TextBlock Text="▼" FontSize="18" VerticalAlignment="Center" HorizontalAlignment="Center" TextAlignment="Center"/>
                     <Button.ContextMenu>
                         <ContextMenu>

@@ -216,7 +216,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 {
                     // Declined: nothing to say. Switched on and still no tube: the old note.
                     if (CoreSettings.Current.AvatarEnabled)
-                        await Dialogs.MessageDialog.ShowAsync(this, "Voice Test \u2014 No Avatar",
+                        await Dialogs.MessageDialog.ShowAsync(this, "Voice Test - No Avatar",
                             "The companion avatar needs to be visible for the voice prompt. Show the avatar, then try again.");
                     return;
                 }

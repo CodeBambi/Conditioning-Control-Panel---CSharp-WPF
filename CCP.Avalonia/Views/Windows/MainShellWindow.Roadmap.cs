@@ -62,14 +62,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     var owner = (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow;
                     if (owner is not { IsVisible: true }) return;
                     if (e.UnlockedNewTrack)
-                        await MessageDialog.ShowAsync(owner, "Track Unlocked!",
-                            "Congratulations! You've unlocked a new track!\n\n" +
+                        await MessageDialog.ShowAsync(owner, "Track Unlocked",
+                            "Congratulations. You've unlocked a new track.\n\n" +
                             "Check the track tabs to continue your transformation.");
                     if (e.EarnedBadge)
-                        await MessageDialog.ShowAsync(owner, "Badge Earned!",
-                            "🏆 CONGRATULATIONS! 🏆\n\n" +
-                            "You have completed the entire Transformation Roadmap!\n\n" +
-                            "You have earned the \"Certified Blowdoll\" badge!");
+                        await MessageDialog.ShowAsync(owner, "Badge Earned",
+                            "🏆 CONGRATULATIONS 🏆\n\n" +
+                            "You have completed the entire Transformation Roadmap.\n\n" +
+                            "You have earned the \"Certified Blowdoll\" badge.");
                 }
                 catch (Exception ex) { Log.Warning(ex, "Roadmap step popup failed"); }
             });
