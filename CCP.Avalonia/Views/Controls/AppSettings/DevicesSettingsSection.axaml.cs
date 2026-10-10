@@ -44,6 +44,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             SliderWakePrecision.ValueChanged += SliderWakePrecision_ValueChanged;
             SliderCmdPrecision.ValueChanged += SliderCmdPrecision_ValueChanged;
             ChkHeadphones.IsCheckedChanged += ChkHeadphones_Changed;
+            WireVoiceModes();
             ChkBlinkRecalWebcamBar.IsCheckedChanged += ChkBlinkRecalShortcut_Changed;
             ChkWebcamDriftCorrection.IsCheckedChanged += ChkWebcamDriftCorrection_Changed;
             ChkRestrictGazeToCalScreen.IsCheckedChanged += ChkRestrictGazeToCalScreen_Changed;
@@ -189,8 +190,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             if (_loading) return;
             CoreSettings.Current.SpeechHeadphonesMode = ChkHeadphones.IsChecked == true;
             CoreSettings.Save();
-            // ponytail: WPF also re-quotes the device on the She's Listening chip
-            // (MainWindow.RefreshSheListeningDeviceChips); no such host on this head.
+            ApplyVoiceLive(reopen: false);   // the She's Listening chip quotes the mode (WPF :291)
         }
 
         /// <summary>
@@ -233,10 +233,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             s.SpeechInputDeviceIndex = idx;
             s.SpeechInputDeviceName = name; // matched by name on reopen - robust to ordinal reshuffle (#441b)
             CoreSettings.Save();
-            // ponytail: WPF also cuts the open capture so the wake loop reopens on the new device
-            // (App.Speech.StopListening + App.Autonomy.RefreshVoiceInputModes) and re-quotes the
-            // device on the She's Listening chip. The seam carries capability only, and neither
-            // the autonomy service nor that chip exists on this head.
+            // Apply live: cut the current capture so the wake loop reopens on the new device (WPF :251).
+            ApplyVoiceLive(reopen: true);
         }
 
         private void BtnMicRefresh_Click(object? sender, RoutedEventArgs e) => PopulateMicDevices();
@@ -541,12 +539,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
         //  voice modes
         // =====================================================================================
 
-        // ponytail: ChkSpeechWakeWord / ChkSpeechPushToTalk need App.Autonomy.RefreshVoiceInputModes
-        // (ConditioningControlPanel/Services/Autonomy/), still in the WPF head. TierGate is not the
-        // blocker any more - CCP.Core/Services/TierGate.cs - but the mic half is. They are
-        // seeded above and left without a write handler: a toggle that saved the flag but could
-        // neither charge the premium bar nor open the mic would be a lie in both directions.
-        // BtnSetPttKey likewise needs MainWindow's global-hook key capture.
+        // The toggles and the key capture live in DevicesSettingsSection.Voice.cs.
 
         private void TxtSpeechWakeWords_LostFocus(object? sender, RoutedEventArgs e)
         {
@@ -555,8 +548,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             CoreSettings.Current.SpeechWakeWords = string.IsNullOrWhiteSpace(text) ? "hey bambi" : text;
             if (string.IsNullOrWhiteSpace(text)) TxtSpeechWakeWords.Text = "hey bambi";
             CoreSettings.Save();
-            // ponytail: WPF also restarts the wake loop so new phrases take effect immediately
-            // (App.Autonomy.RefreshVoiceInputModes); no speech engine on this head.
+            ApplyVoiceLive(reopen: true);   // restart the loop so new phrases take effect at once (WPF)
         }
 
         // =====================================================================================
