@@ -1,8 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!-- Own testhost on purpose: Avalonia's headless platform is fixed by the first test in a process
        (PLAYBOOK P48), and CCP.Avalonia.Tests shards set it up with varying builders. Snapshots must
-       always render through RenderProof.EnsureSetUp - the app's own builder with the bundled Inter
-       font, Skia, real drawing - the same path as render-all and the reference-render CI. -->
+       always render through a copy of RenderProof.EnsureSetUp's builder (app builder, bundled Inter,
+       Skia, real drawing) plus one pinned emoji fallback font; see SetUpOnce in the test. -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
