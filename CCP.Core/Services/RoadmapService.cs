@@ -46,14 +46,15 @@ public class RoadmapService : IDisposable
     public event EventHandler? BadgeEarned;
 
     public RoadmapService()
+        : this(Path.Combine(CorePaths.UserData, "roadmap.json"), Path.Combine(CorePaths.UserData, "roadmap_diary"))
     {
-        _progressPath = Path.Combine(
-            CorePaths.UserData,
-            "roadmap.json");
+    }
 
-        _diaryFolderPath = Path.Combine(
-            CorePaths.UserData,
-            "roadmap_diary");
+    /// <summary>Test seam: a roadmap on its own files, so tests never share CorePaths.UserData.</summary>
+    internal RoadmapService(string progressPath, string diaryFolderPath)
+    {
+        _progressPath = progressPath;
+        _diaryFolderPath = diaryFolderPath;
 
         Progress = LoadProgress();
         EnsureDiaryFolderExists();

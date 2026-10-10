@@ -25,6 +25,19 @@ public sealed class ProgramServiceStartupTests
         Assert.DoesNotContain("CreateReadOnly", src);
     }
 
+    /// <summary>Programs 3b (oracle programs-roadmap-seed test 6): ritual photos file through the shell's roadmap
+    /// (WPF App.xaml.cs:447), seeded lazily - startup never touches MainShellWindow.Roadmap itself, so
+    /// DisposeRoadmapIfCreated still only disposes a roadmap someone used.</summary>
+    [Fact]
+    public void AppStartupSeedsTheRoadmapProviderLazily()
+    {
+        var src = Regex.Replace(
+            File.ReadAllText(Path.Combine(Root(), "CCP.Avalonia", "App.axaml.cs")),
+            @"//[^\n]*|/\*.*?\*/|@?""(?:[^""\\]|\\.)*""", " ", RegexOptions.Singleline);
+        Assert.Matches(@"CoreProgram\.RoadmapProvider\s*=\s*\(\)\s*=>\s*Views\.Windows\.MainShellWindow\.Roadmap;", src);
+        Assert.Single(Regex.Matches(src, @"MainShellWindow\.Roadmap\b"));
+    }
+
     private static string Root([System.Runtime.CompilerServices.CallerFilePath] string here = "") =>
         Path.GetFullPath(Path.Combine(Path.GetDirectoryName(here)!, "..", ".."));
 }

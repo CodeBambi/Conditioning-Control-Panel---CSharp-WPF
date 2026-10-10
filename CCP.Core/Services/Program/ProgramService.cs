@@ -1250,6 +1250,10 @@ public class ProgramService : IDisposable
                     var name = $"{enrollment.ProgramId}_{task.Id}";
                     filed = roadmap.SavePhotoToDiary(name, photoPath!);
                 }
+                else
+                {
+                    Log.Warning("Program ritual task '{Task}': no roadmap service, photo not filed", task.Id);
+                }
 
                 // ??= because an enrollment saved before this field existed deserialises without it,
                 // and a null dictionary here would throw on the one path that completes a day.

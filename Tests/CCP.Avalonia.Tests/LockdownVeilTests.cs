@@ -238,6 +238,14 @@ public sealed class LockdownVeilTests
                     () => programs.ActiveEnrollment == null || !DialogTexts(shell).Contains(Loc.Get("msg_you_are_in_lockdown_mode_nthere_is_no_escape"))),
                 ("program Start session", () => _ = shell.StartProgramSessionAsync(),
                     () => !DialogTexts(shell).Contains(Loc.Get("msg_you_are_in_lockdown_mode_nthere_is_no_escape"))),
+                // programs 3b (P05; WPF has no gate either)
+                ("program Pause/Resume", () => _ = shell.PauseResumeProgramAsync(),
+                    () => programs.ActiveEnrollment?.State != ConditioningControlPanel.Models.Program.ProgramEnrollmentState.Active
+                          || !DialogTexts(shell).Contains(Loc.Get("msg_you_are_in_lockdown_mode_nthere_is_no_escape"))),
+                ("program Restart", () => _ = shell.RestartProgramAsync(),
+                    () => !DialogTexts(shell).Contains(Loc.Get("msg_you_are_in_lockdown_mode_nthere_is_no_escape"))),
+                ("program ritual photo", () => _ = shell.SubmitProgramRitualAsync("d6_ritual_pink"),
+                    () => !DialogTexts(shell).Contains(Loc.Get("msg_you_are_in_lockdown_mode_nthere_is_no_escape"))),
                 // WPF LauncherHost.cs:413 and the launcher Stop link
                 ("launcher close", launcher.RequestClose, () => !launcher.IsVisible),
                 ("launcher Stop link", () => Click(launcher.FindControl<Button>("StopLink")!), () => !CoreEngine.IsRunning),

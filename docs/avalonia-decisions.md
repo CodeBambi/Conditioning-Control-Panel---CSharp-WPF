@@ -818,3 +818,27 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
 - Tests: `Tests/CCP.Core.Tests/ProgramRunLifecycleTests.cs`, `Tests/CCP.Avalonia.Tests/ProgramsRunLifecycleTests.cs`,
   `ProgramServiceStartupTests`, `LockdownVeilTests`, `ProgramsRunViewTests`, `PanicSurfacesTests`. Fail-proofs:
   ~/ccp-port/evidence/review-programs-run-3a/fail-proofs.log.
+
+## 2026-10-10: Programs 3b - Pause/Resume, Restart, Dismiss, rituals and the roadmap seed (avalonia-port/programs-run-3b)
+- Context: the last lifecycle doors of the run panel (WPF MainWindow.ProgramsTab.cs:2012-2160). A ritual files its photo through
+  `CoreProgram.Roadmap()`; this head never seeded that provider, so a ritual would have credited the day with the photo dropped.
+- First supervisor reply (keep `RitualsAvailable=false`) is SUPERSEDED by oracle-deep (~/ccp-port/evidence/oracle/programs-roadmap-seed.md,
+  option B): the head already constructs and writes a lazy `RoadmapService` (`MainShellWindow.Roadmap`, Quests roadmap page, disposed
+  on exit), so seeding the provider adds a caller, not a writer, and no data format changes.
+- Decisions applied:
+  - `CoreProgram.RoadmapProvider = () => MainShellWindow.Roadmap` on desktop startup only, lazy (startup never creates the roadmap).
+  - `SubmitRitualTask` already refuses a read-only service before touching the roadmap; Core now logs "photo not filed" when no
+    roadmap is seeded. Core gets an internal `RoadmapService(progressPath, diaryPath)` test seam (public ctor unchanged).
+  - The Linux picker can return a portal file with no local path: `MainShellWindow.TrySubmitRitual` toasts
+    `programs_photo_not_local` (x9) and never submits, because a null photo would complete the ritual photo-less (WPF cannot).
+  - `ProgramCapabilities.RitualsAvailable = true`: presentation and the_takeover become enrollable; kept and firmware_install stay
+    refused (keyword engine). The ritual button is still gated on the flag.
+  - Lockdown refuses Pause/Resume, Restart and the ritual picker (P05; WPF has no gate here, like 3a's Enroll/Withdraw/Start).
+    Dismiss starts and stops nothing and stays open, as on WPF. Panic behaviour is 3a's (ends our session).
+  - A loaded run this head cannot finish (rollover suppressed, 3a) now says so: `programs_run_unavailable_note` (x9) with the
+    missing feature; Withdraw stays enabled.
+- Risks: roadmap.json still saves without temp+rename and a corrupt file falls back to defaults then overwrites (both heads; a
+  separate Core layer per the oracle). Checkpoint B's WPF-release precondition applies to ritual writes too.
+- Tests: `Tests/CCP.Avalonia.Tests/ProgramsRunControlsTests.cs`, `Tests/CCP.Core.Tests/ProgramRitualTests.cs` (oracle tests 1-4),
+  `ProgramServiceStartupTests.AppStartupSeedsTheRoadmapProviderLazily` (6), `ProgramCapabilitiesTests`, `LockdownVeilTests`.
+  Fail-proofs: ~/ccp-port/evidence/review-programs-run-3b/fail-proofs.log.
