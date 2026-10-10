@@ -84,11 +84,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             };
         }
 
-        /// <summary>WPF SeedNativeState, the audio-only half: init is a snapshot of settings, not of what
-        /// is happening now. The mandatory-video and browser-video suspends are not ported.</summary>
+        /// <summary>WPF SeedNativeState: init is a snapshot of settings, not of what is happening now. A
+        /// mandatory video already playing, or an audio-only session that began during boot, suspends at once.
+        /// SEAM(browser-video): the browser-video seed needs a browser media service the port does not have.</summary>
         private void SeedArcademyNativeState()
         {
-            try { if (CoreSettings.Current?.AudioOnlySession == true) Post(new { type = "suspend", on = true, reason = "audio-only" }); }
+            try
+            {
+                if (CoreEngine.Video?.IsPlaying == true) { ArcademyVideoSuspend(true); return; }
+                if (CoreSettings.Current?.AudioOnlySession == true) Post(new { type = "suspend", on = true, reason = "audio-only" });
+            }
             catch (Exception ex) { Log.Debug("[Game] arcademy seed: {E}", ex.Message); }
         }
 
@@ -140,7 +145,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                 return new
                 {
                     name = string.IsNullOrWhiteSpace(name) ? null : name!.Trim(),
-                    avatarUrl = (string?)null,
+                    avatarUrl = ArcademyAvatarDataUri(linked, ArcademyPresenceShare(s)),
                     discordLinked = linked,
                     presenceShare = ArcademyPresenceShare(s),
                 };

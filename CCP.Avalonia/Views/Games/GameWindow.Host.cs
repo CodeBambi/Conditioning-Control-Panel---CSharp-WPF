@@ -34,6 +34,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
         {
             if (Spec.Id is "backroom" or "breakout" or "breakoutdemo") OpenBackRoom();
             if (Spec.Id is "dtrh" or "arcademy") StartHeartbeatWatch();
+            if (Spec.Id == "arcademy") OpenArcademy();
         }
 
         private void OnGameClosed()

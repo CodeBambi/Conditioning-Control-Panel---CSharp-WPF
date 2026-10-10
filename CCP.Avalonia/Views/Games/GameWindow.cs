@@ -218,6 +218,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             lock (Open) all = Open.ToArray();
             foreach (var w in all)
             {
+                if (w.Spec.Id == "arcademy" && w.ArcademyPanicPress(DateTime.UtcNow)) continue;   // WPF ladder: press 1 freezes, press 2 closes
                 try { w.Close(); }
                 catch (Exception ex) { Log.Warning(ex, "[Game] panic close of {Id} failed", w.Spec.Id); }
             }

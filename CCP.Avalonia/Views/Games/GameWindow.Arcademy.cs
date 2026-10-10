@@ -34,16 +34,22 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
 
         private bool HandleArcademy(JObject o)
         {
+            // Any message is a sign of life for the progress-aware boot deadline (WPF OnPageMessage).
+            _arcLastProgressUtc = DateTime.UtcNow;
             switch ((string?)o["type"])
             {
                 case "ready":
                     // WPF OnPageReady: exactly one init per boot, then the fullscreen state.
                     IsReady = true;
                     NoteHeartbeat();
+                    CancelArcademyBootDeadline();
+                    ArcademyBootFailedThisSession = false;   // a statement about the LAST attempt only
+                    try { Web.Focus(); } catch { }           // so the page's own Esc ladder works from the first frame
                     EnsureArcademy();
                     Post(BuildArcademyInit());
                     Post(new { type = "fullscreen", on = IsHostFullscreen });
                     SeedArcademyNativeState();
+                    KickArcademyAvatarRefresh();
                     Log.Information("[Game] arcademy: sent init (protocol 1)");
                     return true;
                 case "fullscreen-request":
@@ -97,17 +103,25 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                     OnArcademyProbeSub(o);
                     return true;
                 case "share-image":
-                    Log.Information("[Game] arcademy: 'share-image' not ported yet - answered not copied");
-                    Post(new { type = "share-image-result", ok = false });
+                    EnsureArcademy();
+                    OnArcademyShareImage((string?)o["png"]);
                     return true;
                 case "link-discord":
-                    Log.Information("[Game] arcademy: 'link-discord' not ported yet");
-                    PushArcademyProfile("failed");
+                    // The student ID's photo chip in its "Link Discord" state.
+                    EnsureArcademy();
+                    OnArcademyLinkDiscord();
                     return true;
                 case "resume-request":
-                    // The panic ladder's rung 1 (suspend) is not ported: panic closes every game window at once.
-                    Log.Debug("[Game] arcademy: resume-request with no panic suspend outstanding - ignored");
+                    OnArcademyResumeRequest(o);
                     return true;
+                case "boot-error":
+                    OnArcademyBootError((string?)o["msg"]);
+                    return true;
+                case "exit":
+                    // Page-initiated (Esc held): it winds itself down, then exit-done. The shared shell arms the 1200 ms close.
+                    _arcExiting = true;
+                    Log.Information("[Game] arcademy: page exit ({Reason})", (string?)o["reason"]);
+                    return false;
                 default:
                     return false;   // heartbeat, pong, boot-error, log, exit, exit-done: the shared shell
             }
@@ -141,6 +155,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
         {
             Interlocked.Increment(ref _arcGeneration);
             HookArcademySettings(false);
+            try { CancelArcademyLink("teardown", tellPage: false); } catch { }
+            CloseArcademySafety();
             if (_arcAttached)
             {
                 _arcAttached = false;
