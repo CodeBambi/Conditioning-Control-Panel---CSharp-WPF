@@ -430,13 +430,27 @@
                           <!-- Completed. Under the caption, so a finished weekly still says which
                                weekly it was. -->
                           <Border x:Name="WeeklyCompletedOverlay" Background="#992D4A2D" IsVisible="False">
-                            <TextBlock Text="&#x2713;" Foreground="#00E676" FontSize="72"
-                                       FontWeight="Bold" HorizontalAlignment="Center"
-                                       VerticalAlignment="Center" Margin="0,0,0,38">
-                              <TextBlock.Effect>
-                                <DropShadowEffect Color="Black" BlurRadius="8" OffsetX="0" OffsetY="2"/>
-                              </TextBlock.Effect>
-                            </TextBlock>
+                            <!-- Depth wave 10 (WPF :318-340): the STAMP. A mint-outlined plate rotated
+                                 -6 degrees, pressed into the art (inner shade at its top), static: no
+                                 animation and no Effect (WPF's check wore a drop shadow; the plate's
+                                 dark face does that job here). Reuses btn_done, no new key. -->
+                            <Grid x:Name="WeeklyDoneStamp" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                  Margin="0,0,0,38" RenderTransformOrigin="50%,50%" IsHitTestVisible="False">
+                              <Grid.RenderTransform>
+                                <RotateTransform Angle="-6"/>
+                              </Grid.RenderTransform>
+                              <Border CornerRadius="9" BorderBrush="#00E676" BorderThickness="3" Background="#D90B1A12"/>
+                              <Border CornerRadius="6" Margin="3" IsHitTestVisible="False"
+                                      Background="{StaticResource DepthPressedShade}"/>
+                              <Border CornerRadius="6" Margin="5" BorderBrush="#6600E676" BorderThickness="1"/>
+                              <StackPanel Orientation="Horizontal" Margin="18,6,20,8">
+                                <TextBlock Text="&#x2713;" Foreground="#00E676" FontSize="34"
+                                           FontFamily="Segoe MDL2 Assets, Segoe UI Symbol, Segoe UI"
+                                           FontWeight="Bold" VerticalAlignment="Center"/>
+                                <TextBlock Text="{loc:Str btn_done}" Foreground="#00E676" FontSize="26"
+                                           FontWeight="ExtraBold" Margin="10,0,0,0" VerticalAlignment="Center"/>
+                              </StackPanel>
+                            </Grid>
                           </Border>
 
                           <!-- XP, on the art, same corner the daily cards use. -->
@@ -480,11 +494,32 @@
 
                       <!-- BODY: the bar and its count on one line, same as a daily card. -->
                       <Grid Grid.Row="1" Margin="11,9,11,11" ColumnDefinitions="*,Auto">
+                        <!-- Depth wave 10 (WPF :402-429): a SUNKEN groove (well floor, a top and a
+                             left inner band under the fill, a lit foot line) and a TUBE fill
+                             (DepthTubeGloss over the fill colour, a DepthTubeBead riding its leading
+                             edge). The track's width is still the whole fill span: the fill tween in
+                             QuestsTabView.Fx.cs reads it. -->
                         <Border x:Name="WeeklyProgressTrack" Grid.Column="0"
-                                Background="{DynamicResource DarkerBgBrush}" CornerRadius="4"
+                                Background="{StaticResource DepthWellFloorBrush}" CornerRadius="4"
                                 Height="10" VerticalAlignment="Center" Margin="0,0,10,0">
-                          <Border x:Name="WeeklyProgressFill" Background="#9370DB"
-                                  CornerRadius="4" HorizontalAlignment="Left" Width="0"/>
+                          <Grid>
+                            <Border x:Name="WeeklyGrooveTop" Height="4" VerticalAlignment="Top" CornerRadius="4,4,0,0"
+                                    IsHitTestVisible="False" Background="{StaticResource DepthWellTop}"/>
+                            <Border Width="3" HorizontalAlignment="Left" CornerRadius="4,0,0,4"
+                                    IsHitTestVisible="False" Background="{StaticResource DepthWellLeft}"/>
+                            <Border x:Name="WeeklyProgressFill" Background="#9370DB"
+                                    CornerRadius="4" HorizontalAlignment="Left" Width="0">
+                              <Grid>
+                                <Border x:Name="WeeklyTubeGloss" CornerRadius="4" IsHitTestVisible="False"
+                                        Background="{StaticResource DepthTubeGloss}"/>
+                                <Ellipse x:Name="WeeklyTubeBead" Width="8" Height="8" HorizontalAlignment="Right"
+                                         Margin="0,0,1,0" IsVisible="False" IsHitTestVisible="False"
+                                         Fill="{StaticResource DepthTubeBead}"/>
+                              </Grid>
+                            </Border>
+                            <Rectangle Height="1" VerticalAlignment="Bottom" Margin="3,0,3,0"
+                                       IsHitTestVisible="False" Fill="{StaticResource DepthWellFoot}"/>
+                          </Grid>
                         </Border>
                         <TextBlock x:Name="TxtWeeklyProgress" Grid.Column="1" Text="0 / 0"
                                    Foreground="#9370DB" FontSize="12" FontWeight="Bold"

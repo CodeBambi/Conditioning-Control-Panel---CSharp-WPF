@@ -47,6 +47,8 @@ public sealed class QuestsDepthTests
         finally { w.Close(); CoreSettings.ServiceProvider = oldProvider; }
     });
 
+    private static Border Stops(string key) => new() { Background = DepthPaint.Brush(key) };
+
     private static Color Contact(Border band) => ((IGradientBrush)band.Background!).GradientStops[0].Color;
 
     [Fact]
@@ -135,6 +137,41 @@ public sealed class QuestsDepthTests
         w.MouseUp(new Point(2, 2), global::Avalonia.Input.MouseButton.Left);
         Assert.False(button.IsPressed);
         Assert.Equal(DepthRules.TravelFor(true, false, false, false), tab.RerollFaceY);
+    });
+
+    [Fact]
+    public void TheWeeklyBarIsATubeInAGroove_AndAFinishedWeeklyWearsTheMintPlate() => OnTab((tab, _) =>
+    {
+        // The groove: the well floor under a top band; the fill is a tube (gloss) whose bead only
+        // rides a fill wide enough to carry it (WPF TubeBeadPx + 2).
+        var track = tab.FindControl<Border>("WeeklyProgressTrack")!;
+        var fill = tab.FindControl<Border>("WeeklyProgressFill")!;
+        var bead = tab.FindControl<global::Avalonia.Controls.Shapes.Ellipse>("WeeklyTubeBead")!;
+        Assert.Equal(((ISolidColorBrush)DepthPaint.Brush("DepthWellFloorBrush")!).Color, ((ISolidColorBrush)track.Background!).Color);
+        Assert.Equal(Contact(Stops("DepthWellTop")), Contact(tab.FindControl<Border>("WeeklyGrooveTop")!));
+        Assert.Equal(Contact(Stops("DepthTubeGloss")), Contact(tab.FindControl<Border>("WeeklyTubeGloss")!));
+        Assert.Contains(track, fill.GetVisualAncestors());
+        Assert.False(QuestsTabView.TubeBeadShown(9.9));
+        Assert.True(QuestsTabView.TubeBeadShown(10));
+
+        fill.Width = 4;
+        Dispatcher.UIThread.RunJobs();
+        Assert.False(bead.IsVisible);
+        fill.Width = 60;
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(bead.IsVisible);
+        fill.Width = 0;
+        Dispatcher.UIThread.RunJobs();
+        Assert.False(bead.IsVisible);
+
+        // The mint plate: tilted -6 degrees, static, says Done, and nothing on it is an Effect.
+        var stamp = tab.FindControl<Grid>("WeeklyDoneStamp")!;
+        Assert.Equal(-6, Assert.IsType<RotateTransform>(stamp.RenderTransform).Angle);
+        Assert.False(stamp.IsHitTestVisible);
+        Assert.Contains(stamp.GetVisualDescendants().OfType<TextBlock>(),
+            t => t.Text == ConditioningControlPanel.Localization.Loc.Get("btn_done"));
+        Assert.All(stamp.GetVisualDescendants().OfType<Visual>().Append(stamp), v => Assert.Null(v.Effect));
+        Assert.Same(tab.FindControl<Border>("WeeklyCompletedOverlay"), stamp.Parent);
     });
 
     [Fact]

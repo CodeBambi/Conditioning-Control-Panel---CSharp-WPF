@@ -6,8 +6,9 @@
 // hue (DepthRules.ShadowColor through DepthPaint.ShadowBand): the shell calls PaintDepthQuests(hue) from
 // PaintSectionWash, and the constructor paints the You hue so the tab is right before that. Every number
 // is DepthRules'; no shade is hand-picked.
-// not ported from the WPF depth layer: the weekly progress groove and its tube gloss / bead (:402-429)
-// and the mint stamp plate over a finished weekly (:318-340).
+// Lane k16: the weekly progress groove with its tube gloss and bead (WPF xaml :402-429) and the mint
+// stamp plate over a finished weekly (:318-340) are in the axaml; the bead shows only once the fill is
+// wide enough to carry it (WPF WeeklyProgressFill_SizeChanged, TubeBeadPx).
 using System;
 using Avalonia;
 using Avalonia.Controls;
@@ -35,6 +36,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 WirePlank(BtnFixStreak, FixStreakFace, FixStreakDrop, FixStreakBevel);
 
                 WatchVisibility(WeeklyCompletedOverlay, ApplyWeeklyDone);
+                WeeklyProgressFill.PropertyChanged += (_, e) =>
+                {
+                    if (e.Property == BoundsProperty || e.Property == WidthProperty) SyncWeeklyTubeBead();
+                };
+                SyncWeeklyTubeBead();
                 var seats = new Control[] { DailySeat0, DailySeat1, DailySeat2 };
                 var bands = new Control[] { DailySeatBand0, DailySeatBand1, DailySeatBand2 };
                 for (int i = 0; i < seats.Length; i++)
@@ -58,6 +64,20 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             var floatBand = DepthPaint.ShadowBand(hue, DepthRules.FloatAlpha);
             foreach (var b in new[] { DailyCounterDrop, WeeklyXpDrop, WeeklyRerollDrop, FixStreakDrop }) b.Background = drop;
             foreach (var b in new[] { DailySeatBand0, DailySeatBand1, DailySeatBand2, WeeklyFloatBand }) b.Background = floatBand;
+        }
+
+        /// <summary>WPF QuestsTabView.xaml.cs:93, the bead's diameter.</summary>
+        internal const double TubeBeadPx = 8.0;
+
+        /// <summary>WPF WeeklyProgressFill_SizeChanged's rule: a bead needs a fill at least its own
+        /// width plus 2 px to ride on, else it would hang off a sliver.</summary>
+        internal static bool TubeBeadShown(double fillWidth) => fillWidth >= TubeBeadPx + 2;
+
+        private void SyncWeeklyTubeBead()
+        {
+            double width = WeeklyProgressFill.Bounds.Width;
+            if (width <= 0 && !double.IsNaN(WeeklyProgressFill.Width)) width = WeeklyProgressFill.Width;
+            WeeklyTubeBead.IsVisible = TubeBeadShown(width);
         }
 
         private static void WatchVisibility(Control element, Action changed) =>

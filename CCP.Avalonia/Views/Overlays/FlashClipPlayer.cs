@@ -52,6 +52,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             }
         }
 
+        /// <summary>Lane k16: the same silent looping player on the process's shared decoder, for a
+        /// surface that must not name the audio stack (the Tonight Board's showcase clip). Silent by
+        /// construction: every media this class opens carries <c>:no-audio</c>.</summary>
+        internal static FlashClipPlayer? StartSilent(string? path, int width, int height, Action<WriteableBitmap> show,
+            int longSideMax = LongSideMax, int frameGapMs = 66) =>
+            Start(global::ConditioningControlPanel.Avalonia.Platform.LibVlcAudio.Shared, path, width, height, show, 1, longSideMax, frameGapMs);
+
         /// <summary>The decode size: the flash's size scaled so its long side is at most 480 px.</summary>
         internal static (int W, int H) DecodeSize(int width, int height, int longSideMax = LongSideMax)
         {

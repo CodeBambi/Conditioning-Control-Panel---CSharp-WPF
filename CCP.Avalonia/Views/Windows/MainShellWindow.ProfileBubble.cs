@@ -413,6 +413,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             PulseProfileBubble(1.35, 560);
             FlashProfileBubbleGlow();
+            BurstProfileBubble();   // WPF FireBurstAt(BtnProfileBubble, count: 45), MainShellWindow.LevelUpFx.cs
             if (ProfileBubblePopupHost?.IsOpen == true) RefreshProfileMenu();
         }
 

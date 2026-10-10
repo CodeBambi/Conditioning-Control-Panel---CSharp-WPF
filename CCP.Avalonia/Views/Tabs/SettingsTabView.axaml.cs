@@ -388,7 +388,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         }
 
         // -- browser card ---------------------------------------------------------------
-        private void BrowserLoadingText_Click(object? sender, PointerPressedEventArgs e) { }   // mw.BrowserLoadingText_Click(...)
+        private void BrowserLoadingText_Click(object? sender, PointerPressedEventArgs e) => OnBrowserPromptClick();   // SettingsTabView.BrowserCard.cs
         private void BrowserSiteToggle_Click(object? sender, RoutedEventArgs e)
         {
             Shell?.RevealDashboardBrowser("site-toggle");

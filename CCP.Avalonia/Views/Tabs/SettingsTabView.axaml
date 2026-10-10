@@ -51,7 +51,8 @@
      ponytail: BrowserLoadingText starts hidden here. On WPF it is the prompt that stands in the
      browser slot until BrowserLoadingText_Click creates the WebView2; this head puts the
      cross-platform controls:WebHost in that slot from the start, so the prompt would sit straight
-     on top of the host's own panel. Show it again when the load-on-click flow is wired. -->
+     on top of the host's own panel. Lane k16: SettingsTabView.BrowserCard.cs (SyncBrowserPrompt) shows it
+     while an engine is there and nothing is loaded yet, and while the browser is popped out. -->
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"

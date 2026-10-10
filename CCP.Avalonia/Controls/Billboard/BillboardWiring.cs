@@ -4,6 +4,7 @@ using ConditioningControlPanel.Services.Billboard;
 using ConditioningControlPanel.Services.Billboard.Board;
 using ConditioningControlPanel.Services.Billboard.Providers;
 using ConditioningControlPanel.Avalonia.Controls.Billboard.Scenes;
+using ConditioningControlPanel.Services.Billboard.Showcase;
 using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Controls.Billboard
@@ -14,8 +15,9 @@ namespace ConditioningControlPanel.Avalonia.Controls.Billboard
     /// billboard the first time it shows, so it costs nothing in a run that never shows Home.
     ///
     /// <para>Each provider starts on its own: one that throws is logged and the rest still load.
-    /// The port has no Lobby and no showcase clips yet, so there is no Live and no Showcase
-    /// provider: the deck simply starts at the next card (Board, Waiting, Resume, Event, Tip, House).</para>
+    /// The order is WPF's: House, Board, Showcase, then the head's adapters (Live, Waiting, Resume,
+    /// Event), then Tip. The Showcase provider reaches the network (its manifest and clips sit on a
+    /// GitHub release), so it joins only in a running app, never in a headless test host.</para>
     /// </summary>
     public static class BillboardWiring
     {
@@ -46,6 +48,9 @@ namespace ConditioningControlPanel.Avalonia.Controls.Billboard
                 BoardPng.Install();
                 try { BillboardArt.Register(BoardProvider.ArtKey, data => new BoardTileView(data)); }
                 catch (Exception ex) { Log.Warning(ex, "Billboard: board art did not register"); }
+                // WPF ShowcaseArtRegistration.Register: the "clip" key.
+                try { BillboardArt.Register(ShowcaseRules.ArtKey, data => new ClipArtView(data as ShowcaseClipArt)); }
+                catch (Exception ex) { Log.Warning(ex, "Billboard: clip art did not register"); }
                 try { BuiltInArt.Register(); }
                 catch (Exception ex) { Log.Warning(ex, "Billboard: built-in art did not register"); }
             }
@@ -63,6 +68,8 @@ namespace ConditioningControlPanel.Avalonia.Controls.Billboard
                 Add(new HouseProvider());
                 try { Add(new BoardProvider()); }
                 catch (Exception ex) { Log.Warning(ex, "Billboard: board provider did not start"); }
+                try { if (ShowcaseLive()) Add(new ShowcaseProvider()); }
+                catch (Exception ex) { Log.Warning(ex, "Billboard: showcase provider did not start"); }
                 try
                 {
                     if (HeadProviders?.Invoke() is { } extra)
@@ -73,6 +80,16 @@ namespace ConditioningControlPanel.Avalonia.Controls.Billboard
                 catch (Exception ex) { Log.Warning(ex, "Billboard: tip provider did not start"); }
             }
         }
+
+        /// <summary>
+        /// Whether the Showcase provider may join: only a running app (a controlled lifetime). A
+        /// headless test host has none, so a test never fetches the manifest or a clip. WPF asks no
+        /// media consent for these (they are the app's own clips, not the user's media source), and
+        /// neither does this head.
+        /// </summary>
+        internal static Func<bool> ShowcaseLive { get; set; } = () =>
+            global::Avalonia.Application.Current?.ApplicationLifetime
+                is global::Avalonia.Controls.ApplicationLifetimes.IControlledApplicationLifetime;
 
         /// <summary>The viewer's plan, as the header spark reads it: Prime = Lab access, Basic =
         /// Premium access, else Free. The shell sets the reader (it owns the Patreon service).</summary>
