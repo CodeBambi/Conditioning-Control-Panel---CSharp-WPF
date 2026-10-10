@@ -20,6 +20,7 @@ namespace ConditioningControlPanel.Tests;
 /// and expiry rules, the once-per-version download and disk cache, the card, every effect curve
 /// ported from the approved mockup, the tile layout and the renderer's frame budget.
 /// </summary>
+[Collection(BoardFrameBudgetCollection.Name)]
 public class BoardTilesTests
 {
     private static string Loc(string key) => "[" + key + "]";
@@ -647,7 +648,9 @@ public class BoardTilesTests
         r.SetPicture(pic); // the message glow is baked once, outside the frame
         Assert.True(pic.HasInk && r.GlowPixels > 0);
         var ripples = new[] { new BoardRipple(20, 10, 0.1) };
-        for (int k = 0; k < 10; k++) { BoardScene.Compute(pic, 0, fx, 0.3 + k / 30.0, 10, ripples, 0.3 + k / 30.0, false, c, z, ro); r.Draw(c, z, true, 0.02, ro, 0.9); }
+        // Warm past tier-up (~30 calls + the background delay): with 10 frames CI measured Tier-0 code.
+        for (int k = 0; k < 60; k++) { BoardScene.Compute(pic, 0, fx, 0.3 + k / 30.0, 10, ripples, 0.3 + k / 30.0, false, c, z, ro); r.Draw(c, z, true, 0.02, ro, 0.9); }
+        var cpu0 = Process.GetCurrentProcess().TotalProcessorTime; // TEMPDIAG
         var sw = Stopwatch.StartNew();
         const int frames = 60;
         for (int k = 0; k < frames; k++)
@@ -662,28 +665,8 @@ public class BoardTilesTests
         // With the message glow, field/message passes, face cache and packed CRT (same day, watch-party
         // sample, every effect): pitch 14 + CRT 1.6-1.7 ms (1.93 ms before on the same machine).
         // This guard is loose (Debug, cold JIT, a loaded CI runner) and only catches a gross regression.
-        // TEMP DIAG (ci-green): remove before merge.
-        var proc = Process.GetCurrentProcess();
-        string Pass(int n)
-        {
-            var per = new double[n]; var cpu0 = proc.TotalProcessorTime; var w = Stopwatch.StartNew();
-            for (int k = 0; k < n; k++)
-            {
-                var f = Stopwatch.StartNew(); double t = 0.5 + k / 30.0;
-                BoardScene.Compute(pic, 0, fx, t, 10, ripples, t, false, c, z, ro);
-                r.Draw(c, z, true, 0.02, ro, BoardFxMath.GlowStrength(t, 10, false, true));
-                per[k] = f.Elapsed.TotalMilliseconds;
-            }
-            proc.Refresh();
-            double cores = (proc.TotalProcessorTime - cpu0).TotalMilliseconds / w.Elapsed.TotalMilliseconds;
-            var s = per.OrderBy(x => x).ToArray();
-            return $"mean {per.Average():F2} min {s[0]:F2} med {s[n / 2]:F2} max {s[^1]:F2} procCores {cores:F2} threads {proc.Threads.Count} | " + string.Join(" ", per.Select(x => x.ToString("F1")));
-        }
-        var first = Pass(60);
-        for (int k = 0; k < 100; k++) { BoardScene.Compute(pic, 0, fx, 0.3, 10, ripples, 0.3, false, c, z, ro); r.Draw(c, z, true, 0.02, ro, 0.9); }
-        Thread.Sleep(300);
-        var warm = Pass(60);
-        Assert.Fail($"DIAG cpus {Environment.ProcessorCount} orig {ms:F2} ms\nPASS-A {first}\nPASS-B(after 100 more + 300ms) {warm}");
+        Assert.True(ms < 12, $"a board frame took {ms:F2} ms");
+        Assert.Fail($"TEMPDIAG cpus {Environment.ProcessorCount} ms {ms:F2} procCores {(Process.GetCurrentProcess().TotalProcessorTime - cpu0).TotalMilliseconds / sw.Elapsed.TotalMilliseconds:F2}");
     }
 
     // ---- the view ----------------------------------------------------------------------------
@@ -724,4 +707,15 @@ public class BoardTilesTests
         Assert.True(hit);
         Assert.Equal((tx, ty), ((int)x, (int)y));
     }
+}
+
+/// <summary>
+/// Runs <see cref="BoardTilesTests"/> alone. Its frame-budget guard timed the renderer while other
+/// classes ran on the same 4-vCPU CI runner (process at ~1.7-2.0 cores during the timed window,
+/// single frames up to 23.7 ms), so the guard failed on contention, not on the renderer.
+/// </summary>
+[CollectionDefinition(Name, DisableParallelization = true)]
+public sealed class BoardFrameBudgetCollection
+{
+    public const string Name = "BoardFrameBudget";
 }
