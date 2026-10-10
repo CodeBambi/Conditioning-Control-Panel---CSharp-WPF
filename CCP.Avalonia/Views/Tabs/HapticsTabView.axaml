@@ -505,10 +505,9 @@
                                 </Border>
 
                                 <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="18,0,10,0">
-                                    <TextBlock Text="{loc:Str tab_haptics}" FontSize="17" FontWeight="Bold"
-                                               Foreground="{StaticResource TextLightBrush}"/>
+                                    <TextBlock Theme="{StaticResource Type.CardTitle}" Text="{loc:Str tab_haptics}"/>
                                     <TextBlock Text="{loc:Str desc_haptics}" FontSize="11.5"
-                                               Foreground="{StaticResource TextMutedBrush}" Margin="0,1,0,0"
+                                               Foreground="{StaticResource TextSecondaryBrush}" Margin="0,1,0,0"
                                                TextTrimming="CharacterEllipsis"/>
                                 </StackPanel>
 

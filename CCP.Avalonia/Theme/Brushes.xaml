@@ -80,6 +80,11 @@
     <SolidColorBrush x:Key="TextDimBrush" Color="{StaticResource TextDim}"/>
     <!-- Velvet Kit: secondary text tier (see Colors.xaml). -->
     <SolidColorBrush x:Key="TextSecondaryBrush" Color="{StaticResource TextSecondary}"/>
+    <!-- Readability pass (polish 8, Brushes.xaml baff475e4): the section colours (Colors.xaml SectionInk). -->
+    <SolidColorBrush x:Key="SectionInkBrush" Color="{StaticResource SectionInk}"/>
+    <SolidColorBrush x:Key="SectionTintBrush" Color="{StaticResource SectionTint}"/>
+    <SolidColorBrush x:Key="SectionRuleBrush" Color="{StaticResource SectionRule}"/>
+    <SolidColorBrush x:Key="SectionOutlineBrush" Color="{StaticResource SectionOutline}"/>
 
     <!-- ============================================================
          Velvet Kit: section-hue brushes. Per section:

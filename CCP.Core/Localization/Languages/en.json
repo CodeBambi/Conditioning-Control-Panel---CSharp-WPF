@@ -3089,6 +3089,7 @@
   "tooltip_exit_the_application_completely": "Close the app.",
   "label_remote_controlled": "REMOTE CONTROLLED",
   "label_someone_else_is_controlling_your_app": "Someone else is controlling your app",
+  "label_controller_may_be_idle": "Controller may be idle...",
   "label_no_active_session": "No active session",
   "btn_end_session": "End Session",
   "label_drop_to_import": "Drop to Import",
@@ -8357,5 +8358,13 @@
   "kwt_effect_image_flash": "Image Flash",
   "kwt_effect_overlay_pulse": "Overlay Pulse",
   "kwt_effect_mind_wipe": "Mind Wipe",
-  "kwt_effect_bubbles": "Bubbles"
+  "kwt_effect_bubbles": "Bubbles",
+  "label_asset_preset_default_0": "Preset {0}",
+  "msg_asset_preset_saved_0": "Preset '{0}' saved!\n\n{1} images, {2} videos enabled.\n{3} assets disabled.",
+  "msg_asset_preset_updated_0": "Preset '{0}' updated!\n\n{1} images, {2} videos enabled.\n{3} assets disabled.",
+  "msg_update_asset_preset_confirm_0": "Update preset '{0}' with the current selection?",
+  "title_no_preset_selected": "No Preset Selected",
+  "title_cannot_update_default": "Cannot Update Default",
+  "title_cannot_delete_default": "Cannot Delete Default",
+  "title_update_preset": "Update Preset"
 }

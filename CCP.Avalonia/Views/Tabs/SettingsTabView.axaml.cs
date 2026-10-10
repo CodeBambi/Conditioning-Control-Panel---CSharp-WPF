@@ -59,9 +59,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             // WPF IsVisibleChanged -> MainWindow.OnDashboardTabVisibilityChanged (the ? box and
             // One Account cards). Attach covers the launch: the app lands here with no IsVisible flip.
             AttachedToVisualTree += (_, _) => NotifyShellVisibility();
-            PropertyChanged += (_, e) => { if (e.Property == IsVisibleProperty) NotifyShellVisibility(); };
+            PropertyChanged += (_, e) => { if (e.Property == IsVisibleProperty) { NotifyShellVisibility(); SyncFoldArrowBreath(); } };
 
             WireStubs();
+            InitFavoritesDrawer();
         }
 
         // ------------------------------------------------------------------------------
@@ -223,8 +224,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 HomeCmbAudioOutputDevice, HomeBtnAudioOutputRefresh, HomeBtnTestAudio);
             HomeBtnAudioLayers.Click += HomeBtnAudioLayers_Click;
 
-            // Companion + account strips.
-            CompanionStrip.PointerPressed += CompanionStrip_Click;
+            // Account strip (the companion strip went in WPF 210e0e262: the rail has Companion).
             BtnUnifiedLogin.Click += BtnUnifiedLogin_Click;
             BtnQuickLogout.Click += BtnQuickLogout_Click;
             BtnLinkPhone.Click += BtnLinkPhone_Click;
@@ -354,10 +354,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private void HomeBtnAudioLayers_Click(object? sender, RoutedEventArgs e)
             => Windows.LayeredAudioWindow.Open(this);
 
-        // -- companion + account strips --------------------------------------------------
-        /// <summary>Home's companion strip. Pure navigation into the Companion door - the strip
-        /// owns no portrait and no clock, so there is nothing to start or stop here.</summary>
-        private void CompanionStrip_Click(object? sender, PointerPressedEventArgs e) => Shell?.ShowTab("companion");
+        // -- account strip ---------------------------------------------------------------
         private async void BtnUnifiedLogin_Click(object? sender, RoutedEventArgs e)
         {
             if (TopLevel.GetTopLevel(this) is Windows.MainShellWindow mw) await mw.OpenUnifiedLoginDialog();

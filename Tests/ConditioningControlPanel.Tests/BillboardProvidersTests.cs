@@ -439,9 +439,10 @@ public class BillboardProvidersTests
 
     private static IReadOnlyList<string> KeysUsed()
     {
-        var dir = Path.Combine(AppDir(), "Services", "Billboard", "Providers");
+        // Every product root (SourceRoots): the tip table moved to CCP.Core/Services/Billboard/BillboardCards.cs.
+        var sep = Path.DirectorySeparatorChar;
         var keys = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var file in Directory.GetFiles(dir, "*.cs"))
+        foreach (var file in SourceRoots.EnumerateProductSources("*.cs").Where(f => f.Contains($"{sep}Services{sep}Billboard{sep}")))
             foreach (Match m in Regex.Matches(File.ReadAllText(file), "\"(billboard_card_[a-z0-9_]+)\""))
                 if (!m.Groups[1].Value.EndsWith("_", StringComparison.Ordinal)) keys.Add(m.Groups[1].Value);
         foreach (var tip in TipCards.Table)
