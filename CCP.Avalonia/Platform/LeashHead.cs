@@ -165,6 +165,8 @@ internal static class LeashHead
             s.StrictLockEnabled = false;
             s.PanicKeyEnabled = true;
             CoreSettings.SaveImmediate();
+            // WPF SyncNoPanicState: the panic hook and its checkbox move with the flag.
+            try { LockdownService.PanicKeyUiSync?.Invoke(); } catch { }
         }
 
         /// <summary>OWED, as on WPF (LeashCutSafety AppTargets): the tab keeps one pooled balance.</summary>

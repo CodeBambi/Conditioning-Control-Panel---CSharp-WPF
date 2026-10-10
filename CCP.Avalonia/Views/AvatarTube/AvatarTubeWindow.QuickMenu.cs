@@ -46,6 +46,10 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             // Pause browser (WPF MenuItemPauseBrowser_Click :1383): mute + pause through the shell's
             // one seam (MainShellWindow.SetBrowserPaused over Views/Controls/WebHostMedia.cs).
             Wire("MenuItemPauseBrowser", OnMenuPauseBrowser);
+            // Remote Control (WPF MenuItemEmote_Click :924): the five preset items that stand in for the
+            // locked rows while a controller is connected.
+            foreach (var name in EmoteMenuItemNames)
+                if (QuickItem(name) is { } emote) emote.Click += (_, _) => OnMenuEmote(emote);
             UpdateQuickMenuState();
         }
 
@@ -231,6 +235,47 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
                 whispers.Foreground = remote ? MenuLocked : muted ? MenuRed : MenuWhite;
                 whispers.IsEnabled = !remote;
             }
+            RefreshEmoteMenuItemsForRemoteState();
+        }
+
+        internal static readonly string[] EmoteMenuItemNames =
+            { "MenuItemEmote1", "MenuItemEmote2", "MenuItemEmote3", "MenuItemEmote4", "MenuItemEmote5" };
+
+        /// <summary>WPF RefreshEmoteMenuItemsForRemoteState (:883): while a controller is connected the five
+        /// locked rows (Engine, Trigger Mode, Takeover, Personality, Mute) give way to the five emote
+        /// presets. Runs on every Opened, so a preset edit shows at once.</summary>
+        internal void RefreshEmoteMenuItemsForRemoteState()
+        {
+            try
+            {
+                var remote = RemoteControllerConnected;
+                foreach (var name in new[] { "MenuItemEngine", "MenuItemTriggerMode", "MenuItemBambiTakeover", "MenuItemPersonality", "MenuItemMute" })
+                    if (QuickItem(name) is { } original) original.IsVisible = !remote;
+                var presets = CoreSettings.Current.RemoteEmotePresets;
+                for (var i = 0; i < EmoteMenuItemNames.Length; i++)
+                {
+                    if (QuickItem(EmoteMenuItemNames[i]) is not { } item) continue;
+                    item.IsVisible = remote;
+                    if (!remote || presets == null || i >= presets.Count) continue;
+                    var p = presets[i];
+                    item.Header = (string.IsNullOrEmpty(p.Icon) ? "" : p.Icon + "  ") + (p.Text ?? "");
+                    item.Tag = p;
+                    item.Foreground = MenuWhite;   // a MenuItem with no named colour draws no text
+                }
+            }
+            catch (Exception ex) { Log.Warning(ex, "[Avatar] Emote menu refresh failed"); }
+        }
+
+        /// <summary>WPF MenuItemEmote_Click: a preset with no text is a silent no-op; no inline status (the
+        /// menu closes on click), so a rate limit or an ended session stays silent here as on WPF.</summary>
+        internal async void OnMenuEmote(MenuItem item)
+        {
+            try
+            {
+                if (item.Tag is not Models.EmotePreset preset || string.IsNullOrWhiteSpace(preset.Text)) return;
+                await RemoteControlTabView.SendEmoteAndReportAsync(preset.Text, preset.Icon ?? "", "preset", null);
+            }
+            catch (Exception ex) { Log.Warning(ex, "[Avatar] Emote send failed"); }
         }
     }
 }
