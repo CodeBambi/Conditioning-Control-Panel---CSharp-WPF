@@ -53,6 +53,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 var tab = Named<Tabs.SettingsTabView>("SettingsTab");
                 // SettingsTabView composed the fog itself; this only enrols it in the tab park.
                 RegisterTabFx("settings", tab?.FindControl<AmbientFxCanvas>("MosaicFx"));
+                // The favorites drawer's motes (the view starts them itself; this parks them).
+                RegisterTabFx("settings", tab?.FindControl<AmbientFxCanvas>("FavoritesDrawerFx"));
 
                 Activated += OnDashboardFxWindowStateish;
                 Deactivated += OnDashboardFxWindowStateish;
@@ -87,6 +89,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 foreach (var card in tab.GetLogicalDescendants().OfType<FeatureCard>()) card.RefreshFx();
                 foreach (var combo in tab.GetLogicalDescendants().OfType<SplitFeatureCard>()) combo.RefreshFx();
                 ApplyVaultCtaBreath();
+                tab.ApplyHostShown(WindowState != WindowState.Minimized);   // drawer + fold breaths
             }
             catch (Exception ex) { Log.Debug("ApplyDashboardFxLoops: {E}", ex.Message); }
         }

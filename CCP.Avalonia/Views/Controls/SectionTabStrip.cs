@@ -48,6 +48,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
         /// <summary>A pill was chosen (click, Enter/Space, or a Left/Right/Home/End move).</summary>
         public event Action<NavTab>? TabRequested;
 
+        /// <summary>A pill was built (WPF PillCreated): the host attaches its pin menu.</summary>
+        public event Action<NavTab, Button>? PillCreated;
+
         /// <summary>The breadcrumb's section word was clicked.</summary>
         public event Action<string>? SectionRequested;
 
@@ -237,6 +240,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
                 pill.Click += (_, e) => { e.Handled = true; Choose(tab, focus: false); };
                 _pillRow.Children.Add(pill);
                 _pills.Add((tab, pill, face, label));
+                PillCreated?.Invoke(tab, pill);
             }
         }
 

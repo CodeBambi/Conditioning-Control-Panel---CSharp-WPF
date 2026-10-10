@@ -75,7 +75,9 @@ public sealed partial class AccountSeedTests
             shell = new MainShellWindow();
             shell.Show();
             Dispatcher.UIThread.RunJobs();
-            shell.Named<Button>("BtnDiscordTab")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            shell.Named<Button>("DoorYou")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Dispatcher.UIThread.RunJobs();
+            shell.PageStrip!.PillFor("discord")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));   // You > Profile
             for (var i = 0; i < 20; i++) { await Task.Yield(); Dispatcher.UIThread.RunJobs(); }
 
             var page = shell.ProfilePage!;

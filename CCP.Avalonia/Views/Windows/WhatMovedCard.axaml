@@ -1,0 +1,79 @@
+<!-- PORTED from ConditioningControlPanel/Windows/WhatMovedCard.xaml (nav rework, 2026-10-06).
+     Deviations, all forced: WindowStyle/AllowsTransparency -> SystemDecorations/TransparencyLevelHint;
+     ResizeMode -> CanResize; Segoe UI dropped; Style -> Theme; DropShadowEffect ShadowDepth 4 ->
+     OffsetX/OffsetY 2.8; EmojiToImageSource dropped (Avalonia draws colour emoji); Click handlers
+     wired in code (template content has no name scope). -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+        xmlns:cp="clr-namespace:ConditioningControlPanel;assembly=CCP.Core"
+        x:Class="ConditioningControlPanel.Avalonia.Views.Windows.WhatMovedCard"
+        Title="What moved"
+        Width="520" SizeToContent="Height"
+        SystemDecorations="None"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner">
+
+    <Border x:Name="CardRoot" CornerRadius="16" BorderThickness="1" Margin="18"
+            BorderBrush="{DynamicResource PinkBrush}">
+        <Border.Background>
+            <LinearGradientBrush StartPoint="0%,0%" EndPoint="40%,100%">
+                <GradientStop Color="#FF2C1450" Offset="0"/>
+                <GradientStop Color="#FF1C1233" Offset="0.45"/>
+                <GradientStop Color="#FF100A1E" Offset="1"/>
+            </LinearGradientBrush>
+        </Border.Background>
+        <Border.Effect>
+            <DropShadowEffect Color="#000000" BlurRadius="28" OffsetX="2.8" OffsetY="2.8" Opacity="0.6"/>
+        </Border.Effect>
+
+        <StackPanel Margin="26,22,26,22">
+            <Grid>
+                <TextBlock Text="{loc:Str whatmoved_title}" FontSize="24" FontWeight="ExtraBold"
+                           Foreground="{DynamicResource PinkBrush}"/>
+                <Button x:Name="BtnX" Content="✕" HorizontalAlignment="Right"
+                        VerticalAlignment="Top" Background="Transparent" Foreground="#99FFFFFF"
+                        BorderThickness="0" FontSize="13" Cursor="Hand" Padding="4,0"/>
+            </Grid>
+            <TextBlock Text="{loc:Str whatmoved_intro}" Margin="0,6,0,16" FontSize="13"
+                       Foreground="#CCFFFFFF" TextWrapping="Wrap"/>
+
+            <ItemsControl x:Name="Rows">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="cp:WhatMovedRow">
+                        <!-- Each row reads as its sentence in the UIA tree, never as the record. -->
+                        <Border Margin="0,0,0,8" Padding="12,9" CornerRadius="10"
+                                AutomationProperties.Name="{Binding Text}"
+                                Background="#1FFFFFFF" BorderBrush="#26FFFFFF" BorderThickness="1">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{Binding Glyph}" FontSize="16" Width="22"
+                                           TextAlignment="Center" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                                <TextBlock Grid.Column="1" Text="{Binding Text}" FontSize="14" FontWeight="SemiBold"
+                                           Foreground="White" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                                <Button Grid.Column="2" Classes="showMe" Margin="12,0,0,0" Padding="12,5" FontSize="12"
+                                        Tag="{Binding}" Cursor="Hand"
+                                        AutomationProperties.Name="{Binding ShowMeName}"
+                                        Theme="{StaticResource PinkButton}">
+                                    <TextBlock Text="{loc:Str whatmoved_show}"/>
+                                </Button>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <Button x:Name="BtnDone" Theme="{StaticResource SecondaryButton}" HorizontalAlignment="Right"
+                    Padding="18,7" Margin="0,8,0,0">
+                <TextBlock Text="{loc:Str whatmoved_close}"/>
+            </Button>
+        </StackPanel>
+    </Border>
+</Window>

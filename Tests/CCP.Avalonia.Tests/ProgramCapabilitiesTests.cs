@@ -17,18 +17,18 @@ namespace CCP.Avalonia.Tests;
 public sealed class ProgramCapabilitiesTests
 {
     /// <summary>What each program still needs on this head. A new program fails until classified here;
-    /// 3b (rituals) empties presentation and the_takeover.</summary>
+    /// 3b (rituals + the seeded roadmap) emptied presentation and the_takeover.</summary>
     private static readonly Dictionary<string, string[]> Needs = new()
     {
         ["first_week"] = new string[0],
-        ["presentation"] = new[] { "Ritual" },
-        ["the_takeover"] = new[] { "Ritual" },
-        ["kept"] = new[] { "KeywordTrigger", "Ritual" },
+        ["presentation"] = new string[0],
+        ["the_takeover"] = new string[0],
+        ["kept"] = new[] { "KeywordTrigger" },
         ["firmware_install"] = new[] { "KeywordTrigger" },
     };
 
     [Fact]
-    public void EveryBuiltInProgramIsClassifiedAndOnlyFirstWeekIsEnrollable()
+    public void EveryBuiltInProgramIsClassifiedAndOnlyTheFinishableOnesAreEnrollable()
     {
         var all = BuiltInPrograms.All();
         Assert.Equal(Needs.Keys.OrderBy(k => k), all.Select(p => p.Id).OrderBy(k => k));
@@ -39,7 +39,7 @@ public sealed class ProgramCapabilitiesTests
                 .Distinct().OrderBy(s => s);
             Assert.True(Needs[p.Id].OrderBy(s => s).SequenceEqual(missing), $"{p.Id}: {string.Join(",", missing)}");
         }
-        Assert.Equal(new[] { "first_week" },
+        Assert.Equal(new[] { "first_week", "presentation", "the_takeover" },
             all.Where(p => ProgramService.UnavailableTasks(p, ProgramCapabilities.IsAvailable).Count == 0).Select(p => p.Id));
     }
 

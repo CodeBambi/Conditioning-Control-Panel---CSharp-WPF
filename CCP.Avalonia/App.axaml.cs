@@ -699,6 +699,8 @@ namespace ConditioningControlPanel.Avalonia
                 };
                 SeedLevelAchievements(Achievements);
                 StartQuests();
+                // WPF App.xaml.cs:290: a game.* palette row is listed only when this head can start it.
+                SettingsPaletteIndex.GameAvailableProvider = Views.Windows.LauncherWindow.CanStartGame;
                 // WPF App.xaml.cs:513 (main 03af6e8bb): a preset that switches the online selection re-deals every channel.
                 ConditioningControlPanel.Services.AssetPresetService.OnlineChannelsReset = ConditioningControlPanel.Services.Fyp.Online.FypOnlineCoordinator.ResetAllChannels;
                 // programs-3a decision: refuse programs whose required tasks this head never raises
@@ -707,8 +709,11 @@ namespace ConditioningControlPanel.Avalonia
                 Programs = new Services.Program.ProgramService();
                 CoreQuests.TrackProgramVerifierProvider = (category, amount) => Programs?.TrackVerifier(category, amount);   // WPF App.xaml.cs:413
 
-                // CoreProgram: its pack-video and roadmap providers stay unseeded - this head has no
-                // ContentPackService or RoadmapService, so it answers "no pack videos, no roadmap".
+                // WPF App.xaml.cs:447: ritual photos file through the roadmap. Lazy - the shell creates its
+                // RoadmapService on first use, so DisposeRoadmapIfCreated keeps its contract.
+                CoreProgram.RoadmapProvider = () => Views.Windows.MainShellWindow.Roadmap;
+                // CoreProgram's pack-video provider stays unseeded - this head has no ContentPackService,
+                // so it answers "no pack videos".
                 // HasPremiumProvider is seeded by AccountSeed.Seed(); NotifyProvider below, once the
                 // shell's toast host exists.
 
