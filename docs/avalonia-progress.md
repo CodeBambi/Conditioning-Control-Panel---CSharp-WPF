@@ -1800,3 +1800,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/sync6-tube-avatar: +369
 - Tube cel title plate (floating plate, raised coin arrows) and Embers motes in the glass (AmbientFxCanvas Embers/Retint/RunWhileInactive); sync6 rows 2889ddb23, bd95424c8 ported.
 - TubeMotesTests (fail-proven x3); render evidence only, no live check.
+
+## avalonia-port/sync6-premium-page-b: +830
+- Header Premium spark ported (rows 97/99): PremiumSparkRules/Field moved to Core, Avalonia `PremiumSpark` draws it, clock gated by visibility/motion and stopped on detach; `PremiumSparkTests` fail-proven, live Free check.
+- Row 100 (vault flair, no header row on Premium, Home ring) left needs-port for sync6-premium-page-c.
