@@ -110,9 +110,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private static readonly global::Avalonia.Media.Color LockdownCrimson = global::Avalonia.Media.Color.Parse("#DC143C");
         private static readonly string[] LockdownThemeKeys = { "PinkBrush", "DarkPinkBrush", "TransparentPinkBrush", "PinkButtonHoveredBrush" };
         private readonly System.Collections.Generic.List<System.IDisposable> _lockdownThemeHolds = new();
-        private System.Collections.Generic.Dictionary<string, object?>? _preLockdownBrushes;
+        // The four brushes live on the Application, so their originals are kept ONCE for the process: a second
+        // shell that themes while the first is still crimson must not record crimson as "what was there".
+        private static System.Collections.Generic.Dictionary<string, object?>? s_preLockdownBrushes;
+        private static int s_lockdownThemedShells;
+        private bool _lockdownThemed;
 
-        internal bool LockdownThemed => _preLockdownBrushes != null;
+        internal bool LockdownThemed => _lockdownThemed;
 
         private void ApplyLockdownTheme(bool on)
         {
@@ -122,9 +126,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 if (on == LockdownThemed || res == null) return;
                 if (on)
                 {
-                    _preLockdownBrushes = new();
-                    foreach (var k in LockdownThemeKeys)
-                        _preLockdownBrushes[k] = res.TryGetValue(k, out var v) ? v : null;
+                    _lockdownThemed = true;
+                    s_lockdownThemedShells++;
+                    if (s_preLockdownBrushes == null)
+                    {
+                        s_preLockdownBrushes = new();
+                        foreach (var k in LockdownThemeKeys)
+                            s_preLockdownBrushes[k] = res.TryGetValue(k, out var v) ? v : null;
+                    }
                     void Hold<T>(global::Avalonia.AvaloniaObject? o, global::Avalonia.StyledProperty<T> p, T v)
                     {
                         if (o?.SetValue(p, v, global::Avalonia.Data.BindingPriority.Animation) is { } d) _lockdownThemeHolds.Add(d);
@@ -144,9 +153,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 {
                     foreach (var d in _lockdownThemeHolds) d.Dispose();
                     _lockdownThemeHolds.Clear();
-                    foreach (var (k, v) in _preLockdownBrushes!)
-                        if (v != null) res[k] = v; else res.Remove(k);
-                    _preLockdownBrushes = null;
+                    _lockdownThemed = false;
+                    if (--s_lockdownThemedShells <= 0 && s_preLockdownBrushes is { } pre)
+                    {
+                        s_lockdownThemedShells = 0;
+                        foreach (var (k, v) in pre)
+                            if (v != null) res[k] = v; else res.Remove(k);
+                        s_preLockdownBrushes = null;
+                    }
                     RefreshThemeAwareElements();
                 }
             }
