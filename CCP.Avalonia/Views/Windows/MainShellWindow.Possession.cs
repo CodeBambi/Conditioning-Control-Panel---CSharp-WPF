@@ -7,7 +7,7 @@
 // Narrower than WPF on purpose (HB13): only DISPLAY controls are enrolled, so no button, toggle, timer
 // or exit ever moves under the pointer. Views mark victims with poss:Possession.Role and the shell
 // walks its visual tree (Services/Possession/Possession.cs: PossessionTree holds the refusals). The
-// deck here: nudge, typo, breathe, drift, melt, crack, retitle (Services/Possession/PossessionEffects.cs).
+// deck here: nudge, typo, breathe, drift, rewrite, melt, glyphrot, crack, retitle (Services/Possession/*.cs).
 
 using System;
 using System.Collections.Generic;
@@ -42,12 +42,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         /// <summary>The deck this head can draw, in the WPF catalog's rung order (k18 added typo,
-        /// drift, melt, crack, retitle from Services/Possession/PossessionEffects.cs).</summary>
+        /// drift, rewrite, melt, glyphrot, crack, retitle from Services/Possession/).</summary>
         internal static IPossessionEffect[] PossessionHeadEffects() => new IPossessionEffect[]
         {
             new PossessionNudge(), new Services.Possession.Effects.TypoEffect(), new PossessionBreathe(),
-            new Services.Possession.Effects.DriftEffect(),
-            new Services.Possession.Effects.MeltEffect(),
+            new Services.Possession.Effects.DriftEffect(), new Services.Possession.Effects.RewriteEffect(),
+            new Services.Possession.Effects.MeltEffect(), new Services.Possession.Effects.GlyphRotEffect(),
             new Services.Possession.Effects.CrackEffect(),
             new Services.Possession.Effects.RetitleEffect(),
         };

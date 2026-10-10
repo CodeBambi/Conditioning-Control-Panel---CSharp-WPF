@@ -91,7 +91,7 @@ public sealed class PossessionEffectsTests
             // The law is asked again at each effect's door: a hand-built target cannot get past it.
             var host = new PossessionHost();
             var effects = MainShellWindow.PossessionHeadEffects();
-            Assert.Equal(new[] { "nudge", "typo", "breathe", "drift", "melt", "crack", "retitle" }, effects.Select(e => e.Id).ToArray());
+            Assert.Equal(new[] { "nudge", "typo", "breathe", "drift", "rewrite", "melt", "glyphrot", "crack", "retitle" }, effects.Select(e => e.Id).ToArray());
             Assert.DoesNotContain(effects, e => e.UsesFlicker);
             foreach (var e in effects.OfType<PossessionEffectBase>().Where(e => e.Roles.Count > 0))
             {
@@ -240,6 +240,37 @@ public sealed class PossessionEffectsTests
             retitle.ApplyAsync(Ctx(host), tt, default).GetAwaiter().GetResult();
             Assert.Contains(title.Text, RetitleEffect.Lines);
             Assert.True(retitle.UndoAsync(TimeSpan.Zero).IsCompletedSuccessfully);
+            Assert.Equal("Basic Subject", title.Text);
+
+            // rewrite: a pool word in the label's own case; the real word is back in the call.
+            title.Text = "Settings";
+            var rewrite = new RewriteEffect();
+            Assert.True(rewrite.CanApply(Ctx(host), tt));
+            rewrite.ApplyAsync(Ctx(host), tt, default).GetAwaiter().GetResult();
+            Assert.Equal(RewritePools.Rewrite("Settings", RewritePools.ActiveModId, new Random(3)), title.Text);
+            Assert.NotEqual("Settings", title.Text);
+            Assert.True(rewrite.UndoAsync(TimeSpan.Zero).IsCompletedSuccessfully);
+            Assert.Equal("Settings", title.Text);
+
+            // glyphrot: one word rots a letter a beat, holds, heals; panic mid-rot restores at once.
+            title.Text = "Basic Subject";
+            var rot = new GlyphRotEffect();
+            rot.ApplyAsync(Ctx(host), tt, default).GetAwaiter().GetResult();
+            Assert.Equal("Basic Subject", title.Text);                  // nothing before the first beat
+            rot.Step();
+            Assert.NotEqual("Basic Subject", title.Text);
+            rot.Step(); rot.Step();
+            Assert.True(rot.UndoAsync(TimeSpan.Zero).IsCompletedSuccessfully);
+            Assert.Equal("Basic Subject", title.Text);
+            Assert.Equal(0, rot.OverlayCount);
+            rot.Step();                                                 // a late beat does nothing
+            Assert.Equal("Basic Subject", title.Text);
+            rot.ApplyAsync(Ctx(host), tt, default).GetAwaiter().GetResult();
+            for (int i = 0; i < 80 && !rot.IsHealed; i++) rot.Step();   // the whole haunt, beat by beat
+            Assert.True(rot.IsHealed);
+            Assert.Equal("Basic Subject", title.Text);                  // healed on its own, before the undo
+            Assert.Equal(1, rot.OverlayCount);                          // one face at a time, never a pile
+            rot.UndoAsync(TimeSpan.Zero);
             Assert.Equal("Basic Subject", title.Text);
 
             // Photosafe halves a motion, it never adds one.

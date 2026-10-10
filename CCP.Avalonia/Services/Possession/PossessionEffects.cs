@@ -164,6 +164,32 @@ internal abstract class PossessionEffectBase : IPossessionEffect
         if (d != null) _overlays.Add(d);
     }
 
+    /// <summary>An overlay the effect replaces as it goes (a face that changes step by step).</summary>
+    protected IDisposable? OverlayHandle<T>(AvaloniaObject target, StyledProperty<T> property, T value)
+    {
+        var d = target.SetValue(property, value, BindingPriority.Animation);
+        if (d != null) _overlays.Add(d);
+        return d;
+    }
+
+    protected void Drop(IDisposable? overlay)
+    {
+        if (overlay == null) return;
+        _overlays.Remove(overlay);
+        try { overlay.Dispose(); } catch (Exception ex) { Log.Debug("Possession {Id}: overlay drop failed: {E}", Id, ex.Message); }
+    }
+
+    /// <summary>A bounded beat for step effects; stopped with every other motion on undo.</summary>
+    protected void Every(double ms, Action tick)
+    {
+        var timer = new DispatcherTimer(TimeSpan.FromMilliseconds(ms), DispatcherPriority.Normal, (_, _) =>
+        {
+            try { tick(); } catch (Exception ex) { Log.Debug("Possession {Id}: step failed: {E}", Id, ex.Message); }
+        });
+        _timers.Add(timer);
+        timer.Start();
+    }
+
     /// <summary>Borrow the victim's render transform (its own one stays composed underneath).</summary>
     protected PossessionLease? TakeLease(RelativePoint origin)
     {
