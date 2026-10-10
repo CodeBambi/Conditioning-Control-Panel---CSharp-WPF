@@ -188,6 +188,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             RemoteStatusDot.Fill = idle ? Grey : connected ? Green : Orange;
             BindKey(TxtRemoteStatus, idle ? "label_remote_idle" : connected ? "label_controller_connected" : "label_waiting_for_controller");
             TxtRemoteStatus.Foreground = connected ? Green : Grey;
+            // WPF UpdateDirectoryListingStatus: the title bar pill follows the session (hidden with none).
+            (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.UpdateDirectoryListingStatus(!idle, Relay.Value.DirectoryOptedIn, connected);
         }
 
         /// <summary>WPF AppendRemoteCommandLog: newest first, 50 entries, quiet verbs skipped.</summary>

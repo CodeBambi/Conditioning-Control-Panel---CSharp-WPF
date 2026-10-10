@@ -16,7 +16,7 @@ namespace ConditioningControlPanel.Avalonia.Platform
     /// </summary>
     internal sealed class SingleInstance : IDisposable
     {
-        public const string MutexName = "ConditioningControlPanel_SingleInstance_Mutex";
+        public const string MutexName = AppIdentity.MutexName;
         const int ShowAckTimeoutMs = 10000;                          // WPF App.xaml.cs:68
         static readonly TimeSpan LegacyTakeoverWait = TimeSpan.FromSeconds(8);   // WPF App.xaml.cs:1862
         static readonly TimeSpan StaleTakeoverWait = TimeSpan.FromSeconds(3);    // WPF App.xaml.cs:1914
@@ -24,13 +24,16 @@ namespace ConditioningControlPanel.Avalonia.Platform
         readonly Mutex _mutex;
         readonly bool _owned;
         readonly CancellationTokenSource _cts = new();
+        readonly IDisposable? _wpfSignals;
 
-        SingleInstance(Mutex mutex, bool owned, string pipe, Func<string?, Task> show)
+        SingleInstance(Mutex mutex, bool owned, string pipe, string suffix, Func<string?, Task> show)
         {
             _mutex = mutex;
             _owned = owned;
             // Only the mutex owner answers; an unowned run (wedged primary) would fight it for the pipe.
             if (owned) _ = Task.Run(() => ListenAsync(pipe, show, _cts.Token));
+            // The same answer on WPF's own channel, so a WPF 7.1.5 launch finds this instance (Windows).
+            if (owned) _wpfSignals = WpfInstanceBridge.Listen(suffix, show);
         }
 
         /// <summary>A sandboxed profile (CCP_USERDATA_DIR) is a different instance, so kc and tests never
@@ -42,13 +45,19 @@ namespace ConditioningControlPanel.Avalonia.Platform
         }
 
         /// <summary>Null means a live primary acknowledged the show request and this launch must exit.</summary>
-        public static SingleInstance? Claim(string suffix, Func<string?, Task> show, string? payload = null)
+        public static SingleInstance? Claim(string suffix, Func<string?, Task> show, string? payload = null, Action? beforeAsking = null)
         {
             var pipe = "ConditioningControlPanel_ShowWindow_Signal_" + Environment.UserName + suffix;
             var mutex = new Mutex(true, MutexName + suffix, out bool owned);
             if (!owned)
             {
+                // A play/edit launch writes its handoff file first, so a live primary can read it.
+                try { beforeAsking?.Invoke(); } catch (Exception ex) { Serilog.Log.Warning(ex, "Single-instance handoff write failed"); }
                 bool? acked = RequestShow(pipe, payload);
+                // Nobody on the pipe: the mutex holder may be WPF 7.1.5, which listens on its named
+                // events and reads the handoff file instead (WpfInstanceBridge).
+                if (acked == null)
+                    acked = WpfInstanceBridge.AskWpfToShow(suffix, ConditioningControlPanel.CorePaths.UserData, payload, ShowAckTimeoutMs);
                 if (acked == true) { mutex.Dispose(); return null; }
                 // No listener: a primary still exiting mid-update (#466) - wait for it, else exit (WPF 1861-1870).
                 // Listener but no ack: wedged primary. ponytail: WPF also kills it (KillStaleInstances);
@@ -57,7 +66,7 @@ namespace ConditioningControlPanel.Avalonia.Platform
                 catch (AbandonedMutexException) { owned = true; }
                 if (!owned && acked == null) { mutex.Dispose(); return null; }
             }
-            return new SingleInstance(mutex, owned, pipe, show);
+            return new SingleInstance(mutex, owned, pipe, suffix, show);
         }
 
         /// <summary>true = acked, false = connected but no ack in time, null = nobody listening.</summary>
@@ -115,6 +124,7 @@ namespace ConditioningControlPanel.Avalonia.Platform
         public void Dispose()
         {
             _cts.Cancel();
+            _wpfSignals?.Dispose();
             if (_owned) try { _mutex.ReleaseMutex(); } catch (ApplicationException) { }
             _mutex.Dispose();
         }

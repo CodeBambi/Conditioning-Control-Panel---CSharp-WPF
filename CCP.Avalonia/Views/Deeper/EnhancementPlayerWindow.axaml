@@ -340,7 +340,7 @@
                     BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1"
                     CornerRadius="4" IsVisible="False">
                 <Grid>
-                    <controls:WebHost x:Name="VideoBrowser"/>
+                    <controls:WebHost x:Name="VideoBrowser" Profile="browser_data_deeper_player"/>
                     <!-- Bottom-centred, not centred as in WPF: WebHost's fallback panel owns the
                          middle of the pane on any machine with no web engine, and two centred
                          messages on top of each other read as one broken one. -->

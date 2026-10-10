@@ -40,6 +40,26 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             await Platform.AppUpdater.PillClickedAsync(this);
         }
 
+        /// <summary>"NoUpdate" | "UpdateAvailable" | "UrgentUpdate" (the server banner lit it).</summary>
+        internal string? UpdatePillTag => Named<Button>("BtnUpdateAvailable")?.Tag?.ToString();
+
+        /// <summary>The idle pill ("v7.1.5 IS OUT" in the loc file) with this build's own number, so
+        /// the head reads ONE version source. A lit pill (update found, server banner) is left alone.</summary>
+        internal void StampIdleUpdatePill(string version)
+        {
+            if (string.IsNullOrEmpty(version) || Named<Button>("BtnUpdateAvailable") is not { } b) return;
+            if (b.Tag is string tag && tag != "NoUpdate") return;
+            b.Bind(ContentControl.ContentProperty, LocStamped("btn_v7_1_5_is_out", version));
+            b.Bind(ToolTip.TipProperty, LocStamped("tooltip_v7_1_5_stay_tuned", version));
+        }
+
+        private static Binding LocStamped(string key, string version) => new($"[{key}]")
+        {
+            Source = LocalizationManager.Instance,
+            Mode = BindingMode.OneWay,
+            Converter = new FuncValueConverter<string?, string>(f => Platform.AppIdentity.StampVersion(f ?? key, version)),
+        };
+
         /// <summary>WPF App.xaml.cs:4884 lights the pill; the version text and the install/download
         /// tooltip are WPF MainWindow.Marquee.cs:816-821's. Bound, so a language change keeps it.</summary>
         internal void ShowUpdatePill(string version)

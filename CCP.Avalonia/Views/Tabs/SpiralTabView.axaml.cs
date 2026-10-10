@@ -573,7 +573,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
             try
             {
-                var embed = new WebHost { Source = new Uri(EmbedUrl) };
+                var embed = new WebHost { Profile = Platform.WebProfiles.Spiral, Source = new Uri(EmbedUrl) };
                 _embed = embed;
                 _embedHost.Children.Add(embed);
             }

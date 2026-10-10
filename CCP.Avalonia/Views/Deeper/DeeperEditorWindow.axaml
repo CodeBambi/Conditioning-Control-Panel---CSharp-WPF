@@ -341,7 +341,7 @@
 
                         <!-- Remote http(s):// preview (HypnoTube etc). WebHost draws its own
                              fallback panel wherever no web engine is installed. -->
-                        <controls:WebHost x:Name="BrowserPreview" IsVisible="False"/>
+                        <controls:WebHost x:Name="BrowserPreview" Profile="browser_data_deeper_editor" IsVisible="False"/>
 
                         <Canvas x:Name="WaveformCanvas" IsVisible="False" Background="{DynamicResource DeeperWaveformBgBrush}">
                             <Path x:Name="WaveformPath" Stroke="{DynamicResource DeeperAccentBrush}"
