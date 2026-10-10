@@ -25,6 +25,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
     internal sealed partial class GameWindow
     {
         private bool _goonAttached;
+        /// <summary>The watchdog clock; tests drive it.</summary>
+        internal Func<DateTime> GoonClock { get; set; } = () => DateTime.UtcNow;
         private DispatcherTimer? _goonWatch;
         private DateTime _goonLastBeatUtc, _goonLastPaintMoveUtc, _goonLastTickUtc;
         private long? _goonLastPaint;
@@ -159,7 +161,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                 case "heartbeat":
                 case "pong":
                     NoteHeartbeat();
-                    _goonLastBeatUtc = DateTime.UtcNow;
+                    _goonLastBeatUtc = GoonClock();
                     NoteGoonPaint(o);
                     return true;
                 case "exit":
@@ -265,7 +267,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
         /// <summary>WPF OnPageReady: init, manifest (the player's own library), the real window state.</summary>
         private void OnGoonReady()
         {
-            var now = DateTime.UtcNow;
+            var now = GoonClock();
             _goonLastBeatUtc = now;
             _goonLastPaint = null;           // a reloaded page counts its frames from zero
             _goonLastPaintMoveUtc = now;
@@ -313,7 +315,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
         {
             try
             {
-                var now = DateTime.UtcNow;
+                var now = GoonClock();
                 var vis = (string?)o["vis"];
                 if (!string.IsNullOrEmpty(vis) && vis != "visible") { _goonLastPaintMoveUtc = now; return; }
                 var paint = (long?)o["paint"];
@@ -332,7 +334,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             var now = DateTime.UtcNow;
             _goonLastBeatUtc = _goonLastPaintMoveUtc = _goonLastTickUtc = now;
             _goonWatch = new DispatcherTimer { Interval = TimeSpan.FromSeconds(GoonHostService.WatchIntervalSeconds) };
-            _goonWatch.Tick += (_, _) => CheckGoonWatch(DateTime.UtcNow);
+            _goonWatch.Tick += (_, _) => CheckGoonWatch(GoonClock());
             _goonWatch.Start();
         }
 
