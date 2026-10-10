@@ -309,10 +309,46 @@ public sealed class ArcademyHostMediaTests
         }
     });
 
-    // ---- panic ladder -------------------------------------------------------------------------
+    // ---- panic ---------------------------------------------------------------------------------
+
+    /// <summary>Owner, 10 Oct 2026: "One press, host side". A healthy, beating page mid-run is closed by the
+    /// first panic press; nothing is posted for the page to answer first.</summary>
+    [Fact]
+    public Task Panic_OnePressClosesTheArcademy_HostSide() => Campus(c =>
+    {
+        Assert.False(GameWindow.ArcademyPanicLadder);
+        var w = c.Open(true);
+        GameWindow.CloseAllForPanic();
+        Assert.True(w.IsClosedOrClosing);
+        Assert.False(w.ArcademyPanicSuspended);
+        Assert.Equal(0, c.Count("suspend"));
+        Assert.Equal(0, c.Count("end-run"));
+    });
 
     [Fact]
-    public Task Panic_PressOneFreezes_ResumeIsTheHostsToGrant_PressTwoCloses() => Campus(c =>
+    public Task Panic_OnePress_CancelsAnOpenLinkUp() => Campus(c =>
+    {
+        var w = c.Open(true);
+        var never = new TaskCompletionSource<bool>();
+        w.ArcLinkFlowOverride = ct => { ct.Register(() => never.TrySetCanceled()); return never.Task; };
+        w.HandleMessage("{\"type\":\"link-discord\"}");
+        GameWindow.CloseAllForPanic();
+        Assert.True(w.IsClosedOrClosing);
+        Pump(() => never.Task.IsCompleted);
+        Assert.True(never.Task.IsCanceled);
+    });
+
+    // ---- the WPF ladder, kept behind the switch ------------------------------------------------
+
+    private static Task Ladder(Action<Ctx> body) => Campus(c =>
+    {
+        GameWindow.ArcademyPanicLadder = true;
+        try { body(c); }
+        finally { GameWindow.ArcademyPanicLadder = false; }
+    });
+
+    [Fact]
+    public Task Panic_PressOneFreezes_ResumeIsTheHostsToGrant_PressTwoCloses() => Ladder(c =>
     {
         var w = c.Open(true);
         // A resume nobody is owed is ignored.
@@ -343,7 +379,7 @@ public sealed class ArcademyHostMediaTests
     });
 
     [Fact]
-    public Task Panic_APageThatCannotBeFrozenIsClosedAtOnce() => Campus(c =>
+    public Task Panic_APageThatCannotBeFrozenIsClosedAtOnce() => Ladder(c =>
     {
         var booting = c.Open(false);                            // never said ready
         Assert.False(booting.ArcademyPanicPress(DateTime.UtcNow));
@@ -355,12 +391,12 @@ public sealed class ArcademyHostMediaTests
 
         var off = c.Open(true);
         GameWindow.ArcademyPanicLadder = false;
-        try { Assert.False(off.ArcademyPanicPress(DateTime.UtcNow)); }
-        finally { GameWindow.ArcademyPanicLadder = true; }
+        Assert.False(off.ArcademyPanicPress(DateTime.UtcNow));
+        GameWindow.ArcademyPanicLadder = true;
     });
 
     [Fact]
-    public Task Panic_AnAudioOnlySessionOutranksTheResume() => Campus(c =>
+    public Task Panic_AnAudioOnlySessionOutranksTheResume() => Ladder(c =>
     {
         var w = c.Open(true);
         Assert.True(w.ArcademyPanicPress(DateTime.UtcNow));
@@ -374,7 +410,7 @@ public sealed class ArcademyHostMediaTests
     });
 
     [Fact]
-    public Task Video_SuspendsTheClass_AndItsEndNeverLiftsAPanicFreeze() => Campus(c =>
+    public Task Video_SuspendsTheClass_AndItsEndNeverLiftsAPanicFreeze() => Ladder(c =>
     {
         var w = c.Open(true);
         w.ArcademyVideoSuspend(true);
@@ -462,7 +498,7 @@ public sealed class ArcademyHostMediaTests
         var never = new TaskCompletionSource<bool>();
         w.ArcLinkFlowOverride = ct => { ct.Register(() => never.TrySetCanceled()); return never.Task; };
         w.HandleMessage("{\"type\":\"link-discord\"}");
-        Assert.True(w.ArcademyPanicPress(DateTime.UtcNow));
+        Assert.False(w.ArcademyPanicPress(DateTime.UtcNow));     // one press: the caller closes, the chip still hears it
         Assert.Equal("cancelled", (string?)c.Posted.Last(p => (string?)p["type"] == "profile")["result"]);
         Pump(() => never.Task.IsCompleted);
         Assert.True(never.Task.IsCanceled);

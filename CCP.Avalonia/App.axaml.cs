@@ -751,6 +751,7 @@ namespace ConditioningControlPanel.Avalonia
                 // Guided tours (WPF App.Tutorial): the head's TutorialService behind the CoreTutorial
                 // seam every page already calls, and a panic surface that ends a tour at once.
                 Tours.TutorialHead.Seed();
+                Tours.EmiTourNarrator.Attach(Tours.TutorialHead.Service);   // k23: WPF MainWindow.Settings.cs:570, EMI narrates a tour
                 Tours.TutorialHead.HookPanic();
                 Views.Windows.WelcomeShow.FirstShowService.HookPanic();   // EMI's welcome show stops first on a panic
 
@@ -771,6 +772,7 @@ namespace ConditioningControlPanel.Avalonia
                 // WPF App.xaml.cs:2121: per-day feature use, read off the lifetime counters every 60 s.
                 try { FeatureDayLogService.Current = new FeatureDayLogService(FeatureDayLogService.DefaultPath, () => FeatureDayLogService.ReadCounters(Achievements?.Progress, CoreSettings.Current)); }
                 catch (Exception exDayLog) { Serilog.Log.Warning(exDayLog, "[FeatureDayLog] service construction failed; per-day feature use is not recorded this run"); }
+                Platform.AchievementAutosave.Start(Achievements);   // k23: lifetime counters (Core events, 30 s autosave, companion messages)
                 Platform.LoginStreak.Start(Achievements);   // progression#42: WPF AchievementService ctor + App.xaml.cs:2732 + CheckDayRollover
                 WardrobeCatalog.ProgressProvider = () => Achievements?.Progress;
                 CoreProgram.UnlockAchievementProvider = id => Achievements?.TryUnlock(id);

@@ -13,7 +13,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
     /// (:5612-5700), the graceful host close (<c>end-run</c> + the 1200 ms exit watchdog, CloseActive
     /// :348 / :6002) and the boot deadline (:5895).
     ///
-    /// <para>THE LADDER. Press 1 freezes everything: <c>suspend {reason: panic}</c> drops every effect,
+    /// <para>ONE PRESS (owner, 10 Oct 2026: "One press, host side"). The first accepted panic press
+    /// closes the Arcademy from the host, never waiting on the page: <see cref="ArcademyPanicLadder"/>
+    /// is off. In-game Esc on a pause card is the page's own business and still leaves on one press.
+    /// The WPF ladder below is kept behind that switch.</para>
+    ///
+    /// <para>THE LADDER (off). Press 1 freezes everything: <c>suspend {reason: panic}</c> drops every effect,
     /// pauses the class and shows the Resume card; only this host may un-freeze (the page asks with
     /// <c>resume-request</c>). Press 2 inside two seconds closes the Arcademy. A slower second press is
     /// a fresh press 1. It is never weaker than a plain close where a close is what protects the
@@ -29,8 +34,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
         internal static readonly TimeSpan ArcExitWatchdog = TimeSpan.FromMilliseconds(1200);
 
         /// <summary>One switch for the whole ladder: false = every panic press closes the Arcademy at
-        /// once (the port's behaviour before the ladder was ported).</summary>
-        internal static bool ArcademyPanicLadder = true;
+        /// once. OFF by the owner's call (10 Oct 2026): panic closes on ONE press, host side.</summary>
+        internal static bool ArcademyPanicLadder = false;
 
         /// <summary>WPF BootFailedThisSession: the door's own "did not start" memory for this run of the app.</summary>
         internal static bool ArcademyBootFailedThisSession { get; private set; }
@@ -98,7 +103,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
         /// window stays up, frozen; false = the caller closes the window now.</summary>
         internal bool ArcademyPanicPress(DateTime nowUtc)
         {
-            if (!ArcademyPanicLadder) return false;
+            if (!ArcademyPanicLadder)
+            {
+                // One press: an open Discord link-up hears "cancelled" before the window goes.
+                try { CancelArcademyLink("panic", tellPage: true); } catch { }
+                Log.Information("[Game] arcademy: panic press - closing the Arcademy");
+                return false;
+            }
             // A page that cannot be told to freeze is closed, never left running.
             if (!IsReady || !_beating || _arcExiting || IsClosedOrClosing) return false;
             double limit = InRun ? RunSilenceLimitSeconds(Spec.Id) : HubSilenceLimitSeconds;

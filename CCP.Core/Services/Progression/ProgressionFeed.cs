@@ -50,6 +50,7 @@ namespace ConditioningControlPanel
             var previous = s.SkillPoints;
             s.SkillPoints += points;
             s.SeasonPeakLevel = Math.Max(s.SeasonPeakLevel, newLevel);
+            try { AchievementEngine.Current?.TrackSkillPointsEarned(points); } catch { /* a stat, never the wallet */ }   // WPF SkillTreeService.cs:858
             Log.Information("Level up to {Level}! Awarded {Points} skill points. Total: {Total}", newLevel, points, s.SkillPoints);
             SparklePointRewards.PublishCredit(previous, s.SkillPoints, SparklePointSource.LevelUp);
         }

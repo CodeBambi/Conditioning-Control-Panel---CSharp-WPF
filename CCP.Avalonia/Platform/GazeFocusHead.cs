@@ -54,6 +54,7 @@ namespace ConditioningControlPanel.Avalonia.Platform
             if (_wired) return;
             _wired = true;
             WebcamTracker.Instance.StateChanged += EvaluateDesiredState;
+            Engine.GazePopped += () => { try { App.Achievements?.TrackGazePop(); } catch { } };   // WPF GamificationBridge.OnGazePopped (hands_free)
             if (CoreSettings.Service is { } svc) svc.CurrentReplaced += () => Dispatcher.UIThread.Post(WatchSettings);
             WatchSettings();
         }

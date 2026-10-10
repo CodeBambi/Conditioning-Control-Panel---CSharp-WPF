@@ -14,9 +14,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
     /// <see cref="EmiOffers"/>; this file only says what this head can do. An action left null is
     /// an effect the engine never offers, so there is no dead chip.
     ///
-    /// <para>not ported: <c>spiral</c> and <c>rain</c> effects (no timed spiral and no gif rain on
-    /// this head yet); asks that need them are
-    /// dropped at draw time, exactly as an infeasible effect is in WPF.</para>
+    /// <para><c>spiral</c> is a timed hold on the app's own spiral overlay (WPF ShowOverlayTimed) and
+    /// <c>rain</c> is the gif cascade on its own constants (WPF EmiGifRain). Neither changes a setting:
+    /// the hold shows the spiral whatever the user's switch says and lets go by itself. Panic takes both
+    /// down: the stop pass releases every spiral hold, and PanicSurfaces.ArmSafetyHold closes her rain.</para>
     /// </summary>
     internal sealed partial class EmiDeskService
     {
@@ -26,6 +27,64 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         /// <summary>Test seam: the tour starter (default Core tutorial seam, null while no tour service is seeded).</summary>
         internal static Func<Action<string>?> TourStarter { get; set; } =
             () => CoreTutorial.StartAction == null ? null : CoreTutorial.Start;
+
+        /// <summary>Owner name of her spiral hold and her rain (a teardown never takes somebody else's).</summary>
+        internal const string EmiOwner = "emi";
+        /// <summary>WPF GifCascadePayload: every dial of her rain except the duration.</summary>
+        internal const double RainSpawnRate = 1.67, RainGifSize = 400, RainFallSpeed = 3.6, RainOpacity = 0.9, RainStartScale = 0.45;
+
+        /// <summary>Test seams: where the effects draw from, and the two overlay calls.</summary>
+        internal static Func<global::Avalonia.Visual?> EffectHost { get; set; } = () => Shell;
+        internal static Action<global::Avalonia.Visual, Overlays.SpiralHold, int> SpiralShow { get; set; } =
+            (host, hold, ms) => Overlays.SpiralOverlay.Hold(host, EmiOwner, hold, ms);
+        internal static Action<global::Avalonia.Visual, double> RainShow { get; set; } =
+            (host, seconds) => Overlays.GifCascadeOverlay.Show(host, EmiOwner, RainSpawnRate, seconds, RainGifSize, RainFallSpeed, RainOpacity, RainStartScale);
+        internal static Func<bool> RainBusy { get; set; } = () => Overlays.GifCascadeOverlay.IsRaining;
+        internal static Func<bool> HasLocalImages { get; set; } = EmiOffers.HasImages;
+
+        /// <summary>WPF OverlayService.ShowOverlayTimed("spiral", ms, opacity): the spiral for a span, then
+        /// back to the user's own switch. Fires <c>overlaySpiralUp</c> as WPF does (:886).</summary>
+        internal void SpiralFor(int ms, double opacity)
+        {
+            if (!Dispatcher.UIThread.CheckAccess()) { Dispatcher.UIThread.Post(() => SpiralFor(ms, opacity)); return; }
+            try
+            {
+                var host = EffectHost();
+                if (host == null) { Log.Debug("[EmiDesk] spiral effect skipped: no window to draw from"); return; }
+                int safeMs = Math.Clamp(ms, 500, 60000);
+                Fire("overlaySpiralUp", new { channel = "spiral", n = safeMs / 1000 });
+                SpiralShow(host, new Overlays.SpiralHold(Math.Clamp(opacity, 0.05, 1.0)), safeMs);
+                _window?.RaiseAboveStage();   // WPF ReassertTopmost: she stays over her own effect
+            }
+            catch (Exception ex) { Log.Warning(ex, "[EmiDesk] spiral effect failed"); }
+        }
+
+        /// <summary>WPF EmiGifRain.Start: no local images or a rain already up skips; 1..30 seconds.</summary>
+        internal void RainFor(TimeSpan duration)
+        {
+            if (!Dispatcher.UIThread.CheckAccess()) { Dispatcher.UIThread.Post(() => RainFor(duration)); return; }
+            try
+            {
+                var host = EffectHost();
+                if (host == null) { Log.Debug("[EmiDesk] gif rain skipped: no window to draw from"); return; }
+                if (!HasLocalImages()) { Log.Debug("[EmiDesk] gif rain skipped: no local images"); return; }
+                if (RainBusy()) { Log.Debug("[EmiDesk] gif rain skipped: already raining"); return; }
+                double seconds = duration.TotalSeconds;
+                if (double.IsNaN(seconds) || seconds <= 0) seconds = 6.0;   // GifCascadePayload.DURATION_SEC
+                seconds = Math.Max(1.0, Math.Min(30.0, seconds));
+                RainShow(host, seconds);
+                Log.Information("[EmiDesk] gif rain for {Seconds:0.#}s", seconds);
+                _window?.RaiseAboveStage();
+            }
+            catch (Exception ex) { Log.Warning(ex, "[EmiDesk] gif rain failed"); }
+        }
+
+        /// <summary>Her rain down now (panic, her dismiss). Never somebody else's cascade.</summary>
+        internal static void StopRain()
+        {
+            try { Overlays.GifCascadeOverlay.CloseOwned(EmiOwner); }
+            catch (Exception ex) { Log.Debug(ex, "[EmiDesk] gif rain stop failed"); }
+        }
 
         private void SeedOffers()
         {
@@ -46,6 +105,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
             CanStartTour = () => TourStarter() != null,
             BookOpen = () => _window?.Book is { IsVisible: true },
             OpenBook = () => _window?.OpenBook(),
+            Spiral = SpiralFor,
+            Rain = RainFor,
             PlayVideo = path => Overlays.MandatoryVideoOverlay.Instance.Scheduler.Trigger(strictOverride: false, path: path),
             Burst = duration =>
             {

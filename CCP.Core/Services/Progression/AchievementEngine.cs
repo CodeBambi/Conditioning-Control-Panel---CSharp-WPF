@@ -14,7 +14,7 @@ namespace ConditioningControlPanel.Services;
 /// <para><see cref="Unlocked"/> is raised synchronously on the caller's thread; the WPF wrapper
 /// marshals it to the UI thread exactly as it did before (DispatcherHelper.RunOnUI).</para>
 /// </summary>
-internal sealed class AchievementEngine
+internal sealed partial class AchievementEngine
 {
     private readonly AchievementStore _store;
     private volatile bool _isDirty;

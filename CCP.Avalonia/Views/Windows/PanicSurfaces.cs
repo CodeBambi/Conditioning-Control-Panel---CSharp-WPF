@@ -83,9 +83,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// word and the leash gate's Panic; the 6-blink stop calls it itself. Never throws.</summary>
         internal static Action SafetyHold { get; set; } = () => Platform.ChasterHead.Service?.NoteSafetyExit();   // tests swap it
 
+        /// <summary>EMI's gif rain has no surface of its own (the cascade belongs to the Back Room's):
+        /// every panic route takes HER rain down here. Her spiral hold goes with the stop pass
+        /// (SpiralOverlay.ReleaseAllHolds). Tests swap it.</summary>
+        internal static Action StopEmiRain { get; set; } = EmiDesk.EmiDeskService.StopRain;
+
         internal static void ArmSafetyHold()
         {
+            try { StopEmiRain(); }
+            catch (Exception ex) { Serilog.Log.Debug(ex, "Panic: EMI rain stop failed"); }
             ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("panicPressed");   // WPF MainWindow.xaml.cs:1585: a hold with a five minute silence tail, armed first
+            try { App.Achievements?.TrackPanicPressed(); } catch { /* WPF MainWindow.xaml.cs:1849: the relapse window opens */ }
             try { SafetyHold(); }
             catch (Exception ex) { Serilog.Log.Debug(ex, "Panic: Chaster safety hold failed"); }
         }

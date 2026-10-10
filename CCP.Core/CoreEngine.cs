@@ -53,6 +53,8 @@ namespace ConditioningControlPanel
         public static void Start(bool systemInitiated = false)
         {
             var s = CoreSettings.Current;
+            // WPF StartStop.cs:298: Relapse = a start the player chose inside ten seconds of a panic press.
+            if (!systemInitiated) { try { AchievementEngine.Current?.CheckRelapse(); } catch (Exception ex) { Log.Debug(ex, "relapse check"); } }
             if (!systemInitiated) s.TotalSessions++;   // WPF StartStop.cs:308: a keeper start is not a session the user chose
             CoreSettings.Save();
 
