@@ -507,8 +507,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             SeatGrid();
         }
 
-        /// <summary>WPF GamesColumn_SizeChanged: columns and card height from LauncherGridLayout.</summary>
-        private void SeatGrid()
+        /// <summary>WPF GamesColumn_SizeChanged / FitTiles (LauncherWindow.xaml.cs:550): columns and card
+        /// height from LauncherGridLayout; a block that fits sits centred, an overflowing one hangs from
+        /// the top and the window grows once to seat it (7.1.5).</summary>
+        internal void SeatGrid()
         {
             int count = GamesGrid.Children.Count;
             double width = GamesColumn.Bounds.Width;
@@ -516,6 +518,35 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             GamesGrid.Columns = columns;
             double height = LauncherGridLayout.TileHeight(LauncherGridLayout.TileWidth(width, columns));
             foreach (var tile in GamesGrid.Children) tile.Height = height;
+            double available = GamesScroller.Bounds.Height;
+            if (count == 0 || available <= 0 || width <= 0) return;
+            double gridHeight = LauncherGridLayout.GridHeight(width, columns, LauncherGridLayout.Rows(count, columns));
+            bool scroll = LauncherGridLayout.NeedsScroll(available, gridHeight);
+            GamesGrid.VerticalAlignment = scroll ? VerticalAlignment.Top : VerticalAlignment.Center;
+            if (scroll) GrowToFitTiles(available, gridHeight);
+        }
+
+        private bool _grewToFitTiles;
+
+        /// <summary>WPF GrowToFitTiles (LauncherWindow.xaml.cs:583, 7.1.5): the first time the tiles
+        /// overflow, the window grows once (never fighting a hand resize) by the overflow, capped at
+        /// the screen's work area and kept centred on it. A short screen keeps the scroller.</summary>
+        private void GrowToFitTiles(double available, double gridHeight)
+        {
+            if (_grewToFitTiles || WindowState != WindowState.Normal || !IsVisible) return;
+            _grewToFitTiles = true;
+            // No screen known: never grow blind past one.
+            if (Screens.ScreenFromWindow(this) is not { } screen) return;
+            double scale = screen.Scaling > 0 ? screen.Scaling : 1;
+            var wa = screen.WorkingArea;
+            double old = Bounds.Height > 0 ? Bounds.Height : Height;
+            double grown = LauncherGridLayout.FitWindowHeight(old, available, gridHeight, wa.Height / scale);
+            if (grown <= old + 0.5) return;
+            int top = Position.Y - (int)Math.Round((grown - old) * scale / 2);
+            int maxTop = wa.Bottom - (int)Math.Ceiling(grown * scale);
+            Height = grown;
+            Position = new PixelPoint(Position.X, Math.Max(wa.Y, Math.Min(top, maxTop)));
+            Log.Debug("[Launcher] grew {Old:0} -> {New:0} px to seat every tile row", old, grown);
         }
 
         private Border CreateTile(LauncherCard card)
@@ -600,8 +631,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             text.Children.Add(play);
             body.Children.Add(text);
 
-            // A signed-out card is the ask as a whole, not only its button (WPF Tiles.cs:218).
-            if (needsAccount) tile.PointerReleased += (_, _) => { if (MainShellWindow.LockdownActive) return; FxPlayBeat(card.Id, true); OpenSignIn(); };
+            // WPF Tiles.cs:220 (7.1.5): the WHOLE card is the Play button. A left press must start AND
+            // end on the tile; the Play button handles its own press, so nothing fires twice.
+            bool armed = false;
+            tile.PointerPressed += (_, e) => { if (!e.Handled && e.GetCurrentPoint(tile).Properties.IsLeftButtonPressed) armed = true; };
+            tile.PointerExited += (_, _) => armed = false;
+            tile.PointerReleased += (_, e) =>
+            {
+                bool was = armed;
+                armed = false;
+                if (!was || e.Handled || e.InitialPressMouseButton != MouseButton.Left) return;
+                e.Handled = true;
+                if (!MainShellWindow.LockdownActive) Play(card);
+            };
 
             tile.Child = body;
             DecorateTileFx(tile, hue);
