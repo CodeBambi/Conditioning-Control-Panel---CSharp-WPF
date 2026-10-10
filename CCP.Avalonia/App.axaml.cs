@@ -688,11 +688,10 @@ namespace ConditioningControlPanel.Avalonia
                 // CCBill record file into a second tree. That is a fix to the class, in a later
                 // layer, not a seeding decision here.
 
-                // CoreTutorial stays unseeded, and that is the honest state rather than a gap:
-                // TutorialService and its twenty-two step lists are still in the WPF head, so this
-                // head has no tour to describe. Unseeded answers "not active, no step, 0 of 0", so
-                // TutorialOverlay draws nothing and every "bail while a tour is running" gate stays
-                // open. Seeding it with anything would put a tour on screen that nothing drives.
+                // Guided tours (WPF App.Tutorial): the head's TutorialService behind the CoreTutorial
+                // seam every page already calls, and a panic surface that ends a tour at once.
+                Tours.TutorialHead.Seed();
+                Tours.TutorialHead.HookPanic();
 
                 await step(0.75, "Loading achievements...");
                 // Achievements: the Core engine over the same achievements.json WPF uses, seeded the

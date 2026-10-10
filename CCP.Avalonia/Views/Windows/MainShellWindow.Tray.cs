@@ -57,6 +57,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         internal NativeMenu BuildTrayMenu()
         {
             var menu = new NativeMenu();
+            TrayLabels.Clear();
+            HookTrayRelabel();
             menu.Add(Item("tray_show", ShowFromTray));
             // WPF TrayIconService.cs:102: the way back to the launcher, only while it is part of this
             // run, greyed under Lockdown (BackToLauncher refuses anyway).
@@ -68,7 +70,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             menu.Add(back);
             // WPF reads the label once at tray creation (TrayIconService.cs Initialize);
             // App.Mods.IsBambiMode there is the active-mod check AppSettings.IsBambiMode makes here.
-            menu.Add(Item(CoreSettings.Current.IsBambiMode ? "tray_wake_bambi" : "tray_wake", WakeBambiUp));
+            menu.Add(Item(() => CoreSettings.Current.IsBambiMode ? "tray_wake_bambi" : "tray_wake", WakeBambiUp));
             // WPF TrayIconService.cs:119-125: Cut leash, one click, only while someone holds this
             // account's leash. Never gated, never priced, never greyed (Platform/LeashHead.Cut).
             var cutLeash = Item("leash_cut", Platform.LeashHead.Cut);
@@ -83,8 +85,38 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             return menu;
         }
 
-        private static NativeMenuItem Item(string key, Action action) =>
-            new(Loc.Get(key)) { Command = new CompanionRelayCommand(action) };
+        private static NativeMenuItem Item(string key, Action action) => Item(() => key, action);
+
+        private static NativeMenuItem Item(Func<string> key, Action action)
+        {
+            var item = new NativeMenuItem(Loc.Get(key())) { Command = new CompanionRelayCommand(action) };
+            TrayLabels.Add((item, key));
+            return item;
+        }
+
+        // G17: WPF reads the tray labels once; here they follow a language switch and a mod switch
+        // (the wake item's wording is the mod's).
+        private static readonly System.Collections.Generic.List<(NativeMenuItem Item, Func<string> Key)> TrayLabels = new();
+        private bool _trayRelabelHooked;
+
+        private void HookTrayRelabel()
+        {
+            if (_trayRelabelHooked) return;
+            _trayRelabelHooked = true;
+            EventHandler onLanguage = (_, _) => global::Avalonia.Threading.Dispatcher.UIThread.Post(RelabelTray);
+            EventHandler<ConditioningControlPanel.Models.ModPackage> onMod = (_, _) => global::Avalonia.Threading.Dispatcher.UIThread.Post(RelabelTray);
+            LocalizationManager.Instance.LanguageChanged += onLanguage;
+            CoreMods.ModChanged += onMod;
+            Closed += (_, _) => { LocalizationManager.Instance.LanguageChanged -= onLanguage; CoreMods.ModChanged -= onMod; };
+        }
+
+        internal static void RelabelTray()
+        {
+            foreach (var (item, key) in TrayLabels)
+            {
+                try { item.Header = Loc.Get(key()); } catch { /* a label never breaks the tray */ }
+            }
+        }
 
         /// <summary>The panic item: WPF StopEngine (a running session is paused, as the panic key does).
         /// Saved flags stay as the user set them.</summary>

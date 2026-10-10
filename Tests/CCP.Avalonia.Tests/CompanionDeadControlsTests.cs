@@ -135,9 +135,9 @@ public sealed class CompanionDeadControlsTests
                 Assert.False(shelf.Community.FindControl<Button>(name)!.IsVisible, name);
             Assert.True(shelf.Community.FindControl<Button>("HelpBtnPrompts")!.IsVisible);
 
-            // The header's tutorial chip: tours are not on this head.
+            // The header tutorial chip is live again (tours are ported; TutorialTourTests).
             var hero = room.FindControl<CompanionHeroCard>("HeroZone")!;
-            Assert.False(hero.FindControl<Button>("BtnCompanionTutorial")!.IsVisible);
+            Assert.True(hero.FindControl<Button>("BtnCompanionTutorial")!.IsVisible);
         }
         finally
         {

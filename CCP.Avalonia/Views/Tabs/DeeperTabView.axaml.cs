@@ -160,9 +160,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             => Owner?.BtnDeeperNewEnhancement_Click(sender, e);
         private void BtnDeeperOpenLibraryFolder_Click(object? sender, RoutedEventArgs e) => Owner?.OpenDeeperLibraryFolder();
         private void BtnDeeperOpenPlayer_Click(object? sender, RoutedEventArgs e) => Owner?.BtnDeeperOpenPlayer_Click();
-        // ponytail: StartTutorial(TutorialType.Deeper) - no TutorialService on this head;
-        // BtnDeeperTutorial is hidden in the axaml until tours are ported.
-        private void BtnDeeperTutorial_Click(object? sender, RoutedEventArgs e) { }
+        // WPF DeeperTabView.xaml.cs:89: StartTutorial(TutorialType.Deeper).
+        private void BtnDeeperTutorial_Click(object? sender, RoutedEventArgs e) => CoreTutorial.Start("Deeper");
 
         /// <summary>Settings > Devices owns the camera on this head: the Deeper webcam block's buttons
         /// run the same handlers its buttons do (consent, calibrate, quick recal, tracker start/stop).</summary>

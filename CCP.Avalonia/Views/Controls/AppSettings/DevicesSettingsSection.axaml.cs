@@ -652,7 +652,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             if (_capturingPanicKey || TopLevel.GetTopLevel(this) is not { } top) return;
             _capturingPanicKey = true;
             MainShellWindow.CapturingPanicKey = true;
-            SetButtonLabel(BtnPanicKey, "Press any key...");
+            SetButtonLabel(BtnPanicKey, Loc.Get("rf_btn_press_a_key"));
             top.AddHandler(KeyDownEvent, OnCaptureKey, RoutingStrategies.Tunnel);
             // WPF's global hook always got the next key; an in-window capture can be abandoned by
             // clicking away, which would leave the panic key disabled for good. Losing the window cancels.
@@ -703,7 +703,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
         {
             if (TopLevel.GetTopLevel(this) is not { } top) return;
             CapturingPauseKey = true;
-            SetButtonLabel(BtnPauseKey, "Press any key...");
+            SetButtonLabel(BtnPauseKey, Loc.Get("rf_btn_press_a_key"));
             top.AddHandler(KeyDownEvent, OnCaptureKey, RoutingStrategies.Tunnel);
             if (top is Window window) window.Deactivated += OnCancel;
 

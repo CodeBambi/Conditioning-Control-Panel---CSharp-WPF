@@ -31,9 +31,25 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
     /// </summary>
     public partial class GeneralSettingsSection : UserControl, IAppSettingsSection
     {
+        /// <summary>The startup video row's text: the picked file, or "(Random)" in the current language.</summary>
+        internal void RefreshStartupVideoLabel()
+        {
+            try
+            {
+                var path = CoreSettings.Current.StartupVideoPath;
+                TxtStartupVideo.Text = string.IsNullOrEmpty(path) ? Loc.Get("label_random") : System.IO.Path.GetFileName(path);
+            }
+            catch { /* the row keeps its last text */ }
+        }
+
         public GeneralSettingsSection()
         {
             InitializeComponent();
+
+            // G16: "(Random)" is written in code, so a language switch has to write it again.
+            EventHandler languageChanged = (_, _) => global::Avalonia.Threading.Dispatcher.UIThread.Post(RefreshStartupVideoLabel);
+            AttachedToVisualTree += (_, _) => LocalizationManager.Instance.LanguageChanged += languageChanged;
+            DetachedFromVisualTree += (_, _) => LocalizationManager.Instance.LanguageChanged -= languageChanged;
 
             var current = LocalizationManager.Instance.CurrentLanguage;
             for (int i = 0; i < LocalizationManager.AvailableLanguages.Length; i++)

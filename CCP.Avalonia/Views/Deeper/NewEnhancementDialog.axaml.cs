@@ -37,8 +37,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             _txtError = this.FindControl<TextBlock>("TxtError")!;
 
             this.FindControl<Button>("BtnBrowse")!.Click += async (_, _) => await BrowseAsync();
-            this.FindControl<Button>("BtnLocalVideoTutorial")!.Click += (_, _) => { _rbVideo.IsChecked = true; StartInteractiveTutorial(); };
-            this.FindControl<Button>("BtnLocalAudioTutorial")!.Click += (_, _) => { _rbAudio.IsChecked = true; StartInteractiveTutorial(); };
+            this.FindControl<Button>("BtnLocalVideoTutorial")!.Click += (_, _) => { _rbVideo.IsChecked = true; StartInteractiveTutorial("DeeperEditorInteractiveLocalVideo", "DeeperEditorInteractiveLocalVideoPart2"); };
+            this.FindControl<Button>("BtnLocalAudioTutorial")!.Click += (_, _) => { _rbAudio.IsChecked = true; StartInteractiveTutorial("DeeperEditorInteractiveLocalAudio", "DeeperEditorInteractiveLocalAudioPart2"); };
             this.FindControl<Button>("BtnTryHypnoTubeTutorial")!.Click += (_, _) => BtnTryHypnoTubeTutorial_Click();
             this.FindControl<Button>("BtnCancel")!.Click += (_, _) => Close(false);
             this.FindControl<Button>("BtnCreate")!.Click += (_, _) => BtnCreate_Click();
@@ -87,7 +87,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             }
             catch { /* a settings write must never take the dialog down */ }
 
-            StartInteractiveTutorial();
+            StartInteractiveTutorial("DeeperEditorInteractiveHT", "DeeperEditorInteractiveHTPart2");
         }
 
         /// <summary>
@@ -117,9 +117,26 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         /// ("DeeperEditorInteractiveLocalVideo" / "…LocalAudio" / "…HT"), since the seam takes a
         /// name rather than an enum Core refuses to copy.</para>
         /// </summary>
-        private void StartInteractiveTutorial()
+        private void StartInteractiveTutorial(string part1, string part2)
         {
+            // WPF NewEnhancementDialog.StartInteractiveTutorial :167. Part 2 is only queued here; it
+            // is handed to the editor from BtnCreate_Click AFTER validation, so a fumbled first click
+            // cannot leave the flag armed.
+            _pendingPart2Tutorial = part2;
+            try
+            {
+                if (CoreTutorial.IsActive) CoreTutorial.Skip();
+                CoreTutorial.Start(part1);
+                if (!CoreTutorial.IsActive) return;
+                try { _activeTutorialOverlay?.Close(); } catch { }
+                _activeTutorialOverlay = new global::ConditioningControlPanel.Avalonia.Views.Windows.TutorialOverlay(this);
+                _activeTutorialOverlay.Show();
+            }
+            catch (System.Exception ex) { Serilog.Log.Warning(ex, "NewEnhancementDialog: the walkthrough failed to start"); }
         }
+
+        private string? _pendingPart2Tutorial;
+        private global::ConditioningControlPanel.Avalonia.Views.Windows.TutorialOverlay? _activeTutorialOverlay;
 
         private void BtnCreate_Click()
         {
@@ -131,6 +148,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             }
             SelectedMediaType = _rbVideo.IsChecked == true ? MediaTypes.Video : MediaTypes.Audio;
             SelectedSource = source;
+            if (_pendingPart2Tutorial != null) CoreTutorialEvents.PendingPart2Tutorial = _pendingPart2Tutorial;
             Close(true);
         }
     }
