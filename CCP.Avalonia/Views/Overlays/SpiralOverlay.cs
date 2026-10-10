@@ -54,16 +54,71 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         internal static TimeSpan FrameDelay => _delay;
         internal static IReadOnlyList<SpiralOverlayWindow> Shown => Windows;
 
-        /// <summary>WPF GetSpiralPath: the configured file if it exists, else the active mod's spiral,
-        /// else the shipped one. ponytail: SpiralRandomize needs WPF's personal-folder refusal
-        /// (SecurityHelper.IsPersonalFolderRoot, #1053), still head-only, so it is not honoured here
-        /// rather than honoured unsafely; video spirals (.mp4 etc., WPF MediaElement) decode to no
+        /// <summary>WPF GetSpiralPath: with Randomize on, a random spiral from the pool, picked at
+        /// overlay START only (never per tick: the decoded frames are keyed by path and a mid-run
+        /// re-decode hitches); else the configured file if it exists, else the active mod's spiral,
+        /// else the shipped one. ponytail: video spirals (.mp4 etc., WPF MediaElement) decode to no
         /// frames and show nothing.</summary>
         internal static string SourcePath()
         {
-            var p = CoreSettings.Current.SpiralPath;
-            if (!string.IsNullOrEmpty(p) && File.Exists(p)) return p;
+            var s = CoreSettings.Current;
+            var p = s.SpiralPath;
+            var configured = !string.IsNullOrEmpty(p) && File.Exists(p) ? p : null;
+            if (s.SpiralRandomize)
+            {
+                // Latched for the run: every Refresh until the spiral goes down gets the same file.
+                _runPick ??= PickRandomSpiral(configured, Path.Combine(CorePaths.UserData, "Spirals"), Rng, ref _lastRandomSpiralPath);
+                if (_runPick != null) return _runPick;
+            }
+            else _runPick = null;
+            if (configured != null) return configured;
             return CoreModArt.SpiralOverridePath() ?? Path.Combine(AppContext.BaseDirectory, "Resources", "spiral.gif");
+        }
+
+        private static readonly string[] SpiralExtensions = { ".gif", ".png", ".jpg", ".jpeg", ".webp" };
+        private static readonly Random Rng = new();
+        private static string? _runPick, _lastRandomSpiralPath;
+
+        /// <summary>Tests: is a pick latched for the current run.</summary>
+        internal static string? RunPick => _runPick;
+
+        /// <summary>The personal-folder refusal (#1053). A seam for tests.</summary>
+        internal static Func<string?, bool> IsPersonalFolderRoot = path =>
+            !string.IsNullOrEmpty(path) && Views.Windows.MainShellWindow.IsPersonalFolderRoot(path);
+
+        /// <summary>WPF PickRandomSpiral (#641): the pool is the folder of the configured spiral if
+        /// one is set, else the user Spirals library. A configured file in a personal or system
+        /// folder (Desktop, Downloads, Pictures, a drive root) never widens into every image beside
+        /// it (#1053): those roots are refused and the library is the pool. Null when there is no
+        /// pool, so the caller falls back to the single spiral. Avoids the previous pick.</summary>
+        internal static string? PickRandomSpiral(string? configured, string library, Random random, ref string? last)
+        {
+            try
+            {
+                var poolDir = !string.IsNullOrEmpty(configured) ? Path.GetDirectoryName(configured) : library;
+                if (IsPersonalFolderRoot(poolDir))
+                {
+                    Log.Warning("[Overlay] Spiral randomize: refusing {Pool} as a spiral pool (personal/system folder) - falling back to the Spirals library", poolDir);
+                    poolDir = library;
+                }
+                if (string.IsNullOrEmpty(poolDir) || !Directory.Exists(poolDir)) return null;
+
+                var pool = Directory.GetFiles(poolDir)
+                    .Where(f => SpiralExtensions.Contains(Path.GetExtension(f).ToLowerInvariant()))
+                    .ToList();
+                if (pool.Count == 0) return null;
+                if (pool.Count == 1) return pool[0];
+
+                string pick;
+                do { pick = pool[random.Next(pool.Count)]; } while (pick == last);
+                last = pick;
+                return pick;
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "[Overlay] Failed to pick random spiral");
+                return null;
+            }
         }
 
         /// <summary>The painted alpha: the slider through WPF's #722 curve.</summary>
@@ -74,7 +129,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         public static void Refresh(Visual host)
         {
             var s = CoreSettings.Current;
-            if (!s.SpiralEnabled || !ShouldShow()) { CloseAll(); return; }
+            if (!s.SpiralEnabled || !ShouldShow()) { _runPick = null; CloseAll(); return; }   // the next start rolls a fresh spiral
 
             var path = SourcePath();
             if (_framesKey != path)
