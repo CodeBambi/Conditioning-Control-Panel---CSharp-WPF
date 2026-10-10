@@ -1730,3 +1730,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-assets-tab: +910
 - Assets tab: real asset tree, checks, thumbnails, preview, counts and preset CRUD (03af6e8bb online preset fold + OnlineChannelsReset seed).
 - Review fixes: untick/preset/repair drops the video + bubble queues (#130); Refresh keeps the open folder; repair refresh skips an unloaded tab. Rows stay stub (remote picker, packs, video thumbs); FX in the next layer.
+
+## avalonia-port/sync6-nav-rail: +755
+- Section tab strip + breadcrumb from Core NavSections/NavStripTable (WPF NavStripRules delegates), zone keys, launchers, last-tab memory, Ctrl+K from every page; test SectionTabStripShellTests (fail-proven), Keincheck evidence/sync6-nav-rail.
+- 3 of 25 rows ported; 22 deferred to sync6-nav-rail-b (section rail, badges, glow, pin, help, wash, zone scroll, Monitors/Account & Plans).
