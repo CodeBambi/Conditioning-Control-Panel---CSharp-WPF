@@ -158,28 +158,28 @@ namespace ConditioningControlPanel.Controls.Header
                 EndPoint = new Point(0.8, 1),
                 GradientStops =
                 {
-                    new GradientStop(livery.FaceTop, 0.0),
-                    new GradientStop(livery.FaceMid, 0.48),
-                    new GradientStop(livery.FaceBottom, 1.0),
+                    new GradientStop(C(livery.FaceTop), 0.0),
+                    new GradientStop(C(livery.FaceMid), 0.48),
+                    new GradientStop(C(livery.FaceBottom), 1.0),
                 },
             };
             face.Freeze();
             _faceStar.Fill = face;
 
-            var edge = Frozen(livery.Edge);
+            var edge = Frozen(C(livery.Edge));
             _dieCutStar.Fill = edge;
             _dieCutStar.Stroke = edge;
             _dieCutLabel.Fill = edge;
             _dieCutLabel.Stroke = edge;
 
             // The paper shadow: ink pulled toward the tier colour, the DepthRules recipe.
-            var shadow = Frozen(Depth.DepthRules.ShadowColor(livery.FaceBottom));
+            var shadow = Frozen(Depth.DepthRules.ShadowColor(C(livery.FaceBottom)));
             _shadowStar.Fill = shadow;
             _shadowStar.Stroke = shadow;
             _shadowLabel.Fill = shadow;
             _shadowLabel.Stroke = shadow;
 
-            var ink = new LinearGradientBrush(livery.FaceMid, livery.FaceBottom, 90);
+            var ink = new LinearGradientBrush(C(livery.FaceMid), C(livery.FaceBottom), 90);
             ink.Freeze();
             _faceLabel.Fill = ink;
 
@@ -188,14 +188,14 @@ namespace ConditioningControlPanel.Controls.Header
             // Particle inks: the tier's mote colour, white, and a deeper tone (Prime: the cyan ink).
             _moteBrushes = Tier == SparkTier.Basic
                 ? new Brush[] { Frozen(Color.FromRgb(0xFF, 0xD2, 0x4A)), Brushes.White, Frozen(Color.FromRgb(0xFF, 0xB0, 0x22)) }   // glitter gold, rich enough to read at a few px
-                : new Brush[] { Frozen(livery.Mote), Brushes.White, Frozen(livery.Ink) };
+                : new Brush[] { Frozen(C(livery.Mote)), Brushes.White, Frozen(C(livery.Ink)) };
             var flare = new RadialGradientBrush
             {
                 GradientStops =
                 {
                     new GradientStop(Colors.White, 0.0),
                     new GradientStop(Colors.White, 0.35),
-                    new GradientStop(livery.Ink, 1.0),
+                    new GradientStop(C(livery.Ink), 1.0),
                 },
             };
             flare.Freeze();
@@ -350,7 +350,7 @@ namespace ConditioningControlPanel.Controls.Header
         /// catch by the heart. One frozen image per tier.</summary>
         private static ImageSource BuildFolds(PremiumSparkRules.Livery livery)
         {
-            var dark = Depth.DepthRules.ShadowColor(livery.FaceBottom);
+            var dark = Depth.DepthRules.ShadowColor(C(livery.FaceBottom));
             var group = new DrawingGroup();
             using (var dc = group.Open())
             {
@@ -358,13 +358,13 @@ namespace ConditioningControlPanel.Controls.Header
                 dc.DrawRectangle(Brushes.Transparent, null, new Rect(0, 0, PremiumSparkRules.StarSize, PremiumSparkRules.StarSize));
                 dc.PushClip(StarGeometry);
 
-                var heart = PremiumSparkRules.Heart;
+                var heart = P(PremiumSparkRules.Heart);
                 var valleys = new Point[4];
                 for (int k = 0; k < 4; k++)
                 {
                     var flank = PremiumSparkRules.Flanks[k];
                     var (h1, h2) = PremiumSparkRules.Split(flank, 0.5);
-                    valleys[k] = h1.Item4;
+                    valleys[k] = P(h1.Item4);
                     DrawFacet(dc, heart, h1, PremiumSparkRules.FacetShade(flank.p0, h1.Item4), dark);
                     DrawFacet(dc, heart, h2, PremiumSparkRules.FacetShade(h1.Item4, flank.p3), dark);
                 }
@@ -378,7 +378,7 @@ namespace ConditioningControlPanel.Controls.Header
                 for (int k = 0; k < 4; k++)
                 {
                     dc.DrawLine(valley, heart, valleys[k]);
-                    dc.DrawLine(crease, heart, PremiumSparkRules.Flanks[k].p0);
+                    dc.DrawLine(crease, heart, P(PremiumSparkRules.Flanks[k].p0));
                 }
 
                 var spec = new RadialGradientBrush
@@ -400,11 +400,11 @@ namespace ConditioningControlPanel.Controls.Header
         }
 
         private static void DrawFacet(DrawingContext dc, Point heart,
-            (Point p0, Point c1, Point c2, Point p3) half, double shade, Color dark)
+            (SparkPoint p0, SparkPoint c1, SparkPoint c2, SparkPoint p3) half, double shade, Color dark)
         {
             var figure = new PathFigure { StartPoint = heart, IsClosed = true, IsFilled = true };
-            figure.Segments.Add(new LineSegment(half.p0, false));
-            figure.Segments.Add(new BezierSegment(half.c1, half.c2, half.p3, false));
+            figure.Segments.Add(new LineSegment(P(half.p0), false));
+            figure.Segments.Add(new BezierSegment(P(half.c1), P(half.c2), P(half.p3), false));
             var geometry = new PathGeometry(new[] { figure });
             geometry.Freeze();
             // Lit facets catch white, turned-away ones take the tier-tinted shadow ink.
@@ -773,6 +773,10 @@ namespace ConditioningControlPanel.Controls.Header
         }
 
         private static SolidColorBrush Frozen(Color colour) => MakeFrozen(new SolidColorBrush(colour));
+
+        // The rules live in Core (shared with the Avalonia head) with Core-typed colours and points.
+        private static Color C(SparkColor c) => Color.FromRgb(c.R, c.G, c.B);
+        private static Point P(SparkPoint p) => new(p.X, p.Y);
 
         /// <summary>The sparkle outline at unit radius, centred on the origin, for star particles.</summary>
         private static Geometry MakeUnitStar()

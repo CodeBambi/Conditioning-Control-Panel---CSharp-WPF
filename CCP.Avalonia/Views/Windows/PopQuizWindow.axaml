@@ -115,6 +115,12 @@
                 <!-- ESC hint -->
                 <TextBlock Text="{loc:Str label_esc_to_skip}" Foreground="#303050" FontSize="11"
                            HorizontalAlignment="Center" Margin="0,8,0,0"/>
+
+                <!-- Quiet off switch (WPF PopQuizWindow.xaml:114, 7.1.5): the same setting as Graded
+                     Intake > Enable pop-up questions. Never an answer: no XP, no penalty. -->
+                <TextBlock x:Name="TxtTurnOff" Text="{loc:Str intake_popquiz_turn_off}" Foreground="#7A7A9A" FontSize="11"
+                           HorizontalAlignment="Center" Margin="0,6,0,0" Cursor="Hand" TextDecorations="Underline"
+                           Focusable="True"/>
             </StackPanel>
 
             <!-- Affirmation Panel (shown after answering) -->

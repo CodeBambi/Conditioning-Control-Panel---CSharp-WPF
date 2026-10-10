@@ -1741,3 +1741,66 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/sync6-tonight-board: +891
 - The Tonight Board deck (Core BillboardDeck, house + tip providers, dots as the hold clock, snooze + toast, push, no sound) replaces LegacyBillboard (deleted); HouseProvider and TipCards moved to Core.
 - 4 of 24 ledger rows ticked; the rest (drawn art, other providers, animation polish) moved to sync6-tonight-board-b. Parity row is stub.
+
+## avalonia-port/sync6-social-pages: +403
+- Friends page (drawer in page mode) and Leash page (WPF empty state) behind temporary You-door entries; Leaderboard opens on All-Time with no season countdown.
+- Chip tooltip carries the full name, HT box takes a pasted link; Lobby badge lease, Social medallion and Leash "?" stay needs-port (blockers named).
+
+## avalonia-port/sync6-home-layout: +797
+- Home: favorites drawer at the right edge, fold arrow pill (companion strip removed), one LVL chip, window opens at 1661 x 1002 and shrinks evenly (WindowFitRule moved to Core); 6 of 13 rows ported.
+- Still needs porting: hover bubbles, banner FX, marquee drum, rail icons/EMI label, Sparkle pill, animated logo.
+
+## avalonia-port/sync6-media-picker: +969
+- Assets tab: the remote media picker is ported (awaited consent, segmented source, flavour cards, Fine-tune list with niche rows, your own communities and a probed add). FlavourPresets and RemoteSubAddMessages moved to Core; 5 main-sync rows ticked.
+- Open gap: flash/video on this head do not use online media yet (only intake does).
+
+## avalonia-port/roadmap-atomic-save: +169
+- Core RoadmapService: flushed temp+rename save, and a roadmap.json.corrupt-<ts> backup before falling back to defaults; saving is turned off if that backup fails (both heads).
+- 4 fail-proven Core tests on temp dirs via an internal ctor.
+
+## avalonia-port/sync6-premium-page: +199
+- Premium page (main a1d8a7ff1): "premium" key on Home, silent "exclusives" redirect, shelf grouped Basic/Prime/Free under headers (Core PremiumShelfOrder git-mv), reserved seats dropped; fail-proven tests.
+- Left needs-port: header Premium spark (97/99) and vault flair (100).
+
+## avalonia-port/programs-run-3b: +619
+- Pause/Resume, Restart, Dismiss, mantra door and ritual photos live on the run panel; roadmap provider seeded lazily; presentation + the_takeover enrollable.
+- Lockdown refuses Pause/Resume/Restart/ritual/mantra door; Restart refused for unfinishable programs; strings x9; 22 fail-proofs, GATE-OK.
+
+## avalonia-port/sync6-715-fixes: +151
+- 7.1.5 fixes: the pop quiz "Turn these off" link, a 20-minute default for Lockdown, and a session no longer restores the pop quiz switch (ledger rows 144/146/147 ported).
+- Shatter grey-out and perk-row opacity were folded into missing parity rows because those surfaces are not on this head.
+
+## avalonia-port/sync6-companion-ai-page: +251
+- Companion > AI page: the AI pill opens it, and it shows the room's live Connection drawer, Behaviour and Triggers cells and memory diary, giving them back on hide. Rows 138 and 140 are ported; 136 is n/a (no ConversationPage on this head).
+- CompanionAiPageTests (fail-proven) plus a live Keincheck run.
+
+## avalonia-port/sync6-tonight-board-b: +651
+- Tonight Board: Waiting/Resume/Event providers on the Avalonia Home deck. Pure cards (git mv) and adapters are now in Core behind a `BillboardHead` seam both heads fill; tests are fail-proven.
+- Live/Board/Showcase, drawn art and animation polish are left for sync6-tonight-board-c (all 20 rows moved there).
+
+## avalonia-port/sync6-home-layout-b: +774
+- Home account strip + quick pills -> one line of hover bubbles (HoverBubbleBar, WPF 41288a884/acd51fcf9); drawer handle gains the Embers layer.
+- Rail icons left for nav-rail-b; Sparkle pill blocked on the wallet; banner FX/drum not started.
+
+## avalonia-port/sync6-nav-search: +864
+- Ctrl+K palette brought up to the 7.1 nav rework: recent picks, no-hits Try/All, "(was X)" hints, each row opens through its own action, right-click pin, click-away re-activate; GameAvailableProvider set at startup. 10 tests, each proven to fail when broken.
+- What moved card (plan moved to Core): offered once on upgrade through StartupLadder, Help replay, Show me; glow and Games zone (rows 38/46 partial) wait on sync6-nav-rail.
+
+## avalonia-port/sync6-drone-mod: +2
+- Ledger row 110 (drone-mode.ccpmod emotes + voice) marked n/a: content-only, ships via the shared mod-drone pack.
+- Drone outfit emotes folded into avatar-tube-window (this head has no emote mode).
+
+## avalonia-port/sync6-nav-rail-b: +857
+- Section rail replaces the flyout (Social door with Friends/Leash pills, lit row, last tab, Ctrl+1..7, fixed Back row); pills pin on right-click; Play zone pills scroll.
+- Ctrl+K held toggles once; 7 rows ported/n/a, 15 left needs-port for sync6-nav-rail-c.
+
+## avalonia-port/sync6-gate-pay: +74
+- Vault gate: card/PayPal checkout link under every pay button (main 750e76812), via ExternalOpener; fake-launcher test, fail-proven.
+
+## avalonia-port/sync6-tube-avatar: +369
+- Tube cel title plate (floating plate, raised coin arrows) and Embers motes in the glass (AmbientFxCanvas Embers/Retint/RunWhileInactive); sync6 rows 2889ddb23, bd95424c8 ported.
+- TubeMotesTests (fail-proven x3); render evidence only, no live check.
+
+## avalonia-port/sync6-premium-page-b: +830
+- Header Premium spark ported (rows 97/99): PremiumSparkRules/Field moved to Core, Avalonia `PremiumSpark` draws it, clock gated by visibility/motion and stopped on detach; `PremiumSparkTests` fail-proven, live Free check.
+- Row 100 (vault flair, no header row on Premium, Home ring) left needs-port for sync6-premium-page-c.

@@ -101,7 +101,11 @@ public sealed class LanguageSelectorTests
             Assert.Contains(rows, row => (row.Tag as Session)?.Id == "language_unavailable");
 
             // Navigate through the real shell door before exercising the row's keyboard path.
-            shell.FindControl<Button>("BtnPresets")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            // (the Studio row, then its Presets pill: the rail entries left with cd426fe36).
+            shell.FindControl<Button>("DoorStudio")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Dispatcher.UIThread.RunJobs();
+            global::Avalonia.LogicalTree.LogicalExtensions.GetLogicalDescendants(shell).OfType<Button>()
+                .First(b => b.Name == "NavPill_presets").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Dispatcher.UIThread.RunJobs();
             customRow.Focus();
             shell.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, "");
@@ -437,6 +441,8 @@ public sealed class LanguageSelectorTests
         // The Dashboard's launch cards spend their seen-flag (a real save) when they open, like WPF;
         // spent here so the no-startup-save assertion keeps measuring startup itself.
         settings.Current.SeenFeatureIntros.AddRange(new[] { "daily-free", "one-account" });
+        // Likewise the upgrade-only What moved card spends its flag when it opens (sync6-nav-search).
+        settings.Current.WhatMovedCardShown = 1;
         // Opening Presets notes it in the dashboard's RECENT rail (a real save, WPF NoteDestinationOpened);
         // already at the head here, so the visit below is not a write.
         settings.Current.RailRecent.Add("tab.presets");

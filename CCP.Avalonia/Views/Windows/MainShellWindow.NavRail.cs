@@ -1,241 +1,222 @@
-// PORTED from ConditioningControlPanel/MainWindow/MainWindow.NavRail.cs (1107 lines): the rail's
-// setup pass (premium pills), the hover flyout (56 -> 236 px, 190/150 ms QuadraticEaseOut), the
-// global label fade, the medallion tile/icon growth, the staggered door-name fade + rise, the
-// scrollbar flip and the popup hold latch. See HookNavRailHover.
+// PORTED from ConditioningControlPanel/MainWindow/MainWindow.NavRail.cs (the section rail, nav
+// rework 2026-10-06: cd426fe36, 8b67e45d2, ac59c3344). An always-labelled rail of seven sections and
+// a Settings gear inside the 96px column; no flyout, no hold latch, no door accordion. A row opens its
+// section's last tab; the lit row follows every navigation (RefreshSectionRail, from ShowTab).
 //
-// ponytail: still dropped, each needing a service/effect this head lacks - door-name glow breath
-// and shimmer (BuildNavDoorLabelFx/Start/Stop), the hue glow ellipse and active tile tint
-// (BuildNavDoorGlow/RefreshNavDoorActive/SetNavDoorGlow), mod-aware ApplyDoorArt, the possession
-// reroute seam, the WebView airspace holds, the stuck-rail watchdog and the MotionFx
-// reduced-motion snap of the rail flyout itself (door panels honour it, SetDoorPanelExpanded).
-// The handlers named by MainShellWindow.axaml are real methods,
-// because a missing one is a XAML compile error, not a runtime gap.
+// ponytail: not yet here (sync6-nav-rail-c): the coin depth (BuildNavCoin, press travel, tilt,
+// specular), the edge spur, the hue-bevel ring gradient (a flat hue ring stands in), the art tint
+// over each tile (Tag "navtint", PaintNavTint :701), the static glow behind each label (DropShadow
+// in the mod glow colour), the 160 ms halo fade (the halo snaps here), NavBadges
+// counts, the rich row tooltip, the possession reroute seam, mod door art (ApplyDoorArt) and the
+// rail shadow (PaintDepthRail).
 
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using Avalonia;
-using Avalonia.Animation;
-using Avalonia.Animation.Easings;
 using Avalonia.Controls;
-using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Shapes;
+using Avalonia.Data;
+using Avalonia.Data.Converters;
 using Avalonia.Input;
-using Avalonia.Interactivity;
-using Avalonia.Layout;
-using Avalonia.LogicalTree;
 using Avalonia.Media;
+using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Services.UI;
 using Serilog;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
     public partial class MainShellWindow
     {
-        /// <summary>
-        /// The rail's one-time setup pass, cut down to what this head can answer. WPF calls this
-        /// from MainWindow_Loaded (MainWindow.NavRail.cs:263) after templates are applied; this
-        /// head calls it from the constructor, right after XAML load, which is enough: the pills
-        /// are namescope lookups and CacheNavRailParts walks the
-        /// LOGICAL tree, which XAML load has already built (WPF walked the visual tree, so it
-        /// needed Loaded).
-        ///
-        /// <para>Internal and repeatable so NavCheck can call it directly. WPF's
-        /// <c>_navRailReady</c> latch is split: the pills repaint on every call (an assertion can
-        /// force them on and watch this put them back), the hover hook latches on
-        /// <c>_navRailHooked</c>.</para>
-        /// </summary>
+        /// <summary>One section row's parts, found once by type/Tag inside the row's Grid.</summary>
+        internal sealed class NavSectionRow
+        {
+            internal string Section = "";
+            internal Button Button = null!;
+            internal Ellipse? Glow;
+            internal Border? Tile, Ring, Shade;
+            internal TextBlock? Label;
+            internal Color Hue;
+            internal bool Active, Painted;
+        }
+
+        // WPF NavRailRules: row tint 0x33, tile tint 0x40, ring idle/hover/active alpha, lit halo.
+        private const byte NavFillAlpha = 0x33, NavTileTintAlpha = 0x40;
+        private const byte NavRingIdleAlpha = 0xCC, NavRingHoverAlpha = 0xF2;
+        private const double NavGlowActive = 0.55;
+
+        private readonly List<NavSectionRow> _navSectionRows = new();
+        private bool _navRailReady;
+
+        internal IReadOnlyList<NavSectionRow> NavSectionRowsForTests => _navSectionRows;
+
+        /// <summary>Every rail button, top to bottom, gear last (WPF NavSectionButtons).</summary>
+        private static readonly string[] NavSectionButtonNames =
+            { "DoorHome", "DoorStudio", "DoorCompanion", "DoorPlay", "DoorSocial", "DoorYou", "DoorLibrary", "DoorSettings" };
+
+        /// <summary>WPF InitializeNavRail (:110). Called from the constructor after XAML load; a rail
+        /// that fails here stays as authored: rows that navigate, no hue, no lit row.</summary>
         internal void InitializeNavRail()
         {
+            try { RefreshNavPremiumTags(); }   // repaints the favorites chips (MainShellWindow.NavPremiumTags.cs)
+            catch (Exception ex) { Log.Debug("RefreshNavPremiumTags: {E}", ex.Message); }
             try
             {
-                // LAYER A: the gold stars on the sold rows. Authored IsVisible=False, so a rail
-                // that never got here shows none rather than all - see the NavEntryPremiumTag
-                // theme. The four subscriptions that take them away again are still head-side
-                // (MainShellWindow.NavPremiumTags.cs's header names all four services).
-                RefreshNavPremiumTags();
+                if (_navRailReady) return;
+                CacheNavSectionRows();
+                RegisterSectionShortcuts();
+                _navRailReady = true;
+                RefreshSectionRail(CurrentTab);
             }
-            catch (Exception ex) { Log.Debug("InitializeNavRail: {E}", ex.Message); }
-
-            // Its own try, deliberately. Sharing one with the pills meant a throw in them silently
-            // took the rail's hover with it - the two have nothing to do with each other, and a
-            // catch that swallows a whole feature because an unrelated line above it failed is how
-            // this port has already lost work once.
-            try { HookNavRailHover(); }
-            catch (Exception ex) { Log.Debug("HookNavRailHover: {E}", ex.Message); }
+            catch (Exception ex) { Log.Warning(ex, "InitializeNavRail failed; rail stays as authored"); }
         }
 
-        // WPF MainWindow.NavRail.cs:61-145. Sizes the XAML authors as the shut state.
-        private const double NavRailCollapsedWidth = 56;
-        private const double NavRailExpandedWidth = 236;
-        private const int NavRailAnimMs = 190;
-        private const int NavRailCollapseAnimMs = 150;
-        private const double NavDoorTileCollapsed = 44, NavDoorTileExpanded = 50;
-        private const double NavDoorIconCollapsed = 40, NavDoorIconExpanded = 46;
-        private const double NavDoorLabelRise = 14;
-        private const int NavDoorLabelFadeMs = 220, NavDoorLabelSlideMs = 260, NavDoorLabelStaggerMs = 30;
-        private const string NavRailStaticTextTag = "navrailstatic";
+        private static readonly IValueConverter NavCaps =
+            new FuncValueConverter<object?, string?>(v => (v as string)?.ToUpper(CultureInfo.CurrentUICulture));
 
-        private bool _navRailExpanded;
-        private bool _navRailHooked;
-        private Border? _navRail;
-        private readonly List<Control> _navRailLabels = new();
-        private readonly List<(Border Tile, Viewbox Icon, Control Host, TranslateTransform Slide)> _navDoorRows = new();
-        private readonly HashSet<object> _navRailHolds = new();
+        /// <summary>WPF CacheNavSectionRows (:139): hue from the one table (NavStripTable.AccentRgb),
+        /// the label bound upper-cased to the section's own key (WPF NavCapsConverter).</summary>
+        private void CacheNavSectionRows()
+        {
+            _navSectionRows.Clear();
+            foreach (var name in NavSectionButtonNames)
+            {
+                if (Named<Button>(name) is not { Tag: string tag } btn) continue;
+                var section = tag == "appsettings" ? NavSections.Settings : tag;
+                var rgb = NavStripTable.AccentRgb(section);
+                var row = new NavSectionRow
+                {
+                    Section = section,
+                    Button = btn,
+                    Hue = Color.FromRgb((byte)(rgb >> 16), (byte)(rgb >> 8), (byte)rgb),
+                };
+                btn.Background = new SolidColorBrush(WithAlpha(row.Hue, NavFillAlpha));
+                btn.BorderBrush = new SolidColorBrush(row.Hue);
+                if (btn.Content is Panel grid)
+                {
+                    foreach (var child in grid.Children)
+                    {
+                        switch (child)
+                        {
+                            case Ellipse e: row.Glow = e; break;
+                            case Border b when (b.Tag as string) == "navring": row.Ring = b; break;
+                            case Border b when (b.Tag as string) == "navart": break;
+                            case Border b: row.Tile ??= b; break;
+                            case TextBlock t: row.Label = t; break;
+                        }
+                    }
+                }
+                row.Shade = Named<Border>("Shade" + name);
+                if (row.Glow != null)
+                    row.Glow.Fill = new RadialGradientBrush
+                    {
+                        GradientStops = { new GradientStop(WithAlpha(row.Hue, 0x99), 0), new GradientStop(WithAlpha(row.Hue, 0), 1) },
+                    };
+                if (row.Tile != null) row.Tile.Background = new SolidColorBrush(WithAlpha(row.Hue, NavTileTintAlpha));
+                if (row.Label != null && NavSections.Find(section) is { } s)
+                    row.Label.Bind(TextBlock.TextProperty, new Binding($"[{s.LabelKey}]")
+                    {
+                        Source = LocalizationManager.Instance, Mode = BindingMode.OneWay, Converter = NavCaps,
+                    });
+                var captured = row;
+                btn.PointerEntered += (_, _) => PaintNavRing(captured, hover: true);
+                btn.PointerExited += (_, _) => PaintNavRing(captured, hover: false);
+                PaintNavRowActive(row);
+                _navSectionRows.Add(row);
+            }
+        }
+
+        private static Color WithAlpha(Color c, byte a) => Color.FromArgb(a, c.R, c.G, c.B);
+
+        /// <summary>A row press: the section's last tab, else its default (WPF NavDoor_Click :568).</summary>
+        private void NavDoor_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            if (sender is not Button { Tag: string tag }) return;
+            OpenNavSection(tag == "appsettings" ? NavSections.Settings : tag);
+        }
+
+        /// <summary>WPF OpenNavSection (:575): opens a section the way its rail row does; logs and
+        /// stays on an unknown key.</summary>
+        internal void OpenNavSection(string section)
+        {
+            if (NavSections.Find(section) is null)
+            {
+                Log.Warning("OpenNavSection: no section {Section}", section);
+                return;
+            }
+            ShowTab(section == NavSections.Settings ? "appsettings" : NavLastTabFor(section));
+        }
+
+        /// <summary>WPF RegisterSectionShortcuts (:589): Ctrl+1..7 jump to the rail's sections.
+        /// Window KeyBindings, so they fire only while this window has focus.</summary>
+        private void RegisterSectionShortcuts()
+        {
+            int n = 0;
+            foreach (var s in NavSections.Order)
+            {
+                if (s.Key == NavSections.Settings || ++n > 7) continue;
+                var section = s.Key;
+                KeyBindings.Add(new KeyBinding
+                {
+                    Gesture = new KeyGesture(Key.D0 + n, KeyModifiers.Control),
+                    Command = new NavSectionCommand(() => OpenNavSection(section)),
+                });
+            }
+        }
+
+        private sealed class NavSectionCommand(Action run) : System.Windows.Input.ICommand
+        {
+            public event EventHandler? CanExecuteChanged { add { } remove { } }
+            public bool CanExecute(object? parameter) => true;
+            public void Execute(object? parameter) => run();
+        }
 
         /// <summary>
-        /// WPF's InitializeNavRail hover half (MainWindow.NavRail.cs:308-402): cache the rail's
-        /// parts, author the shut state, then open on pointer-over and shut on leave / outside
-        /// press / deactivation. The pointer test is <c>rail.IsPointerOver</c> (WPF IsMouseOver):
-        /// hit-test aware and immune to the Viewbox scale, where window coordinates against the
-        /// rail's parent-local Bounds were not. Tunnel + handledEventsToo so no child can swallow
-        /// the move. Popups opened from the rail hold it
-        /// through <see cref="HoldNavRailOpen"/>; the WPF watchdog is not ported (every trigger
-        /// here is level, re-read on each move).
+        /// WPF RefreshSectionRail (:608): lights the row that owns <paramref name="tabKey"/> - filled
+        /// row, 4px bar and label in the section hue, full ring, halo. Called from ShowTab on every
+        /// navigation, so the lit row follows deep links, the palette and the strip. A key no section
+        /// owns leaves the current row lit. Repaints only rows whose state changed (P07).
         /// </summary>
-        private void HookNavRailHover()
+        internal void RefreshSectionRail(string? tabKey)
         {
-            if (_navRailHooked) return;
-            var rail = this.FindControl<Border>("NavSidebar");
-            if (rail is null) return;
-            _navRailHooked = true;
-            _navRail = rail;
-
-            CacheNavRailParts(rail);
-            _navRailLabels.AddRange(NavPremiumTagElements);
-
-            // Shut state first, THEN the transitions, so the first frame does not tween.
-            ApplyNavRail(false);
-            rail.Transitions = Eased(Layoutable.WidthProperty);
-            // Linear, as WPF's label/pill fade (SetNavRailExpanded builds it with no easing).
-            foreach (var l in _navRailLabels)
-                l.Transitions = new Transitions { new DoubleTransition { Property = Visual.OpacityProperty } };
-            foreach (var r in _navDoorRows)
+            if (!_navRailReady) return;
+            var section = NavSections.SectionForTab(tabKey == "lab" ? "play" : tabKey);
+            if (section == null) return;
+            foreach (var row in _navSectionRows)
             {
-                r.Tile.Transitions = Eased(Layoutable.WidthProperty, Layoutable.HeightProperty);
-                r.Icon.Transitions = Eased(Layoutable.WidthProperty, Layoutable.HeightProperty);
-                r.Host.Transitions = Eased(Visual.OpacityProperty);
-                r.Slide.Transitions = Eased(TranslateTransform.YProperty);
-            }
-
-            // IsPointerOver is hit-test aware, like WPF's IsMouseOver: an overlay covering the rail
-            // (tutorial, remote control, fullscreen browser) owns the pointer, so the rail stays shut.
-            void Sync(PointerEventArgs e)
-            {
-                bool over = rail.IsPointerOver;
-                if (over || _navRailHolds.Count == 0) SetNavRailExpanded(over);
-            }
-            AddHandler(PointerMovedEvent, (_, e) => Sync(e), RoutingStrategies.Tunnel, handledEventsToo: true);
-            AddHandler(PointerPressedEvent, (_, e) => Sync(e), RoutingStrategies.Tunnel, handledEventsToo: true);
-            PointerExited += (_, _) => { if (_navRailHolds.Count == 0) SetNavRailExpanded(false); };
-            Deactivated += (_, _) => { if (_navRailHolds.Count == 0) SetNavRailExpanded(false); };
-        }
-
-        private static Transitions Eased(params AvaloniaProperty[] props)
-        {
-            var t = new Transitions();
-            foreach (var p in props)
-                t.Add(new DoubleTransition { Property = p, Easing = new QuadraticEaseOut() });
-            return t;
-        }
-
-        /// <summary>WPF CacheNavRailParts + CacheNavDoorRows (:545-620): a door medallion is a
-        /// Button whose content Grid is Ellipse, Border (tile), Viewbox (icon), Grid (name host),
-        /// picked by type as WPF does. Every other TextBlock is a label faded with the rail,
-        /// except the navrailstatic ones (the lens and the entry icons - Images on WPF).</summary>
-        private void CacheNavRailParts(ILogical root)
-        {
-            foreach (var child in root.LogicalChildren)
-            {
-                if (child is Button { Content: Grid { Children: [Ellipse, Border tile, Viewbox icon, Grid host] } })
-                {
-                    var slide = new TranslateTransform();
-                    host.RenderTransform = slide;
-                    _navDoorRows.Add((tile, icon, host, slide));
-                }
-                else if (child is TextBlock tb)
-                {
-                    if (tb.Tag as string != NavRailStaticTextTag) _navRailLabels.Add(tb);
-                }
-                else CacheNavRailParts(child);
+                bool on = row.Section == section;
+                if (row.Painted && on == row.Active) continue;
+                row.Active = on;
+                PaintNavRowActive(row);
             }
         }
 
-        /// <summary>WPF SetNavRailExpanded + ApplyNavDoorRows (:837-960). Early-outs on the state
-        /// it is already in, so a pointer moving inside the rail is one field read per move.</summary>
-        private void SetNavRailExpanded(bool expand)
+        private static void PaintNavRowActive(NavSectionRow row)
         {
-            if (_navRailExpanded == expand || _navRail is null) return;
-            _navRailExpanded = expand;
-
-            // Durations first: a transition reads them when the value changes.
-            int ms = expand ? NavRailAnimMs : NavRailCollapseAnimMs;
-            Time(_navRail, ms);
-            foreach (var l in _navRailLabels) Time(l, expand ? ms : ms / 2);   // labels lead in, trail out
-            for (int i = 0; i < _navDoorRows.Count; i++)
+            row.Painted = true;
+            row.Button.Classes.Set("active", row.Active);
+            if (row.Shade != null) row.Shade.Opacity = row.Active ? 0 : 1;
+            if (row.Label != null)
             {
-                var r = _navDoorRows[i];
-                int delay = expand ? i * NavDoorLabelStaggerMs : 0;
-                Time(r.Tile, ms);
-                Time(r.Icon, ms);
-                Time(r.Host, expand ? NavDoorLabelFadeMs : ms / 2, delay);
-                Time(r.Slide, expand ? NavDoorLabelSlideMs : ms / 2, delay);
+                if (row.Active) row.Label.Foreground = new SolidColorBrush(row.Hue);
+                else row.Label.ClearValue(TextBlock.ForegroundProperty);
             }
-            ApplyNavRail(expand);
-            ApplyNavRailDoorState();   // WPF :1014 - shut rail parks every door, open restores the chosen one
+            if (row.Glow != null) row.Glow.Opacity = row.Active ? NavGlowActive : 0;
+            PaintNavRing(row, hover: row.Button.IsPointerOver);
         }
 
-        private static void Time(Animatable a, int ms, int delayMs = 0)
+        /// <summary>WPF PaintNavRingParts (:687), flat: the hue at 0xCC idle, 0xF2 hover, solid and
+        /// 3.5px lit.</summary>
+        private static void PaintNavRing(NavSectionRow row, bool hover)
         {
-            foreach (var t in a.Transitions ?? new Transitions())
-                if (t is DoubleTransition d)
-                {
-                    d.Duration = TimeSpan.FromMilliseconds(ms);
-                    d.Delay = TimeSpan.FromMilliseconds(delayMs);
-                }
+            if (row.Ring is not { } ring) return;
+            byte a = row.Active ? (byte)0xFF : hover ? NavRingHoverAlpha : NavRingIdleAlpha;
+            ring.BorderBrush = new SolidColorBrush(WithAlpha(row.Hue, a));
+            ring.BorderThickness = new Thickness(row.Active ? 3.5 : 3);
         }
 
-        private void ApplyNavRail(bool expand)
-        {
-            _navRail!.Width = expand ? NavRailExpandedWidth : NavRailCollapsedWidth;
-            foreach (var l in _navRailLabels) l.Opacity = expand ? 1 : 0;
-            foreach (var r in _navDoorRows)
-            {
-                r.Tile.Width = r.Tile.Height = expand ? NavDoorTileExpanded : NavDoorTileCollapsed;
-                r.Icon.Width = r.Icon.Height = expand ? NavDoorIconExpanded : NavDoorIconCollapsed;
-                r.Host.Opacity = expand ? 1 : 0;
-                r.Slide.Y = expand ? 0 : NavDoorLabelRise;
-            }
-            // Shut, a bar would sit over the medallions (WPF :955-958).
-            if (this.FindControl<ScrollViewer>("NavRailScroll") is { } sv)
-                sv.VerticalScrollBarVisibility = expand ? ScrollBarVisibility.Auto : ScrollBarVisibility.Hidden;
-        }
-
-        /// <summary>WPF HoldNavRailOpen/ReleaseNavRailOpen (:1309-1351): a popup opened from the
-        /// rail keeps it out until the last holder lets go; then it shuts unless the pointer is
-        /// on it. No popup on this head calls it yet (the favorites rail and friends chip that do on
-        /// WPF are not ported).</summary>
-        internal void HoldNavRailOpen(object owner)
-        {
-            if (_navRailHolds.Add(owner)) SetNavRailExpanded(true);
-        }
-
-        internal void ReleaseNavRailOpen(object owner)
-        {
-            if (_navRailHolds.Remove(owner) && _navRailHolds.Count == 0 && _navRail?.IsPointerOver != true)
-                SetNavRailExpanded(false);
-        }
-
-        /// <summary>Whether the rail is currently open. NavCheck and the click-through driver read
-        /// this rather than Width, which mid-tween reports the in-flight value, not the intent.</summary>
-        internal bool NavRailExpanded => _navRailExpanded;
-
-        internal bool NavRailHooked => _navRailHooked;
-
-        /// <summary>
-        /// The rail's search pill, one line as in WPF (MainWindow.NavRail.cs:480-484). Toggle refuses
-        /// during Lockdown, as WPF's does.
-        /// </summary>
+        /// <summary>The rail's search pill, one line as in WPF (:559). Toggle refuses during Lockdown.</summary>
         private void BtnNavSearch_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
             => SettingsPaletteWindow.Toggle(this);
-
     }
 }

@@ -350,6 +350,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 else _ = LoadProfileBubblePhotoAsync(url);
 
                 RefreshProfileBubbleTierBadge();
+                RefreshPremiumSpark();   // WPF UpdatePatreonUI: the spark wears the same tier
                 RefreshProfileShareButton();
                 if (ProfileBubblePopupHost?.IsOpen == true) RefreshProfileMenu();
             }

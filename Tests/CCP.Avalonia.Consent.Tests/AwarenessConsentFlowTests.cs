@@ -259,6 +259,7 @@ public sealed class AwarenessConsentFlowTests
             HasAcceptedAgeVerification = true,   // a welcomed profile has passed the 18+ gate; without it the app-level age dialog (#1844) opens over the shell
             Language = "en",
             UseAwarenessV2 = true,
+            WhatMovedCardShown = 1,   // the upgrade-only What moved card would open over the shell (sync6-nav-search)
         };
         // The shell queues its Dashboard feature cards on open (FeatureIntroPopup.ShowWhenStartupSettles);
         // one is held 3 s by the startup ladder and then opens over WHICHEVER test's shell is up,

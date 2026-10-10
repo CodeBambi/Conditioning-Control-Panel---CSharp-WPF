@@ -89,6 +89,7 @@ public sealed class SessionRulesTests
 
     /// <summary>WPF SaveCurrentSettings' 36 fields, in order (SessionEngine.cs:1060-1114), plus
     /// SubliminalDuration (37): WPF writes it from the session and never restores it (decision log).</summary>
+    // PopQuizEnabled left the list in 7.1.5 (WPF f30b54f31): a session must not restore it.
     private static readonly string[] WpfSnapshotFields =
     {
         "FlashEnabled", "FlashFrequency", "FlashOpacity", "FlashClickable", "CorruptionMode", "FlashAudioEnabled",
@@ -97,7 +98,7 @@ public sealed class SessionRulesTests
         "PinkFilterOpacity", "SpiralEnabled", "SpiralOpacity", "BrainDrainEnabled", "BrainDrainIntensity",
         "BubblesEnabled", "BubblesFrequency", "BubblesClickable", "BouncingTextEnabled", "BouncingTextSpeed",
         "BouncingTextSize", "BouncingTextOpacity", "MandatoryVideosEnabled", "VideosPerHour", "LockCardEnabled",
-        "LockCardFrequency", "PopQuizEnabled", "PopQuizFrequency", "BubbleCountEnabled", "BubbleCountFrequency",
+        "LockCardFrequency", "PopQuizFrequency", "BubbleCountEnabled", "BubbleCountFrequency",
     };
 
     private static string Json(AppSettings s) => JsonConvert.SerializeObject(s, Formatting.Indented);

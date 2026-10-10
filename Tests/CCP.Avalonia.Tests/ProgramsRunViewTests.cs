@@ -90,14 +90,14 @@ public sealed class ProgramsRunViewTests
             Assert.Contains(tasks, t => t.TaskId == "d2_lockcards" && t.ProgressText == Loc.GetF("programs_task_progress", 1, 2));
             Assert.All(tasks, t => Assert.False(t.SubmitVisible || t.OpenVisible));
 
-            // Read-only service: the 3a doors show greyed, the 3b ones stay hidden.
-            foreach (var name in new[] { "BtnProgramWithdraw", "BtnStartTodaySession" })
+            // Read-only service: every run-panel door shows greyed; the lapsed/graduated ones grey too.
+            foreach (var name in new[] { "BtnProgramWithdraw", "BtnStartTodaySession", "BtnProgramPauseResume" })
             {
                 Assert.True(F<Button>(name).IsEffectivelyVisible, name);
                 Assert.False(F<Button>(name).IsEnabled, name);
             }
-            foreach (var name in new[] { "BtnProgramPauseResume", "BtnProgramRestart", "BtnProgramDismissGraduated" })
-                Assert.False(F<Button>(name).IsEffectivelyVisible, name);
+            foreach (var name in new[] { "BtnProgramRestart", "BtnProgramDismissGraduated" })
+                Assert.False(F<Button>(name).IsEnabled, name);
 
             // Same program day as the save: then, and only then, it is "today".
             ProgramsTabView.Clock = new FixedClock(savedDay.AddHours(12));

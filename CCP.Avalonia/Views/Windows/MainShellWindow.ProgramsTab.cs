@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Avalonia.Controls;
 using Avalonia.Media;
+using Avalonia.Platform.Storage;
 using ConditioningControlPanel.Avalonia.Platform;
 using ConditioningControlPanel.Avalonia.Views.Dialogs;
 using ConditioningControlPanel.Avalonia.Helpers;
@@ -78,9 +80,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             return items;
         }
 
-        // ---- lifecycle (WPF MainWindow.ProgramsTab.cs:1999-2270). 3a: Enroll, Withdraw, today's
-        // session. Under Lockdown each refuses (P05; WPF has no Lockdown gate here - the Avalonia
-        // shell refuses every control that starts or stops something). ----
+        // ---- lifecycle (WPF MainWindow.ProgramsTab.cs:1999-2270). Enroll, Withdraw, today's session,
+        // Pause/Resume, Restart and the ritual picker refuse under Lockdown (P05; WPF has no Lockdown gate
+        // here - the Avalonia shell refuses every control that starts or stops something). ----
 
         /// <summary>P05: true (and says so) when Lockdown holds; the caller stops.</summary>
         private async Task<bool> ProgramRefusedByLockdown()
@@ -143,6 +145,114 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 RefreshProgramsTab();
             }
             catch (Exception ex) { Serilog.Log.Warning(ex, "Program withdraw failed"); }
+        }
+
+        /// <summary>WPF BtnProgramPauseResume_Click :2012. Resume, else Pause; a Pause declined because today's
+        /// session is in flight (a race past the greyed button) says why instead of dead-clicking.</summary>
+        internal async Task PauseResumeProgramAsync()
+        {
+            try
+            {
+                if (App.Programs is not { ActiveEnrollment: { } enrollment, IsReadOnly: false } svc) return;
+                if (await ProgramRefusedByLockdown()) return;
+                if (enrollment.State == ProgramEnrollmentState.Paused) svc.Resume();
+                else if (!svc.Pause())
+                {
+                    await MessageDialog.ShowAsync(this, Loc.Get("programs_pause_blocked_title"), Loc.Get("programs_pause_blocked_body"));
+                    return;
+                }
+                RefreshProgramsTab();
+            }
+            catch (Exception ex) { Serilog.Log.Warning(ex, "Program pause/resume failed"); }
+        }
+
+        /// <summary>WPF BtnProgramRestart_Click :2086.</summary>
+        internal async Task RestartProgramAsync()
+        {
+            try
+            {
+                if (App.Programs is not { IsReadOnly: false } svc) return;
+                if (await ProgramRefusedByLockdown()) return;
+                // A new attempt is an enrollment in all but name: a lapsed run synced from Windows of a
+                // program this head cannot finish is refused like CanEnroll refuses it (Avalonia-only gate).
+                if (svc.ActiveProgram is { } program &&
+                    ProgramService.UnavailableReason(program, CoreProgram.IsTaskAvailable) is { } missing)
+                {
+                    await MessageDialog.ShowAsync(this, Loc.Get("programs_unavailable_title"), missing);
+                    return;
+                }
+                svc.RestartAfterLapse();
+                RefreshProgramsTab();
+            }
+            catch (Exception ex) { Serilog.Log.Warning(ex, "Program restart failed"); }
+        }
+
+        /// <summary>WPF BtnProgramOpenMantras_Click :2148 -> StartMantraSession; refused under Lockdown (P05, Avalonia-only).</summary>
+        internal async Task OpenProgramMantrasAsync(int reps)
+        {
+            try
+            {
+                if (await ProgramRefusedByLockdown()) return;
+                StartMantraSession(reps);
+            }
+            catch (Exception ex) { Serilog.Log.Warning(ex, "Program mantra launch failed"); }
+        }
+
+        /// <summary>WPF BtnProgramDismissGraduated_Click :2099. Starts and stops nothing, so no Lockdown gate.</summary>
+        internal void DismissGraduatedProgram()
+        {
+            try
+            {
+                App.Programs?.DismissGraduated();
+                RefreshProgramsTab();
+            }
+            catch (Exception ex) { Serilog.Log.Warning(ex, "Program graduation dismiss failed"); }
+        }
+
+        /// <summary>Test seam for the ritual photo picker (P08: no real dialog in tests). Returns null on cancel,
+        /// else the picked file's local path, which is itself null for a portal/non-local file.</summary>
+        internal static Func<Window, Task<(bool Picked, string? LocalPath)>>? RitualPhotoPicker;
+
+        /// <summary>WPF BtnProgramSubmitRitual_Click :2112: pick a photo, hand it to the service. The file never
+        /// leaves this machine.</summary>
+        internal async Task SubmitProgramRitualAsync(string? taskId)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(taskId) || App.Programs is not { IsReadOnly: false } svc) return;
+                if (await ProgramRefusedByLockdown()) return;
+                var (picked, path) = await (RitualPhotoPicker ?? PickRitualPhotoAsync)(this);
+                if (!picked) return;
+                TrySubmitRitual(svc, taskId!, path);
+                RefreshProgramsTab();
+            }
+            catch (Exception ex) { Serilog.Log.Warning(ex, "Program ritual submission failed"); }
+        }
+
+        /// <summary>WPF's picker only ever returns a file. A Linux portal pick can have no local path, and
+        /// SubmitRitualTask(id, null) would complete the ritual with no photo - so that case only says why.</summary>
+        internal static bool TrySubmitRitual(ProgramService svc, string taskId, string? localPath)
+        {
+            if (localPath == null)
+            {
+                App.Notifications.Show(Loc.Get("programs_photo_not_local"), NotificationType.Warning, TimeSpan.FromSeconds(8));
+                return false;
+            }
+            return svc.SubmitRitualTask(taskId, localPath, null);
+        }
+
+        private static async Task<(bool, string?)> PickRitualPhotoAsync(Window owner)
+        {
+            // programs_photo_filter is WPF's "Label|*.a;*.b|Label|*.*" filter string.
+            var parts = Loc.Get("programs_photo_filter").Split('|');
+            var types = Enumerable.Range(0, parts.Length / 2).Select(i =>
+                new FilePickerFileType(parts[2 * i])
+                { Patterns = parts[2 * i + 1].Split(';').Select(p => p == "*.*" ? "*" : p).ToList() }).ToList();
+            var files = await owner.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+            {
+                Title = Loc.Get("programs_photo_dialog_title"), AllowMultiple = false, FileTypeFilter = types,
+            });
+            return files.Count == 1 ? (true, files[0].TryGetLocalPath()) : (false, null);
         }
 
         /// <summary>WPF StartProgramSession :2200: never on top of a running session; the runner is

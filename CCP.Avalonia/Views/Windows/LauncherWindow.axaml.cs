@@ -35,6 +35,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                               panel => panel.ShowTab("gradedintake")),
             };
 
+        /// <summary>WPF LauncherCatalogue.Find(id)?.Available: a game.* palette row is listed only
+        /// when this head can start it (seeded as SettingsPaletteIndex.GameAvailableProvider).</summary>
+        internal static bool CanStartGame(string id) => Destinations.ContainsKey(id);
+
         internal static IEnumerable<LauncherCard> VisibleCards => LauncherCards.All.Where(c => Destinations.ContainsKey(c.Id));
 
         private static LauncherWindow? _window;

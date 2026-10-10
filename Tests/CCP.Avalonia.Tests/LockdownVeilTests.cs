@@ -238,6 +238,17 @@ public sealed class LockdownVeilTests
                     () => programs.ActiveEnrollment == null || !DialogTexts(shell).Contains(Loc.Get("msg_you_are_in_lockdown_mode_nthere_is_no_escape"))),
                 ("program Start session", () => _ = shell.StartProgramSessionAsync(),
                     () => !DialogTexts(shell).Contains(Loc.Get("msg_you_are_in_lockdown_mode_nthere_is_no_escape"))),
+                // programs 3b (P05; WPF has no gate either)
+                ("program Pause/Resume", () => _ = shell.PauseResumeProgramAsync(),
+                    () => programs.ActiveEnrollment?.State != ConditioningControlPanel.Models.Program.ProgramEnrollmentState.Active
+                          || !DialogTexts(shell).Contains(Loc.Get("msg_you_are_in_lockdown_mode_nthere_is_no_escape"))),
+                ("program Restart", () => _ = shell.RestartProgramAsync(),
+                    () => !DialogTexts(shell).Contains(Loc.Get("msg_you_are_in_lockdown_mode_nthere_is_no_escape"))),
+                ("program ritual photo", () => _ = shell.SubmitProgramRitualAsync("d6_ritual_pink"),
+                    () => !DialogTexts(shell).Contains(Loc.Get("msg_you_are_in_lockdown_mode_nthere_is_no_escape"))),
+                ("program mantra door", () => _ = shell.OpenProgramMantrasAsync(3),
+                    () => shell.OwnedWindows.OfType<MantraWindow>().Any()
+                          || !DialogTexts(shell).Contains(Loc.Get("msg_you_are_in_lockdown_mode_nthere_is_no_escape"))),
                 // WPF LauncherHost.cs:413 and the launcher Stop link
                 ("launcher close", launcher.RequestClose, () => !launcher.IsVisible),
                 ("launcher Stop link", () => Click(launcher.FindControl<Button>("StopLink")!), () => !CoreEngine.IsRunning),
@@ -436,8 +447,12 @@ public sealed class LockdownVeilTests
         {
             shell.ShowTab("lockdown");
             Frame();
-            Assert.True(hint.IsVisible);    // 10 minutes, the default: under the quest minimum
-            combo.SelectedIndex = 3;        // 30 minutes
+            // 7.1.5 (#1388, WPF a40bf0b9b): 20 minutes is the default and counts for the quests.
+            Assert.Equal("20", (combo.SelectedItem as ComboBoxItem)?.Tag);
+            Assert.False(hint.IsVisible);
+            combo.SelectedIndex = 2;        // 15 minutes: under the quest minimum
+            Assert.True(hint.IsVisible);
+            combo.SelectedIndex = 4;        // 30 minutes
             Assert.False(hint.IsVisible);
             combo.SelectedIndex = 0;        // 5 minutes
             Assert.True(hint.IsVisible);
@@ -481,7 +496,7 @@ public sealed class LockdownVeilTests
         Assert.Equal("ff8b0000", Hex(titleBar.Background));
         Assert.Equal("ff100505", Hex(shell.Background));
         Assert.Equal("ffdc143c", Hex(card.BorderBrush));
-        Assert.Equal("ffdc143c", Hex(shell.Named<TextBlock>("TxtHeaderVersion")!.Foreground));
+        Assert.Equal("ffdc143c", Hex(shell.Named<TextBlock>("TxtPlayerTitle")!.Foreground));
 
         var flash = shell.LockdownFlash!;
         Assert.Same(root, flash.Parent);
