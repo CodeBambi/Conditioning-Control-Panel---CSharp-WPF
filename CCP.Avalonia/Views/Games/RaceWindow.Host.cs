@@ -344,9 +344,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
 
         /// <summary>THE LOOM: the player's own woven spirals, slug + url + the params sidecar. The page
         /// draws an entry that kept its params live.
-        /// SEAM(platform): WebAssetServer has no route for WPF's ccp.spirals host (the Spirals folder),
-        /// so a spiral saved WITHOUT params (gif only) cannot be fetched and is left out; one with params
-        /// is woven live and names the WPF url as its floor.</summary>
+        /// The gif comes off the asset server's ccp.spirals route (WPF https://ccp.spirals/), so a spiral
+        /// saved without params plays too.</summary>
         private void PostRaceLoomList()
         {
             try
@@ -355,17 +354,22 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                 {
                     type = "loom-list",
                     spirals = DtrhLoomStore.List()
-                        .Select(s => new { s.Slug, Params = TryParseLoomParams(s.ParamsJson) })
-                        .Where(s => s.Params != null)
                         .Select(s => new
                         {
                             slug = s.Slug,
-                            url = $"https://ccp.spirals/loom_{s.Slug}.gif",
-                            @params = s.Params,
+                            url = RaceLoomUrl(s.Slug),
+                            @params = TryParseLoomParams(s.ParamsJson),
                         }),
                 });
             }
             catch (Exception ex) { Log.Debug("RaceHost.PostLoomList: {E}", ex.Message); }
+        }
+
+        internal static string RaceLoomUrl(string slug)
+        {
+            var server = Platform.WebAssetServer.Shared;
+            server.Hosts.TryAdd(ArcSpiralsHost, () => DtrhLoomStore.SpiralsFolder);
+            return server.HostUrl(ArcSpiralsHost, "loom_" + slug + ".gif");
         }
 
         private static JObject? TryParseLoomParams(string? json)
