@@ -41,6 +41,23 @@ namespace ConditioningControlPanel.Services.Billboard.Providers
 
         public event EventHandler? Changed;
 
+        private readonly List<Action> _unhooks = new();
+
+        /// <summary>Records how to undo one service hook (<see cref="Detach"/>).</summary>
+        protected void OnDetach(Action unhook) { lock (_unhooks) _unhooks.Add(unhook); }
+
+        /// <summary>Unsubscribes every service hook. WPF builds its providers once; a head that builds
+        /// a set per window (the Avalonia shell) calls this when the window closes (PLAYBOOK P41).</summary>
+        public void Detach()
+        {
+            Action[] all;
+            lock (_unhooks) { all = _unhooks.ToArray(); _unhooks.Clear(); }
+            foreach (var unhook in all)
+            {
+                try { unhook(); } catch (Exception ex) { Log.Debug("Billboard provider {Id}: unhook failed: {E}", Id, ex.Message); }
+            }
+        }
+
         protected void RaiseChanged()
         {
             try { Changed?.Invoke(this, EventArgs.Empty); }
@@ -103,17 +120,24 @@ namespace ConditioningControlPanel.Services.Billboard.Providers
             _hooked = true;
             try
             {
+                EventHandler changed = (_, _) => RaiseChanged();
                 if (_head.Quests() is { } q)
                 {
-                    q.QuestsRefreshed += (_, _) => RaiseChanged();
-                    q.QuestCompleted += (_, _) => RaiseChanged();
+                    EventHandler<QuestCompletedEventArgs> completed = (_, _) => RaiseChanged();
+                    q.QuestsRefreshed += changed;
+                    q.QuestCompleted += completed;
+                    OnDetach(() => { q.QuestsRefreshed -= changed; q.QuestCompleted -= completed; });
                 }
                 if (_head.Programs() is { } p)
                 {
-                    p.TodayChanged += (_, _) => RaiseChanged();
-                    p.DayCompleted += (_, _) => RaiseChanged();
+                    EventHandler<ProgramDayEventArgs> day = (_, _) => RaiseChanged();
+                    p.TodayChanged += changed;
+                    p.DayCompleted += day;
+                    OnDetach(() => { p.TodayChanged -= changed; p.DayCompleted -= day; });
                 }
-                WaitingSignals.InvitesChanged += RaiseChanged;
+                Action invites = RaiseChanged;
+                WaitingSignals.InvitesChanged += invites;
+                OnDetach(() => WaitingSignals.InvitesChanged -= invites);
             }
             catch (Exception ex) { Log.Debug("[Billboard] waiting hooks: {E}", ex.Message); }
         }
@@ -213,20 +237,24 @@ namespace ConditioningControlPanel.Services.Billboard.Providers
             {
                 if (log != null)
                 {
-                    log.LogReady += (_, e) =>
+                    EventHandler<SessionLogReadyEventArgs> ready = (_, e) =>
                     {
                         var s = FromLog(e.Log);
                         if (s == null) return;
                         lock (_gate) _session = s;
                         RaiseChanged();
                     };
+                    log.LogReady += ready;
+                    OnDetach(() => log.LogReady -= ready);
                 }
                 if (Settings() is INotifyPropertyChanged settings)
                 {
-                    settings.PropertyChanged += (_, e) =>
+                    PropertyChangedEventHandler moved = (_, e) =>
                     {
                         if (e.PropertyName == nameof(Models.AppSettings.DeeperRecentFiles)) ReadDeeperInBackground();
                     };
+                    settings.PropertyChanged += moved;
+                    OnDetach(() => settings.PropertyChanged -= moved);
                 }
             }
             catch (Exception ex) { Log.Debug("[Billboard] resume hooks: {E}", ex.Message); }
@@ -293,7 +321,13 @@ namespace ConditioningControlPanel.Services.Billboard.Providers
         {
             var chaster = _head.Chaster();
             if (chaster == null) return Array.Empty<BillboardCardSpec>();
-            if (!_hooked) { chaster.LinkChanged += RaiseChanged; _hooked = true; }
+            if (!_hooked)
+            {
+                Action link = RaiseChanged;
+                chaster.LinkChanged += link;
+                OnDetach(() => chaster.LinkChanged -= link);
+                _hooked = true;
+            }
             var verify = chaster.LastLadderVerify;
             var reading = verify is { Ok: true } ? new RaffleReading(verify.DaysCounted, verify.Seconds) : null;
             var card = EventCards.Locktober(chaster.IsLinked, context.NowUtc, reading, Loc);

@@ -53,6 +53,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (DashboardBillboard.PruneSnoozes(snoozes, DateTime.UtcNow)) SaveBillboardSnoozes();
 
             var providers = BillboardProviders(weak);
+            // A set per shell (WPF has one per process): a closed shell unhooks its providers from the
+            // long-lived services, or every shell ever opened stays subscribed (P41).
+            Closed += (_, _) => { foreach (var p in providers) (p as BillboardProviderBase)?.Detach(); };
             var deck = new BillboardDeck(() => providers, BillboardContextNow, snoozes, SaveBillboardSnoozes);
             var cardHost = new BillboardCardHost(deck);
             cardHost.ActionRequested += RunBillboardAction;

@@ -89,6 +89,12 @@ public sealed class BillboardAppProvidersTests
             Click(board.Cta);
             Dispatcher.UIThread.RunJobs();
             Assert.Equal("presets", shell.CurrentTab);
+
+            // The shell closes: its providers leave the long-lived services (P41).
+            Assert.NotNull(InvitesChangedHandlers());
+            shell.Close();
+            Dispatcher.UIThread.RunJobs();
+            Assert.Null(InvitesChangedHandlers());
         }
         finally
         {
@@ -98,6 +104,10 @@ public sealed class BillboardAppProvidersTests
         }
         await Task.CompletedTask;
     });
+
+    private static Delegate? InvitesChangedHandlers() =>
+        (Delegate?)typeof(WaitingSignals).GetField("InvitesChanged",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!.GetValue(null);
 
     /// <summary>The hold never moves on its own: the deck changes only when the test presses.</summary>
     private sealed class FrozenClock : TimeProvider
