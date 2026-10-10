@@ -41,6 +41,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 // A Start control is a STOP control while the engine or a session runs.
                 PossessionTree.SomethingRunning = () => CoreEngine.IsRunning || App.Sessions?.IsRunning == true;
                 InstallPossessionRemember(lockdown);
+                // WPF PossessionAudio.Install: the two synthesised tics (tones, never speech).
+                PossessionAudio.Install(lockdown, () => PossessionDirector.Current);
                 lockdown.LockdownActivated += () => Dispatcher.UIThread.Post(() => PostPossessionRulesIfFirstTime(() => Current));
             }
             catch (Exception ex) { Log.Warning(ex, "Possession: install failed"); }
@@ -145,6 +147,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         internal static void StopPossessionForPanic(MainShellWindow? shell)
         {
             try { PossessionDirector.Current?.PanicStop(); } catch (Exception ex) { Log.Warning(ex, "Possession: panic stop failed"); }
+            try { PossessionAudio.StopForPanic(); } catch (Exception ex) { Log.Debug("Possession: audio stop failed: {E}", ex.Message); }
             try { (shell ?? Current)?.PaintPossessionPulse(double.MaxValue); } catch (Exception ex) { Log.Debug("Possession: pulse drop failed: {E}", ex.Message); }
             try { Deeper.ScreenShake.Stop(); } catch (Exception ex) { Log.Debug("Possession: shake drop failed: {E}", ex.Message); }
         }
