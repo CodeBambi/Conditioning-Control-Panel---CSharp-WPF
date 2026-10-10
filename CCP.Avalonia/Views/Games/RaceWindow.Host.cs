@@ -56,6 +56,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             TrackDecoder.ToWavProvider ??= RaceTrackPlayer.TranscodeToWav;
             Closed += (_, _) => DisposeRace();
             StartRaceHeartbeatWatch();
+            HookRaceVideoFromApp();   // WPF HookVideoEvents(true): a mandatory video pauses the race
             try { Platform.FriendsHead.Service?.EnterActivity(PresenceActivity.Race); }
             catch (Exception ex) { Log.Debug("RaceHost: presence enter: {E}", ex.Message); }
             Log.Information("CaucusHostService: launched");
@@ -430,6 +431,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             Platform.PrizeOwnership.Changed -= OnRaceGrantsChanged;
             ++_raceSession;
             StopRaceHeartbeatWatch();
+            UnhookRaceVideo();
             try { DisposeRaceCloud(); } catch (Exception ex) { Log.Debug("RaceHost: cloud dispose: {E}", ex.Message); }
             try { DisposeRaceTracks(); } catch (Exception ex) { Log.Debug("RaceHost: track dispose: {E}", ex.Message); }
             try { _raceMeta?.FlushSave(); } catch (Exception ex) { Log.Debug("RaceHost: meta flush: {E}", ex.Message); }
