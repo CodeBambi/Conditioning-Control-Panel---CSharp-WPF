@@ -733,7 +733,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 }
                 else
                 {
-                    trendBlock.Text = $"Score: {trend.LatestPercent}% \u2014 Your first {QuizStore.DisplayName(entry)} quiz!";
+                    trendBlock.Text = $"Score: {trend.LatestPercent}% - Your first {QuizStore.DisplayName(entry)} quiz.";
                 }
 
                 _trendPanel.Children.Add(trendBlock);

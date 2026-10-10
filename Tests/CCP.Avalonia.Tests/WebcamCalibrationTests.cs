@@ -252,14 +252,14 @@ public sealed class WebcamCalibrationTests
         focus.EvaluateDesiredState();
         try { Assert.Null(Gazes()); } finally { focus.CanRunOverride = null; }
         win.FindControl<Button>("BtnVerifyAccuracy")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-        Assert.Equal("Move your eyes around — the pink dot should track them. 15s left.", status.Text);
+        Assert.Equal("Move your eyes around - the pink dot should track them. 15s left.", status.Text);
         Gazes()!(new global::Avalonia.Point(400, 300));   // what the tracker raises for a projected gaze
         Assert.True(cursor.IsVisible);
         Assert.Equal(400 - cursor.Width / 2, Canvas.GetLeft(cursor));
         Assert.Equal(300 - cursor.Height / 2, Canvas.GetTop(cursor));
 
         Clock.Advance(1000); Dispatcher.UIThread.RunJobs();
-        Assert.Equal("Move your eyes around — the pink dot should track them. 14s left.", status.Text);
+        Assert.Equal("Move your eyes around - the pink dot should track them. 14s left.", status.Text);
         for (int i = 0; i < 14; i++) { Clock.Advance(1000); Dispatcher.UIThread.RunJobs(); }
         Assert.False(cursor.IsVisible);
         Assert.Null(Gazes());

@@ -271,11 +271,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 
         private static List<CatalogueEntry> SampleEntries() => new()
         {
-            new CatalogueEntry("e1", "Spiral Descent — Deep Focus Mix",
+            new CatalogueEntry("e1", "Spiral Descent - Deep Focus Mix",
                 "A slow ten-minute induction layered over the original audio, with breath cues on the downbeat.",
                 "velvet", null, new List<string> { "induction", "spiral", "slow" }, "CC BY-SA 4.0", 1842,
                 "https://hypnotube.example/v/9f2c41", null, "https://app.cclabs.app/files/e1.ccp"),
-            new CatalogueEntry("e2", "Spiral Descent — Trigger Remix",
+            new CatalogueEntry("e2", "Spiral Descent - Trigger Remix",
                 "Adds three keyword triggers and a shorter tail. Built on velvet's mix.",
                 "velvet", "mirrorfade", new List<string> { "triggers", "remix" }, null, 613,
                 "https://hypnotube.example/v/9f2c41", null, "https://app.cclabs.app/files/e2.ccp"),

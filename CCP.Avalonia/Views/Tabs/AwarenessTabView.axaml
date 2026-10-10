@@ -126,7 +126,7 @@
                                     Theme="{StaticResource SmallPinkButton}"
                                     VerticalAlignment="Center" Margin="0,0,14,0"
                                     Click="BtnAwarenessTutorial_Click"
-                                    ToolTip.Tip="Walk through the Awareness Engine — sources, cooldowns, presets, and the editor.">
+                                    ToolTip.Tip="{loc:Str awareness_tour_tip}">
                                 <TextBlock Text="🎓 Tutorial"/>
                             </Button>
                             <!-- the breathing status glow: a sibling BoxShadow (MainShellWindow SetStatusPulse), never an Effect on the dot -->
@@ -146,9 +146,9 @@
                                           IsCheckedChanged="ChkAwarenessMaster_Changed">
                                     <ToolTip.Tip>
                                         <StackPanel MaxWidth="320">
-                                            <TextBlock Text="Awareness Engine — Master Switch" Foreground="#FF69B4" FontWeight="Bold" FontSize="12" Margin="0,0,0,4"/>
+                                            <TextBlock Text="{loc:Str awareness_master_title}" Foreground="#FF69B4" FontWeight="Bold" FontSize="12" Margin="0,0,0,4"/>
                                             <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="White"
-                                                       Text="Turns the whole Awareness system on or off. When ON, enabled signal sources (OCR + keyboard) feed words into the trigger engine and matching keywords fire their actions in real time. When OFF, nothing detects anything — installed presets stay on disk but do nothing."/>
+                                                       Text="{loc:Str awareness_master_desc}"/>
                                         </StackPanel>
                                     </ToolTip.Tip>
                                 </CheckBox>
@@ -209,7 +209,7 @@
                             <Grid Margin="4,0,4,10">
                                 <TextBlock Text="PRESETS" Foreground="{StaticResource TabHueBrush}" FontSize="10" FontWeight="Bold"
                                            VerticalAlignment="Center"/>
-                                <TextBlock Text="One-click packs — click any card to preview or install"
+                                <TextBlock Text="{loc:Str awareness_packs_hint}"
                                            HorizontalAlignment="Right"
                                            Foreground="{DynamicResource TextDimBrush}" FontSize="10" FontStyle="Italic"/>
                             </Grid>
@@ -266,7 +266,7 @@
                                                 <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="White"
                                                            Text="Minimum gap before the SAME word can fire again, regardless of which trigger caught it. Stops a single word on screen from re-triggering on every OCR scan."/>
                                                 <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,6,0,0"
-                                                           Text="Independent of the &quot;cooldown between effects&quot; above — a different word can still fire within this window. 15s default. Up to an hour."/>
+                                                           Text="{loc:Str awareness_word_cooldown_desc}"/>
                                             </StackPanel>
                                         </ToolTip.Tip>
                                         <Grid.ColumnDefinitions>
@@ -306,7 +306,7 @@
                                             <StackPanel MaxWidth="340">
                                                 <TextBlock Text="Screen OCR" Foreground="#FF69B4" FontWeight="Bold" FontSize="12" Margin="0,0,0,4"/>
                                                 <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="White"
-                                                           Text="Scans your screen every few seconds with optical character recognition and feeds detected words into the trigger engine. This is how she notices text inside other apps — Discord, browsers, image viewers, game UIs, anything visible."/>
+                                                           Text="{loc:Str awareness_ocr_desc}"/>
                                                 <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,6,0,0"
                                                            Text="Reads words from what's on your screen. Uses modest CPU/GPU during active sessions. Turn off if you don't want screen-based triggers or want to save power."/>
                                             </StackPanel>
@@ -332,7 +332,7 @@
                                             <StackPanel MaxWidth="340">
                                                 <TextBlock Text="Keyboard Capture" Foreground="#FF69B4" FontWeight="Bold" FontSize="12" Margin="0,0,0,4"/>
                                                 <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="White"
-                                                           Text="Listens to your keystrokes and assembles a rolling buffer of recent typing. When you type a trigger keyword, it fires immediately — no OCR delay."/>
+                                                           Text="{loc:Str awareness_keyboard_desc}"/>
                                                 <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,6,0,0"
                                                            Text="Catches trigger words as you type them. Only trigger words are acted on; nothing else is stored or logged. Fastest signal source. Turn off if you don't want typing-based triggers."/>
                                             </StackPanel>
@@ -373,7 +373,7 @@
                                             <StackPanel MaxWidth="340">
                                                 <TextBlock Text="Ignore CCP's own windows" Foreground="#FF69B4" FontWeight="Bold" FontSize="12" Margin="0,0,0,4"/>
                                                 <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="White"
-                                                           Text="OCR will skip words drawn by Control Panel itself — avatar speech bubbles, subliminal flash overlays, bouncing text, and the main window. Prevents Awareness from reacting to her own voice and creating feedback loops."/>
+                                                           Text="{loc:Str awareness_skip_own_desc}"/>
                                                 <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,6,0,0"
                                                            Text="Strongly recommended ON. Only turn off if you're debugging why a specific overlay isn't being detected."/>
                                             </StackPanel>
@@ -401,7 +401,7 @@
                                                 <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="White"
                                                            Text="When a trigger fires, its keyword is silenced for a few seconds. Stops a single mention on screen from firing multiple times in quick succession if OCR keeps catching it."/>
                                                 <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,6,0,0"
-                                                           Text="Also works across sources — a keyword fired via Keyboard is muted for OCR detection too, and vice versa."/>
+                                                           Text="{loc:Str awareness_cross_source_desc}"/>
                                             </StackPanel>
                                         </ToolTip.Tip>
                                         <Grid.ColumnDefinitions>
@@ -451,32 +451,32 @@
                                         <Border x:Name="SwatchHighlightPink" Width="22" Height="22" CornerRadius="3"
                                                 Background="#FF69B4" BorderBrush="#3A3A5A" BorderThickness="1"
                                                 Margin="0,0,4,0" Cursor="Hand" Tag="#FF69B4"
-                                                ToolTip.Tip="Hot pink — CCP default"
+                                                ToolTip.Tip="{loc:Str awareness_swatch_pink}"
                                                 PointerPressed="AwarenessHighlightSwatch_Click"/>
                                         <Border x:Name="SwatchHighlightCyan" Width="22" Height="22" CornerRadius="3"
                                                 Background="#00E5FF" BorderBrush="#3A3A5A" BorderThickness="1"
                                                 Margin="0,0,4,0" Cursor="Hand" Tag="#00E5FF"
-                                                ToolTip.Tip="Electric cyan — max contrast on dark UIs"
+                                                ToolTip.Tip="{loc:Str awareness_swatch_cyan}"
                                                 PointerPressed="AwarenessHighlightSwatch_Click"/>
                                         <Border x:Name="SwatchHighlightLime" Width="22" Height="22" CornerRadius="3"
                                                 Background="#9DFF00" BorderBrush="#3A3A5A" BorderThickness="1"
                                                 Margin="0,0,4,0" Cursor="Hand" Tag="#9DFF00"
-                                                ToolTip.Tip="Lime — visible on pink/purple themes"
+                                                ToolTip.Tip="{loc:Str awareness_swatch_lime}"
                                                 PointerPressed="AwarenessHighlightSwatch_Click"/>
                                         <Border x:Name="SwatchHighlightOrange" Width="22" Height="22" CornerRadius="3"
                                                 Background="#FF8A00" BorderBrush="#3A3A5A" BorderThickness="1"
                                                 Margin="0,0,4,0" Cursor="Hand" Tag="#FF8A00"
-                                                ToolTip.Tip="Amber orange — warm alternative"
+                                                ToolTip.Tip="{loc:Str awareness_swatch_orange}"
                                                 PointerPressed="AwarenessHighlightSwatch_Click"/>
                                         <Border x:Name="SwatchHighlightViolet" Width="22" Height="22" CornerRadius="3"
                                                 Background="#B388FF" BorderBrush="#3A3A5A" BorderThickness="1"
                                                 Margin="0,0,4,0" Cursor="Hand" Tag="#B388FF"
-                                                ToolTip.Tip="Soft violet — matches SissyHypno theme"
+                                                ToolTip.Tip="{loc:Str awareness_swatch_violet}"
                                                 PointerPressed="AwarenessHighlightSwatch_Click"/>
                                         <Border x:Name="SwatchHighlightWhite" Width="22" Height="22" CornerRadius="3"
                                                 Background="#FFFFFF" BorderBrush="#3A3A5A" BorderThickness="1"
                                                 Margin="0,0,8,0" Cursor="Hand" Tag="#FFFFFF"
-                                                ToolTip.Tip="Pure white — most neutral option"
+                                                ToolTip.Tip="{loc:Str awareness_swatch_white}"
                                                 PointerPressed="AwarenessHighlightSwatch_Click"/>
                                         <!-- Text seeded with AppSettings' KeywordHighlightColor default (:6906); on WPF
                                              SyncAwarenessHighlightSwatchUi writes it, and the ported half of that
@@ -496,7 +496,7 @@
                                                 <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="White"
                                                            Text="Off (default): highlights render on your desktop but are excluded from screen capture via WDA_EXCLUDEFROMCAPTURE, so OBS, Discord, and screen recordings don't see them."/>
                                                 <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="White" Margin="0,6,0,0"
-                                                           Text="On: lets the highlights show up in recordings — useful for streaming or demos. Also a fallback if your GPU driver is one of the few that hides excluded windows from the desktop itself."/>
+                                                           Text="{loc:Str awareness_capture_desc}"/>
                                             </StackPanel>
                                         </ToolTip.Tip>
                                         <Grid.ColumnDefinitions>
@@ -524,7 +524,7 @@
                                         <StackPanel>
                                             <TextBlock Text="Where she may notice" Foreground="{StaticResource TextLightBrush}"
                                                        FontSize="13" FontWeight="SemiBold" Margin="0,0,0,4"/>
-                                            <TextBlock Text="Triggers normally fire in whatever app you're in. Narrow that here — it applies to typing, OCR and clipboard alike."
+                                            <TextBlock Text="{loc:Str awareness_scope_desc}"
                                                        Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                                        TextWrapping="Wrap" Margin="0,0,0,8"/>
                                             <ComboBox x:Name="CmbAwarenessAppScope"
@@ -556,14 +556,14 @@
                                                 <TextBox x:Name="TxtAwarenessAppList"
                                                          Background="#1E1E32" Foreground="White" BorderBrush="#3A3A5A"
                                                          FontSize="11" Padding="6,4"
-                                                         ToolTip.Tip="App names, comma separated — e.g. chrome, discord, ms-teams. The .exe is optional. Press Enter or click away to apply."
+                                                         ToolTip.Tip="{loc:Str awareness_scope_apps_tip}"
                                                          LostFocus="TxtAwarenessAppList_LostFocus"
                                                          KeyDown="TxtAwarenessAppList_KeyDown"/>
                                                 <TextBlock Text="Comma separated app names. The .exe is optional."
                                                            Foreground="{DynamicResource TextDimBrush}" FontSize="11"
                                                            TextWrapping="Wrap" Margin="0,4,0,0"/>
                                                 <TextBlock x:Name="TxtAwarenessSeenAppsLabel"
-                                                           Text="Recently focused — click to add:"
+                                                           Text="{loc:Str awareness_recent_apps}"
                                                            Foreground="{DynamicResource TextDimBrush}" FontSize="11"
                                                            Margin="0,8,0,4" IsVisible="False"/>
                                                 <!-- Filled at runtime from KeywordTriggerService.GetRecentForegroundApps():
@@ -577,7 +577,7 @@
                                                     <StackPanel MaxWidth="340">
                                                         <TextBlock Text="Stay quiet while Control Panel has focus" Foreground="#FF69B4" FontWeight="Bold" FontSize="12" Margin="0,0,0,4"/>
                                                         <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="White"
-                                                                   Text="Stops a keyword firing when you type it into Control Panel itself — the trigger editor, the search box, or the companion's chat box."/>
+                                                                   Text="{loc:Str awareness_own_typing_desc}"/>
                                                         <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,6,0,0"
                                                                    Text="Different from &quot;Ignore CCP's own windows&quot; above, which only filters OCR by screen position and cannot see your typing at all. Leave this off if you want her reacting to what you say to her in chat."/>
                                                     </StackPanel>

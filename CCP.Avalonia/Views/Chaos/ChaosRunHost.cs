@@ -84,7 +84,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             double elapsed = ChaosRunEngine.Advance(_state);
             var end = ChaosRunEngine.CheckEnd(_state, elapsed);
             if (end == ChaosRunEngine.EndCheck.RunOver) { EndRun(); return; }
-            if (end == ChaosRunEngine.EndCheck.Relapse) _state.PushEvent("☠ relapse. one more loop — everything drips double");
+            if (end == ChaosRunEngine.EndCheck.Relapse) _state.PushEvent("☠ relapse. one more loop - everything drips double");
             var (newWave, _) = ChaosRunEngine.WaveAt(_state, elapsed);
             if (newWave > _state.WaveIndex)
             {

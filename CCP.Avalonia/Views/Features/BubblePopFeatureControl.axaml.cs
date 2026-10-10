@@ -141,7 +141,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
                     "builtin-locked" => "Circe",
                     _ => "your companion"
                 };
-                TxtTriggerEggHint.Text = $"careful — {persona} loves these…";
+                TxtTriggerEggHint.Text = Loc.GetF("label_trigger_bubbles_egg_hint", persona);
 
                 ChkTriggers.IsChecked = s.BubbleTriggersEnabled;
                 TriggerOptionsPanel.IsVisible = s.BubbleTriggersEnabled;

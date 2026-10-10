@@ -48,6 +48,7 @@
      never localized — so there is no {loc:Str} here and no key has been invented for one. -->
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
         x:Class="ConditioningControlPanel.Avalonia.Views.Chaos.ChaosHubWindow"
         Title="the Dollhouse"
         SystemDecorations="None"
@@ -319,7 +320,7 @@
                 <!-- Close/minimize/fullscreen live in the shared WinChrome cluster (top-right of the
                      root grid); the guide button sits left of it so they don't overlap. -->
                 <Button x:Name="BtnGuide" Content="?" Click="BtnGuide_Click"
-                        ToolTip.Tip="How to play — the rules card"
+                        ToolTip.Tip="{loc:Str chaos_guide_tip}"
                         HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,0,120,0"
                         Width="28" Height="28" Padding="0" Background="#22FFFFFF" Foreground="White"
                         HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
@@ -475,7 +476,7 @@
                                 <CheckBox x:Name="ChkPinTop" Theme="{StaticResource Chk}" Content="Keep on top"
                                           ToolTip.Tip="Pins the chaos layer above other windows. Off = other apps can come forward over the descent."/>
                                 <CheckBox x:Name="ChkSharedHost" Theme="{StaticResource Chk}" Content="Smooth bubbles (experimental)"
-                                          ToolTip.Tip="Renders all bubbles on one shared layer instead of a window each, so clicks stay responsive when the screen is busy. Experimental — turn off if bubbles misbehave."/>
+                                          ToolTip.Tip="{loc:Str chaos_shared_host_tip}"/>
                                 <TextBlock Text="Effect intensity" Foreground="{StaticResource TextMut}" FontSize="11" Margin="0,6,0,0"/>
                                 <Slider x:Name="SldEffect" Theme="{StaticResource PinkSlider}" Minimum="0.2" Maximum="1.5"/>
                                 <CheckBox x:Name="ChkAnnouncer" Theme="{StaticResource Chk}" Content="Announcements" Margin="0,8,0,0"/>
@@ -487,7 +488,7 @@
                                 <TextBlock Text="Backdrop opacity" Foreground="{StaticResource TextMut}" FontSize="11" Margin="0,6,0,0"/>
                                 <Slider x:Name="SldBackdropOpacity" Theme="{StaticResource PinkSlider}" Minimum="0" Maximum="1"/>
                                 <CheckBox x:Name="ChkTunnel" Theme="{StaticResource Chk}" Content="3D rabbit-hole tunnel" Margin="0,10,0,0"
-                                          ToolTip.Tip="An endless procedurally-generated 3D tunnel rendered behind the game. Heavier on the GPU — default off."/>
+                                          ToolTip.Tip="An endless procedurally-generated 3D tunnel rendered behind the game. Heavier on the GPU - default off."/>
                             </StackPanel>
                         </Border>
 
@@ -516,7 +517,7 @@
 
                             <Border Theme="{StaticResource CardStyle}">
                                 <StackPanel>
-                                    <TextBlock Text="BUBBLE POOL — what can drop" Theme="{StaticResource SectionHdr}"/>
+                                    <TextBlock Text="BUBBLE POOL - what can drop" Theme="{StaticResource SectionHdr}"/>
                                     <WrapPanel x:Name="GrpPool">
                                         <ToggleButton Theme="{StaticResource Seg}" Tag="flash" Content="Flash" Margin="0,0,6,6"/>
                                         <ToggleButton Theme="{StaticResource Seg}" Tag="subliminal" Content="Subliminal" Margin="0,0,6,6"/>
@@ -632,7 +633,7 @@
                          restored if the pick ever returns to the hub. -->
                     <Button x:Name="BtnBeginDesktop" Content="🖥 FREE DESKTOP" Tag="FreeDesktop" Click="BtnBegin_Click"
                             IsVisible="False"
-                            ToolTip.Tip="Pop bubbles over your real desktop — no story or backdrop, and other windows can stay in front. Your companion floats along."
+                            ToolTip.Tip="Pop bubbles over your real desktop - no story or backdrop, and other windows can stay in front. Your companion floats along."
                             Background="#332A2A4A" Foreground="{StaticResource TextMut}" FontWeight="SemiBold" FontSize="14"
                             BorderBrush="#55E84393" BorderThickness="1" Padding="22,12" Margin="0,0,12,0" Cursor="Hand"
                             CornerRadius="14"/>
@@ -735,9 +736,9 @@
                         <Button x:Name="BtnMenuHowTo" Theme="{StaticResource MenuBtn}" Content="📖  HOW TO PLAY"
                                 Click="Menu_HowTo_Click" ToolTip.Tip="new here? thirty seconds and you'll have it."/>
                         <Button x:Name="BtnMenuDollhouse" Theme="{StaticResource MenuBtn}" Content="🏠  THE DOLL HOUSE"
-                                Click="Menu_Dollhouse_Click" ToolTip.Tip="pockets, toys, the bench — dress the fall."/>
+                                Click="Menu_Dollhouse_Click" ToolTip.Tip="pockets, toys, the bench - dress the fall."/>
                         <Button x:Name="BtnMenuStory" Theme="{StaticResource MenuBtn}" Content="📖  STORY MODE  🔒"
-                                Click="Menu_Story_Click" ToolTip.Tip="the Madam's narrated descent — coming soon."/>
+                                Click="Menu_Story_Click" ToolTip.Tip="the Madam's narrated descent - coming soon."/>
                         <Button x:Name="BtnMenuOptions" Theme="{StaticResource MenuBtn}" Content="⚙  OPTIONS" Click="Menu_Options_Click"/>
                         <Button x:Name="BtnMenuExit" Theme="{StaticResource MenuBtn}" Content="✕  EXIT" Click="Menu_Exit_Click"/>
                     </StackPanel>
@@ -782,7 +783,7 @@
 
                     <StackPanel Grid.Row="0">
                         <TextBlock Text="⚙  OPTIONS" Foreground="{StaticResource Pink}" FontFamily="Consolas, Courier New" FontWeight="Bold" FontSize="28"/>
-                        <TextBlock Text="display &amp; comfort — these stick between descents." Foreground="{StaticResource TextMut}" FontSize="13" Margin="2,6,0,0"/>
+                        <TextBlock Text="display &amp; comfort - these stick between descents." Foreground="{StaticResource TextMut}" FontSize="13" Margin="2,6,0,0"/>
                     </StackPanel>
 
                     <Grid Grid.Row="1" Margin="0,12,0,0" VerticalAlignment="Center" ColumnDefinitions="*,64,*">
@@ -885,7 +886,7 @@
         <!-- shared window controls (top-right, above both views) -->
         <StackPanel x:Name="WinChrome" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top"
                     Margin="0,10,12,0" ZIndex="50">
-            <Button x:Name="BtnMin" Theme="{StaticResource WinBtn}" Content="—" Click="BtnMin_Click" ToolTip.Tip="Minimize"/>
+            <Button x:Name="BtnMin" Theme="{StaticResource WinBtn}" Content="-" Click="BtnMin_Click" ToolTip.Tip="Minimize"/>
             <Button x:Name="BtnFull" Theme="{StaticResource WinBtn}" Content="⛶" Click="BtnFull_Click" ToolTip.Tip="Fullscreen (maximize)"/>
             <Button x:Name="BtnCloseWin" Theme="{StaticResource WinBtn}" Content="✕" Click="BtnClose_Click" ToolTip.Tip="Close"/>
         </StackPanel>

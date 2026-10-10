@@ -280,8 +280,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (Autonomy.IsEnabled) { Autonomy.TestTrigger(); return; }
             var reason = !AutonomyScheduler.HasEntitlement
                 ? ConditioningControlPanel.Localization.Loc.GetF("tiergate_denied_premium", ConditioningControlPanel.Localization.Loc.Get("tab_takeover"))
-                : "Click the green \"Start\" button to enable it, then press Test again.";
-            _ = MessageDialog.ShowAsync(this, "Autonomy Not Running", $"Autonomy Mode isn't running yet.\n\n{reason}");
+                : ConditioningControlPanel.Localization.Loc.Get("autonomy_not_running_start");
+            _ = MessageDialog.ShowAsync(this, ConditioningControlPanel.Localization.Loc.Get("autonomy_not_running_title"),
+                ConditioningControlPanel.Localization.Loc.GetF("autonomy_not_running_body", reason));
         }
 
         /// <summary>Panic (key or tray): Takeover stops with everything else and its queued

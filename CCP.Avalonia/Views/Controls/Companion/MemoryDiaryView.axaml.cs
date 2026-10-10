@@ -562,7 +562,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
             new MemoryFact("Never tease about chastity.",
                 "boundary", Loc.Get("companion_memory_card_boundary"), "set by you · 2026-07-30", isBoundary: true)
                 { UserEditedMetaLabel = "set by you · edited just now" },
-            new MemoryFact("First trance: 2026-03-02 — “the day we met.”",
+            new MemoryFact("First trance: 2026-03-02 - “the day we met.”",
                 "moment", Loc.Get("companion_memory_card_moment"), "pinned · she brings this up on anniversaries", isPinned: true)
                 { UserEditedMetaLabel = "pinned · edited by you" },
             new MemoryFact("Calls his cat “Prime Minister Beans.”",

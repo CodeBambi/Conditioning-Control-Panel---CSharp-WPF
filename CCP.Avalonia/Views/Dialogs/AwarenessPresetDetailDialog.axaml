@@ -138,7 +138,7 @@
             <Border Grid.Row="3" x:Name="BrdAiBadge" IsVisible="False"
                     Background="#2A1A3E" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
                     CornerRadius="6" Padding="10,6" HorizontalAlignment="Left" Margin="0,0,0,12">
-                <TextBlock Text="AI required for best experience — falls back to canned lines offline"
+                <TextBlock Text="AI required for best experience - falls back to canned lines offline"
                            Foreground="{DynamicResource PinkBrush}" FontSize="10" FontWeight="SemiBold"/>
             </Border>
 

@@ -53,7 +53,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (s == null) return;
             if (!Ramp.Tick(s, DateTime.Now, App.Sessions?.IsRunning == true)) return;
             Serilog.Log.Information("Ramp complete - ending session");
-            Platform.OsNotifications.Show("Session Complete", "Intensity ramp finished. Stopping...");
+            Platform.OsNotifications.Show(ConditioningControlPanel.Localization.Loc.Get("dialog_session_complete"), ConditioningControlPanel.Localization.Loc.Get("toast_ramp_done_body"));
             StopEngine();
         }
 
@@ -84,7 +84,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (Scheduler.CheckOnStartup(s, DateTime.Now) != SchedulerRun.Action.Start) return;
             Serilog.Log.Information("Scheduler: App started within scheduled time window - auto-starting");
             MinimizeToTrayForScheduler();
-            Platform.OsNotifications.Show("Scheduler Active", "Session auto-started based on schedule.");
+            Platform.OsNotifications.Show(ConditioningControlPanel.Localization.Loc.Get("toast_scheduler_active_title"), ConditioningControlPanel.Localization.Loc.Get("toast_scheduler_started_body"));
             if (!CoreEngine.IsRunning) StartEngine();
         }
 
@@ -97,13 +97,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 case SchedulerRun.Action.Start:
                     Serilog.Log.Information("Scheduler: Entering scheduled time window - auto-starting");
                     MinimizeToTrayForScheduler();
-                    Platform.OsNotifications.Show("Scheduler Active", "Session auto-started based on schedule.");
+                    Platform.OsNotifications.Show(ConditioningControlPanel.Localization.Loc.Get("toast_scheduler_active_title"), ConditioningControlPanel.Localization.Loc.Get("toast_scheduler_started_body"));
                     StartEngine();
                     break;
                 case SchedulerRun.Action.Stop:
                     Serilog.Log.Information("Scheduler: Exiting scheduled time window - auto-stopping");
                     StopEngine();
-                    Platform.OsNotifications.Show("Scheduler", "Scheduled session ended.");
+                    Platform.OsNotifications.Show(ConditioningControlPanel.Localization.Loc.Get("toast_scheduler_title"), ConditioningControlPanel.Localization.Loc.Get("toast_scheduler_ended_body"));
                     break;
             }
         }

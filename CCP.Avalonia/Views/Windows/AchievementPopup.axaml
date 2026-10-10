@@ -20,7 +20,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="ConditioningControlPanel.Avalonia.Views.Windows.AchievementPopup"
-        Title="Achievement Unlocked!"
+        Title="Achievement Unlocked"
         Width="400" Height="200"
         SystemDecorations="None"
         TransparencyLevelHint="Transparent"
@@ -60,7 +60,7 @@
                 <!-- Trophy Icon + "Achievement Unlocked" -->
                 <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                     <TextBlock x:Name="TxtHeaderIcon" Text="🏆" FontSize="16" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                    <TextBlock x:Name="TxtHeaderText" Text="ACHIEVEMENT UNLOCKED!" Foreground="#FFD700"
+                    <TextBlock x:Name="TxtHeaderText" Text="ACHIEVEMENT UNLOCKED" Foreground="#FFD700"
                                FontWeight="Bold" FontSize="12" VerticalAlignment="Center"/>
                 </StackPanel>
 

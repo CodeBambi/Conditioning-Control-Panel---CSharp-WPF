@@ -204,7 +204,7 @@
                             Margin="0,0,0,8"/>
 
                     <!-- Got it Button -->
-                    <Button x:Name="BtnDismiss" Content="Got it!"
+                    <Button x:Name="BtnDismiss" Content="Got it"
                             Theme="{StaticResource AnnouncementPillButton}"
                             HorizontalAlignment="Center"
                             Width="120" Height="36"

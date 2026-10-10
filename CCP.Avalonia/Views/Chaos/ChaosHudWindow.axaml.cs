@@ -309,11 +309,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
                 const string TIP_FOCUS =
                     "the defuse fuel. a hold costs 30 (15 per bound half). treats refill +10, rabbits and heavy drops +15, a denied tease +10. max 100, you fall in with 50. pressing a live bubble with less than 30 detonates it in your grip. snaps during a freeze are free.";
                 const string TIP_RESIST =
-                    "each ♥ absorbs one trigger: the effect still washes past, but your streak and lust survive (some sins demand 2). with none left, a trigger zeroes both. you fall in with 0 — charms, hearts and mantras grant it.";
+                    "each ♥ absorbs one trigger: the effect still washes past, but your streak and lust survive (some sins demand 2). with none left, a trigger zeroes both. you fall in with 0 - charms, hearts and mantras grant it.";
                 const string TIP_LUST =
-                    "climbs while you perform (each snap +0.07) and pays up to x2.0 at full burn — the orange bar. an unblocked trigger cools it to zero.";
+                    "climbs while you perform (each snap +0.07) and pays up to x2.0 at full burn - the orange bar. an unblocked trigger cools it to zero.";
                 const string TIP_RIPPLE =
-                    "the right-click wave. cast it near the bubbles: treats pop paid, trances snap clean, rabbits get flung. one charge, gathered back over time — READY means it's in your hand.";
+                    "the right-click wave. cast it near the bubbles: treats pop paid, trances snap clean, rabbits get flung. one charge, gathered back over time - READY means it's in your hand.";
 
                 AttachTip(_txtStripClock, "the fall", TIP_CLOCK);
                 AttachTip(_txtStripScore, "score", TIP_SCORE);
@@ -335,10 +335,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
                 AttachTip(_txtShields, "resistance", TIP_RESIST);
                 AttachTip(_hdrFocus, "focus", TIP_FOCUS);
                 AttachTip(_focusPanelBlock, "focus", TIP_FOCUS);
-                AttachTip(_hdrPockets, "toys", "the active toys you took down — two pockets at most. hover a tile for its card; before the fall starts, clicking a tile takes it off.");
-                AttachTip(_hdrAccessories, "accessories", "the accessories you wore down — two at most. hover a tile for its card; before the fall starts, clicking a tile takes it off.");
+                AttachTip(_hdrPockets, "toys", "the active toys you took down - two pockets at most. hover a tile for its card; before the fall starts, clicking a tile takes it off.");
+                AttachTip(_hdrAccessories, "accessories", "the accessories you wore down - two at most. hover a tile for its card; before the fall starts, clicking a tile takes it off.");
                 AttachTip(_hdrConditioning, "conditioning", "the mantras and sins you accepted this run, in draft order. hover each for what it does.");
-                AttachTip(_hdrModifiers, "modifiers", "your trained habits — always on, every descent. switch them at the Dollhouse, not here.");
+                AttachTip(_hdrModifiers, "modifiers", "your trained habits - always on, every descent. switch them at the Dollhouse, not here.");
                 AttachTip(_hdrFeed, "the feed", "the last few things that happened down here, newest first.");
             }
             catch (Exception ex) { Log.Debug("AttachHudTips: {E}", ex.Message); }
@@ -799,8 +799,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
                 _pauseChoiceRow.IsVisible = paused;
                 var settings = CoreSettings.Current;
                 _txtPauseHint.Text = settings.PanicKeyEnabled
-                    ? $"⏸ HELD · {settings.PanicKey} again wakes you up"
-                    : "⏸ HELD · the hole waits";
+                    ? ConditioningControlPanel.Localization.Loc.GetF("chaos_pause_held_key", settings.PanicKey)
+                    : ConditioningControlPanel.Localization.Loc.Get("chaos_pause_held_nokey");
                 _txtPauseHint.IsVisible = paused;
                 _pinnedOpen = paused;
                 if (paused)

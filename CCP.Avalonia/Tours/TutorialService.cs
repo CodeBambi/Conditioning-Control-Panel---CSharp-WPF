@@ -705,7 +705,7 @@ namespace ConditioningControlPanel.Avalonia.Tours
                 {
                     Id = "welcome",
                     Icon = "~",
-                    Title = "Welcome to Conditioning Control Panel!",
+                    Title = "Welcome to Conditioning Control Panel",
                     Description = "Everything lives behind seven doors down the left. This quick tour opens each " +
                                   "one so you know where things are.\n\n" +
                                   "You can replay it any time from the ? button in the title bar.",
@@ -717,7 +717,7 @@ namespace ConditioningControlPanel.Avalonia.Tours
                     Icon = "<3",
                     Title = "Meet Your Companion",
                     Description = "Your avatar companion lives in the tube! Click her to chat, right-click for quick options. " +
-                                  "She evolves as you level up!",
+                                  "She evolves as you level up.",
                     TextPosition = TutorialStepPosition.Center
                 },
                 new TutorialStep
@@ -837,7 +837,7 @@ namespace ConditioningControlPanel.Avalonia.Tours
                     Icon = "?",
                     Title = "Need Help?",
                     Description = "Click the ? button anytime to see detailed guides for each feature. " +
-                                  "You can also start focused tutorials for individual doors!",
+                                  "You can also start focused tutorials for individual doors.",
                     TargetElementName = "BtnMainHelp",
                     TextPosition = TutorialStepPosition.Left
                 },
@@ -863,7 +863,7 @@ namespace ConditioningControlPanel.Avalonia.Tours
                     Id = "gs_welcome",
                     Icon = "~",
                     Title = "Getting Started",
-                    Description = "Let's quickly cover the basics of Conditioning Control Panel!",
+                    Description = "Let's quickly cover the basics of Conditioning Control Panel.",
                     TextPosition = TutorialStepPosition.Center
                 },
                 new TutorialStep
@@ -882,7 +882,7 @@ namespace ConditioningControlPanel.Avalonia.Tours
                     Icon = "?",
                     Title = "Hover for Help",
                     Description = "Hover over any slider, checkbox, or button to see a tooltip explaining what it does. " +
-                                  "This is the fastest way to learn!",
+                                  "This is the fastest way to learn.",
                     TextPosition = TutorialStepPosition.Center
                 },
                 new TutorialStep
@@ -906,7 +906,7 @@ namespace ConditioningControlPanel.Avalonia.Tours
                 {
                     Id = "gs_done",
                     Icon = "<3",
-                    Title = "You're Ready!",
+                    Title = "You're Ready",
                     Description = "That's the basics! Open the seven doors on the left to discover the rest, " +
                                   "or click the ? button for detailed guides on each one.",
                     TextPosition = TutorialStepPosition.Center
@@ -1242,7 +1242,7 @@ namespace ConditioningControlPanel.Avalonia.Tours
                                   "• Per Hour: How many flash events per hour\n" +
                                   "• Images: How many images per flash event\n" +
                                   "• Clickable: Click to dismiss or click-through\n" +
-                                  "• Hydra Mode: Clicking spawns more images!",
+                                  "• Hydra Mode: Clicking spawns more images.",
                     // Phase 3: the dashboard flash card is a Studio shortcut now; the real
                     // controls live on the rack. "FlashSection" was the dead LegacyDashboardHost
                     // Border - the spotlight degraded to a centred card.
@@ -1354,11 +1354,11 @@ namespace ConditioningControlPanel.Avalonia.Tours
                 {
                     Id = "set_done",
                     Icon = "✓",
-                    Title = "Settings Complete!",
+                    Title = "Settings Complete",
                     Description = "Now you know all the settings! Remember:\n" +
                                   "• Hover over any control for details\n" +
                                   "• Use 'Test Now' buttons to preview effects\n" +
-                                  "• Save your setup as a Preset!",
+                                  "• Save your setup as a Preset.",
                     TextPosition = TutorialStepPosition.Center
                 }
             };
@@ -1396,7 +1396,7 @@ namespace ConditioningControlPanel.Avalonia.Tours
                     Description = "Sessions are timed experiences with scripted effects.\n" +
                                   "• Click a session to see details\n" +
                                   "• Sessions bypass level requirements\n" +
-                                  "• Great for trying new features!",
+                                  "• Great for trying new features.",
                     RequiresTab = "presets",
                     TextPosition = TutorialStepPosition.Center
                 },
@@ -1525,7 +1525,7 @@ namespace ConditioningControlPanel.Avalonia.Tours
                     Id = "ach_intro",
                     Icon = "🏆",
                     Title = "Achievements Guide",
-                    Description = "Unlock achievements by reaching milestones!",
+                    Description = "Unlock achievements by reaching milestones.",
                     RequiresTab = "achievements",
                     TextPosition = TutorialStepPosition.Center
                 },
@@ -1550,7 +1550,7 @@ namespace ConditioningControlPanel.Avalonia.Tours
                     Title = "Viewing Achievements",
                     Description = "Click on any achievement tile to see details.\n" +
                                   "Locked achievements show hints on how to unlock them.\n" +
-                                  "Try to collect them all!",
+                                  "Try to collect them all.",
                     RequiresTab = "achievements",
                     TextPosition = TutorialStepPosition.Center
                 }
@@ -1898,7 +1898,7 @@ namespace ConditioningControlPanel.Avalonia.Tours
                     Id = "ava_intro",
                     Icon = "💗",
                     Title = "Avatar Companion Guide",
-                    Description = "Everything about your avatar companion!",
+                    Description = "Everything about your avatar companion.",
                     TextPosition = TutorialStepPosition.Center
                 },
                 new TutorialStep
@@ -1975,7 +1975,7 @@ namespace ConditioningControlPanel.Avalonia.Tours
                 {
                     Id = "mod_welcome",
                     Icon = "\uD83D\uDD27",
-                    Title = "Welcome to the Mod Creator!",
+                    Title = "Welcome to the Mod Creator",
                     Description = "This tool lets you build a complete mod visually - no manual file editing needed.\n\n" +
                                   "We'll walk through each tab so you know exactly what everything does. " +
                                   "You can reopen this guide anytime with the ? button in the title bar.",

@@ -161,14 +161,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             {
                 var count = _phraseBackupService.Export(settings, path);
                 Log.Information("Phrases exported: {Count} to {Path}", count, path);
-                await Dialogs.MessageDialog.ShowAsync(owner, "Phrases Exported",
-                    $"Saved {count} phrase(s) to:\n{path}");
+                await Dialogs.MessageDialog.ShowAsync(owner, Loc.Get("phrases_exported_title"),
+                    Loc.GetF("phrases_exported_body", count, path));
             }
             catch (Exception ex)
             {
                 Log.Error(ex, "Failed to export phrases");
-                await Dialogs.MessageDialog.ShowAsync(owner, "Export Failed",
-                    $"Could not export phrases:\n{ex.Message}");
+                await Dialogs.MessageDialog.ShowAsync(owner, Loc.Get("title_export_failed"),
+                    Loc.GetF("phrases_export_failed_body", ex.Message));
             }
         }
 
@@ -180,12 +180,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
 
             var files = await owner.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
             {
-                Title = "Import Phrases",
+                Title = Loc.Get("phrases_import_picker_title"),
                 AllowMultiple = false,
                 FileTypeFilter = new[]
                 {
-                    new FilePickerFileType("Phrase backup") { Patterns = new[] { "*.ccpphrases.json" } },
-                    new FilePickerFileType("All files") { Patterns = new[] { "*" } },
+                    new FilePickerFileType(Loc.Get("set2_data_phrase_backup_title")) { Patterns = new[] { "*.ccpphrases.json" } },
+                    new FilePickerFileType(Loc.Get("filetype_all_files")) { Patterns = new[] { "*" } },
                 },
             });
             if (files.Count != 1 || files[0].TryGetLocalPath() is not { } path) return;
@@ -193,17 +193,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             if (!_phraseBackupService.Validate(path, out var error))
             {
                 Log.Warning("Phrase import rejected: {Error}", error);
-                await Dialogs.MessageDialog.ShowAsync(owner, "Import Failed",
-                    $"That file isn't a valid phrase backup:\n{error}");
+                await Dialogs.MessageDialog.ShowAsync(owner, Loc.Get("phrases_import_failed_title"),
+                    Loc.GetF("phrases_import_invalid_body", error));
                 return;
             }
 
             // Importing replaces the current phrase pools — confirm first. WPF's two-button styled
             // confirm (MainWindow.PresetIO.cs:115); Enter lands on Cancel (docs/avalonia-decisions.md).
-            if (!await Dialogs.MessageDialog.ConfirmAsync(owner, "Import Phrases?",
-                    "This replaces your current lock-card phrases, subliminals, mantras and other " +
-                    "custom text with the ones in the backup file. Continue?",
-                    defaultToCancel: true, okText: "Import", cancelText: "Cancel"))
+            if (!await Dialogs.MessageDialog.ConfirmAsync(owner, Loc.Get("phrases_import_confirm_title"),
+                    Loc.Get("phrases_import_confirm_body"),
+                    defaultToCancel: true, okText: Loc.Get("btn_import"), cancelText: Loc.Get("btn_cancel")))
                 return;
 
             try
@@ -211,14 +210,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
                 var count = _phraseBackupService.Import(settings, path);
                 CoreSettings.Save();
                 Log.Information("Phrases imported: {Count} from {Path}", count, path);
-                await Dialogs.MessageDialog.ShowAsync(owner, "Phrases Imported",
-                    $"Restored {count} phrase(s). You may need to reopen any open phrase editors to see them.");
+                await Dialogs.MessageDialog.ShowAsync(owner, Loc.Get("phrases_imported_title"),
+                    Loc.GetF("phrases_imported_body", count));
             }
             catch (Exception ex)
             {
                 Log.Error(ex, "Failed to import phrases");
-                await Dialogs.MessageDialog.ShowAsync(owner, "Import Failed",
-                    $"Could not import phrases:\n{ex.Message}");
+                await Dialogs.MessageDialog.ShowAsync(owner, Loc.Get("phrases_import_failed_title"),
+                    Loc.GetF("phrases_import_failed_body", ex.Message));
             }
         }
 
@@ -454,7 +453,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
                 if (Directory.Exists(logs))
                     await Platform.ExternalOpener.OpenAsync(top, logs);
                 else if (top is Window owner)
-                    await Dialogs.MessageDialog.ShowAsync(owner, "Info", Loc.Get("msg_no_logs_found"));
+                    await Dialogs.MessageDialog.ShowAsync(owner, Loc.Get("title_info"), Loc.Get("msg_no_logs_found"));
             }
             catch (Exception ex) { Log.Warning(ex, "Opening the logs folder failed"); }
         }

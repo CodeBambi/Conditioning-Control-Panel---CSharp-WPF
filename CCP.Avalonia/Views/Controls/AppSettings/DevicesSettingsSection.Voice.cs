@@ -83,7 +83,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
                         ? await AskAlwaysOn()
                         : TopLevel.GetTopLevel(this) is Window owner && await MessageDialog.ConfirmAsync(owner, "Always-on microphone",
                             "Wake word keeps the microphone open continuously while Takeover is running so she can hear you call her.\n\n" +
-                            "Everything stays offline — audio is processed on your device and never recorded or sent anywhere.\n\n" +
+                            "Everything stays offline - audio is processed on your device and never recorded or sent anywhere.\n\n" +
                             "Turn on always-on listening?", okText: "Yes", cancelText: "No");
                     if (!yes) { RevertVoiceToggle(ChkSpeechWakeWord); return; }
                 }

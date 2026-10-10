@@ -77,7 +77,7 @@ public sealed class WebcamDevicePickerTests
                 Directory.Delete(root, true);
                 section.FindControl<Button>("BtnWebcamDeviceRefresh")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 Assert.Contains("Re-scanned cameras: none detected.", log.Text);
-                Assert.Equal("(no cameras detected)", ((ComboBoxItem)cmb.SelectedItem!).Content);
+                Assert.Equal(ConditioningControlPanel.Localization.Loc.Get("webcam_no_cameras"), ((ComboBoxItem)cmb.SelectedItem!).Content);
                 window.Close();
                 return Task.CompletedTask;
             });

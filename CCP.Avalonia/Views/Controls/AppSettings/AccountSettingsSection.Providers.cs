@@ -50,7 +50,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
                 if (patreon?.IsAuthenticated == true)
                 {
                     var name = s?.UserDisplayName ?? patreon.DisplayName;
-                    SetText("TxtPatreonStatus", string.IsNullOrEmpty(name) ? "Connected to Patreon" : $"Welcome, {name}!");
+                    SetText("TxtPatreonStatus", string.IsNullOrEmpty(name) ? "Connected to Patreon" : $"Welcome, {name}.");
                     SetText("TxtPatreonTier", TierLine(patreon));
                     SetContent("BtnPatreonLogin", Loc.Get("btn_logout"));
                 }
@@ -66,7 +66,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
                 if (sub?.IsAuthenticated == true)
                 {
                     var name = s?.UserDisplayName ?? sub.DisplayName;
-                    SetText("TxtSubscribeStarStatus", string.IsNullOrEmpty(name) ? "Connected to SubscribeStar" : $"Welcome, {name}!");
+                    SetText("TxtSubscribeStarStatus", string.IsNullOrEmpty(name) ? "Connected to SubscribeStar" : $"Welcome, {name}.");
                     SetText("TxtSubscribeStarTier", TierLine(sub));
                     SetContent("BtnSubscribeStarLogin", Loc.Get("btn_logout"));
                 }

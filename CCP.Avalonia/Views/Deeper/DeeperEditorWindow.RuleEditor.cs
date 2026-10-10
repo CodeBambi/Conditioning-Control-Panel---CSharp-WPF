@@ -641,7 +641,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             for (int i = 0; i < _enhancement.Regions.Count; i++)
             {
                 var r = _enhancement.Regions[i];
-                CmbRuleRegion.Items.Add(string.IsNullOrEmpty(r.Label) ? r.Id : $"{r.Id} — {r.Label}");
+                CmbRuleRegion.Items.Add(string.IsNullOrEmpty(r.Label) ? r.Id : $"{r.Id} - {r.Label}");
                 if (_selectedRule?.RegionConstraint == r.Id) selected = i + 1;
             }
             CmbRuleRegion.SelectedIndex = selected;
@@ -1570,7 +1570,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             for (int i = 0; i < _enhancement.Regions.Count; i++)
             {
                 var r = _enhancement.Regions[i];
-                combo.Items.Add(string.IsNullOrEmpty(r.Label) ? r.Id : $"{r.Id} — {r.Label}");
+                combo.Items.Add(string.IsNullOrEmpty(r.Label) ? r.Id : $"{r.Id} - {r.Label}");
                 if (r.Id == currentId) selected = i + (allowNone ? 1 : 0);
             }
             if (selected < 0) selected = combo.Items.Count > 0 ? 0 : -1;

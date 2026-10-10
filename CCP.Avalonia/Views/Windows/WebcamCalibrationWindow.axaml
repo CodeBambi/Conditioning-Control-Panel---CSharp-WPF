@@ -135,7 +135,7 @@
                 <TextBlock Text="Webcam Calibration"
                            Foreground="#FFFFFF" FontSize="26" FontWeight="Bold"
                            HorizontalAlignment="Center" Margin="0,0,0,4"/>
-                <TextBlock Text="Two short phases — under a minute total."
+                <TextBlock Text="Two short phases - under a minute total."
                            Foreground="#FFB6E1" FontSize="14"
                            HorizontalAlignment="Center" Margin="0,0,0,22"/>
 
@@ -164,7 +164,7 @@
                 <TextBlock Foreground="#FFC96E" FontSize="12.5"
                            HorizontalAlignment="Center" TextAlignment="Center"
                            TextWrapping="Wrap" Margin="0,0,0,8"
-                           Text="⚠ Dim-lit rooms make eye tracking super inconsistent — put some light on your face if you can."/>
+                           Text="⚠ Dim-lit rooms make eye tracking super inconsistent - put some light on your face if you can."/>
                 <TextBlock Foreground="{DynamicResource TextMutedBrush}" FontSize="12"
                            HorizontalAlignment="Center" TextAlignment="Center"
                            TextWrapping="Wrap" Margin="0,0,0,18"
@@ -252,7 +252,7 @@
                 <TextBlock Text="Accuracy test" Foreground="White" FontSize="22" FontWeight="Bold"
                            HorizontalAlignment="Center"/>
                 <TextBlock x:Name="TxtBubbleTestStatus"
-                           Text="Look at each bubble — hold your gaze on it to pop it. ESC cancels."
+                           Text="Look at each bubble - hold your gaze on it to pop it. ESC cancels."
                            Foreground="{DynamicResource TextMutedBrush}" FontSize="14" Margin="0,8,0,0" HorizontalAlignment="Center"/>
             </StackPanel>
         </Grid>
@@ -286,7 +286,7 @@
             <StackPanel>
                 <TextBlock Text="Calibration verified" Foreground="#FF69B4" FontSize="22"
                            FontWeight="Bold" HorizontalAlignment="Center"/>
-                <TextBlock Text="Calibration complete. Blink and mouth tracking warmed up — you're all set."
+                <TextBlock Text="Calibration complete. Blink and mouth tracking warmed up - you're all set."
                            Foreground="{DynamicResource TextSecondaryBrush}" FontSize="13" Margin="0,8,0,0"
                            TextWrapping="Wrap" HorizontalAlignment="Center"/>
                 <TextBlock x:Name="TxtVerifyStatus" Text="Preview accuracy with a live gaze cursor, or pop a few bubbles with your eyes to test (and auto fine-tune) precision."

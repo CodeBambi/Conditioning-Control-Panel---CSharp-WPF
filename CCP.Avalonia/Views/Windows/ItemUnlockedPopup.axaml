@@ -27,7 +27,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
         x:Class="ConditioningControlPanel.Avalonia.Views.Windows.ItemUnlockedPopup"
-        Title="New Item Unlocked!"
+        Title="New Item Unlocked"
         Width="340" Height="104"
         SystemDecorations="None"
         TransparencyLevelHint="Transparent"

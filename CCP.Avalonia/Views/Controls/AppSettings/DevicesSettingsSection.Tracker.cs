@@ -21,7 +21,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
         private bool _webcamMonitorPopulating;
         private bool _trackerSubscribed;
         private int _debugBlinks;
-        private string _debugFace = "—";
+        private string _debugFace = "-";
         private GazeSide? _debugGaze;
         private string? _lastStateKey;
 
@@ -122,7 +122,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
         }
 
         private void PaintCounters() =>
-            TxtWebcamDebugCounters.Text = $"Face: {_debugFace} | Blinks: {_debugBlinks} | Gaze: {(_debugGaze is { } g ? g.ToString() : "-")}";
+            TxtWebcamDebugCounters.Text = Loc.GetF("webcam_debug_counters", _debugFace, _debugBlinks, _debugGaze is { } g ? g.ToString() : "-");
 
         /// <summary>WPF UpdateLabTrackerUi + the state half of EnsureWebcamDebugSubscribed: the pill's text
         /// in the user's language, a green dot and border while live, the Start button's label.</summary>
