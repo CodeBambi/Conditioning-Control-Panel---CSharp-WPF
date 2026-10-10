@@ -92,14 +92,14 @@ public sealed class DtrhDirectorTests
     }
 
     [Fact]
-    public async Task Boot_error_remembers_the_failure_closes_and_opens_the_classic_door()
+    public async Task Boot_error_remembers_the_failure_closes_and_says_so()
     {
         await AvaloniaTestDispatcher.RunAsync(() =>
         {
             EnsureApp();
-            var (door, tuck, restore) = (GameWindow.DtrhLegacyFallback, GameWindow.DtrhTuckShell, GameWindow.DtrhRestoreShell);
+            var (door, tuck, restore) = (GameWindow.DtrhBootErrorNotice, GameWindow.DtrhTuckShell, GameWindow.DtrhRestoreShell);
             int opened = 0;
-            GameWindow.DtrhLegacyFallback = () => opened++;
+            GameWindow.DtrhBootErrorNotice = (_, _) => opened++;
             GameWindow.DtrhTuckShell = () => false;
             GameWindow.DtrhRestoreShell = () => { };
             var w = Dtrh();
@@ -117,7 +117,7 @@ public sealed class DtrhDirectorTests
             finally
             {
                 if (!closed) w.Close();
-                (GameWindow.DtrhLegacyFallback, GameWindow.DtrhTuckShell, GameWindow.DtrhRestoreShell) = (door, tuck, restore);
+                (GameWindow.DtrhBootErrorNotice, GameWindow.DtrhTuckShell, GameWindow.DtrhRestoreShell) = (door, tuck, restore);
             }
             return Task.CompletedTask;
         });
