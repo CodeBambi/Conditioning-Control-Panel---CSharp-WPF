@@ -167,10 +167,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                 // The menu's `levels` panel: only a host that owns the browser window offers it.
                 cloud = RaceCloudAvailable,
                 racingTracks = RaceOwnedTracks(),
-                // WPF sets this when the race came from the Back Room's shared host. Here the room
-                // closes first and the race opens in a window of its own (RaceWindow.Refusal), so
-                // there is no room to go back to.
-                returnToCasino = false,
+                // WPF sets this when the race came from the Back Room (GameWindow.BackRoom.RaceReturn.cs).
+                returnToCasino = RaceFromRoom,
             },
             modId = RaceActiveModId(),
             // Creator mods' own DTRH content (drift pools, portrait, tint, drone) on the ccp.mod route.

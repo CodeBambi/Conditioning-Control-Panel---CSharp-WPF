@@ -147,13 +147,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                     // result ("locked" without a racing purchase, "busy" while a race is up), then the
                     // room winds down and the race opens once it has closed.
                     if ((string?)o["game"] != "race" || _openingRace) return true;
-                    var refusal = RaceWindow.Refusal();
+                    var refusal = RoomRaceRefusal();
                     Post(new { type = "game-open-result", game = "race", ok = refusal == null, reason = refusal });
                     if (refusal != null) return true;
                     _openingRace = true;
-                    // ponytail: WPF hands the race the room's own window and returns to the room after
-                    // (?raceReturn=1); this head opens the race in its own window and ends there.
-                    Closed += (_, _) => { if (RaceWindow.Refusal() == null) RaceWindow.Launch(); };
+                    // The race opens once the room has closed, and the room comes back when the race
+                    // ends (?raceReturn=1): GameWindow.BackRoom.RaceReturn.cs.
+                    ArmRaceHandoff();
                     _backRoom!.RequestClose("race");
                     return true;
                 default:

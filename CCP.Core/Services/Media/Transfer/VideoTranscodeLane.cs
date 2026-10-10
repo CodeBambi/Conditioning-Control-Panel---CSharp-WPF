@@ -16,11 +16,12 @@ namespace ConditioningControlPanel.Services.Transfer
     /// <summary>
     /// Lane C: video, host side (WPF Services/Media/Transfer/VideoTranscodeLane.cs). The targets live
     /// here (720p H.264, 85% of the source bitrate clamped 0.9 to 2.0 Mbps, the 426x240 two-second
-    /// silent preview). The engine in WPF is WinRT MediaTranscoder, which neither Core nor this
-    /// cross-platform head can reference, so it is three seams.
-    /// not ported: the engine itself. With no seam seeded a probe is "unknown" (never "unsupported")
-    /// and a transcode is refused as no-decoder, so a video over 5 MB shows as failed in the page's
-    /// library and is never offered; videos of 5 MB or less travel as they are.
+    /// silent preview). The engine in WPF is WinRT MediaTranscoder, which Core cannot reference, so it
+    /// is three seams. The Windows head seeds them with the same WinRT engine
+    /// (CCP.Avalonia/Platform/WinRtVideoTranscoder.cs); Linux has no engine yet. With no seam seeded a
+    /// probe is "unknown" (never "unsupported") and a transcode is refused as no-decoder, so a video
+    /// over 5 MB shows as failed in the page's library and is never offered; videos of 5 MB or less
+    /// travel as they are.
     /// </summary>
     internal static class VideoTranscodeLane
     {
@@ -91,6 +92,22 @@ namespace ConditioningControlPanel.Services.Transfer
             var run = Preview;
             if (run == null) throw new TranscodeUnsupportedException(TransferFailReasons.NoDecoder);
             return run(srcPath, tmpOut, probe, ct);
+        }
+
+        /// <summary>WPF PreviewStartFraction: the preview starts 12% into the clip.</summary>
+        public const double PreviewStartFraction = 0.12;
+
+        /// <summary>The preview's trim window in ms (WPF MakePreviewAsync): two seconds starting 12% in,
+        /// clamped so the window always fits; a clip shorter than the window is taken whole, and an
+        /// unknown duration takes the first two seconds.</summary>
+        public static (double StartMs, double StopMs) PreviewWindow(int durMs)
+        {
+            if (durMs > PreviewMs)
+            {
+                double start = Math.Clamp(durMs * PreviewStartFraction, 0, durMs - PreviewMs);
+                return (start, start + PreviewMs);
+            }
+            return (0, durMs > 0 ? durMs : PreviewMs);
         }
 
         /// <summary>Fit inside a box preserving aspect, never upscaling, rounding to even dimensions.</summary>

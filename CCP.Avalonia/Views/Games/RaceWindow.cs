@@ -61,12 +61,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
 
         /// <summary>WPF CaucusHostService.Launch: one race at a time, focused rather than relaunched.
         /// Returns null when the gate refused.</summary>
-        internal static GameWindow? Launch()
+        internal static GameWindow? Launch(bool fromRoom = false)
         {
-            if (_live != null) { _live.Activate(); return _live; }
+            if (_live != null) { if (fromRoom) return null; _live.Activate(); return _live; }   // WPF :133: a shared-host launch over a live race goes back to the room
             try { if (!Gate()) return null; }
             catch (Exception ex) { Log.Warning(ex, "[Race] gate threw; refused"); return null; }
             var window = new GameWindow(Spec);
+            if (fromRoom) window.MarkRaceFromRoom();   // before ready: init says returnToCasino
             window.StartRace();
             window.Closed += (_, _) => { if (ReferenceEquals(_live, window)) _live = null; };
             _live = window;

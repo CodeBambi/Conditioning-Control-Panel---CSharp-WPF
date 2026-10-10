@@ -41,7 +41,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             TransferPlatform.AssetUrl = rel => Platform.WebAssetServer.Shared.AssetUrl(rel.Replace('/', Path.DirectorySeparatorChar));
             TransferPlatform.OnUi = a => Dispatcher.UIThread.Post(a);   // always queued, as WPF BeginInvoke: the feed never cuts into the ready frames
             StillCompressLane.Encoder ??= Platform.TransferStillEncoder.Compress;
-            // not ported: the video engine (VideoTranscodeLane.Probe / Transcode / Preview; WPF = WinRT MediaTranscoder).
+            SeedGoonVideoEngine();
+        }
+
+        /// <summary>The video engine behind Core's <see cref="VideoTranscodeLane"/> seams. Windows: the same
+        /// WinRT MediaTranscoder WPF uses (Platform/WinRtVideoTranscoder.cs). Linux: none yet, so a clip
+        /// that needs shrinking is refused as no-decoder and never offered (docs/avalonia-linux-exceptions.md).
+        /// First seeding wins, so a test's fake stays put.</summary>
+        internal static void SeedGoonVideoEngine()
+        {
+#if CCP_WINRT
+            if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 19041)) return;
+            VideoTranscodeLane.Probe ??= Platform.WinRtVideoTranscoder.ProbeAsync;
+            VideoTranscodeLane.Transcode ??= Platform.WinRtVideoTranscoder.TranscodeAsync;
+            VideoTranscodeLane.Preview ??= Platform.WinRtVideoTranscoder.PreviewAsync;
+#endif
         }
 
         /// <summary>WPF Launch :244: the cache folders exist before the page can ask for a file, and the
@@ -54,6 +68,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                 SeedGoonTransfer();
                 TransferCacheStore.Instance.EnsureRoot();
                 TransferCompressionService.Instance.Initialize();   // idempotent
+                TransferCompressionService.Instance.ReleaseHostHold();   // the last window's close held the queue
                 _ = Task.Run(() => TransferCompressionService.Instance.RefreshAsync());
             }
             catch (Exception ex) { Log.Warning("[Goon] transfer cache init: {E}", ex.Message); }
@@ -93,6 +108,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
         {
             try { GoonCacheBridge.Detach(); } catch { }
             _goonCacheAttached = false;
+            // Window close and panic (panic closes the window): every encode in flight is cancelled and its
+            // temp file removed, and nothing new starts until the Goon window is open again.
+            try { TransferCompressionService.Instance.HoldForHostClose(); } catch { }
             try { TransferCompressionService.Instance.ResumeAfterMatch(); } catch { }
             try { TransferInboxStore.Instance.PurgeCommittedSafe("window closed"); } catch { }
         }
