@@ -39,6 +39,9 @@ namespace ConditioningControlPanel.Services
             string? Session(string verb, JObject? p);
             /// <summary>WPF IsSessionRemoteStarted: the run on screen is the one a controller started.</summary>
             bool SessionIsRemoteStarted { get; }
+            /// <summary>WPF RestoreFromTrayForRemote + ShowAvatarTube: after a remote stop the panel comes
+            /// back from the tray. Default: nothing (a head without a tray).</summary>
+            void RestoreWindow() { }
         }
 
         public static volatile IRemoteHead? Head;
@@ -81,8 +84,9 @@ namespace ConditioningControlPanel.Services
             var s = CoreSettings.Current;
             int value;
             try { value = p["value"]?.Value<int>() ?? 25; } catch { return "bad params"; }
-            // WPF EasedOpacity.Ask: clamp to 0..max (pink 50, spiral 100). Easy is not on this head, so factor 1.
-            if (which == "pink") s.PinkFilterOpacity = Math.Clamp(value, 0, 50); else s.SpiralOpacity = Math.Clamp(value, 0, 100);
+            // WPF EasedOpacity.Ask: clamp to 0..max (pink 50, spiral 100), then the subject's Easy factor.
+            if (which == "pink") s.PinkFilterOpacity = _easedPink.Ask(value, 50, EasyFactor);
+            else s.SpiralOpacity = _easedSpiral.Ask(value, 100, EasyFactor);
             OverlayHold = true;
             head.RefreshOverlay(which);
             CoreSettings.Save();
@@ -169,9 +173,59 @@ namespace ConditioningControlPanel.Services
           // v2: hold-to-buzz sends one every second while held (main 719ed9ca5)
           "haptic_level", "haptic_stop" };
 
-        /// <summary>The remote haptic player (WPF RemoteControlService.RemoteHaptics). Easy is not on this head
-        /// (no HUD), so the scale stays 1.</summary>
-        internal static Remote.CoreRemoteHapticDriver RemoteHaptics = new(() => 1.0);   // tests swap in a stepped clock
+        /// <summary>The remote haptic player (WPF RemoteControlService.RemoteHaptics), scaled by Easy.</summary>
+        internal static Remote.CoreRemoteHapticDriver RemoteHaptics = new(() => EasyFactor);   // tests swap in a stepped clock
+
+        // ------------------------------------------------------------------ Easy (WPF RemoteControlService.V2.cs)
+
+        private static readonly Remote.EasedOpacity _easedSpiral = new(), _easedPink = new();
+
+        /// <summary>Scales every remote haptic and remote-set spiral / pink opacity. 1 at the start of a
+        /// session, halved by each Easy press (floor 0.25), back to 1 when the session ends.</summary>
+        public static double EasyFactor { get; private set; } = 1.0;
+
+        /// <summary>Raised when <see cref="EasyFactor"/> changes.</summary>
+        public static event EventHandler? EasyChanged;
+
+        /// <summary>WPF ApplyEasy: halves the remote's strength for the rest of the session (floor 0.25): the
+        /// haptic replays at the new level, a controller-set (or showing) spiral and pink fade. UI thread.</summary>
+        public static void ApplyEasy()
+        {
+            var next = Remote.RemoteEasy.Next(EasyFactor);
+            if (next == EasyFactor) return;
+            EasyFactor = next;
+            Serilog.Log.Information("[RemoteControl] Easy: remote strength now x{Factor}", next);
+            var s = CoreSettings.Current;
+            var changed = false;
+            if (_easedSpiral.Rescale(s.SpiralOpacity, s.SpiralEnabled, next) is int sv) { s.SpiralOpacity = sv; changed = true; }
+            if (_easedPink.Rescale(s.PinkFilterOpacity, s.PinkFilterEnabled, next) is int pv) { s.PinkFilterOpacity = pv; changed = true; }
+            if (changed)
+            {
+                try { Head?.RefreshOverlay("spiral"); Head?.RefreshOverlay("pink"); }
+                catch (Exception ex) { Serilog.Log.Warning(ex, "[RemoteControl] overlay refresh failed"); }
+                CoreSettings.Save();
+            }
+            try { RemoteHaptics.Rescale(); } catch (Exception ex) { Serilog.Log.Warning(ex, "[RemoteControl] haptic rescale failed"); }
+            EasyChanged?.Invoke(null, EventArgs.Empty);
+        }
+
+        /// <summary>WPF RestoreEasedOpacities + the Easy half of ResetV2SessionState: the session ended, so
+        /// where Easy faded the subject's own opacity it is handed back and the factor returns to 1.</summary>
+        public static void ResetEasy()
+        {
+            var s = CoreSettings.Current;
+            var changed = false;
+            if (_easedSpiral.SubjectOriginal is int so) { s.SpiralOpacity = so; changed = true; }
+            if (_easedPink.SubjectOriginal is int po) { s.PinkFilterOpacity = po; changed = true; }
+            _easedSpiral.Reset();
+            _easedPink.Reset();
+            if (changed) CoreSettings.Save();
+            if (EasyFactor != 1.0)
+            {
+                EasyFactor = 1.0;
+                EasyChanged?.Invoke(null, EventArgs.Empty);
+            }
+        }
 
         private static int _panicGeneration;
         /// <summary>Moves on every panic: a command fetched before it never runs after it (RemoteRelay).</summary>
@@ -234,7 +288,7 @@ namespace ConditioningControlPanel.Services
                 case "stop_lock_card": LockCardScheduler.Instance.Stop(); return null;
                 case "trigger_haptic":
                     if (CoreHaptics.Service?.IsConnected != true) return "no_device";   // WPF 7b22ece8c (ccp-bugs #1065): never a silent "ok"
-                    _ = CoreHaptics.Service!.TriggerAsync("remote_control", 0.7, 2000); return null;
+                    _ = CoreHaptics.Service!.TriggerAsync("remote_control", 0.7 * EasyFactor, 2000); return null;
                 // Remote Control v2 (main 719ed9ca5): a pattern or hold-to-buzz level replaces whatever remote haptic plays.
                 case "haptic_pattern":
                 case "haptic_level":
@@ -305,6 +359,8 @@ namespace ConditioningControlPanel.Services
                 SyncPanicUi();
             }
             else if (overlays) CoreSettings.Save();
+            // WPF, both stop paths: "restore window visibility" (RestoreFromTrayForRemote + ShowAvatarTube).
+            try { head?.RestoreWindow(); } catch (Exception ex) { Serilog.Log.Warning(ex, "[RemoteControl] window restore failed"); }
         }
 
         private static void SyncPanicUi() { try { LockdownService.PanicKeyUiSync?.Invoke(); } catch { } }

@@ -224,3 +224,36 @@ public sealed class RemoteMindWipeVerbTests
         }
     }
 }
+
+/// <summary>Contract D on the directory claim (WPF AvailableSubjectsService.TryClaimAsync :221): a merged-account
+/// 409 is about the caller, so it is handed to the recovery and is never reported as a lost race.</summary>
+[Collection(CoreSecretsStatics.Name)]
+public sealed class RemoteDirectoryClaimMergedTests
+{
+    private sealed class Fake : HttpMessageHandler
+    {
+        public string Body = "{}";
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage r, CancellationToken ct) =>
+            Task.FromResult(new HttpResponseMessage(HttpStatusCode.Conflict) { Content = new StringContent(Body) });
+    }
+
+    [Fact]
+    public async Task A_merged_409_goes_to_the_recovery_and_is_not_a_lost_race()
+    {
+        var settings = new ConditioningControlPanel.Models.AppSettings { UnifiedId = "u_canon456" };
+        MergedAccountRecovery.ResetForTest();
+        MergedAccountRecovery.SettingsForTest = () => settings;
+        try
+        {
+            var f = new Fake();
+            var api = new ConditioningControlPanel.Services.Lobby.RemoteDirectoryApi(new HttpClient(f), () => ("u_canon456", "tok"), "http://127.0.0.1:1");
+            Assert.Equal((null, true), await api.ClaimAsync("sub-9"));    // a plain 409: someone claimed first
+            // Already on the canonical: recognised as the tombstone, nothing swapped, and not a lost race.
+            f.Body = "{\"error\":\"merged\",\"canonical_unified_id\":\"u_canon456\"}";
+            Assert.Equal((null, false), await api.ClaimAsync("sub-9"));
+            await MergedAccountRecovery.LastSwap;
+            Assert.Equal("u_canon456", settings.UnifiedId);
+        }
+        finally { MergedAccountRecovery.ResetForTest(); }
+    }
+}
