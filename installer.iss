@@ -211,6 +211,13 @@ Source: "{#PublishDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
 ; pack instead.
 #include "installer-content-deletions.iss"
 
+; UPGRADE FROM WPF (owner, 2026-10-10): the head's installer removes the old WPF program files and
+; keeps all data. Explicit paths inside {app} only; the rules are at the top of the include and
+; pinned by Tests/CCP.Core.Tests/InstallerWpfCleanupTests. Never compiled into the WPF installer.
+#ifdef AvaloniaHead
+#include "installer-wpf-cleanup.iss"
+#endif
+
 ; RETIRED 2026-09-25 (not pack payload, so not in the generated list above): orphaned Bambi
 ; trigger clips from the Resources\sounds ROOT that no code read. Duplicates of Resources\sub_audio.
 ; Exact names only, same rule as above. Resources\sounds\GOOD GIRL.mp3 and 00 Bimbo Drone.mp3 stay
