@@ -38,6 +38,8 @@ internal abstract class PossessionEffectBase : IPossessionEffect
     private static readonly PossessionRole[] _noRoles = Array.Empty<PossessionRole>();
     private readonly List<IDisposable> _overlays = new();
     private readonly List<DispatcherTimer> _timers = new();
+    private readonly List<PossessionLease> _leases = new();
+    private readonly List<(DispatcherTimer Timer, Action Beat)> _beats = new();
     private int _epoch;
 
     protected CancellationTokenSource? Cts { get; private set; }
@@ -130,6 +132,7 @@ internal abstract class PossessionEffectBase : IPossessionEffect
             try { _overlays[i].Dispose(); } catch (Exception ex) { Log.Warning("Possession {Id}: overlay drop failed: {E}", Id, ex.Message); }
         }
         _overlays.Clear();
+        _leases.Clear();
         try { Cts?.Dispose(); } catch { }
         Cts = null;
         Lease = null;
@@ -144,6 +147,54 @@ internal abstract class PossessionEffectBase : IPossessionEffect
         // A cancelled tween is stopped through its timer, or it would land on its end value.
         foreach (var t in _timers) { try { t.Stop(); } catch { } }
         _timers.Clear();
+        foreach (var b in _beats) { try { b.Timer.Stop(); } catch { } }
+        _beats.Clear();
+    }
+
+    /// <summary>A later beat of a choreography. Dropped, unplayed, by any undo.</summary>
+    protected void At(double ms, Action beat)
+    {
+        DispatcherTimer? timer = null;
+        timer = new DispatcherTimer(TimeSpan.FromMilliseconds(Math.Max(1, ms)), DispatcherPriority.Normal, (_, _) =>
+        {
+            timer!.Stop();
+            _beats.RemoveAll(b => ReferenceEquals(b.Timer, timer));
+            if (!IsLive) return;
+            try { beat(); } catch (Exception ex) { Log.Debug("Possession {Id}: beat failed: {E}", Id, ex.Message); }
+        });
+        _beats.Add((timer, beat));
+        timer.Start();
+    }
+
+    /// <summary>Tests: play every beat still waiting, in order, now.</summary>
+    internal void PlayBeatsNow()
+    {
+        var waiting = _beats.ToArray();
+        _beats.Clear();
+        foreach (var (timer, beat) in waiting)
+        {
+            timer.Stop();
+            if (IsLive) beat();
+        }
+    }
+
+    /// <summary>Ease every borrowed transform home over <paramref name="ms"/>.</summary>
+    protected bool SettleLeases(double ms)
+    {
+        foreach (var l in _leases)
+        {
+            Tween(l.Translate, ms, false,
+                (0, TranslateTransform.XProperty, l.Translate.X), (1, TranslateTransform.XProperty, 0),
+                (0, TranslateTransform.YProperty, l.Translate.Y), (1, TranslateTransform.YProperty, 0));
+            Tween(l.Scale, ms, false,
+                (0, ScaleTransform.ScaleXProperty, l.Scale.ScaleX), (1, ScaleTransform.ScaleXProperty, 1),
+                (0, ScaleTransform.ScaleYProperty, l.Scale.ScaleY), (1, ScaleTransform.ScaleYProperty, 1));
+            Tween(l.Skew, ms, false,
+                (0, SkewTransform.AngleXProperty, l.Skew.AngleX), (1, SkewTransform.AngleXProperty, 0),
+                (0, SkewTransform.AngleYProperty, l.Skew.AngleY), (1, SkewTransform.AngleYProperty, 0));
+            Tween(l.Rotate, ms, false, (0, RotateTransform.AngleProperty, l.Rotate.Angle), (1, RotateTransform.AngleProperty, 0));
+        }
+        return _leases.Count > 0;
     }
 
     protected virtual bool CanApplyCore(PossessionContext ctx, PossessionTarget? target) => true;
@@ -195,6 +246,12 @@ internal abstract class PossessionEffectBase : IPossessionEffect
     {
         if (Lease != null) return Lease;
         if (Victim is not { } c) return null;
+        return Lease = LeaseFor(c, origin);
+    }
+
+    /// <summary>Borrow any control's render transform (a scene has several victims).</summary>
+    protected PossessionLease LeaseFor(Control c, RelativePoint origin)
+    {
         var lease = new PossessionLease();
         lease.Group.Children.Add(lease.Scale);
         lease.Group.Children.Add(lease.Skew);
@@ -203,7 +260,8 @@ internal abstract class PossessionEffectBase : IPossessionEffect
         if (c.RenderTransform is Transform own) lease.Group.Children.Add(own);
         Overlay(c, Visual.RenderTransformOriginProperty, origin);
         Overlay<ITransform?>(c, Visual.RenderTransformProperty, lease.Group);
-        return Lease = lease;
+        _leases.Add(lease);
+        return lease;
     }
 
     /// <summary>Stop the tweens in flight (a new move on the same lease would fight them).</summary>

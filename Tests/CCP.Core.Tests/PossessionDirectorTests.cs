@@ -38,6 +38,55 @@ public sealed class PossessionDirectorTests
         public Task UndoAsync(TimeSpan duration) { Undone.Add(duration); IsLive = false; return Task.CompletedTask; }
     }
 
+    private sealed class FakeScene : IPossessionScene
+    {
+        public string Id => "scene_fake";
+        public PossessionRung MinRung => PossessionRung.Melt;
+        public PossessionIntensity MinIntensity => PossessionIntensity.Gentle;
+        public bool IsBig => true;
+        public bool UsesFlicker => false;
+        public double Weight => 1;
+        public TimeSpan HoldFor => TimeSpan.Zero;
+        public IReadOnlyList<PossessionRole> Roles { get; } = Array.Empty<PossessionRole>();
+        public int Beats { get; init; } = 2;
+        public bool IsLive { get; private set; }
+        public int Applied;
+        public readonly List<PossessionRung> Rungs = new();
+        public readonly List<TimeSpan> Undone = new();
+        public bool CanApply(PossessionContext ctx, PossessionTarget? target) => target == null;
+        public Task ApplyAsync(PossessionContext ctx, PossessionTarget? target, CancellationToken ct)
+        {
+            Applied++; IsLive = true; Rungs.Add(ctx.Rung);
+            return Task.CompletedTask;
+        }
+        public Task UndoAsync(TimeSpan duration) { Undone.Add(duration); IsLive = false; return Task.CompletedTask; }
+    }
+
+    [Fact]
+    public void FromMeltAScenePlaysOnTheRoll_NeverBelowIt_NeverWhenItDoesNotFit_AndPanicEndsIt()
+    {
+        using var r = new Rig();
+        var scene = new FakeScene();
+        var wide = new FakeScene { Beats = 99 };       // can never fit the room
+        r.Director.Scenes.Add(wide);
+        r.Director.Scenes.Add(scene);
+        r.Lockdown.Activate(TimeSpan.FromMinutes(20));
+
+        for (double f = 0.09; f < 0.34; f += 0.01) r.TickAt(f);       // Settle and Drift: no scenes
+        Assert.Equal(0, scene.Applied);
+
+        for (double f = 0.36; f < 0.84 && scene.Applied == 0; f += 0.004) r.TickAt(f);
+        Assert.Equal(1, scene.Applied);
+        Assert.All(scene.Rungs, rung => Assert.True(rung >= PossessionRung.Melt));
+        Assert.Equal(0, wide.Applied);
+        Assert.True(r.Director.LiveEffectCount >= 1);
+
+        r.Director.PanicStop();
+        Assert.Equal(new[] { TimeSpan.Zero }, scene.Undone);          // a scene comes back like any ghost
+        Assert.False(scene.IsLive);
+        Assert.Equal(0, r.Director.LiveEffectCount);
+    }
+
     private sealed class Rig : IDisposable
     {
         public readonly LockdownService Lockdown = new();

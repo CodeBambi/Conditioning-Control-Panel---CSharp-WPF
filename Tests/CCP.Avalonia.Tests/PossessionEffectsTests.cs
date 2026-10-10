@@ -13,6 +13,7 @@ using ConditioningControlPanel.Avalonia.Views.Windows;
 using ConditioningControlPanel.Services;
 using ConditioningControlPanel.Services.Possession;
 using ConditioningControlPanel.Services.Possession.Effects;
+using ConditioningControlPanel.Services.Possession.Scenes;
 using Xunit;
 
 namespace CCP.Avalonia.Tests;
@@ -278,6 +279,78 @@ public sealed class PossessionEffectsTests
             calm.ApplyAsync(Ctx(host, photosafe: true), lt, default).GetAwaiter().GetResult();
             calm.UndoAsync(TimeSpan.Zero);
             Assert.Same(ownTransform, label.RenderTransform);
+        }
+        finally { win.Close(); }
+    });
+
+    [Fact]
+    public void TheScenesTakeOnlyFreeDisplayVictims_PlayTheirBeats_AndGiveEveryOneBackInTheCall() => AvaloniaTestDispatcher.Run(() =>
+    {
+        EnsureApp();
+        var a = Tagged(new TextBlock { Name = "TxtA", Text = "level one" }, PossessionRole.Label, "the level label");
+        var b = Tagged(new TextBlock { Name = "TxtB", Text = "the readout" }, PossessionRole.Label, "the readout");
+        var title = Tagged(new TextBlock { Name = "TxtHead", Text = "Basic Subject" }, PossessionRole.Title, "the title");
+        var card = Tagged(new Border { Name = "CardPips", Width = 80, Height = 20, Background = Brushes.Gray }, PossessionRole.Card, "the pips");
+        var exitCard = Tagged(new Border { Name = "CardExit", Child = new Button { Content = "Emergency Exit" } }, PossessionRole.Card, "the lockdown card");
+        var win = new Window { Width = 400, Height = 300, Content = new StackPanel { Children = { a, b, title, card, exitCard } } };
+        win.Show();
+        Dispatcher.UIThread.RunJobs();
+        var pulses = new List<double>();
+        var named = new List<(string, string?)>();
+        var cache = new Dictionary<string, PossessionTarget>();
+        var host = new PossessionHost { Targets = () => PossessionTree.Collect(win, cache), EdgePulse = pulses.Add, IsUsable = () => true };
+        PossessionContext SceneCtx(bool photosafe = false) => new()
+        {
+            Host = host, Rung = PossessionRung.Melt, Intensity = PossessionIntensity.Eerie, Photosafe = photosafe,
+            Rng = new Random(5), ElapsedFraction = 0.4, Remaining = TimeSpan.FromMinutes(12), Name = (id, t) => named.Add((id, t)),
+        };
+        try
+        {
+            Assert.Equal(new[] { "scene_the_count", "scene_where_you_are" }, MainShellWindow.PossessionHeadScenes().Select(x => x.Id).ToArray());
+
+            var count = new TheCountScene();
+            Assert.Equal(3, count.Beats);
+            Assert.True(count.CanApply(SceneCtx(), null));
+            count.ApplyAsync(SceneCtx(), null, default).GetAwaiter().GetResult();
+            Assert.True(count.IsLive);
+            Assert.Equal(3, count.Booked.Count);                       // two labels and the title, booked
+            Assert.All(count.Booked, t => Assert.True(t.IsLive));
+            Assert.Equal(("scene_the_count", "the title"), Assert.Single(named));
+            Assert.Null(a.RenderTransform);                             // nothing before its beat
+            count.PlayBeatsNow();
+            Assert.IsType<TransformGroup>(a.RenderTransform);
+            Assert.IsType<TransformGroup>(b.RenderTransform);
+            Assert.NotEqual("Basic Subject", title.Text);
+            Assert.Equal(new[] { 0.5 }, pulses);
+            Assert.True(count.UndoAsync(TimeSpan.Zero).IsCompletedSuccessfully);
+            Assert.Null(a.RenderTransform);
+            Assert.Null(b.RenderTransform);
+            Assert.Equal("Basic Subject", title.Text);
+            Assert.All(host.Targets(), t => Assert.False(t.IsLive));    // every victim is free again
+            Assert.Empty(count.Booked);
+
+            // Undone before a beat came due: the beat never plays.
+            count.ApplyAsync(SceneCtx(photosafe: true), null, default).GetAwaiter().GetResult();
+            count.UndoAsync(TimeSpan.Zero);
+            count.PlayBeatsNow();
+            Assert.Null(a.RenderTransform);
+            Assert.Single(pulses);
+
+            // Where you are: the free card, never the one that holds a way out.
+            var where = new WhereYouAreScene();
+            where.ApplyAsync(SceneCtx(), null, default).GetAwaiter().GetResult();
+            Assert.Equal("CardPips", Assert.Single(where.Booked).Key);
+            where.PlayBeatsNow();
+            Assert.IsType<TransformGroup>(card.RenderTransform);
+            Assert.Null(exitCard.RenderTransform);
+            Assert.True(card.IsHitTestVisible && card.IsVisible);
+            Assert.True(where.UndoAsync(TimeSpan.Zero).IsCompletedSuccessfully);
+            Assert.Null(card.RenderTransform);
+
+            // A card someone else holds is not free: the scene has no victim and says so.
+            host.Targets().First(t => t.Key == "CardPips").IsLive = true;
+            Assert.False(where.CanApply(SceneCtx(), null));
+            host.Targets().First(t => t.Key == "CardPips").IsLive = false;
         }
         finally { win.Close(); }
     });

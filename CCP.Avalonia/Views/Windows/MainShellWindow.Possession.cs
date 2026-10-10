@@ -37,6 +37,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             {
                 PossessionDirector.Current?.Dispose();
                 PossessionDirector.Current = new PossessionDirector(lockdown, PossessionHeadEffects(), PossessionHostFor(() => Current));
+                PossessionDirector.Current.Scenes.AddRange(PossessionHeadScenes());
             }
             catch (Exception ex) { Log.Warning(ex, "Possession: install failed"); }
         }
@@ -50,6 +51,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             new Services.Possession.Effects.MeltEffect(), new Services.Possession.Effects.GlyphRotEffect(),
             new Services.Possession.Effects.CrackEffect(),
             new Services.Possession.Effects.RetitleEffect(),
+        };
+
+        /// <summary>WPF PossessionSceneCatalog, minus the rail sweep (its victims are the rail doors,
+        /// which are buttons and not enrolled on this head).</summary>
+        internal static IPossessionScene[] PossessionHeadScenes() => new IPossessionScene[]
+        {
+            new Services.Possession.Scenes.TheCountScene(), new Services.Possession.Scenes.WhereYouAreScene(),
         };
 
         /// <summary>The director's host over a shell (the live one at run time, a test's own in tests).</summary>

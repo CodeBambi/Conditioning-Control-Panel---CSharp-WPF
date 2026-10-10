@@ -6,7 +6,8 @@
 // Carried from WPF: activation / deactivation / tick / tripwire / restart handlers, the one-pick-at-a-time
 // cadence, the live ledger mirrored by key, hold-then-undo, the reassembly exit with its generation
 // guard, UndoAll (sync, never throws), PulseEdges for the Dose keeper, the barks.
-// Not on this director (each logged once when it would have run): scenes (one pick in three from Melt),
+// Scenes (one pick in three from Melt) are elected here and played by the head (IPossessionScene).
+// Not on this director (each logged once when it would have run):
 // the warden verbs (knock, stare, leave, return), the proximity pick (no pointer reading), the reactive
 // layer (RequestReactive / PossessionEvents) and the ember charge / outline around a victim.
 
@@ -213,29 +214,40 @@ public sealed class PossessionDirector : IDisposable
         {
             var now = Now();
 
-            // WPF A6: from Melt up one pick in three is a scene. No scene has a head here; the roll is
-            // still spent so the single-effect cadence matches, and the pick falls through to the deck.
-            if (rung >= PossessionRung.Melt && _rng.Next(SceneEveryNthPick) == 0) LogMissingOnce("scenes");
-
-            var targets = SnapshotTargets(now, out var targetMetas);
-            var effectMetas = _effects.Select(PossessionDeck.MetaOf).ToList();
-
-            var pick = PossessionDeck.Pick(effectMetas, targetMetas, rung, _intensity, _photosafe, _lastTargetKey, _rng, null);
-            if (pick == null)
+            // WPF A6: from Melt up one pick in three is a scene (TryStartSceneAsync). The roll is
+            // spent either way so the single-effect cadence matches; with no scene registered, or none
+            // that fits, the pick falls through to the deck.
+            IPossessionEffect? effect = null;
+            PossessionTarget? target = null;
+            PossessionContext? ctx = null;
+            if (rung >= PossessionRung.Melt && _rng.Next(SceneEveryNthPick) == 0)
             {
-                // Nothing may run right now. Try again on the next cadence beat.
-                _nextDue = now + PossessionDeck.NextDelay(rung, _intensity, _rng);
-                return;
+                if (Scenes.Count == 0) LogMissingOnce("scenes");
+                else if (ElectScene(rung, remaining, frac, out var sceneCtx) is { } scene) { effect = scene; ctx = sceneCtx; }
             }
 
-            var effect = _effects[pick.Value.EffectIndex];
-            var target = pick.Value.TargetIndex >= 0 ? targets[pick.Value.TargetIndex] : null;
-            var ctx = BuildContext(rung, remaining, frac, effect);
-
-            if (effect.IsLive || !effect.CanApply(ctx, target))
+            if (effect == null || ctx == null)
             {
-                _nextDue = now + PossessionDeck.NextDelay(rung, _intensity, _rng);
-                return;
+                var targets = SnapshotTargets(now, out var targetMetas);
+                var effectMetas = _effects.Select(PossessionDeck.MetaOf).ToList();
+
+                var pick = PossessionDeck.Pick(effectMetas, targetMetas, rung, _intensity, _photosafe, _lastTargetKey, _rng, null);
+                if (pick == null)
+                {
+                    // Nothing may run right now. Try again on the next cadence beat.
+                    _nextDue = now + PossessionDeck.NextDelay(rung, _intensity, _rng);
+                    return;
+                }
+
+                effect = _effects[pick.Value.EffectIndex];
+                target = pick.Value.TargetIndex >= 0 ? targets[pick.Value.TargetIndex] : null;
+                ctx = BuildContext(rung, remaining, frac, effect);
+
+                if (effect.IsLive || !effect.CanApply(ctx, target))
+                {
+                    _nextDue = now + PossessionDeck.NextDelay(rung, _intensity, _rng);
+                    return;
+                }
             }
 
             // Book the victim BEFORE any await so a second tick cannot double-book it.
@@ -283,6 +295,36 @@ public sealed class PossessionDirector : IDisposable
     }
 
     private int LiveSlots => _live.Count;
+
+    /// <summary>The choreographies this head can play (WPF PossessionSceneCatalog). A scene is a haunt
+    /// with no target of its own: it takes its victims from the host registry, books them, and gives
+    /// every one back on undo. Empty on a head with none.</summary>
+    public List<IPossessionScene> Scenes { get; } = new();
+
+    /// <summary>WPF TryStartSceneAsync, the election: a scene that is not already playing, is allowed
+    /// at this rung, intensity and photosafe setting, fits the room by its beats, and says it has victims.</summary>
+    private IPossessionScene? ElectScene(PossessionRung rung, TimeSpan remaining, double frac, out PossessionContext? ctx)
+    {
+        ctx = null;
+        var eligible = new List<(IPossessionScene Scene, PossessionContext Ctx)>();
+        foreach (var sc in Scenes)
+        {
+            try
+            {
+                if (sc == null || sc.IsLive) continue;
+                if (sc.MinRung > rung || sc.MinIntensity > _intensity) continue;
+                if (sc.UsesFlicker && _photosafe) continue;
+                if (!PossessionDeck.FitsConcurrency(LiveSlots, sc.Beats, rung)) continue;
+                var c = BuildContext(rung, remaining, frac, sc);
+                if (sc.CanApply(c, null)) eligible.Add((sc, c));
+            }
+            catch (Exception ex) { Log.Debug("Possession scene {Scene} could not be asked: {Error}", sc?.Id, ex.Message); }
+        }
+        if (eligible.Count == 0) return null;
+        var won = eligible[eligible.Count == 1 ? 0 : _rng.Next(eligible.Count)];
+        ctx = won.Ctx;
+        return won.Scene;
+    }
 
     private PossessionContext BuildContext(PossessionRung rung, TimeSpan remaining, double frac, IPossessionEffect effect) => new()
     {
