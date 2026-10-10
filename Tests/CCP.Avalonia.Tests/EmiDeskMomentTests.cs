@@ -131,6 +131,51 @@ public sealed class EmiDeskMomentTests
             engine.ResetForTests();
         }
     });
+
+    [Fact]
+    public Task TheAlivePollLeansHerTowardTheCursor_AndComesBackToRest() => AvaloniaTestDispatcher.RunAsync(async () =>
+    {
+        EnsureApp();
+        await Task.CompletedTask;
+        var oldSettings = CoreSettings.ServiceProvider;
+        var service = new SettingsService();
+        CoreSettings.ServiceProvider = () => service;
+        var w = new EmiDeskWindow();
+        try
+        {
+            CoreSettings.Current.MotionLevel = ConditioningControlPanel.Models.MotionLevel.Full;
+            PixelPoint? cursor = null;
+            w.CursorProbe = () => cursor;
+            w.Show();
+            Dispatcher.UIThread.RunJobs();
+            w.CancelChain();
+            Assert.True(w.AliveRunning);                  // the poll starts with her
+
+            var now = DateTime.UtcNow;
+            w.AliveStep(now);
+            Assert.Equal((0d, 0d), w.Gaze);               // no cursor from the OS: she stays at rest
+
+            var body = w.BodyScreenRect;
+            cursor = new PixelPoint((int)(body.X + body.Width * 4), (int)(body.Y + body.Height / 2));
+            for (int i = 1; i <= 40; i++) w.AliveStep(now.AddMilliseconds(100 * i));
+            Assert.True(w.Gaze.X > 0.5, "she leans toward a cursor on her right");
+
+            cursor = new PixelPoint((int)(body.X + body.Width / 2), (int)(body.Y + body.Height / 2));
+            w.CancelChain();                              // a perk may have taken her face: the lean waits for it
+            for (int i = 41; i <= 140; i++) { w.CancelChain(); w.AliveStep(now.AddMilliseconds(100 * i)); }
+            Assert.True(Math.Abs(w.Gaze.X) < 0.2, "the lean has an out: it eases back when the cursor is on her");
+
+            w.Hide();
+            Dispatcher.UIThread.RunJobs();
+            Assert.False(w.AliveRunning);                 // and the poll stops when she goes
+            Assert.Equal((0d, 0d), w.Gaze);
+        }
+        finally
+        {
+            w.ShutDown();
+            CoreSettings.ServiceProvider = oldSettings;
+        }
+    });
 }
 
 /// <summary>HC8, the nudges: a track outside the lines file's vocabulary falls back to its fixed line,

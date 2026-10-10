@@ -2393,11 +2393,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         // still reads as the same code and the later layers have the exact call sites to fill in.
         // React.cs and Fx.cs are no longer among them: both are real, above.
 
-        /// <summary>ponytail: EmiDeskWindow.Alive.cs - the 100 ms gaze/idle poll. Starts with her.</summary>
-        private void StartAlive() { }
-
-        /// <summary>ponytail: EmiDeskWindow.Alive.cs - stops the poll when she goes.</summary>
-        private void StopAlive() { }
+        // StartAlive / StopAlive: EmiDeskWindow.Alive.cs (the 100 ms gaze and idle poll).
 
         // The click pat + poke ladder: EmiDeskWindow.Poke.cs (E9).
 
