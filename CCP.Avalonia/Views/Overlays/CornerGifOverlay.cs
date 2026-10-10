@@ -63,6 +63,37 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         internal static Task? LastDecode { get; private set; }
         internal static IReadOnlyCollection<int> ShownSlots => Windows.Keys;
         internal static bool HasActiveOverlays => Windows.Count > 0 || Queue.Count > 0 || Decoding.Count > 0;
+
+        /// <summary>The session-owned slot (WPF SessionEngine's own corner window): one more window through
+        /// the same queue, decode and placement, outside the user's <see cref="CornerGifPlanner.MaxOverlays"/>.</summary>
+        internal const int SessionSlot = 1000;
+
+        /// <summary>The session's corner GIF is up or on its way.</summary>
+        internal static bool SessionActive => Windows.ContainsKey(SessionSlot) || Queue.ContainsKey(SessionSlot) || Decoding.Contains(SessionSlot);
+
+        /// <summary>WPF CornerGifService.HasActiveOverlays: the user's own slots only.</summary>
+        internal static bool HasStandaloneOverlays =>
+            Windows.Keys.Any(k => k != SessionSlot) || Queue.Keys.Any(k => k != SessionSlot) || Decoding.Any(k => k != SessionSlot);
+
+        /// <summary>WPF SessionEngine.ShowCornerGif. The session's own art when the file exists, else the
+        /// built-in corner art (never the user's fullscreen spiral pick). An animated gif plays as a gif.</summary>
+        internal static void ShowSession(Visual host, string path, CornerPosition position, int size, int opacity)
+        {
+            _host = host;
+            CloseSlot(SessionSlot);   // a recreate (size / path change) never stacks a second one
+            QueueShow(SessionSlot, new CornerGifOverlaySetting
+            {
+                Enabled = true, GifPath = path ?? "", Position = position, Size = size > 0 ? size : 300, Opacity = opacity,
+            });
+        }
+
+        /// <summary>WPF SessionEngine.CloseCornerGif: down now; with <paramref name="handBack"/> the corner
+        /// goes back to the user's own slots (they stood down while the session held it).</summary>
+        internal static void HideSession(bool handBack)
+        {
+            CloseSlot(SessionSlot);
+            if (handBack && _host is { } host) Refresh(host);
+        }
         internal static SpiralOverlayWindow? WindowFor(int slot) => Windows.TryGetValue(slot, out var s) ? s.Window : null;
         internal static int FrameIndexFor(int slot) => Windows.TryGetValue(slot, out var s) ? s.Index : -1;
         internal static string SentinelPath => Path.Combine(CorePaths.UserData, "logs", "cornergif_restore.active");
@@ -70,11 +101,22 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         private static long NowMs => (long)Clock.GetElapsedTime(0).TotalMilliseconds;
 
         /// <summary>WPF App.xaml.cs:480: the <see cref="CoreCornerGif"/> surface seam, on the UI thread.</summary>
-        internal static void Seed(Func<Visual?> host) =>
+        internal static void Seed(Func<Visual?> host)
+        {
             CoreCornerGif.RefreshHandler = index => Dispatcher.UIThread.Post(() =>
             {
                 if (host() is { } h) Refresh(h, index);
             });
+            // The session-scoped corner GIF (U13): the runner decides, this draws.
+            CoreCornerGif.ShowSessionHandler = (path, position, size, opacity) => Dispatcher.UIThread.Post(() =>
+            {
+                // Asked again at draw time: the runner may have closed it while this was queued.
+                if (CoreCornerGif.SessionActive && host() is { } h) ShowSession(h, path, position, size, opacity);
+            });
+            CoreCornerGif.HideSessionHandler = handBack => Dispatcher.UIThread.Post(() => HideSession(handBack));
+            CoreCornerGif.StandaloneActiveProvider = () => HasStandaloneOverlays;
+            CoreCornerGif.SpiralVisibleProvider = () => SpiralOverlay.IsShowing;
+        }
 
         /// <summary>WPF RefreshOverlays (index &lt; 0) / RefreshSlot (index &gt;= 0). UI thread.</summary>
         public static void Refresh(Visual host, int index = -1)
@@ -83,8 +125,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             var overlays = CoreSettings.Current.CornerGifOverlays;
             if (index < 0)
             {
-                StopAll();
-                if (overlays == null) return;
+                StopStandalone();
+                if (overlays == null) { CoreCornerGif.RaiseStandaloneChanged(); return; }
                 int queued = 0;
                 for (int i = 0; i < overlays.Count; i++)
                 {
@@ -95,15 +137,34 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                         Log.Warning("CornerGif: more than {Max} enabled corner-GIF slots - ignoring the rest", CornerGifPlanner.MaxOverlays);
                         break;
                     }
+                    // WPF CornerGifMedia.AllowStandaloneCornerGif: a slot yields while the session's is up.
+                    if (!CornerGifMedia.AllowStandaloneCornerGif(o.Enabled, SessionActive || CoreCornerGif.SessionActive)) continue;
                     queued++;
                     QueueShow(i, o);
                 }
+                CoreCornerGif.RaiseStandaloneChanged();   // WPF RefreshOverlays -> SessionEngine.RefreshCornerGifPolicy
                 return;
             }
 
+            if (index == SessionSlot) return;   // never a user slot
             CloseSlot(index);
             if (overlays == null || index >= overlays.Count || index >= CornerGifPlanner.MaxOverlays) return;
-            if (overlays[index] is { Enabled: true } setting) QueueShow(index, setting);
+            if (overlays[index] is { Enabled: true } setting
+                && CornerGifMedia.AllowStandaloneCornerGif(setting.Enabled, SessionActive || CoreCornerGif.SessionActive))
+                QueueShow(index, setting);
+            CoreCornerGif.RaiseStandaloneChanged();
+        }
+
+        /// <summary>Every user slot down and its queued realization cancelled; the session's stays.</summary>
+        private static void StopStandalone()
+        {
+            foreach (var i in Windows.Keys.Where(k => k != SessionSlot).ToList()) Close(i);
+            foreach (var i in Seq.Keys.Where(k => k != SessionSlot).ToList()) Seq[i]++;
+            foreach (var i in Queue.Keys.Where(k => k != SessionSlot).ToList()) Queue.Remove(i);
+            Decoding.RemoveWhere(k => k != SessionSlot);
+            // As StopAll when nothing else is in flight: the rebuilt first slot shows at once, not a stagger late.
+            if (!SessionActive) { _pump?.Stop(); _pump = null; _nextRealizeTick = 0; }
+            SyncSentinel();
         }
 
         /// <summary>WPF StopAll: every window closes and every queued realization is cancelled. Panic,
@@ -199,7 +260,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                 Log.Debug("CornerGif: no composited click-through overlay on this platform, so no corner GIF");
                 return;
             }
-            var path = CornerGifPlanner.ResolveSourcePath(setting, CoreSettings.Current.SpiralPath)
+            // The session's fallback is the built-in corner art, never the user's fullscreen spiral pick
+            // (WPF SessionEngine.ShowCornerGif -> CornerGifMedia.ResolveDefaultUriString).
+            var path = CornerGifPlanner.ResolveSourcePath(setting, index == SessionSlot ? null : CoreSettings.Current.SpiralPath)
                        ?? CoreModArt.SpiralOverridePath()
                        ?? Path.Combine(AppContext.BaseDirectory, "Resources", "spiral_corner.gif");
             int srcW, srcH;
@@ -216,7 +279,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             var scale = screen.Scaling > 0 ? screen.Scaling : 1;
             var place = CornerGifPlanner.Place(setting, srcW, srcH,
                 screen.Bounds.Width / scale, screen.Bounds.Height / scale,
-                CornerGifPlanner.CountEarlierSlotsInCorner(CoreSettings.Current.CornerGifOverlays, index, setting.Position));
+                index == SessionSlot ? 0 : CornerGifPlanner.CountEarlierSlotsInCorner(CoreSettings.Current.CornerGifOverlays, index, setting.Position));
             if (place is not { } p)
             {
                 Log.Warning("CornerGif: unreadable or degenerate GIF {W}x{H} ({Path}) for slot {Index} - skipping overlay", srcW, srcH, path, index);
@@ -286,7 +349,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         /// <summary>Armed while an overlay is up or on its way; cleared once none is (WPF SyncSentinel).</summary>
         private static void SyncSentinel()
         {
-            bool wanted = HasActiveOverlays;
+            bool wanted = HasStandaloneOverlays;   // the user's own slots only: a session's GIF never disables them next launch
             if (wanted == _sentinelArmed) return;
             _sentinelArmed = wanted;
             if (!wanted) { ClearSentinel(); return; }
