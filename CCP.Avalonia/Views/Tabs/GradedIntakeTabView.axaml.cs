@@ -63,6 +63,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             RefreshPastQuizzes();   // WPF refreshes on tab navigation (MainWindow.TabNavigation.cs:548)
             if (CoreSettings.Service is { } svc) svc.CurrentReplaced += OnCurrentReplaced;
             App.IntakePass.PassStateChanged += OnIntakePassStateChanged;
+            Windows.PopQuizWindow.TurnedOff += OnPopQuizTurnedOff;
             SyncFromSettings();
             RefreshGradedIntakeGate();
         }
@@ -72,8 +73,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             LocalizationManager.Instance.LanguageChanged -= OnLanguageChanged;
             if (CoreSettings.Service is { } svc) svc.CurrentReplaced -= OnCurrentReplaced;
             App.IntakePass.PassStateChanged -= OnIntakePassStateChanged;
+            Windows.PopQuizWindow.TurnedOff -= OnPopQuizTurnedOff;
             base.OnDetachedFromVisualTree(e);
         }
+
+        // The quiz card's "Turn these off" link drives the same setting; keep the switch in step
+        // (WPF PopQuizWindow.TurnOff_Click sets GradedIntakeTab.ChkPopQuizEnabled).
+        private void OnPopQuizTurnedOff() => Dispatcher.UIThread.Post(SyncFromSettings);
 
         private void OnLanguageChanged(object? sender, EventArgs e) => Dispatcher.UIThread.Post(() =>
         {

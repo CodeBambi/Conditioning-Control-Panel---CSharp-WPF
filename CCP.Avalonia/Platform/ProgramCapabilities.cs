@@ -20,8 +20,8 @@ namespace ConditioningControlPanel.Avalonia.Platform
             // Not raised: KeywordTrigger (engine not ported), Remote/RemoteIssue, Session, Streak, Combined.
         };
 
-        /// <summary>Ritual tasks need SubmitRitualTask (programs slice 3b flips this).</summary>
-        internal static bool RitualsAvailable = false;
+        /// <summary>Ritual tasks: SubmitRitualTask + the seeded roadmap (programs 3b). Tests flip it to prove the gate.</summary>
+        internal static bool RitualsAvailable = true;
 
         internal static bool IsAvailable(ProgramTask task) =>
             task.Kind == ProgramTaskKind.Ritual ? RitualsAvailable

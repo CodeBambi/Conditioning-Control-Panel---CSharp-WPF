@@ -54,6 +54,7 @@
         xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
         xmlns:views="clr-namespace:ConditioningControlPanel.Avalonia.Views.Tabs"
         xmlns:cmp="clr-namespace:ConditioningControlPanel.Avalonia.Views.Controls"
+        xmlns:cmpPages="clr-namespace:ConditioningControlPanel.Avalonia.Views.Controls.Companion.Pages"
         xmlns:fx="clr-namespace:ConditioningControlPanel.Avalonia.Controls"
         x:Class="ConditioningControlPanel.Avalonia.Views.Windows.MainShellWindow"
         x:CompileBindings="False"
@@ -2563,6 +2564,8 @@
 
                 <!-- Companion Tab (v5.9 - Hero + AI Brain redesign) -->
                 <views:CompanionTabView x:Name="CompanionTab" Margin="10,5,10,10" IsVisible="False" />
+                <!-- Companion > AI (WPF MainWindow.CompanionTabs.cs "companionai", 48f587200) -->
+                <cmpPages:AiPage x:Name="CompanionAiTab" Margin="10,5,10,10" IsVisible="False" />
 
 
                 <!-- Patreon Exclusives Tab: DEMOLISHED (UX restructure, Phase 8). PatreonTabView was a

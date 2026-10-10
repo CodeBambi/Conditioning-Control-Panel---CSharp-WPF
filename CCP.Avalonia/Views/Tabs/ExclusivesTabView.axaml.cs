@@ -59,19 +59,30 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             this.FindControl<ItemsControl>("ExclusivesShelf")!.SizeChanged += (_, e) => { if (e.WidthChanged) FitShelf(); };
         }
 
-        /// <summary>WPF FitExclusiveShelf: every card sized for the shelf's width; the Gap is each card's right/bottom margin.</summary>
+        public static readonly StyledProperty<double> CardWidthProperty = AvaloniaProperty.Register<ExclusivesTabView, double>(nameof(CardWidth), Services.UI.ExclusiveShelfFit.BaseWidth);
+        public static readonly StyledProperty<double> CardHeightProperty = AvaloniaProperty.Register<ExclusivesTabView, double>(nameof(CardHeight), Services.UI.ExclusiveShelfFit.BaseHeight);
+        public static readonly StyledProperty<double> GroupHeadWidthProperty = AvaloniaProperty.Register<ExclusivesTabView, double>(nameof(GroupHeadWidth), double.NaN);
+
+        /// <summary>The fitted card size the shelf templates bind to (WPF FitExclusiveShelf sets it per child).</summary>
+        public double CardWidth { get => GetValue(CardWidthProperty); set => SetValue(CardWidthProperty, value); }
+        public double CardHeight { get => GetValue(CardHeightProperty); set => SetValue(CardHeightProperty, value); }
+
+        /// <summary>A group header spans the row, so the WrapPanel breaks the line after it.</summary>
+        public double GroupHeadWidth { get => GetValue(GroupHeadWidthProperty); set => SetValue(GroupHeadWidthProperty, value); }
+
+        /// <summary>WPF FitExclusiveShelf: every card sized for the shelf's width (each card's right/bottom margin is the Gap).</summary>
         internal void FitShelf()
         {
-            var shelf = this.FindControl<ItemsControl>("ExclusivesShelf")!;
-            if (shelf.Bounds.Width <= 0 || shelf.ItemsPanelRoot is not WrapPanel wrap) return;
-            var (_, w, h) = Services.UI.ExclusiveShelfFit.For(shelf.Bounds.Width);
-            wrap.ItemWidth = w + Services.UI.ExclusiveShelfFit.Gap;
-            wrap.ItemHeight = h + Services.UI.ExclusiveShelfFit.Gap;
+            double width = this.FindControl<ItemsControl>("ExclusivesShelf")!.Bounds.Width;
+            if (width <= 0) return;
+            var (_, w, h) = Services.UI.ExclusiveShelfFit.For(width);
+            (CardWidth, CardHeight, GroupHeadWidth) = (w, h, Math.Max(0, width - 1));
         }
 
         private void OnLoaded(object? sender, RoutedEventArgs e)
         {
             CoreMods.ModChanged += OnModChanged;
+            LocalizationManager.Instance.LanguageChanged += OnLanguageChanged;
             AmbientFxCanvas.Env.MotionGateChanged += UpdateMotion;
             StartAmbient();
             UpdateMotion();
@@ -79,6 +90,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         /// <summary>ModChanged may be raised off the UI thread; marshal before touching the Image.</summary>
         private void OnModChanged(object? sender, ModPackage mod) => Dispatcher.UIThread.Post(() => { LoadBackdrop(); RefreshVault(); });
+
+        /// <summary>WPF binds the group headers live (BindVaultLoc); here the rows are rebuilt (PLAYBOOK P09).</summary>
+        private void OnLanguageChanged(object? sender, EventArgs e) => Dispatcher.UIThread.Post(RefreshVault);
 
         /// <summary>WPF LoadBackdrop: null keeps what is already painted rather than blanking the room.</summary>
         private void LoadBackdrop()
@@ -98,6 +112,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private void OnUnloaded(object? sender, RoutedEventArgs e)
         {
             CoreMods.ModChanged -= OnModChanged;
+            LocalizationManager.Instance.LanguageChanged -= OnLanguageChanged;
             AmbientFxCanvas.Env.MotionGateChanged -= UpdateMotion;
             _ambientFx.Stop();
             UpdateMotion();
@@ -115,14 +130,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// </summary>
         internal void RefreshVault()
         {
-            // Main 2e9080399: Prime first, then Basic, then the untiered doors. Just Drop until the server opens
-            // its door and the Arcademy behind its build flag are hidden, not veiled (ExclusiveFeature.IsShown).
+            // WPF ArrangeVaultShelf (polish 12): Basic, Prime, Free, each under its header, open doors first,
+            // roster order within each half (Core PremiumShelfOrder). The two reserved seats are dropped. Just
+            // Drop until the server opens its door and the Arcademy behind its build flag are hidden, not veiled.
             var rows = new List<object>();
-            foreach (var f in ExclusiveFeature.ShelfOrder(ExclusiveFeature.All))
-                if (f.Shown()) rows.Add(new ExclusiveCardRow(f));
-            // WPF EnsureExclusivesBuilt: the casino filled the first teaser; two reserved seats remain.
-            rows.Add(new ExclusiveTeaserRow("play_racing_reserved_title", "play_racing_reserved_blurb"));
-            rows.Add(new ExclusiveTeaserRow("play_future_reserved_title", "play_future_reserved_blurb"));
+            var cards = ExclusiveFeature.All.Where(f => f.Shown()).Select(f => new ExclusiveCardRow(f));
+            foreach (var (group, items) in Services.UI.PremiumShelfOrder.Arrange(cards, r => r.Feature.Key, r => r.Tier, r => !r.IsLocked))
+            {
+                rows.Add(new ExclusiveGroupRow(group, items.Count(r => !r.IsLocked), items.Count));
+                rows.AddRange(items);
+            }
             this.FindControl<ItemsControl>("ExclusivesShelf")!.ItemsSource = rows;
 
             var spot = new ExclusiveCardRow(ExclusiveFeature.All[0]);
@@ -410,14 +427,49 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private static IBrush Brush(string hex) => new SolidColorBrush(Color.Parse(hex));
     }
 
-    /// <summary>WPF BuildComingSoonCard: a reserved seat - silhouette, breathing "?", SOON badge, never clickable.</summary>
-    public sealed class ExclusiveTeaserRow(string titleKey, string taglineKey)
+    /// <summary>
+    /// WPF VaultGroupHead (MainWindow.Exclusives.cs, polish 12): a shelf group's header row - the tier
+    /// sign (none for Free), the plan's name and one line in its colour, and "n of m yours". Commerce
+    /// colours: they never follow the mod accent.
+    /// </summary>
+    public sealed class ExclusiveGroupRow(Services.UI.PremiumGroup group, int open, int total)
     {
-        public string Title { get; } = Loc.Get(titleKey);
-        public string Tagline { get; } = Loc.Get(taglineKey);
-        public string Soon { get; } = Loc.Get("exclusives_badge_soon");
+        private static readonly Color BasicGold = Color.FromRgb(0xFF, 0xC8, 0x5A);
+        private static readonly Color PrimeCyan = Color.FromRgb(0x6F, 0xE8, 0xFF);
+        private static readonly Color FreeLilac = Color.FromRgb(0xB7, 0x9C, 0xFF);
 
-        /// <summary>WPF TeaserMarkAlpha over the vault accent (FxTheme glow).</summary>
-        public IBrush MarkBrush { get; } = new SolidColorBrush(AmbientFxCanvas.Env.GlowColor, 0x8C / 255.0);
+        public Services.UI.PremiumGroup Group { get; } = group;
+        private string Key => Group switch
+        {
+            Services.UI.PremiumGroup.Basic => "basic",
+            Services.UI.PremiumGroup.Prime => "prime",
+            _ => "free",
+        };
+        private Color Hue => Group switch
+        {
+            Services.UI.PremiumGroup.Basic => BasicGold,
+            Services.UI.PremiumGroup.Prime => PrimeCyan,
+            _ => FreeLilac,
+        };
+
+        public string Title => Loc.Get($"premium_group_{Key}");
+        public string Sub => Loc.Get($"premium_group_{Key}_sub");
+        public string Count { get; } = Loc.GetF("premium_group_count", open, total);
+        /// <summary>Loaded once per row (ModArt keeps no cache); WPF builds its headers once.</summary>
+        public Bitmap? Sign { get; } = group == Services.UI.PremiumGroup.Free ? null : ModArt.TryLoad($"features/tier_badge_t{(group == Services.UI.PremiumGroup.Basic ? 1 : 2)}.png", 240);
+        public bool HasSign => Sign != null;
+        public IBrush HueBrush => new SolidColorBrush(Hue);
+        public IBrush PillBackground => new SolidColorBrush(Color.FromArgb(0x1F, Hue.R, Hue.G, Hue.B));
+        public IBrush PillBorder => new SolidColorBrush(Color.FromArgb(0x66, Hue.R, Hue.G, Hue.B));
+
+        /// <summary>A hairline in the plan's colour under the row, fading out to the right.</summary>
+        public IBrush Rule => new LinearGradientBrush
+        {
+            StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+            EndPoint = new RelativePoint(1, 0, RelativeUnit.Relative),
+            GradientStops = { new GradientStop(Color.FromArgb(0xAA, Hue.R, Hue.G, Hue.B), 0), new GradientStop(Color.FromArgb(0, Hue.R, Hue.G, Hue.B), 1) },
+        };
+
+        public Thickness Margin => new(0, Group == Services.UI.PremiumGroup.Basic ? 0 : 14, 0, 16);
     }
 }
