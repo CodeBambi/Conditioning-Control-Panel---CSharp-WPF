@@ -581,6 +581,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 CoreProgression.AddXP(xpAmount, "LockCard");
                 // WPF AchievementService.TrackLockCardCompletion's quest call (:759), same !_isTest gate (progression#41).
                 try { App.Quests?.TrackLockCardCompleted(); } catch (Exception ex) { Log.Debug("lock card quest credit: {E}", ex.Message); }
+                Platform.ChasterHead.NoteLockCard(_totalErrors);   // WPF AchievementService.cs:763, same !_isTest gate
                 try { Completed?.Invoke(); } catch (Exception ex) { Log.Debug("lock card completed handler: {E}", ex.Message); }   // WPF TotalLockCardsCompleted, read by the leash task host
             }
 

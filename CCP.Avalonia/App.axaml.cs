@@ -319,10 +319,17 @@ namespace ConditioningControlPanel.Avalonia
         protected virtual string AchievementsPath => AchievementStore.DefaultPath;
 
         /// <summary>WPF App.Chaster?.Note(id), with its swallow: inert until the tab is on and priced.</summary>
-        internal static void ChasterNote(string id)
+        internal static void ChasterNote(string id, int units = 1)
         {
-            try { Platform.ChasterHead.Service?.Note(id); }
+            try { Platform.ChasterHead.Service?.Note(id, units); }
             catch (Exception ex) { Serilog.Log.Debug(ex, "[Chaster] {Id} hook", id); }
+        }
+
+        /// <summary>WPF AchievementService.TrackSessionComplete :999-1000, the two calls this head makes.</summary>
+        internal static void SessionCompleted()
+        {
+            try { Quests?.TrackSessionCompleted(); } catch (Exception ex) { Serilog.Log.Debug(ex, "session quest credit"); }
+            ChasterNote("session");
         }
 
         public override void Initialize()
@@ -757,7 +764,11 @@ namespace ConditioningControlPanel.Avalonia
                 CoreProgression.TrackBubbleCountCompletedProvider = () => Quests?.TrackBubbleCountCompleted();
                 // WPF MantraService's App.Quests / App.Chaster reads (seeded in WPF App.xaml.cs the same way).
                 CoreProgression.TrackMantraCompletedProvider = () => Quests?.TrackMantraCompleted();
-                CoreProgression.TrackSessionCompletedProvider = () => Quests?.TrackSessionCompleted();   // progression#41
+                // WPF AchievementService.TrackSessionComplete :999-1000: the quest credit, then Circe's "session"
+                // row (which also forgives misses and feeds the streak credit inside the Core service).
+                CoreProgression.TrackSessionCompletedProvider = SessionCompleted;   // progression#41
+                // WPF RemoteControlService.cs:1245 / :1358: what the controller sends lands on the wearer's tab.
+                RemoteCommands.ChasterNote = id => ChasterNote(id);
                 MantraService.ChasterNote = reps => { try { Platform.ChasterHead.Service?.Note("mantra", reps); } catch (Exception ex) { Serilog.Log.Debug(ex, "[Chaster] mantra hook"); } };
                 // WPF AchievementService.TrackVideoWatched -> App.Quests.TrackVideoMinutes.
                 CoreProgression.TrackVideoWatchedProvider = sec => Quests?.TrackVideoMinutes(Achievements?.TrackVideoWatched(sec) ?? sec / 60.0);

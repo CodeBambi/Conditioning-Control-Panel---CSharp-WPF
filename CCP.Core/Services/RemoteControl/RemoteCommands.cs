@@ -243,6 +243,14 @@ namespace ConditioningControlPanel.Services
             try { RemoteHaptics.Stop(); } catch (Exception ex) { Serilog.Log.Warning(ex, "[RemoteControl] remote haptic stop failed"); }
         }
 
+        /// <summary>WPF App.Chaster?.Note(id) (RemoteControlService.cs:1245, :1358). The head seeds it.</summary>
+        public static volatile Action<string>? ChasterNote;
+
+        private static void Chaster(string id)
+        {
+            try { ChasterNote?.Invoke(id); } catch (Exception ex) { Serilog.Log.Debug(ex, "[RemoteControl] chaster remote hook"); }
+        }
+
         public static string? Execute(string action, JObject? p)
         {
             var s = CoreSettings.Current;
@@ -251,6 +259,7 @@ namespace ConditioningControlPanel.Services
                 case "trigger_flash":
                     if (CoreFlash.ShowProvider is not { } flash) return NotOnThisBuild;
                     flash();
+                    Chaster("remote_media");   // Circe's tab: what the controller sends lands on the wearer's tab
                     return null;
                 case "trigger_subliminal":
                 case "trigger_custom_subliminal":
@@ -267,7 +276,11 @@ namespace ConditioningControlPanel.Services
                 case "stop_bubbles": CoreBubbles.Stop(); return null;
                 case "start_bounce_text": CoreBouncingText.Start(); return null;
                 case "stop_bounce_text": CoreBouncingText.Stop(); return null;
-                case "trigger_video": return CoreEngine.Video?.Trigger() == true ? null : CoreEngine.Video == null ? NotOnThisBuild : "a video is already playing";
+                case "trigger_video":
+                    if (CoreEngine.Video is not { } video) return NotOnThisBuild;
+                    var played = video.Trigger();
+                    Chaster("remote_video");   // WPF :1357-1358 books the send whether or not a video was already up
+                    return played ? null : "a video is already playing";
                 case "start_video": if (CoreEngine.Video == null) return NotOnThisBuild; CoreEngine.Video.Start(); return null;
                 case "stop_video": CoreEngine.Video?.Stop(); return null;
                 case "show_pink_filter": return Overlay("pink", true);
