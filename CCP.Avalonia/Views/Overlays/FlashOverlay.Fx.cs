@@ -75,7 +75,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             var gen = _pendingGeneration;
             var multiplier = FlashFxRules.RollLucky(SkillTreeRules.HasSkill(s, FlashFxRules.LuckySkillId), gen, false, rng);
             var glow = FlashFxRules.ResolveGlow(s.FlashGlowEnabled, Tier(s), multiplier > 1,
-                SkillTreeRules.GetSparkleBoostTier(s), natasha: false);
+                SkillTreeRules.GetSparkleBoostTier(s), natasha: w.IsNatasha);
             var k = w.DesktopScaling > 0 ? w.DesktopScaling : 1.0;
             var radiusPx = FlashCorners.Resolve(s.FlashRoundedCorners, OwnsFlashV2(), glow.HasGlow,
                 Math.Min(rect.Width, rect.Height), k);
