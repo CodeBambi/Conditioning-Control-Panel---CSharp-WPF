@@ -19,7 +19,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
     /// (:866, :906), world freeze and dive mute over that video (:803, :831), the Loom (:357, :405),
     /// report-bug (:390) and the crash sentinel (:327).
     /// DtRH is a trance game: nothing here adds a sound, a flash or a shake WPF does not have.
-    /// not ported: bark (no chaos bark hooks on this head), haptic-state (no DtrhHapticDirector),
+    /// The haptic-state feed and the tap before each bark drive Core DtrhHapticDirector.
+    /// not ported: bark (no chaos bark hooks on this head),
     /// the freeze's pause of a spoken companion line, the session stats store, the tray tuck.
     /// </summary>
     internal sealed partial class GameWindow
@@ -41,6 +42,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             }
             catch (Exception ex) { Log.Debug("DtrhHost: hosts: {E}", ex.Message); }
             HookDtrhVideo(MandatoryVideoOverlay.Instance.Scheduler);
+            // WPF Launch (:180): the descent's haptics live from here to CloseDtrhHost.
+            try { global::ConditioningControlPanel.Services.Haptics.DtrhHapticDirector.OnLaunch(_testMode); } catch (Exception ex) { Log.Debug("DtrhHost haptics launch: {E}", ex.Message); }
             TuckShellForDtrh();
         }
 
@@ -69,12 +72,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
         private void OnDtrhVideoStarted()
         {
             NoteDtrhVideoShown();   // session telemetry: a video was shown this run
+            // WPF :890: the covering video's own haptics own the device until it closes.
+            try { global::ConditioningControlPanel.Services.Haptics.DtrhHapticDirector.OnVideoCovering(true); } catch (Exception ex) { Log.Debug("DtrhHost haptics video: {E}", ex.Message); }
             Post(new { type = "payload-state", kind = "video", on = true });
         }
 
         private void OnDtrhVideoEnded()
         {
             Post(new { type = "payload-state", kind = "video", on = false });
+            try { global::ConditioningControlPanel.Services.Haptics.DtrhHapticDirector.OnVideoCovering(false); } catch (Exception ex) { Log.Debug("DtrhHost haptics video: {E}", ex.Message); }   // WPF :929
             // the video window had the keyboard; hand it back to the game
             try { if (!IsClosedOrClosing) Dispatcher.UIThread.Post(() => { if (!IsClosedOrClosing) Web.Focus(); }); }
             catch (Exception ex) { Log.Debug("DtrhHost: focus back: {E}", ex.Message); }
@@ -191,11 +197,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                     });
                     break;
                 case "bark":
-                    // not ported: the haptic tap WPF takes first (DtrhHapticDirector.OnGameEvent).
+                    // Haptics tap FIRST (WPF :342): the moment happened whether or not a voice line
+                    // plays over it; the vn-speaking gate inside RouteDtrhBark only guards the mix.
+                    try { global::ConditioningControlPanel.Services.Haptics.DtrhHapticDirector.OnGameEvent(o); } catch (Exception ex) { Log.Debug("DtrhHost haptics bark: {E}", ex.Message); }
                     RouteDtrhBark(o);
                     break;
                 case "haptic-state":
-                    // not ported: DtrhHapticDirector is not on this head.
+                    // The page's ~2 s depth / melt feed for the director's ambient floor (WPF :348).
+                    try { global::ConditioningControlPanel.Services.Haptics.DtrhHapticDirector.OnHapticState(o); } catch (Exception ex) { Log.Debug("DtrhHost haptic-state: {E}", ex.Message); }
                     break;
             }
         }
@@ -206,6 +215,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             _vnSpeaking = false;
             ApplyWorldFreeze(false);
             ResetDtrhRunMetrics();
+            // WPF :332, test mode included: the director's own Ready gate keeps a test run silent.
+            try { global::ConditioningControlPanel.Services.Haptics.DtrhHapticDirector.OnRunStarted(); } catch (Exception ex) { Log.Debug("DtrhHost haptics run-started: {E}", ex.Message); }
             if (_testMode) return;
             DtrhBarkRunStarted(difficulty);
             try { ChaosCrashSentinel.Mark($"mode=dtrh-web diff={difficulty}"); } catch (Exception ex) { _ = ex; }
@@ -217,6 +228,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
         {
             if (on == _worldFrozen) return;
             _worldFrozen = on;
+            try { global::ConditioningControlPanel.Services.Haptics.DtrhHapticDirector.OnWorldFreeze(on); } catch (Exception ex) { Log.Debug("DtrhHost haptics freeze: {E}", ex.Message); }   // WPF :838
             try { DtrhVideoPause(on); } catch (Exception ex) { Log.Debug("DtrhHost.ApplyWorldFreeze: {E}", ex.Message); }
         }
 
@@ -232,6 +244,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
         private void CloseDtrhHost()
         {
             UnhookDtrhVideo();
+            // WPF DisposeAll (:1091): our layer goes to zero the moment the window dies. Panic closes
+            // this window too, after CoreHaptics.Service.PanicStop() has already silenced the device.
+            try { global::ConditioningControlPanel.Services.Haptics.DtrhHapticDirector.OnClosed(); } catch (Exception ex) { Log.Debug("DtrhHost haptics closed: {E}", ex.Message); }
             RestoreShellAfterDtrh();
             if (_dtrhLoomHooked) { try { DtrhLoomStore.Changed -= OnDtrhLoomChanged; } catch { } _dtrhLoomHooked = false; }
             if (_worldFrozen) { _worldFrozen = false; try { DtrhVideoPause(false); } catch { } }

@@ -1,0 +1,514 @@
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Threading;
+using System.Threading.Tasks;
+using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services.Haptics.Core;
+using Newtonsoft.Json.Linq;
+using Serilog;
+
+// PORTED from WPF 7.1.5 ConditioningControlPanel/Services/Haptics/DtrhHapticDirector.cs. The only
+// changes: App.Settings / App.Haptics / App.Logger became CoreSettings / CoreHaptics / Serilog, and
+// the three internal test readers at the bottom. Every table, tier, gap and curve is WPF's.
+// A head with no device (CoreHaptics.Service null, or not connected) makes every entry a quiet no-op.
+namespace ConditioningControlPanel.Services.Haptics
+{
+    /// <summary>
+    /// Haptics for the DtRH browser game. NOT a 1:1 event→buzz mapper — the game emits
+    /// dozens of events per minute, and Buttplug commands carry ~1.3s of latency, so a
+    /// naive mapping is either a constant buzz or arrives seconds late. Instead this
+    /// director maintains a two-layer envelope:
+    ///
+    ///   AMBIENT — a slow "depth gauge" floor driven by the page's throttled
+    ///   haptic-state feed (the game's own intensity() 0..1 signal + Surfacing melt).
+    ///   Now published as <see cref="HapticLayer.Dtrh"/> on the mixer, which holds the level
+    ///   with zero command traffic until it changes (it used to be a 30s Lovense command
+    ///   refreshed on a timer, which is the same trick one abstraction layer lower).
+    ///
+    ///   ACCENTS — short pattern spikes on meaningful moments, tapped from the bark
+    ///   event stream DtrhHostService already receives. Three tiers with cooldowns:
+    ///   tier 3 moments always fire and preempt, tier 2 respects a shared gap, tier 1
+    ///   micro-events (pops/defuses) are COALESCED into one swell scaled by count.
+    ///   Accents are mixer PULSES carrying their tier as priority, so they ride OVER the
+    ///   ambient floor instead of replacing it.
+    ///
+    /// This director's two-layer shape was the template for HapticMixer; the tuning values
+    /// below (tiers, gaps, coalesce window, ambient curve) are unchanged from v6.6.
+    ///
+    /// Lifecycle-safe: everything stops on run end, world freeze, covering video,
+    /// window close, or the settings toggles flipping off mid-run.
+    /// </summary>
+    internal static class DtrhHapticDirector
+    {
+        private sealed record Accent(int Tier, double Rel, VibrationMode Mode, int Ms);
+
+        // The curated verb table. Rel is a fraction of the DtRH routing row's intensity.
+        private static readonly Dictionary<string, Accent> Map = new()
+        {
+            // ---- tier 3: rare moments (preempt whatever is playing) ----
+            ["act-changed"]          = new(3, 0.95, VibrationMode.Escalate,  900),
+            ["ending-soon"]          = new(3, 0.85, VibrationMode.Heartbeat, 1400),
+
+            // ---- tier 2: notable beats (shared cooldown) ----
+            ["detonated"]            = new(2, 1.00, VibrationMode.Constant,  300),
+            ["detonated-absorbed"]   = new(2, 0.70, VibrationMode.Pulse,     250),
+            ["curse-picked"]         = new(2, 0.85, VibrationMode.Earthquake, 800),
+            ["boon-picked"]          = new(2, 0.70, VibrationMode.Heartbeat, 600),
+            ["crafted"]              = new(2, 0.70, VibrationMode.Pulse,     450),
+            ["combo-milestone"]      = new(2, 0.70, VibrationMode.Escalate,  500),
+            ["combo-big"]            = new(2, 0.90, VibrationMode.Escalate,  700),
+            ["tease-denied"]         = new(2, 0.80, VibrationMode.Pulse,     350),
+            ["tease-denied-streak"]  = new(2, 0.90, VibrationMode.Pulse,     500),
+            ["wave-cleared"]         = new(2, 0.60, VibrationMode.Wave,      500),
+            ["wave-escalated"]       = new(2, 0.75, VibrationMode.Escalate,  600),
+            ["freeze-caught"]        = new(2, 0.60, VibrationMode.Constant,  300),
+            ["gold-first"]           = new(2, 0.70, VibrationMode.Heartbeat, 500),
+            ["reveal-flash"]         = new(2, 0.65, VibrationMode.Wave,      500),
+
+            // ---- tier 1: micro-events (coalesced into one swell) ----
+            ["benign-popped"]        = new(1, 0.40, VibrationMode.Constant,  150),
+            ["defused"]              = new(1, 0.50, VibrationMode.Wave,      300),
+            ["darter-caught"]        = new(1, 0.50, VibrationMode.Pulse,     200),
+            ["rabbit-caught"]        = new(1, 0.55, VibrationMode.Pulse,     200),
+            ["tease-clicked"]        = new(1, 0.45, VibrationMode.Pulse,     200),
+        };
+
+        /// <summary>
+        /// In-world effect payloads, keyed by the page's payload kind (ccp-bugs #1244).
+        ///
+        /// <para>Every DtRH effect used to be a native WPF window fired over the bridge, and the
+        /// toy felt it through the ordinary flash / subliminal rows. The 2026-07 cutover moved
+        /// them all in-world and nothing replaced that signal, so a descent full of flashes moved
+        /// the device only through the ambient depth floor - which is the report, in the
+        /// reporter's own words: "images and bubble pops do not fire the toy". The page barks
+        /// <c>effect-fired</c> now and these are the accents it maps to.</para>
+        ///
+        /// <para>The light ones are tier 1 on purpose: a pop that also fires a flash should feel
+        /// like ONE bigger pop, and the tier-1 coalescer is what makes that true. The heavies -
+        /// a video card, a gif cascade, a melt - are real moments and take tier 2.</para>
+        /// </summary>
+        private static readonly Dictionary<string, Accent> PayloadAccents = new()
+        {
+            ["flash"]        = new(1, 0.55, VibrationMode.Pulse,     220),
+            ["subliminal"]   = new(1, 0.35, VibrationMode.Constant,  180),
+            ["overlay"]      = new(1, 0.45, VibrationMode.Wave,      300),
+            ["glitch"]       = new(1, 0.50, VibrationMode.Pulse,     200),
+            ["bouncingText"] = new(1, 0.40, VibrationMode.Pulse,     180),
+            ["gifWash"]      = new(2, 0.60, VibrationMode.Wave,      500),
+            ["gifCascade"]   = new(2, 0.75, VibrationMode.Wave,      700),
+            ["melt"]         = new(2, 0.70, VibrationMode.Wave,      600),
+            ["blackout"]     = new(2, 0.65, VibrationMode.Constant,  400),
+            ["video"]        = new(2, 0.60, VibrationMode.Heartbeat, 600),
+        };
+
+        /// <summary>The accent for one bark, or null when nothing in the table answers to it.
+        /// Split out of <see cref="OnGameEvent"/> so the two tables can be checked without a
+        /// device, a page or an App.</summary>
+        internal static bool TryAccentFor(string? evt, string? payloadKind, out int tier)
+        {
+            tier = 0;
+            if (string.IsNullOrEmpty(evt)) return false;
+            var accent = Lookup(evt, payloadKind);
+            if (accent == null) return false;
+            tier = accent.Tier;
+            return true;
+        }
+
+        private static Accent? Lookup(string evt, string? payloadKind)
+        {
+            if (evt == PayloadEvent)
+            {
+                return payloadKind != null && PayloadAccents.TryGetValue(payloadKind, out var p) ? p : null;
+            }
+            return Map.TryGetValue(evt, out var a) ? a : null;
+        }
+
+        /// <summary>The page's bark for an in-world effect payload; its kind rides in <c>kind</c>.</summary>
+        private const string PayloadEvent = "effect-fired";
+
+        private static readonly object Gate = new();
+        private static bool _active;          // host window alive (Launch..DisposeAll)
+        private static bool _testMode;
+        private static bool _runActive;       // between run-started and run-ended
+        private static bool _pageRunning;     // page state === 'running' (haptic-state feed)
+        private static bool _worldFrozen;     // in-world Freeze bubble holds the real world
+        private static bool _videoCovering;   // a mandatory native video owns haptics (VideoEnabled path)
+        private static double _depth;         // game's intensity() 0..1
+        private static double _melt;          // Surfacing melt 0..1
+
+        private static Timer? _ambientTimer;
+        private static double _lastAmbientSent = -1;
+        private static DateTime _lastAmbientSendUtc = DateTime.MinValue;
+
+        private static CancellationTokenSource? _accentCts;
+        private static int _accentTierPlaying;              // 0 = idle
+        private static DateTime _lastAccentEndUtc = DateTime.MinValue;
+
+        // tier-1 coalescer: micro-events within a short window become ONE swell
+        private static Timer? _coalesceTimer;
+        private static int _coalesceCount;
+        private static Accent? _coalesceBest;
+        private const int CoalesceWindowMs = 700;
+
+        private static HapticSettings? Settings => CoreSettings.Service?.Current?.Haptics;
+
+        /// <summary>
+        /// THE control for DtRH haptics is the DtrhAccent row of the Haptics tab's routing matrix
+        /// (v6.6.3's ChkHapticDtrh / SliderHapticDtrh were removed in the Phase E rebuild, so the
+        /// legacy DtrhEnabled / DtrhIntensity pair has no UI writing it any more). Read the rule
+        /// LIVE on every use — the row VM writes straight into this POCO and raises no event, so a
+        /// cached copy would be stale the moment the user touched the toggle.
+        /// The row also mirrors its writes back onto the legacy pair, which is what keeps
+        /// <see cref="OnSettingsChanged"/> firing and a downgrade honest.
+        /// </summary>
+        private static HapticEventRule? AccentRule => Settings?.V2?.Rule(HapticEventKind.DtrhAccent);
+
+        private static bool Ready
+        {
+            get
+            {
+                var s = Settings;
+                return _active && !_testMode && s is { Enabled: true }
+                       && AccentRule?.Enabled == true
+                       && CoreHaptics.Service is { IsConnected: true };
+            }
+        }
+
+        // ============================ lifecycle (DtrhHostService taps) ============================
+
+        public static void OnLaunch(bool testMode)
+        {
+            lock (Gate)
+            {
+                _active = true;
+                _testMode = testMode;
+                _runActive = false;
+                _pageRunning = false;
+                _worldFrozen = false;
+                _videoCovering = false;
+                _depth = 0; _melt = 0;
+                _lastAmbientSent = -1;
+            }
+            var s = Settings;
+            if (s != null) s.PropertyChanged += OnSettingsChanged;
+        }
+
+        public static void OnClosed()
+        {
+            var s = Settings;
+            if (s != null) s.PropertyChanged -= OnSettingsChanged;
+            bool wasActive;
+            lock (Gate)
+            {
+                wasActive = _active;
+                _active = false;
+                _runActive = false;
+                _pageRunning = false;
+            }
+            StopAmbientTimer();
+            CancelCoalesce();
+            _accentCts?.Cancel();
+            if (wasActive) _ = SafeStopDevice();
+        }
+
+        public static void OnRunStarted()
+        {
+            lock (Gate)
+            {
+                _runActive = true;
+                _depth = 0; _melt = 0;
+                _lastAmbientSent = -1;
+            }
+            // Timer runs regardless — each tick re-checks Ready, so connecting the
+            // device mid-run still picks up the ambient floor.
+            StartAmbientTimer();
+            if (!Ready) return;
+            // A gentle wave marks the drop-in — the descent has begun.
+            _ = PlayAccent(new Accent(3, 0.50, VibrationMode.Wave, 800), "run-started");
+        }
+
+        public static void OnRunEnded()
+        {
+            bool notify;
+            lock (Gate)
+            {
+                notify = _runActive;
+                _runActive = false;
+                _pageRunning = false;
+                _depth = 0; _melt = 0;
+            }
+            StopAmbientTimer();
+            CancelCoalesce();
+            _accentCts?.Cancel();
+            if (!notify || !Ready) { _ = SafeStopDevice(); return; }
+            // One soft farewell wave, then silence — the recap should feel like surfacing.
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await PlayPattern(0.45, 600, VibrationMode.Wave, CancellationToken.None);
+                    await SafeStopDevice();
+                }
+                catch { }
+            });
+        }
+
+        public static void OnWorldFreeze(bool on)
+        {
+            lock (Gate) { _worldFrozen = on; }
+            if (on)
+            {
+                _accentCts?.Cancel();
+                CancelCoalesce();
+                _ = SafeStopDevice();
+                lock (Gate) { _lastAmbientSent = -1; }   // reassert floor when the freeze lifts
+            }
+        }
+
+        /// <summary>A mandatory native video covers the game: its own haptic feature
+        /// (Video background + TargetHit) owns the device until it closes.</summary>
+        public static void OnVideoCovering(bool on)
+        {
+            lock (Gate) { _videoCovering = on; _lastAmbientSent = -1; }
+            if (on) { _accentCts?.Cancel(); CancelCoalesce(); }
+        }
+
+        // ============================ page feeds ============================
+
+        /// <summary>haptic-state {running, depth, melt} — the page's ~2s ambient feed.</summary>
+        public static void OnHapticState(JObject o)
+        {
+            lock (Gate)
+            {
+                _pageRunning = (bool?)o["running"] ?? false;
+                _depth = Math.Clamp((double?)o["depth"] ?? 0, 0, 1);
+                _melt = Math.Clamp((double?)o["melt"] ?? 0, 0, 1);
+            }
+        }
+
+        /// <summary>A bark-stream game event (tapped in DtrhHostService BEFORE the
+        /// vn-speaking gate — the moment happened whether or not she talks over it).</summary>
+        public static void OnGameEvent(JObject o)
+        {
+            if (!Ready) return;
+            var evt = (string?)o["event"];
+            if (evt == null) return;
+            var accent = Lookup(evt, (string?)o["kind"]);
+            if (accent == null) return;
+            lock (Gate)
+            {
+                if (_worldFrozen || _videoCovering) return;
+            }
+
+            var density = Settings?.DtrhDensity ?? 1;
+            if (accent.Tier == 1)
+            {
+                if (density == 0) return;   // Sparse: big moments only
+                Coalesce(accent);
+                return;
+            }
+            _ = PlayAccent(accent, evt == PayloadEvent ? evt + ":" + (string?)o["kind"] : evt);
+        }
+
+        // ============================ accents ============================
+
+        private static double GapMult => (Settings?.DtrhDensity ?? 1) switch
+        {
+            0 => 2.0,   // Sparse
+            2 => 0.6,   // Rich
+            _ => 1.0,
+        };
+
+        private static async Task PlayAccent(Accent accent, string label)
+        {
+            var haptics = CoreHaptics.Service;
+            if (haptics == null) return;
+
+            CancellationTokenSource cts;
+            lock (Gate)
+            {
+                var sinceLast = (DateTime.UtcNow - _lastAccentEndUtc).TotalSeconds;
+                if (_accentTierPlaying > 0)
+                {
+                    // Busy: only a tier-3 moment preempts; everything else is dropped.
+                    if (accent.Tier < 3) return;
+                    _accentCts?.Cancel();
+                }
+                else
+                {
+                    var minGap = accent.Tier switch { 3 => 1.0, 2 => 4.0, _ => 1.5 } * GapMult;
+                    if (sinceLast < minGap) return;
+                }
+                cts = new CancellationTokenSource();
+                _accentCts = cts;
+                _accentTierPlaying = accent.Tier;
+            }
+
+            try
+            {
+                // Accent ceiling = the routing row's intensity, read fresh (see AccentRule).
+                var intensity = Math.Clamp((AccentRule?.Intensity ?? 0.6) * accent.Rel, 0.06, 1.0);
+                // Buttplug's ~1.3s command latency turns short patterns into mush — stretch them.
+                var ms = haptics.IsButtplugProvider ? accent.Ms * 2 : accent.Ms;
+                Log.Debug("DtrhHaptics: accent {Label} T{Tier} {Pct}% {Ms}ms {Mode}",
+                    label, accent.Tier, (int)(intensity * 100), ms, accent.Mode);
+                // Tier becomes mixer priority: a tier-3 moment out-ranks (and evicts) tier-1 chatter.
+                await PlayAccentPattern(intensity, ms, accent.Mode, accent.Tier, cts.Token);
+            }
+            catch { }
+            finally
+            {
+                lock (Gate)
+                {
+                    if (_accentCts == cts) { _accentTierPlaying = 0; _accentCts = null; }
+                    _lastAccentEndUtc = DateTime.UtcNow;
+                    _lastAmbientSent = -1;   // the accent overrode the floor — reassert it soon
+                }
+            }
+        }
+
+        private static Task PlayPattern(double intensity, int ms, VibrationMode mode, CancellationToken token)
+            => PlayAccentPattern(intensity, ms, mode, 2, token);
+
+        private static Task PlayAccentPattern(double intensity, int ms, VibrationMode mode, int tier, CancellationToken token)
+        {
+            var haptics = CoreHaptics.Service;
+            if (haptics == null) return Task.CompletedTask;
+            var target = AccentRule?.Target ?? ToyRole.All;
+            return haptics.PlayPatternAsync(intensity, ms, mode, tier, target, token);
+        }
+
+        // tier-1 micro-events: first one opens a short window; everything landing inside
+        // becomes a single swell whose strength grows with the count (a chain-pop feels
+        // like one surge, not twelve stutters).
+        private static void Coalesce(Accent accent)
+        {
+            lock (Gate)
+            {
+                _coalesceCount++;
+                if (_coalesceBest == null || accent.Rel > _coalesceBest.Rel) _coalesceBest = accent;
+                if (_coalesceTimer != null) return;
+                _coalesceTimer = new Timer(_ => FlushCoalesced(), null, CoalesceWindowMs, Timeout.Infinite);
+            }
+        }
+
+        private static void FlushCoalesced()
+        {
+            Accent? best; int count;
+            lock (Gate)
+            {
+                best = _coalesceBest; count = _coalesceCount;
+                _coalesceBest = null; _coalesceCount = 0;
+                _coalesceTimer?.Dispose(); _coalesceTimer = null;
+            }
+            if (best == null || count == 0 || !Ready) return;
+            // Swell: base strength + a nudge per extra event, longer for bigger bursts.
+            var rel = Math.Min(0.75, best.Rel + 0.05 * (count - 1));
+            var ms = Math.Min(600, best.Ms + 60 * (count - 1));
+            _ = PlayAccent(new Accent(1, rel, count >= 3 ? VibrationMode.Wave : best.Mode, ms), $"swell x{count}");
+        }
+
+        private static void CancelCoalesce()
+        {
+            lock (Gate)
+            {
+                _coalesceTimer?.Dispose(); _coalesceTimer = null;
+                _coalesceBest = null; _coalesceCount = 0;
+            }
+        }
+
+        // ============================ ambient floor ============================
+
+        private static void StartAmbientTimer()
+        {
+            StopAmbientTimer();
+            _ambientTimer = new Timer(_ => AmbientTick(), null, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(5));
+        }
+
+        private static void StopAmbientTimer()
+        {
+            _ambientTimer?.Dispose();
+            _ambientTimer = null;
+        }
+
+        private static void AmbientTick()
+        {
+            try
+            {
+                if (!Ready) return;
+                double target;
+                lock (Gate)
+                {
+                    if (!_runActive || !_pageRunning || _worldFrozen || _videoCovering || _accentTierPlaying > 0)
+                        return;
+                    var s = Settings;
+                    var cap = s?.DtrhAmbientIntensity ?? 0;
+                    // The toy as a depth gauge: a whisper at the surface, the slider's full
+                    // value at the bottom, and the Surfacing melt pushes past it a touch.
+                    target = AmbientTarget(cap, _depth, _melt);   // clears Lovense's <=0.05 = off cutoff
+
+                    var refreshDue = (DateTime.UtcNow - _lastAmbientSendUtc).TotalSeconds > 20;
+                    if (Math.Abs(target - _lastAmbientSent) < 0.02 && !refreshDue) return;
+                    _lastAmbientSent = target;
+                    _lastAmbientSendUtc = DateTime.UtcNow;
+                }
+                // Level-set: the mixer holds this until we change it, so there is no refresh
+                // traffic at all. Zero is just another level, hence no special-case stop.
+                CoreHaptics.Service?.SetLayer(HapticLayer.Dtrh, target);
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("DtrhHaptics ambient tick: {E}", ex.Message);
+            }
+        }
+
+        // ============================ safety ============================
+
+        private static void OnSettingsChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            // DtrhEnabled is the legacy MIRROR the routing row writes on every toggle (the v2 rule
+            // itself raises nothing), so this is still how "switched off mid-run" reaches us.
+            if (e.PropertyName is not (nameof(HapticSettings.Enabled) or nameof(HapticSettings.DtrhEnabled)))
+                return;
+            if (Ready) return;   // still on — nothing to kill
+            _accentCts?.Cancel();
+            CancelCoalesce();
+            lock (Gate) { _lastAmbientSent = -1; }
+            _ = SafeStopDevice();
+        }
+
+        /// <summary>
+        /// Stop OUR contribution only. The old version called HapticService.StopAsync(), which
+        /// stopped the device outright and therefore also killed any video / audio-sync / Deeper
+        /// haptics that happened to be running underneath.
+        /// </summary>
+        private static Task SafeStopDevice()
+        {
+            try
+            {
+                CoreHaptics.Service?.SetLayer(HapticLayer.Dtrh, 0);
+            }
+            catch { }
+            return Task.CompletedTask;
+        }
+
+        // ============================ test readers ============================
+
+        /// <summary>The page feed and lifecycle as the director holds them (tests).</summary>
+        internal static (bool Active, bool RunActive, bool PageRunning, bool WorldFrozen, bool VideoCovering, double Depth, double Melt) Snapshot
+        {
+            get { lock (Gate) return (_active, _runActive, _pageRunning, _worldFrozen, _videoCovering, _depth, _melt); }
+        }
+
+        /// <summary>The ambient floor for a depth and melt under a cap: WPF AmbientTick's curve (tests).</summary>
+        internal static double AmbientTarget(double cap, double depth, double melt)
+        {
+            var target = cap <= 0 ? 0 : cap * (0.30 + 0.70 * depth) * (1 + 0.5 * melt);
+            return target > 0 ? Math.Clamp(target, 0.06, 1.0) : 0;
+        }
+
+        /// <summary>True while a device could be driven right now (tests).</summary>
+        internal static bool IsReady => Ready;
+    }
+}

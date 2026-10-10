@@ -18,10 +18,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
     /// <see cref="DtrhSessionStatsStore"/> (:707), the boot-error door to the classic hub (:943),
     /// and the main window tucked away while the descent owns the screen (:181, :1112).
     ///
-    /// <para>not ported: <c>DtrhHapticDirector</c> (Services/Haptics, 7.1.5) - the descent's
-    /// haptic accents and ambient floor. The <c>haptic-state</c> frame and the haptic tap ahead of
-    /// each bark are still dropped here. EMI Desk's dtrhOpened / dtrhClosed moments belong to the
-    /// EMI Desk lane.</para>
+    /// <para><c>DtrhHapticDirector</c> is in Core (Services/Haptics) and tapped from
+    /// GameWindow.Dtrh.Host.cs. not ported: EMI Desk's dtrhOpened / dtrhClosed moments (the EMI
+    /// Desk lane).</para>
     /// </summary>
     internal sealed partial class GameWindow
     {
