@@ -240,19 +240,18 @@ public sealed class BackRoomWireTests
     }
 
     [Fact]
-    public void Fx_APrimitiveWithNoOverlayHere_IsAckedSkippedUnknown_AndNeverReachesTheSink()
+    public void Fx_TheStorm_ReachesTheSinkWhole_NothingAckedSkippedUnknown()
     {
         var (fx, sink, clock) = Dispatcher();
-        // The storm is a flash burst and the glitch wash (both on this head) plus the gif rain (no overlay here).
+        // The storm is a flash burst, the glitch wash and the gif rain: all three have an overlay on this head (k14: the cascade).
         var ack = fx.Fire("fx.gif_storm", "slot", new[] { "gif0" }, Deal());
         clock.Advance(20000);
         Assert.Contains("flash-burst", ack.Fired);
-        Assert.DoesNotContain("gif-rain", ack.Fired);
+        Assert.Contains("gif-rain", ack.Fired);
         Assert.Contains("flash", sink.Calls);
-        Assert.DoesNotContain("rain", sink.Calls);
+        Assert.Contains("rain", sink.Calls);
         Assert.Contains("glitch", sink.Calls);
-        Assert.Contains(ack.Skipped, s => s.Prim == "gif-rain" && s.Why == BackRoomFxSkipReason.Unknown);
-        Assert.Equal(1, ack.Skipped.Count(s => s.Why == BackRoomFxSkipReason.Unknown));
+        Assert.DoesNotContain(ack.Skipped, s => s.Why == BackRoomFxSkipReason.Unknown);
     }
 
     [Fact]

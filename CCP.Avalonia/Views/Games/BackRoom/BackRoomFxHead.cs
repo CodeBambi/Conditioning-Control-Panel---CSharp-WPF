@@ -22,7 +22,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games.BackRoom;
 /// <para>Ported: flash-burst (FlashOverlay), the three sub primitives (SubliminalOverlay), the Brain
 /// Drain melt and haze (BrainDrainOverlay's timed drain) and the colour wash (a TintOverlayWindow
 /// under the WPF wash envelope), and on <see cref="BackRoomOverlays"/> the glitch wash, gif-full, gif-from, the
-/// picture inside a wash, tunnel vision and the Loom spiral. Not ported: gif-rain (no cascade overlay here).</para>
+/// picture inside a wash, tunnel vision and the Loom spiral, and gif-rain on <see cref="GifCascadeOverlay"/>.</para>
 ///
 /// <para>No CCP feature toggle gates any of it (the Back Room is an authored show): only the
 /// effective motion level (OS reduced motion) and Calm shape a fire. It stops only what it started:
@@ -51,6 +51,7 @@ internal sealed class BackRoomFxHead : IBackRoomFxSink
         FxPrim.FlashBurst, FxPrim.SubSingle, FxPrim.SubSeq, FxPrim.SubBurst9,
         FxPrim.BrainDrainMelt, FxPrim.Haze, FxPrim.Wash,
         FxPrim.GlitchBubbles, FxPrim.GifFull, FxPrim.GifFrom, FxPrim.SpiralFull, FxPrim.SpiralLoom,
+        FxPrim.GifRain,
     };
 
     /// <summary>A Back Room picture pays as a flash image does (WPF BackRoomFxServices.PayPictureXp, CONTRACT 10.14):
@@ -301,9 +302,23 @@ internal sealed class BackRoomFxHead : IBackRoomFxSink
         _wash.Clear();
     }
 
-    // ---- no overlay on this head: never reached, the dispatcher skips it as unknown ----
+    // ---- gif-rain: the cascade (WPF BackRoomFxServices.GifRain, same numbers as the Chaos payload) ----
 
-    public void GifRain(int count, int durationMs, double opacity) { }
+    /// <summary>WPF GifCascadePayload.GIF_SIZE / FALL_SPEED / START_SCALE.</summary>
+    internal const double RainGifSize = 400, RainFallSpeed = 3.6, RainStartScale = 0.45;
+
+    public void GifRain(int count, int durationMs, double opacity)
+    {
+        if (Host is not { } host) return;
+        // A rain already on screen keeps its own; a second cascade on top is noise.
+        if (GifCascadeOverlay.IsRaining) return;
+        double seconds = Math.Max(1.0, durationMs / 1000.0);
+        GifCascadeOverlay.Show(host, BackRoomOverlays.RainOwner, Math.Max(1, count) / seconds, seconds,
+            RainGifSize, RainFallSpeed, opacity, RainStartScale);
+    }
+
+    /// <summary>The room's web view on screen for a gif-from's rect (WPF BackRoomFxServices.Viewport). Tests swap it.</summary>
+    internal static Func<RoomViewport?> Viewport = () => BackRoomFromMap.Read(Host);
 
     // ---- the room's own overlay windows (BackRoomOverlays) ----
 
@@ -324,8 +339,9 @@ internal sealed class BackRoomFxHead : IBackRoomFxSink
     {
         if (Host is not { } host || LocalFile(gif) is not { } path) return false;
         double aspect = gif.W > 0 && gif.H > 0 ? (double)gif.W / gif.H : 4.0 / 3;
-        // ponytail: the page rect is not mapped to the desktop on this head, the picture grows from the screen's centre.
-        BackRoomOverlays.GifFrom(host, path, aspect, durationMs, scale, dim, shown);
+        RoomViewport? vp = null;
+        try { vp = Viewport(); } catch (Exception ex) { Log.Debug("[BackRoom] room viewport read: {E}", ex.Message); }
+        BackRoomOverlays.GifFrom(host, path, aspect, durationMs, scale, dim, shown, from, vp);
         return true;
     }
 

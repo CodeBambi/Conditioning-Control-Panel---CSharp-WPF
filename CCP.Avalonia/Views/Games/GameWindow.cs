@@ -59,6 +59,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             [FypId] = new(FypId, "tab_fyp", "fyp/index.html", FypGate),
             // WPF ShowTab("justdrop"): the server's door flag; the page is the live site (GameWindow.JustDrop.cs).
             [JustDropId] = new(JustDropId, "jd_door_title", "", JustDropDoorOpen),
+            [LoomId] = new(LoomId, "billboard_loom_title", "dtrh/loom.html"),   // WPF LoomHostService: free, no account (GameWindow.Loom.cs)
             ["arcademy"] = new("arcademy", "launcher_game_arcademy_title", "arcademy/index.html",
                 () => TierGate.DemandLab(Loc.Get("launcher_game_arcademy_title")) && ArcademyLaunchAllowed()),
         };
