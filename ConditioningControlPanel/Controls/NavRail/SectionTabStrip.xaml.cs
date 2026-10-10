@@ -25,14 +25,10 @@ namespace ConditioningControlPanel.Controls.NavRail
         /// <summary>Home is the dashboard (no strip); Settings keeps its own left pill column.
         /// Home's other page, Premium, is a hidden tab (polish 12 round 2, owner: "remove the whole
         /// row, people click Home on the side rail to go back"), so Home never draws pills.</summary>
-        public static bool ShowsPills(string? section) =>
-            section != null && section != NavSections.Home && section != NavSections.Settings;
+        public static bool ShowsPills(string? section) => NavStripTable.ShowsPills(section);
 
-        /// <summary>The header (breadcrumb row) shows everywhere but Home, the dashboard and Premium
-        /// alike: both Home pages keep the same canvas height, so going between them never moves
-        /// the page.</summary>
-        public static bool ShowsHeader(string? section) =>
-            section != null && section != NavSections.Home;
+        /// <summary>The header (breadcrumb row) shows everywhere but Home (NavStripTable).</summary>
+        public static bool ShowsHeader(string? section) => NavStripTable.ShowsHeader(section);
 
         /// <summary>The loc key of a pill's "what is this" line, shown on its "?" badge (2026-10-07).</summary>
         public static string HelpKey(NavTab tab) => "nav_help_" + tab.Key;
@@ -57,78 +53,32 @@ namespace ConditioningControlPanel.Controls.NavRail
             catch { return true; }
         }
 
-        public static IReadOnlyList<NavTab> Pills(string? section)
-        {
-            if (!ShowsPills(section)) return Array.Empty<NavTab>();
-            return NavSections.Find(section)?.Tabs.Where(t => !t.Hidden).ToArray() ?? Array.Empty<NavTab>();
-        }
+        public static IReadOnlyList<NavTab> Pills(string? section) => NavStripTable.Pills(section);
 
-        /// <summary>
-        /// The pill a tab key lights. A pill key lights itself; the permanent alias "lab" lights
-        /// Games; pages that live inside a Play zone light that zone (Graded Intake and Lockdown
-        /// sit in Sessions, Blink Trainer in Eyes). Null when no pill owns the page (Spiral Room).
-        /// </summary>
-        public static string? ActivePill(string? tab)
-        {
-            if (string.IsNullOrEmpty(tab)) return null;
-            var key = tab.ToLowerInvariant();
-            switch (key)
-            {
-                case "lab": return "play";
-                case "gradedintake":
-                case "lockdown": return "playsessions";
-                case "blinktrainer": return "playeyes";
-            }
-            var section = NavSections.SectionForTab(key);
-            return Pills(section).Any(p => p.Key == key) ? key : null;
-        }
+        /// <summary>The pill a tab key lights (NavStripTable.ActivePill).</summary>
+        public static string? ActivePill(string? tab) => NavStripTable.ActivePill(tab);
 
         /// <summary>The label key a breadcrumb shows for a tab (its own row in the table).</summary>
-        public static string? PageLabelKey(string? tab)
-        {
-            if (string.IsNullOrEmpty(tab)) return null;
-            var key = tab.ToLowerInvariant() == "lab" ? "play" : tab.ToLowerInvariant();
-            foreach (var t in NavSections.AllTabs)
-                if (t.Key == key) return t.LabelKey;
-            return null;
-        }
+        public static string? PageLabelKey(string? tab) => NavStripTable.PageLabelKey(tab);
 
         /// <summary>Keyboard move inside the strip: Left/Right wrap, Home/End jump. -1 = not a strip key.</summary>
-        public static int MoveIndex(int current, int count, Key key)
-        {
-            if (count <= 0) return -1;
-            return key switch
-            {
-                Key.Left => current <= 0 ? count - 1 : current - 1,
-                Key.Right => current < 0 || current >= count - 1 ? 0 : current + 1,
-                Key.Home => 0,
-                Key.End => count - 1,
-                _ => -1,
-            };
-        }
+        public static int MoveIndex(int current, int count, Key key) => NavStripTable.MoveIndex(current, count, key.ToString());
 
         // Section hues (polish wave 2, owner 2026-10-06: one hue PER SECTION so a page, its pills
         // and its rail medallion read as one place). Static (commerce-neutral) tokens, never gold
         // (T1), cyan (T2), red (Circe / danger) or mint (credit), and every pair at least 18
         // degrees apart: SectionTabStripTests pins the gaps. The gear shares Home's lilac.
-        public static readonly Color Lilac = Color.FromRgb(0xB7, 0x9C, 0xFF);       // Home, Settings
-        public static readonly Color Pink = Color.FromRgb(0xFF, 0x69, 0xB4);        // Studio (SectionHueGeneral)
-        public static readonly Color Orchid = Color.FromRgb(0xE0, 0x70, 0xFF);      // Companion
-        public static readonly Color VioletBlue = Color.FromRgb(0x7A, 0x86, 0xFF);  // Play
-        public static readonly Color Sky = Color.FromRgb(0x5F, 0xB0, 0xFF);         // Social
-        public static readonly Color Coral = Color.FromRgb(0xFF, 0x9A, 0x6B);       // You
-        public static readonly Color Sage = Color.FromRgb(0xA8, 0xD8, 0xA0);        // Library
+        public static readonly Color Lilac = FromRgb(NavStripTable.Lilac);       // Home, Settings
+        public static readonly Color Pink = FromRgb(NavStripTable.Pink);         // Studio (SectionHueGeneral)
+        public static readonly Color Orchid = FromRgb(NavStripTable.Orchid);     // Companion
+        public static readonly Color VioletBlue = FromRgb(NavStripTable.VioletBlue); // Play
+        public static readonly Color Sky = FromRgb(NavStripTable.Sky);           // Social
+        public static readonly Color Coral = FromRgb(NavStripTable.Coral);       // You
+        public static readonly Color Sage = FromRgb(NavStripTable.Sage);         // Library
 
-        public static Color Accent(string? section) => section switch
-        {
-            NavSections.Studio => Pink,
-            NavSections.Companion => Orchid,
-            NavSections.Play => VioletBlue,
-            NavSections.Social => Sky,
-            NavSections.You => Coral,
-            NavSections.Library => Sage,
-            _ => Lilac,   // Home, Settings
-        };
+        public static Color Accent(string? section) => FromRgb(NavStripTable.AccentRgb(section));
+
+        private static Color FromRgb(uint rgb) => Color.FromRgb((byte)(rgb >> 16), (byte)(rgb >> 8), (byte)rgb);
 
         // ---- Section ink (polish wave 8, readability pass) ----------------------------------
         // Saturation goes into the headers, not the body: the eyebrow, its rule, the card
@@ -161,43 +111,13 @@ namespace ConditioningControlPanel.Controls.NavRail
         private static Color WithAlphaByte(Color c, byte a) => Color.FromArgb(a, c.R, c.G, c.B);
 
         /// <summary>Last-tab memory: section -> tab, stored as JSON in AppSettings.NavLastTabBySection.</summary>
-        public static Dictionary<string, string> ParseLastTabs(string? json)
-        {
-            var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            if (string.IsNullOrWhiteSpace(json)) return map;
-            try
-            {
-                var raw = JsonSerializer.Deserialize<Dictionary<string, string>>(json!);
-                if (raw != null)
-                    foreach (var (k, v) in raw)
-                        if (!string.IsNullOrWhiteSpace(k) && !string.IsNullOrWhiteSpace(v)) map[k] = v;
-            }
-            catch (JsonException) { }
-            return map;
-        }
+        public static Dictionary<string, string> ParseLastTabs(string? json) => NavStripTable.ParseLastTabs(json);
 
         /// <summary>The JSON with one section's last tab set. Unchanged JSON when nothing moved.</summary>
-        public static string WithLastTab(string? json, string section, string tab)
-        {
-            var map = ParseLastTabs(json);
-            if (map.TryGetValue(section, out var had) && string.Equals(had, tab, StringComparison.OrdinalIgnoreCase))
-                return json ?? string.Empty;
-            map[section] = tab;
-            return JsonSerializer.Serialize(map.OrderBy(p => p.Key, StringComparer.Ordinal)
-                                               .ToDictionary(p => p.Key, p => p.Value));
-        }
+        public static string WithLastTab(string? json, string section, string tab) => NavStripTable.WithLastTab(json, section, tab);
 
-        /// <summary>The tab a section returns to: its remembered tab when the table still owns it,
-        /// otherwise its default.</summary>
-        public static string? LastTabFor(string? json, string section)
-        {
-            var def = NavSections.DefaultTab(section);
-            if (ParseLastTabs(json).TryGetValue(section, out var tab)
-                && string.Equals(NavSections.SectionForTab(tab), section, StringComparison.OrdinalIgnoreCase)
-                && !NavSections.Redirects.ContainsKey(tab))
-                return tab;
-            return def;
-        }
+        /// <summary>The tab a section returns to: its remembered tab, else its default.</summary>
+        public static string? LastTabFor(string? json, string section) => NavStripTable.LastTabFor(json, section);
 
         /// <summary>Slide duration for the active fill: 180 ms, halved at Reduced, 0 at Off.</summary>
         public static int SlideMs(MotionLevel level) => level switch

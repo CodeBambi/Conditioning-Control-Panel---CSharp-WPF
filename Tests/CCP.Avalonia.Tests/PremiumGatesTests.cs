@@ -49,6 +49,8 @@ public sealed class PremiumGatesTests
                 // Opening Play notes it in the dashboard's RECENT rail, a real save (WPF
                 // NoteDestinationOpened); already at the head, so this measures the lapse pass alone.
                 service.Current.RailRecent.Insert(0, "tab.play");
+                // Opening a section page remembers its last tab (WPF SyncSectionChrome); already so.
+                service.Current.NavLastTabBySection = "{\"play\":\"play\"}";
                 service.SaveImmediate();
                 var before = System.IO.File.ReadAllText(path);
                 (CoreEntitlement.HasPremiumProvider, CoreEntitlement.IsFreeTodayProvider) = (() => false, null);
