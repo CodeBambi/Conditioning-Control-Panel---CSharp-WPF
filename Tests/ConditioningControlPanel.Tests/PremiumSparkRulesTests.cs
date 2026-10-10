@@ -134,7 +134,7 @@ public class PremiumSparkRulesTests
     {
         var keys = Enum.GetValues<SparkTier>().Select(PremiumSparkRules.TooltipKey).ToArray();
         Assert.Equal(keys.Length, keys.Distinct().Count());
-        var en = File.ReadAllText(Path.Combine(RepoRoot(), "ConditioningControlPanel", "Localization", "Languages", "en.json"));
+        var en = File.ReadAllText(Path.Combine(SourceRoots.LanguagesDirectory, "en.json"));
         foreach (var key in keys.Append("premium_spark_label"))
             Assert.Contains("\"" + key + "\"", en);
     }

@@ -154,7 +154,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             column.RowDefinitions[1].Height = BrowserFoldRule.FoldRowIsStar(collapsed) ? GridLength.Star : new GridLength(0);
             body.IsVisible = BrowserFoldRule.BodyShown(collapsed);
 
-            if (dash!.FindControl<TextBlock>("TxtFoldBrowser") is { } glyph) glyph.Text = BrowserFoldRule.Chevron(collapsed);
+            // Since 7.1 (main 210e0e262) Core's chevrons are Segoe MDL2 code points; no such font on
+            // Linux, so this head draws the plain arrows WPF used before (sync6-home-layout ports the pill).
+            if (dash!.FindControl<TextBlock>("TxtFoldBrowser") is { } glyph) glyph.Text = collapsed ? "▾" : "▴";
             if (dash.FindControl<Button>("BtnFoldBrowser") is { } btn)
             {
                 // Bound, not assigned: the tooltip follows a language switch (P09).

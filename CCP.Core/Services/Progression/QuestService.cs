@@ -1516,7 +1516,7 @@ public class QuestService : IDisposable
     {
         // Logged either way so a "lockdowns do not count" report (#1388) answers itself from the log.
         var counts = LockdownCountsForQuests(served);
-        App.Logger?.Information("Quest: lockdown of {Minutes:F1} min {Verdict} (minimum {Min} min)",
+        Log.Information("Quest: lockdown of {Minutes:F1} min {Verdict} (minimum {Min} min)",
             served.TotalMinutes, counts ? "counts" : "is too short to count", LockdownQuestMinimum.TotalMinutes);
         if (!counts) return;
         UpdateQuestProgress(QuestCategory.Lockdown, 1);

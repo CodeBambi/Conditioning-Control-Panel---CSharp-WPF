@@ -26,7 +26,7 @@ public class WhatMovedCardTests
     }
 
     private static string Source(params string[] parts) =>
-        File.ReadAllText(Path.Combine(new[] { RepoRoot(), "ConditioningControlPanel" }.Concat(parts).ToArray()));
+        SourceRoots.ReadProductFile(parts);
 
     [Theory]
     [InlineData(0, false, true)]

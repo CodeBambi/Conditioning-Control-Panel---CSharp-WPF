@@ -52,7 +52,7 @@ public class NavSectionsTests
     }
 
     private static string[] LanguageFiles() => Directory
-        .GetFiles(Path.Combine(RepoRoot(), "ConditioningControlPanel", "Localization", "Languages"), "*.json")
+        .GetFiles(SourceRoots.LanguagesDirectory, "*.json")
         .OrderBy(f => f, StringComparer.Ordinal).ToArray();
 
     private static HashSet<string> LanguageKeys(string path)

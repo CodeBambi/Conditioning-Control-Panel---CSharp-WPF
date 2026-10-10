@@ -1699,3 +1699,6 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/main-20261009: +47588
 - Main sync #6: WPF main 11d7c3afc merged (releases 7.1.0-7.1.5); delta ledger docs/avalonia-main-sync-20261009.md (8 ported-by-merge, 132 needs-port in 15 sync6-* lanes, 8 n/a).
+
+## avalonia-port/main-20261009-compat: +199
+- Compat for main sync #6: BillboardContract/NavSections into Core, QuestsOpen/GameAvailable head seams, LegacyBillboard keeps the Avalonia slideshow, WPF scan tests via SourceRoots/Assets. GATE-OK.
