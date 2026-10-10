@@ -1726,3 +1726,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/sync6-nav-polish: +364
 - Polish 8 readability pass on Avalonia: type scale + section ink tokens, token greys sweep, Play/Companion on the scale (rows 72-74, 76).
 - Rail/strip/depth/edge-fog rows (28) left needs-port for sync6-nav-polish-b, blocked on sync6-nav-rail.
+
+## avalonia-port/rows-assets-tab: +910
+- Assets tab: real asset tree, checks, thumbnails, preview, counts and preset CRUD (03af6e8bb online preset fold + OnlineChannelsReset seed).
+- Review fixes: untick/preset/repair drops the video + bubble queues (#130); Refresh keeps the open folder; repair refresh skips an unloaded tab. Rows stay stub (remote picker, packs, video thumbs); FX in the next layer.
