@@ -316,7 +316,37 @@ namespace ConditioningControlPanel.Services.Transfer
         public void PauseForMatch() { _pausedByMatch = true; RaiseChanged(); }
         public void ResumeAfterMatch() { _pausedByMatch = false; Kick(); RaiseChanged(); }
 
-        public bool IsPaused => _pausedByUser || _pausedByMatch;
+        /// <summary>The window that owns the cache closed (its own close, or panic): nothing new starts
+        /// and every job in flight is cancelled now, its temp file with it. The queue keeps its place and
+        /// runs again after <see cref="ReleaseHostHold"/>; a cancelled job is back in the plan, never
+        /// marked failed. (WPF's queue is app-lifetime; this head has no other door onto it.)</summary>
+        public void HoldForHostClose()
+        {
+            List<RunningJob> running;
+            lock (_lock)
+            {
+                _heldByHost = true;
+                running = _running.Values.ToList();
+            }
+            foreach (var r in running) { try { r.Cts.Cancel(); } catch { } }
+            RaiseChanged();
+        }
+
+        public void ReleaseHostHold()
+        {
+            lock (_lock)
+            {
+                if (!_heldByHost) return;
+                _heldByHost = false;
+            }
+            Kick();
+            RaiseChanged();
+        }
+
+        internal bool HeldByHost => _heldByHost;
+        private volatile bool _heldByHost;
+
+        public bool IsPaused => _pausedByUser || _pausedByMatch || _heldByHost;
         /// <summary>"user" wins the label when both hold — it's the one with a button attached.</summary>
         public string? PausedBy => _pausedByUser ? "user" : _pausedByMatch ? "match" : null;
 

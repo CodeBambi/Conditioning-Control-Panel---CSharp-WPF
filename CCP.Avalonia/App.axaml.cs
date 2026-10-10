@@ -34,6 +34,8 @@ namespace ConditioningControlPanel.Avalonia
         /// <summary>The achievement engine (achievements.json), or null on the headless render path.
         /// Local-only: no sync, no streak writes, no ResetProgress on this head (oracle-achievements.md).</summary>
         internal static AchievementEngine? Achievements { get; private set; }
+        /// <summary>Buying a v2 prize from the options panel (WPF App.V2Purchase, Platform/V2PurchaseService).</summary>
+        internal static Platform.V2PurchaseService? V2Purchase { get; set; }
         /// <summary>WPF App.CommunityPrompts. Null only if its construction failed.</summary>
         internal static CommunityPromptLibrary? CommunityPrompts { get; private set; }
 
@@ -587,6 +589,9 @@ namespace ConditioningControlPanel.Avalonia
                         PointsSpent = cost => Achievements?.TrackSkillPointsSpent(cost),
                         LifetimeSpentReconciled = total => Achievements?.ReconcileLifetimePointsSpent(total),
                     };
+                    // WPF App.xaml.cs:2146 (k31): the options-panel "Get it" purchase. The relay is the room's
+                    // own; adoptSp is NULL on it on purpose (the service knows which op answered).
+                    V2Purchase ??= Platform.V2PurchaseService.ForApp();
                     // WPF SkillTreeService.PurchaseSkillAsync: SkillUnlocked feeds the bark's skill_unlock rule, and
                     // buying Pink Rush starts its check timer at once (ApplySkillEffects case "pink_rush").
                     SkillPurchase.Current.SkillUnlocked += (_, id) =>

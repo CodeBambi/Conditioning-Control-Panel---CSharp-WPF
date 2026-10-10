@@ -6,8 +6,8 @@
 //   - the tier badge shakes once every 8 s and its big copy pops in (LauncherWindow.TierBadge.cs).
 // Every tween is a 16 ms timer write (TransformTween's road: never Animation.RunAsync on a transform),
 // snaps when transitions are off, and is dropped on hide.
-// not ported: cursor parallax (WPF LauncherWindow.Backdrop.cs :211): this head's backdrop is one
-// drawn canvas with no separate glow / pool / spiral layers to slide against each other.
+// Cursor parallax (WPF LauncherWindow.Backdrop.cs :211) is LauncherWindow.Parallax.cs; the art drift, trail,
+// comets and sheens are LauncherWindow.ArtMotion.cs.
 using System;
 using System.Collections.Generic;
 using System.Globalization;

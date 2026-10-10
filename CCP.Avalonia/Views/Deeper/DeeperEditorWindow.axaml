@@ -186,20 +186,12 @@
                                FontSize="12" FontWeight="SemiBold"
                                VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
 
-                    <!-- Browser zoom cluster: page-zooms the embedded preview in WPF. HIDDEN here,
-                         and not because of a mode. AdjustPreviewZoom is a stub that only logs -
-                         NativeWebView has no zoom factor at all, and CSS zoom through the script
-                         channel is not a substitute (per-document, lost on the next navigation, and
-                         it does not scale a fullscreened video). WPF's binding was
-                         IsVisible="{Binding #BrowserPreview.IsVisible}"; restore that line and this
-                         cluster comes back the moment the buttons do something. Two enabled buttons
-                         that log is a toolbar lying about what it offers, which is why they are not
-                         merely disabled. Same call, same reason, in EnhancementPlayerWindow's
-                         ShowMediaPaneFor. -->
+                    <!-- Browser zoom cluster: page-zooms the embedded preview (DeeperPageBridge: a CSS zoom
+                         re-applied after each navigation). Shown with the preview, as in WPF. -->
                     <StackPanel Grid.Row="0" Grid.Column="2" x:Name="PreviewZoomCluster"
                                 Orientation="Horizontal" VerticalAlignment="Center"
                                 Margin="8,0,0,0"
-                                IsVisible="False">
+                                IsVisible="{Binding #BrowserPreview.IsVisible}">
                         <TextBlock Text="🔍" FontSize="12" VerticalAlignment="Center" Margin="0,0,4,0"/>
                         <Button x:Name="BtnPreviewZoomOut" Content="−"
                                 ToolTip.Tip="{loc:Str deeper_zoom_out_tt}"

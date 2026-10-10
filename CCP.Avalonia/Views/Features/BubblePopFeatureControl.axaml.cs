@@ -79,6 +79,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             CoreMods.ModChanged += OnModChanged;
             Overlays.BubbleOverlay.XpBudgetChanged += UpdateAmbientXpBudgetLine;   // WPF AmbientXpBudgetChanged
             Platform.PrizeOwnership.Changed += OnGrantsChanged;
+            // WPF OnLoaded: the Get it row names its prize and tells the box when to re-measure.
+            RowGetBubblesV2.RowChanged -= OnGetRowChanged;
+            RowGetBubblesV2.RowChanged += OnGetRowChanged;
+            RowGetBubblesV2.Configure(Platform.V2PurchaseRule.BubblesPrizeId, "v2_get_bubble_blurb", "label_bubbles_v2_box");
             RebindToCurrentSettings();
         }
 
@@ -316,6 +320,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
         // ---- Bubbles v2 motion picker (WPF BubblePopFeatureControl.xaml.cs RebuildMotionPicker) ----
 
         /// <summary>Grants can change off the UI thread (a sync); the rebuild is posted.</summary>
+        // The Get it row decides its own visibility; the box only needs to know whether anything is
+        // left in it (WPF OnGetRowChanged).
+        private void OnGetRowChanged(object? sender, EventArgs e)
+        {
+            var was = _isLoading;
+            _isLoading = true;
+            try { RebuildMotionPicker(); }
+            finally { _isLoading = was; }
+        }
+
         private void OnGrantsChanged() => Dispatcher.UIThread.Post(() =>
         {
             var was = _isLoading;
@@ -337,7 +351,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             bool spiral = Platform.PrizeOwnership.IsGranted(AmbientBubbleMotion.SpiralInGrant);
             ChkBrainDrainBubble.IsVisible = rain || spiral;
             MotionRow.IsVisible = rain || spiral;
-            V2Box.IsVisible = rain || spiral;   // WPF also keeps it up for the Get it row (owner call, not built)
+            // The BOX stays up while the Get it row has something to offer (WPF RebuildMotionPicker).
+            V2Box.IsVisible = rain || spiral || !RowGetBubblesV2.IsRowHidden;
 
             CmbMotion.Items.Clear();
             CmbMotion.Items.Add(MotionItem(BubbleMotionStyle.FloatUp, "bubble_motion_float_up", v2: false));

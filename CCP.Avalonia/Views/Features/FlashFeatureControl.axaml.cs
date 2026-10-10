@@ -77,6 +77,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             base.OnAttachedToVisualTree(e);
             if (CoreSettings.Service is { } svc) svc.CurrentReplaced += OnCurrentReplaced;
             Platform.PrizeOwnership.Changed += OnGrantsChanged;
+            // WPF OnLoaded: the Get it row names its prize and tells the box when to re-measure.
+            RowGetFlashesV2.RowChanged -= OnGetRowChanged;
+            RowGetFlashesV2.RowChanged += OnGetRowChanged;
+            RowGetFlashesV2.Configure(Platform.V2PurchaseRule.FlashesPrizeId, "v2_get_flash_blurb", "section_flash_v2");
             RebindToCurrentSettings();
         }
 
@@ -92,6 +96,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
 
         /// <summary>WPF OnGrantsChanged: a prize granted (or an account cleared) while the panel is up
         /// rebuilds the motion picker and the v2 rows. Raised off the UI thread, so it is posted.</summary>
+        // WPF OnGetRowChanged: the row repaints on its own schedule (a counter read landing, a
+        // sign-in), so the box is re-measured from the row and not from ownership alone.
+        private void OnGetRowChanged(object? sender, EventArgs e) =>
+            BoxFlashV2.IsVisible = RowRoundedCorners.IsVisible || !RowGetFlashesV2.IsRowHidden;
+
         private void OnGrantsChanged() => Dispatcher.UIThread.Post(() =>
         {
             var was = _isLoading;
@@ -169,7 +178,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             var motion = drift || Platform.PrizeOwnership.IsGranted(Platform.PrizeOwnership.FlashPendulum);
             RowMotion.IsVisible = drift;
             RowRoundedCorners.IsVisible = RowDraggable.IsVisible = RowShatter.IsVisible = motion;
-            BoxFlashV2.IsVisible = motion;
+            // The box no longer collapses on ownership alone: with nothing owned it holds the offer
+            // to buy the prize (WPF RefreshV2Box).
+            BoxFlashV2.IsVisible = motion || !RowGetFlashesV2.IsRowHidden;
             RefreshExitRow();
             CmbMotion.Items.Clear();
             AddMotionChoice(FlashMotionStyle.Still, "option_flash_motion_still", v2: false);

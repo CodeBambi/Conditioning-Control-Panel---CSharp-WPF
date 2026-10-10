@@ -35,9 +35,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
     /// on a 1 s UI timer: a dead (8 s) or lost (5 s without frames) output replays the clip once, as
     /// WPF's vout heal, but on the same shared LibVLC (docs/avalonia-decisions.md). Ambient bubbles
     /// are paused by the Core scheduler.
-    /// ponytail: missing against WPF - the off-thread UI-wedge watchdog and the LibVLC retire/quarantine
-    /// (a Stop that hangs in native code still hangs the UI thread), the gaze attention input and
-    /// no-activate z-order. The toy-button input is <see cref="ToyPressed"/>; the remote-media offer
+    /// The off-thread UI-wedge watchdog is <see cref="VideoWedgeWatchdog"/> (rungs 1 and 3; a player whose
+    /// Stop wedged is quarantined). ponytail: missing against WPF - retiring the shared LibVLC (rung 2)
+    /// and no-activate z-order. The gaze
+    /// attention input is <see cref="GazeTargets"/>, read by Platform/GazeFocusHead. The toy-button input is <see cref="ToyPressed"/>; the remote-media offer
     /// after the "no videos" dialog is <see cref="Platform.RemoteMediaOffer"/>.
     /// </summary>
     internal sealed class MandatoryVideoOverlay : IMandatoryVideoHost
@@ -213,7 +214,59 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             _guard = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
             _guard.Tick += (_, _) => GuardTick();
             _guard.Start();
+            StartWedgeWatchdog();
             if (_attention) DispatcherTimer.RunOnce(SetupAttention, TimeSpan.FromSeconds(2));   // WPF: Task.Delay(2000)
+        }
+
+        // ---- the UI-thread wedge watchdog (WPF VideoService.cs:7186, VideoWedgeWatchdog.cs) ----
+
+        private VideoWedgeWatchdog? _wedge;
+        private volatile IntPtr[] _windowHandles = Array.Empty<IntPtr>();
+        private volatile bool _playerWedged;
+        /// <summary>WPF's rooted quarantine: a player whose Stop() wedged is never stopped again or disposed
+        /// (that dispose is the next hang); it stays referenced for the life of the process.</summary>
+        private static readonly List<object> WedgedPlayers = new();
+
+        /// <summary>Tests: the watchdog armed for the clip on screen (null when none).</summary>
+        internal VideoWedgeWatchdog? Wedge => _wedge;
+
+        private void StartWedgeWatchdog()
+        {
+            _wedge?.Dispose();
+            _playerWedged = false;
+            VideoWedgeWatchdog? dog = null;
+            dog = _wedge = new VideoWedgeWatchdog
+            {
+                Armed = () => Scheduler.IsPlaying && _surfaces.Count > 0,
+                Live = () => _player != null,
+                Cleaning = () => _closing,
+                StopPlayers = () =>
+                {
+                    var p = _player;
+                    if (p == null) return true;
+                    bool ok = VideoWedgeWatchdog.StopOffThread(() => p.Stop());
+                    if (!ok) _playerWedged = true;
+                    return ok;
+                },
+                // Guarded by identity: a teardown that already ran (and a newer clip) must not be ended by this one.
+                PostTeardown = () => Dispatcher.UIThread.Post(() => { if (ReferenceEquals(_wedge, dog) && Scheduler.IsPlaying) Scheduler.End(); }),
+                EscapeHatch = () => VideoWedgeWatchdog.ReleaseTopmost(_windowHandles),
+                OnBeat = CacheWindowHandles,
+            };
+            dog.Start();
+        }
+
+        /// <summary>The native handles of the video windows, read on the UI thread once a second so the escape
+        /// hatch can reach them from a worker without the dispatcher.</summary>
+        private void CacheWindowHandles()
+        {
+            var handles = new List<IntPtr>(_surfaces.Count);
+            foreach (var x in _surfaces)
+            {
+                try { if (x.Window.TryGetPlatformHandle()?.Handle is { } h && h != IntPtr.Zero) handles.Add(h); }
+                catch (Exception ex) { Log.Debug("VideoWedge: handle read failed: {E}", ex.Message); }
+            }
+            _windowHandles = handles.ToArray();
         }
 
         /// <summary>WPF VideoService.UpdateMasterVolume / UpdateVideoVolume: a playing clip follows
@@ -334,7 +387,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                 e.Handled = true;
             }, global::Avalonia.Interactivity.RoutingStrategies.Tunnel);
             // WPF: strict vetoes a user close while playing; a non-strict close is a dismiss.
-            w.Closing += (_, e) => { if (!_closing && strict && Scheduler.IsPlaying) e.Cancel = true; };
+            // Once the app has demonstrably wedged during this clip the veto stands down (WPF #765).
+            w.Closing += (_, e) => { if (!_closing && strict && Scheduler.IsPlaying && _wedge?.StallSeen != true) e.Cancel = true; };
             w.Closed += (_, _) => { if (!_closing) Scheduler.End(); };
             w.Show();
             w.WindowState = WindowState.FullScreen;
@@ -624,11 +678,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                     e.Handled = true;
                     Hit(t);
                 };
+                t.Click = () => Hit(t);   // the gaze dwell's road in (GazeTargets)
                 batch.Add(t);
                 _targets.Add(t);
                 ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("attentionCheckShown");   // WPF VideoService.cs:5844: a HOLD, released when no target is left
             }
-            // Whichever route gets here (mouse, toy button) runs the same idempotent pipeline.
+            // Whichever route gets here (mouse, toy button, gaze dwell) runs the same idempotent pipeline.
             void Hit(Target t)
             {
                 if (caught) return;
@@ -696,6 +751,30 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             }
         }
 
+        /// <summary>WPF VideoService.GetGazeTargets + IAttentionTarget.GetGazeBounds: the live attention targets
+        /// in screen pixels, each with the click a gaze dwell performs (WPF GazeClick: the same idempotent Hit as
+        /// the mouse). Empty while the grace pause is up. The VideoGazeClickEnabled gate is the caller's
+        /// (Platform/GazeFocusHead).</summary>
+        internal IReadOnlyList<(object Key, double X, double Y, double W, double H, Action Click)> GazeTargets()
+        {
+            var list = new List<(object, double, double, double, double, Action)>();
+            if (_gracePaused || _closing) return list;
+            foreach (var t in _targets)
+            {
+                try
+                {
+                    if (t.Click is not { } click || TopLevel.GetTopLevel(t.Root) is not { } top) continue;
+                    var at = t.Root.PointToScreen(default);
+                    double rs = top.RenderScaling > 0 ? top.RenderScaling : 1;
+                    double w = t.Root.Bounds.Width > 0 ? t.Root.Bounds.Width : t.Root.Width, h = t.Root.Bounds.Height > 0 ? t.Root.Bounds.Height : t.Root.Height;
+                    if (double.IsNaN(w) || double.IsNaN(h)) continue;   // not measured yet
+                    list.Add((t, at.X, at.Y, w * rs, h * rs, click));
+                }
+                catch (Exception ex) { Log.Debug("Attention gaze bounds: {E}", ex.Message); }
+            }
+            return list;
+        }
+
         internal static void PlayPop()
         {
             var path = Path.Combine(AppContext.BaseDirectory, "Resources", "sounds", "bubbles", new[] { "Pop.mp3", "Pop2.mp3", "Pop3.mp3" }[Random.Shared.Next(3)]);
@@ -709,6 +788,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             internal const double Speed = 187.5, Outline = 7.5;
             public readonly Border Root;
             public readonly double Due;
+            /// <summary>The hit a click performs, for the routes that are not a pointer (gaze dwell).</summary>
+            public Action? Click;
             private readonly Canvas _layer;
             private double _x, _y, _vx, _vy, _minX, _minY, _maxX, _maxY;
             private readonly double _w, _h;
@@ -918,7 +999,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                 ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.ReleaseHold("attentionCheckShown");   // the clip is gone: a hold must not outlive its reason
                 DisarmToyInput();
                 // Stop joins the decoder thread, so after it no callback touches the frame buffer.
-                if (_player != null)
+                if (_player != null && _playerWedged)
+                {
+                    // Its off-thread Stop() never returned: stopping or disposing it here is the next hang.
+                    lock (WedgedPlayers) WedgedPlayers.Add(_player);
+                    Log.Error("VideoService: a wedged player was quarantined, not disposed");
+                }
+                else if (_player != null)
                 {
                     try { _player.Stop(); } catch { }
                     try { _player.Dispose(); } catch { }
@@ -936,7 +1023,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                 BouncingTextOverlay.PauseForVideo(false);
                 if (FillCount > 0) Log.Information("VideoService: blur fill {Avg:F3} ms/frame over {N} frames", FillMs / FillCount, FillCount);
             }
-            finally { _closing = false; }
+            finally
+            {
+                // Armed THROUGH the teardown (WPF #766): the longest UI-thread block is the one above.
+                _wedge?.Dispose();
+                _wedge = null;
+                _playerWedged = false;
+                _windowHandles = Array.Empty<IntPtr>();
+                _closing = false;
+            }
             return Interlocked.Exchange(ref _watchedMs, 0) / 1000.0;
         });
     }

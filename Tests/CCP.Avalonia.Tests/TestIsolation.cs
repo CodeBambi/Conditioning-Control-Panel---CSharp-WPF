@@ -68,6 +68,9 @@ internal sealed class IsolateProcessStateAttribute : BeforeAfterTestAttribute
             // PLAYBOOK P52: a passive card (FeatureIntroPopup, AnnouncementPopup) or any other app
             // window a test left open holds the next test's startup surfaces, so close it first.
             OpenWindows.CloseLeftovers();
+            // Singletons whose own state outlives a test: EMI left out, a failed camera start.
+            ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk.EmiDeskService.Instance.ResetForTests();
+            ConditioningControlPanel.Avalonia.Platform.WebcamTracker.Instance.ClearErrorForTests();
             ConditioningControlPanel.Avalonia.Platform.StartupLadder.ResetForTests();
             Current?.Restore();
             Current = null;

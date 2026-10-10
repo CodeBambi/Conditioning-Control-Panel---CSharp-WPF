@@ -34,6 +34,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         /// <summary>True while she is on screen (including her intro and outro).</summary>
         public bool IsOut { get; private set; }
 
+        /// <summary>Test seam: a test that left her out (a summon or a borrowed show, window never shown)
+        /// must not leave her out for the next test. No goodbye, no events.</summary>
+        internal void ResetForTests()
+        {
+            _summonGen++;
+            var win = _window;
+            _window = null;
+            try { win?.Close(); } catch { /* a half-built headless window */ }
+            IsOut = false;
+        }
+
         /// <summary>The widget window, or null before her first summon.</summary>
         public EmiDeskWindow? Window => _window;
 

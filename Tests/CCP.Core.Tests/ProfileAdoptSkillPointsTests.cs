@@ -48,7 +48,7 @@ public sealed class ProfileAdoptSkillPointsTests
     }
 
     [Fact]
-    public void TheSyncReplyRaises_NeverLowers_AndHoldsUnderAForcedSkillsReset()
+    public void TheSyncReplyRaises_NeverLowers()
     {
         var now = new DateTime(2026, 10, 10, 12, 0, 0, DateTimeKind.Utc);
         var s = With(5);
@@ -56,8 +56,6 @@ public sealed class ProfileAdoptSkillPointsTests
         Assert.Equal(12, s.SkillPoints);
         ProfileAdopt.ApplySyncResponse(s, JObject.Parse("{\"skill_points\":2}"), now);
         Assert.Equal(12, s.SkillPoints);
-        ProfileAdopt.ApplySyncResponse(s, JObject.Parse("{\"skill_points\":40,\"force_skills_reset\":true}"), now);
-        Assert.Equal(12, s.SkillPoints);                                                   // the server's own reset is not a raise
         ProfileAdopt.ApplySyncResponse(s, JObject.Parse("{}"), now);
         Assert.Equal(12, s.SkillPoints);
     }

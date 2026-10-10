@@ -26,6 +26,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
         {
             if (EmiMomentStem(Spec.Id) is not { } stem) return;
             _emiOpenedUtc = DateTime.UtcNow;
+            // WPF's farewell claims her voice for that window: the last thing you get is the bye.
+            if (_arcFarewellClaimed) return;
             EmiDeskBus.Fire(stem + "Opened");
         }
 

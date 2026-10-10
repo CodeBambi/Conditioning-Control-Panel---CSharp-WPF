@@ -87,13 +87,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
 
         /// <summary>WPF SeedNativeState: init is a snapshot of settings, not of what is happening now. A
         /// mandatory video already playing, or an audio-only session that began during boot, suspends at once.
-        /// SEAM(browser-video): the browser-video seed needs a browser media service the port does not have.</summary>
+        /// So does a browser video takeover (Platform.BrowserVideoSignal).</summary>
         private void SeedArcademyNativeState()
         {
             try
             {
                 if (CoreEngine.Video?.IsPlaying == true) { ArcademyVideoSuspend(true); return; }
-                if (CoreSettings.Current?.AudioOnlySession == true) Post(new { type = "suspend", on = true, reason = "audio-only" });
+                if (CoreSettings.Current?.AudioOnlySession == true) { Post(new { type = "suspend", on = true, reason = "audio-only" }); return; }
+                // WPF :539: a browser video already playing under the protection freezes the class at once.
+                if (Platform.BrowserVideoSignal.IsPlaying) ArcademyBrowserVideoChanged(true);
             }
             catch (Exception ex) { Log.Debug("[Game] arcademy seed: {E}", ex.Message); }
         }
