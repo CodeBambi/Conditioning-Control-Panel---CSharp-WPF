@@ -240,4 +240,44 @@ public sealed class SectionTabStripFxTests
             return Task.CompletedTask;
         });
     }
+
+    /// <summary>WPF CelebratePrestige, the sheen: one pass across the chrome that parks itself at 0.</summary>
+    [Fact]
+    public async Task ThePrestigeSheenCrossesOnce_AndParksAtZero()
+    {
+        await AvaloniaTestDispatcher.RunAsync(async () =>
+        {
+            if (Application.Current is null)
+                AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>()
+                    .UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                    .SetupWithoutStarting();
+            var w = new global::ConditioningControlPanel.Avalonia.Views.Windows.MainShellWindow();
+            try
+            {
+                w.Show();
+                Dispatcher.UIThread.RunJobs();
+                var band = w.Named<Border>("PrestigeSheen")!;
+                w.PrestigeSheenGateOverride = false;
+                Assert.False(w.SweepPrestigeSheen());                 // gate shut: nothing moves
+                Assert.Equal(0, band.Opacity, 3);
+
+                w.PrestigeSheenGateOverride = true;
+                Assert.True(w.SweepPrestigeSheen());
+                Assert.True(w.PrestigeSheenRunning);
+                double peak = 0;
+                for (int i = 0; i < 120 && w.PrestigeSheenRunning; i++)
+                {
+                    await Task.Delay(16);
+                    Dispatcher.UIThread.RunJobs();
+                    Assert.InRange(band.Opacity, 0, 1);
+                    peak = System.Math.Max(peak, band.Opacity);
+                }
+                Assert.False(w.PrestigeSheenRunning);
+                Assert.Equal(0, band.Opacity, 3);
+                Assert.InRange(peak, 0.01, global::ConditioningControlPanel.Avalonia.Views.Windows.MainShellWindow.PrestigeSheenPeak + 0.0001);
+                Assert.Null(band.Effect);
+            }
+            finally { w.Close(); }
+        });
+    }
 }

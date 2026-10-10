@@ -99,7 +99,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
         private readonly ScaleTransform _breath;
         private readonly ScaleTransform _armScale = new(1, 1);
 
-        private CancellationTokenSource? _breathClock;
+        private global::ConditioningControlPanel.Avalonia.Helpers.BeatLoop? _beat;
         private double _progress;
         private bool _hasBlock;
         private bool _breathing;
@@ -333,45 +333,20 @@ namespace ConditioningControlPanel.Avalonia.Controls
                 if (_breathing) return;
                 _breathing = true;
 
-                _breathClock = new CancellationTokenSource();
-                var breathe = new Animation
-                {
-                    Duration = TimeSpan.FromSeconds(BreathSeconds),
-                    IterationCount = IterationCount.Infinite,
-                    PlaybackDirection = PlaybackDirection.Alternate,
-                    Easing = new SineEaseInOut(),
-                    Children =
-                    {
-                        new KeyFrame
-                        {
-                            Cue = new Cue(0d),
-                            Setters =
-                            {
-                                new Setter(ScaleTransform.ScaleXProperty, 1.0),
-                                new Setter(ScaleTransform.ScaleYProperty, 1.0),
-                            },
-                        },
-                        new KeyFrame
-                        {
-                            Cue = new Cue(1d),
-                            Setters =
-                            {
-                                new Setter(ScaleTransform.ScaleXProperty, BreathScale),
-                                new Setter(ScaleTransform.ScaleYProperty, BreathScale),
-                            },
-                        },
-                    },
-                };
-                // The GLYPH, not _breath. Avalonia's TransformAnimator is handed the host Visual
-                // and resolves the transform itself, walking that visual's RenderTransform for the
-                // child whose type matches the animated property's owner. Handed the transform it
-                // casts straight to Visual and throws InvalidCastException - into the catch below,
-                // which is how this control shipped with a breath that never once ran. TierBadge
-                // carries the same note against the same Avalonia 12.1.1 behaviour.
-                _ = breathe.RunAsync(this, _breathClock.Token);
+                // On the window's shared 30 fps beat (Helpers/BeatLoop), not an infinite Animation:
+                // one of those anywhere keeps the whole window composing at 60 Hz. Same breath:
+                // 1 -> BreathScale -> 1 over 2 x BreathSeconds, sine in-out, written straight to
+                // the transform (never Animation.RunAsync on a Transform).
+                _beat ??= new global::ConditioningControlPanel.Avalonia.Helpers.BeatLoop(this, t =>
+                    _breath.ScaleX = _breath.ScaleY = 1.0 + (BreathScale - 1.0)
+                        * global::ConditioningControlPanel.Avalonia.Helpers.BeatLoop.Breath(t, BreathSeconds));
+                _beat.Start();
             }
             catch (Exception ex) { Log.Debug("[Spiral] glyph motion: {E}", ex.Message); }
         }
+
+        /// <summary>Test seam: the breath is ticking.</summary>
+        internal bool BreathRunning => _beat?.IsRunning == true;
 
         private void StopBreath()
         {
@@ -379,8 +354,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
             _breathing = false;
             try
             {
-                _breathClock?.Cancel();
-                _breathClock = null;
+                _beat?.Stop();
                 _breath.ScaleX = _breath.ScaleY = 1.0;
             }
             catch (Exception ex) { Log.Debug("[Spiral] glyph stop: {E}", ex.Message); }
