@@ -92,7 +92,7 @@ public sealed class PossessionEffectsTests
             // The law is asked again at each effect's door: a hand-built target cannot get past it.
             var host = new PossessionHost();
             var effects = MainShellWindow.PossessionHeadEffects();
-            Assert.Equal(new[] { "nudge", "typo", "breathe", "drift", "rewrite", "melt", "glyphrot", "crack", "retitle", "glitchportrait" }, effects.Select(e => e.Id).ToArray());
+            Assert.Equal(new[] { "nudge", "typo", "breathe", "drift", "rewrite", "melt", "glyphrot", "xpdrain", "crack", "retitle", "glitchportrait" }, effects.Select(e => e.Id).ToArray());
             // Photosafe: the one flicker in the deck says so (the deck skips it) and refuses by itself too.
             var flicker = Assert.Single(effects, e => e.UsesFlicker);
             Assert.Equal("glitchportrait", flicker.Id);
@@ -283,6 +283,25 @@ public sealed class PossessionEffectsTests
             Assert.Equal(1, rot.OverlayCount);                          // one face at a time, never a pile
             rot.UndoAsync(TimeSpan.Zero);
             Assert.Equal("Basic Subject", title.Text);
+
+            // xpdrain: the bar is squeezed and the chip lies; neither value is ever written.
+            var drain = new XpDrainEffect();
+            Assert.False(drain.CanApply(Ctx(host), lt));                // this window has no XP bar
+            var fill = new Border { Name = "XPBar", Width = 100, Height = 10, HorizontalAlignment = global::Avalonia.Layout.HorizontalAlignment.Left, Background = Brushes.Pink };
+            var chip = Tagged(new TextBlock { Name = "TxtLevelLabel", Text = "LVL 12" }, PossessionRole.Label, "the level label");
+            ((StackPanel)win.Content!).Children.Add(fill);
+            ((StackPanel)win.Content!).Children.Add(chip);
+            Dispatcher.UIThread.RunJobs();
+            var chipTarget = Target(chip, PossessionRole.Label);
+            Assert.True(drain.CanApply(Ctx(host), chipTarget));
+            drain.ApplyAsync(Ctx(host), chipTarget, default).GetAwaiter().GetResult();
+            Assert.IsType<TransformGroup>(fill.RenderTransform);
+            Assert.Equal(100, fill.Width);                              // the real width is never touched
+            Assert.Equal(ConditioningControlPanel.Localization.Loc.Get("possession_level_zero"), chip.Text);
+            chip.Text = "LVL 13";                                       // a real level-up during the hold
+            Assert.True(drain.UndoAsync(TimeSpan.Zero).IsCompletedSuccessfully);
+            Assert.Null(fill.RenderTransform);
+            Assert.Equal("LVL 13", chip.Text);                          // the user's progress, not a stale string
 
             // Photosafe halves a motion, it never adds one.
             var calm = new DriftEffect();

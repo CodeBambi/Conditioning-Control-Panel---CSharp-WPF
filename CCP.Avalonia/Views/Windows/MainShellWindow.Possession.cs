@@ -51,6 +51,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             new PossessionNudge(), new Services.Possession.Effects.TypoEffect(), new PossessionBreathe(),
             new Services.Possession.Effects.DriftEffect(), new Services.Possession.Effects.RewriteEffect(),
             new Services.Possession.Effects.MeltEffect(), new Services.Possession.Effects.GlyphRotEffect(),
+            new Services.Possession.Effects.XpDrainEffect(),
             new Services.Possession.Effects.CrackEffect(),
             new Services.Possession.Effects.RetitleEffect(),
             new Services.Possession.Effects.GlitchPortraitEffect(),

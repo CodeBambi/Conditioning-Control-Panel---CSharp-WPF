@@ -45,6 +45,62 @@ internal sealed class RewriteEffect : PossessionEffectBase
     }
 }
 
+/// <summary>R2 "xpdrain": the XP bar empties over 1.5 s and the level chip reads zero for six seconds,
+/// then both come back. THE VALUE IS NEVER TOUCHED: the bar is squeezed by a borrowed transform and the
+/// chip's text is an overlay, so progression, the profile and a real level-up during the hold are all
+/// untouched underneath (WPF paints a ghost bar over a faded real one; same picture, no ghost layer).</summary>
+internal sealed class XpDrainEffect : PossessionEffectBase
+{
+    private static readonly PossessionRole[] _roles = { PossessionRole.Progress, PossessionRole.Label };
+    internal const double DrainMs = 1500;
+    internal const string BarName = "XPBar", LabelName = "TxtLevelLabel";
+
+    public override string Id => "xpdrain";
+    public override PossessionRung MinRung => PossessionRung.Melt;
+    public override PossessionIntensity MinIntensity => PossessionIntensity.Eerie;
+    public override bool IsBig => true;
+    public override double Weight => 3;
+    public override TimeSpan HoldFor => TimeSpan.FromSeconds(6);
+    public override IReadOnlyList<PossessionRole> Roles => _roles;
+    protected override bool OutlineOnApply => false;   // the thing that misbehaves is the bar, not the label that won the roll
+
+    private static Control? Find(object? from, string name)
+    {
+        if (from is not global::Avalonia.Visual v || global::Avalonia.Controls.TopLevel.GetTopLevel(v) is not { } top) return null;
+        foreach (var d in global::Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(top))
+            if (d is Control c && c.Name == name) return c;
+        return null;
+    }
+
+    private static Control? Bar(PossessionTarget? target) =>
+        Find(target?.Element, BarName) is { IsEffectivelyVisible: true } bar && bar.Bounds.Width >= 6 && bar.Bounds.Height >= 2
+        && !PossessionTree.IsOffLimits(bar) ? bar : null;
+
+    protected override bool CanApplyCore(PossessionContext ctx, PossessionTarget? target) => Bar(target) != null;
+
+    protected override void ApplyCore(PossessionContext ctx, PossessionTarget? target)
+    {
+        if (Bar(target) is not { } bar) return;
+        ctx.Name(Id, "the XP bar");
+        var lease = LeaseFor(bar, new global::Avalonia.RelativePoint(0, 0.5, global::Avalonia.RelativeUnit.Relative));
+        Tween(lease.Scale, DrainMs, false,
+            (0, global::Avalonia.Media.ScaleTransform.ScaleXProperty, 1.0), (1, global::Avalonia.Media.ScaleTransform.ScaleXProperty, 0.0));
+
+        // The lie: the chip reads zero for the length of the hold.
+        if (Find(target?.Element, LabelName) is { } chipHost && !PossessionTree.IsOffLimits(chipHost)
+            && PossessionTree.FindTextBlock(chipHost) is { } chip && PossessionTree.IsRewritable(chip, 2))
+            Overlay(chip, TextBlock.TextProperty, ZeroText());
+    }
+
+    protected override bool SettleCore(double ms) => SettleLeases(ms);
+
+    private static string ZeroText()
+    {
+        var s = ConditioningControlPanel.Localization.Loc.Get("possession_level_zero");
+        return string.IsNullOrWhiteSpace(s) || s == "possession_level_zero" ? "LVL 0" : s;
+    }
+}
+
 /// <summary>R2. One word rots into box glyphs and look-alikes a letter at a time (60 ms a step),
 /// holds, then heals in reverse. A step is a text change, not a flash: photosafe only holds longer.</summary>
 internal sealed class GlyphRotEffect : PossessionEffectBase
