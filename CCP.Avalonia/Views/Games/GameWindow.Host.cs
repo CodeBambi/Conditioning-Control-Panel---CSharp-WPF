@@ -51,6 +51,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             if (Spec.Id == "dtrh" && HandleDtrh(o)) return true;
             if (Spec.Id == "race" && HandleRace(o)) return true;   // RaceWindow.Host.cs
             if (Spec.Id == PbpId && HandlePbp(o)) return true;
+            if (Spec.Id == "goon" && HandleGoon(o)) return true;
             return false;
         }
 
