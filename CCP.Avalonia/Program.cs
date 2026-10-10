@@ -246,7 +246,8 @@ namespace ConditioningControlPanel.Avalonia
                 .With(new SkiaOptions { MaxGpuResourceSizeBytes = Platform.RenderBudget.GpuResourceCacheBytes });
             if (OperatingSystem.IsWindows())
                 builder = builder.With(Win32Options());
-            // Off Windows: bundled stand-ins for the Windows faces the views name (Platform/AppFonts.cs).
+            // The packed display face (Fredoka) on every OS; off Windows also the bundled stand-ins for
+            // the Windows faces the views name (Platform/AppFonts.cs).
             if (Platform.AppFonts.Options() is { } fonts)
                 builder = builder.With(fonts);
             // Pinned, not detected: every desktop overlay is an X11 override-redirect window

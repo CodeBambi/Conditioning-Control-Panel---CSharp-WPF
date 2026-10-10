@@ -219,8 +219,10 @@ public sealed class ScreenOcrServiceTests
         foreach (var name in new[] { "Consolas", "Courier New", "monospace", "Segoe UI" })
             Assert.True(AppFonts.Substitutes.ContainsKey(name), name);
         Assert.Equal(AppFonts.BundledMono, AppFonts.Substitutes["Consolas"]);
-        if (System.OperatingSystem.IsWindows()) Assert.Null(AppFonts.Options());
-        else Assert.Equal(AppFonts.Substitutes.Count, AppFonts.Options()!.FontFamilyMappings!.Count);
+        // The packed display face is mapped on every OS; the Windows stand-ins stay off Windows.
+        var mapped = AppFonts.Options().FontFamilyMappings!;
+        Assert.True(mapped.ContainsKey(AppFonts.DisplayName));
+        Assert.Equal(System.OperatingSystem.IsWindows() ? 1 : AppFonts.Substitutes.Count + 1, mapped.Count);
     }
 
     [Fact]
