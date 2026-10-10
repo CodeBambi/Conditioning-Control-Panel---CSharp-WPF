@@ -13,6 +13,17 @@ namespace ConditioningControlPanel.Avalonia.Platform
     /// Listing never opens a camera. Anything that goes wrong reads as "no cameras".</summary>
     internal static class CameraList
     {
+        /// <summary>WPF QuestHardwareGate's strict probe: true / false only from a clean count; a broken
+        /// enumeration THROWS so the gate fails open instead of trusting "absent" forever.</summary>
+        internal static bool AnyStrict()
+        {
+            if (Override is { } o) return o().Count > 0;
+            if (Disabled) return true;   // tests: fail open, never ask the machine
+            if (OperatingSystem.IsWindows())
+                return DirectShowCameras.Enumerate(DirectShowCameras.VideoInput, strict: true).Count > 0 || WinRtCameras.Enumerate().Count > 0;
+            return System.Linq.Enumerable.Any(System.IO.Directory.EnumerateFiles("/dev", "video*"));
+        }
+
         /// <summary>Tests: no test may ask the real machine for its cameras.</summary>
         internal static bool Disabled;
 
@@ -45,6 +56,7 @@ namespace ConditioningControlPanel.Avalonia.Platform
     {
         private static readonly Guid CLSID_SystemDeviceEnum = new("62BE5D10-60EB-11D0-BD3B-00A0C911CE86");
         private static readonly Guid CLSID_VideoInputDeviceCategory = new("860BB310-5D01-11D0-BD3B-00A0C911CE86");
+        internal static Guid VideoInput => CLSID_VideoInputDeviceCategory;
         private static readonly Guid IID_IPropertyBag = new("55272A00-42CB-11CE-8135-00AA004BB851");
 
         [ComImport, Guid("29840822-5B84-11D0-BD3B-00A0C911CE86"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
@@ -65,7 +77,10 @@ namespace ConditioningControlPanel.Avalonia.Platform
             int Write([MarshalAs(UnmanagedType.LPWStr)] string pszPropName, ref object pVar);
         }
 
-        public static IReadOnlyList<(int Index, string Name)> Enumerate()
+        public static IReadOnlyList<(int Index, string Name)> Enumerate() => Enumerate(CLSID_VideoInputDeviceCategory);
+
+        /// <summary>Any DirectShow device category, in its own order (the camera list uses video input).</summary>
+        internal static IReadOnlyList<(int Index, string Name)> Enumerate(Guid category, bool strict = false)
         {
             var devices = new List<(int, string)>();
             ICreateDevEnum? devEnum = null;
@@ -77,9 +92,10 @@ namespace ConditioningControlPanel.Avalonia.Platform
                 devEnum = Activator.CreateInstance(type) as ICreateDevEnum;
                 if (devEnum == null) return devices;
 
-                Guid cat = CLSID_VideoInputDeviceCategory;
+                Guid cat = category;
                 int hr = devEnum.CreateClassEnumerator(ref cat, out enumMoniker, 0);
-                // S_OK = a list; S_FALSE (1) = no devices; negative = failure, read as none.
+                // S_OK = a list; S_FALSE (1) = no devices; negative = failure, read as none unless strict.
+                if (hr < 0 && strict) throw Marshal.GetExceptionForHR(hr) ?? new InvalidOperationException($"CreateClassEnumerator failed (0x{hr:X8})");
                 if (hr != 0 || enumMoniker == null) return devices;
 
                 var monikers = new IMoniker[1];
@@ -111,7 +127,7 @@ namespace ConditioningControlPanel.Avalonia.Platform
                     idx++;
                 }
             }
-            catch (Exception ex) { Log.Warning(ex, "Webcam: DirectShow enumeration threw"); }
+            catch (Exception ex) when (!strict) { Log.Warning(ex, "Webcam: DirectShow enumeration threw"); }
             finally
             {
                 if (enumMoniker != null) { try { Marshal.ReleaseComObject(enumMoniker); } catch { } }

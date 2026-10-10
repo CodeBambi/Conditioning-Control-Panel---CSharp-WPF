@@ -75,7 +75,7 @@ namespace ConditioningControlPanel.Avalonia
             CoreQuests.PlayCompletionEffectsProvider = PlayQuestCompletionEffects;
             // Real probes, not the fail-open default (which reads present + resolved). A throw
             // (no pactl) reaches the gate's CachedProbe and still fails open, as WPF's strict pair does.
-            CoreQuests.CameraProbe = () => System.IO.Directory.EnumerateFiles("/dev", "video*").Any();
+            CoreQuests.CameraProbe = Platform.CameraList.AnyStrict;   // /dev/video* on Linux, DirectShow / WinRT on Windows
             CoreQuests.MicrophoneProbe = () => OperatingSystem.IsWindows()
                 ? Platform.WinMmMicSource.DeviceCount > 0
                 : Platform.PulseMicSource.ParseSources(Platform.LibVlcAudio.Pactl("list short sources")).Count > 1;
