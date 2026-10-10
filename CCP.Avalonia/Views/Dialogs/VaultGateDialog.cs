@@ -326,6 +326,7 @@ public sealed class VaultGateDialog : Window
     {
         var link = Link(Loc.Get("vaultgate_or_card"));
         link.Margin = new Thickness(0, 8, 0, 0);
+        if (link.Content is TextBlock t) t.TextAlignment = TextAlignment.Center;   // WPF CardLink: wrapped lines centred
         link.Click += (_, _) => { OpenCard(lab ? "prime" : "basic", from); Close(); };
         return link;
     }

@@ -260,6 +260,7 @@ public sealed class VaultGateTests
                 .Where(b => b.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text == Loc.Get("vaultgate_or_card"))).ToList();
             Assert.Equal(2, links.Count);
             Assert.All(links, l => Assert.True(l.Focusable));
+            Assert.All(links, l => Assert.Equal(TextAlignment.Center, ((TextBlock)l.Content!).TextAlignment));   // WPF centres wrapped lines
             links[1].RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Dispatcher.UIThread.RunJobs();
 
