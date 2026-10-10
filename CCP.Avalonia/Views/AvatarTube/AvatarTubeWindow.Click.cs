@@ -16,8 +16,8 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
     /// her feet), the 1-in-25 pop and the double-click (300 ms) that opens the chat input when the AI
     /// is on and available.
     /// <para>ponytail: the 50-clicks-in-60s collapse (TriggerBambiCumAndCollapse), the Neon Obsession
-    /// click count (App.Achievements), the muted double-click indicator, the activity-comment double
-    /// click with the AI off and the drop-shadow glow pulse (no Effect over the avatar here) remain.</para>
+    /// click count (App.Achievements) and the drop-shadow glow pulse (no Effect over the avatar here)
+    /// remain. The activity-comment double click with the AI off is AvatarTubeWindow.ActivityComment.cs.</para>
     /// </summary>
     public partial class AvatarTubeWindow
     {
@@ -34,6 +34,7 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             {
                 if (IsMuted) ShowMutedIndicator();   // WPF ChatInput.cs:97
                 else if (CoreSettings.Current.AiChatEnabled && App.Ai?.IsAvailable == true) OpenChatInput();
+                else OnAvatarDoubleClickComment(now);   // WPF ChatInput.cs:104: the activity comment (AvatarTubeWindow.ActivityComment.cs)
             }
             _lastAvatarClickTime = now;
 
