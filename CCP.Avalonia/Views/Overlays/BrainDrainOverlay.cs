@@ -110,7 +110,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             var engineUp = ShouldShow();
             if (!engineUp) baseWants = false;
             var timedOk = _timed is not null && App.Sessions?.IsPaused != true;
-            if ((!IsSupported && !SkipPlatformChecksForTest) || _refused || (!baseWants && !timedOk))
+            if ((!IsSupported || _refused) && !SkipPlatformChecksForTest || (!baseWants && !timedOk))
             {
                 CloseWindows();
                 return;

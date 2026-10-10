@@ -68,8 +68,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// as well as refused. Bound to the service current at construction (App seeds it first).</summary>
         private void InitializeLockdownGreys()
         {
+            bool shellClosed = false;
+            // The four accent brushes live on the APPLICATION: a shell that closes mid-lockdown hands
+            // them back, or every window after it (a second shell, a dialog) stays crimson.
+            Closed += (_, _) => { shellClosed = true; ApplyLockdownTheme(false); };
             void Refresh() => global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             {
+                if (shellClosed) return;   // a refresh posted before the close must not repaint the app's brushes
                 if (Named<global::Avalonia.Controls.Button>("BtnBackToLauncher") is { } door) door.IsEnabled = !LockdownActive;
                 // WPF SetLockdownBadge (Lab.cs:672/753/794): the badge shows for the whole run, seeded.
                 if (Named<global::Avalonia.Controls.Border>("LockdownBadge") is { } badge) badge.IsVisible = LockdownActive;
