@@ -436,6 +436,7 @@ namespace ConditioningControlPanel.Avalonia
                 LockdownService.RecoverIfNeeded();
                 LockdownService.Current = new LockdownService();
                 Views.Windows.MainShellWindow.InstallLockdownDose(LockdownService.Current);   // WPF App.xaml.cs:2657 (the Dose)
+                Views.Windows.MainShellWindow.InstallPossession(LockdownService.Current);     // WPF App.Possession (the haunt)
                 // WPF App.xaml.cs:2662: a served Lockdown credits the Lockdown quests (progression#41).
                 var lockdown = LockdownService.Current;
                 lockdown.LockdownDeactivated += () => { try { Quests?.TrackLockdownCompleted(lockdown.LastActiveDuration); } catch (Exception ex) { Serilog.Log.Debug("lockdown quest credit: {E}", ex.Message); } };

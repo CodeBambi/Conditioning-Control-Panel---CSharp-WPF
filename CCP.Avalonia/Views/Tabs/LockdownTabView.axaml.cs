@@ -80,8 +80,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             {
                 ld.LockdownActivated += () => Dispatcher.UIThread.Post(ShowLockdownState);
                 ld.LockdownDeactivated += () => Dispatcher.UIThread.Post(ShowLockdownState);
-                ld.CountdownTick += r => Dispatcher.UIThread.Post(() => TxtLockdownTimer.Text = Clock(r));
-                ld.TimerRestarted += _ => Dispatcher.UIThread.Post(() => TxtLockdownTimer.Text = Clock(ld.Remaining));
+                ld.CountdownTick += r => Dispatcher.UIThread.Post(() => { TxtLockdownTimer.Text = Clock(r); PaintPossessionReadout(); });
+                ld.TimerRestarted += _ => Dispatcher.UIThread.Post(() => { TxtLockdownTimer.Text = Clock(ld.Remaining); PaintPossessionReadout(); });
                 ShowLockdownState();
             }
         }
@@ -258,7 +258,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         // phrase, the Emergency Exit breath; the title-bar badge, blood-red theme and activation flash
         // are MainShellWindow.Lockdown.cs; the Strict toggles grey themselves (HoldWhileLockdown).
         // The Dose keeper is Core LockdownDoseKeeper, installed by MainShellWindow.LockdownDose.cs.
-        // Not on this head: the Possession haunt/readout (no director yet) and
+        // The Possession readout is PaintPossessionReadout (director = Core PossessionDirector, head =
+        // MainShellWindow.Possession.cs). Not on this head:
         // the system-key hook (Linux has none, so the warning does not promise it).
 
         /// <summary>The head's live Lockdown (null in renders and tests that set none).</summary>
@@ -269,6 +270,28 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         private static string Clock(TimeSpan remaining) =>
             SessionClockLabel.LockdownClock(remaining, CoreSettings.Current.HideLockdownTimer);
+
+        /// <summary>WPF MainWindow.Lab.cs HookPossessionReadout / UpdatePossessionReadout / Unhook: a word
+        /// plus five pips, shown only while a lockdown runs with Possession on. Everything starts at
+        /// Settle. Painted from the lockdown's own tick and restart (the director moves the rung on the
+        /// same tick, ahead of this post), so there is no second subscription to leak.</summary>
+        internal void PaintPossessionReadout()
+        {
+            try
+            {
+                var on = Lockdown?.IsActive == true && CoreSettings.Current.LockdownPossessionEnabled;
+                TxtPossessionRung.IsVisible = on;
+                PossessionPips.IsVisible = on;
+                int index = on ? (int)(PossessionDirector.Current is { IsHaunting: true } d ? d.CurrentRung : PossessionRung.Settle) : -1;
+                TxtPossessionRung.Text = on ? Loc.GetF("lockdown_poss_readout_fmt", Loc.Get("lockdown_poss_rung_" + index)) : "";
+                for (int i = 0; i < PossessionPips.Children.Count; i++)
+                {
+                    if (PossessionPips.Children[i] is not Border pip) continue;
+                    pip.Background = new SolidColorBrush(i <= index ? Views.Windows.MainShellWindow.PossessionEmber : Views.Windows.MainShellWindow.PossessionEmberDim);
+                }
+            }
+            catch (Exception ex) { Log.Warning(ex, "Possession: failed to paint the rung readout"); }
+        }
 
         /// <summary>WPF OnLockdownActivated / OnLockdownDeactivated, the panel half: swap Setup and
         /// Active, seed the clock, reset the secret exit and the slab notice.</summary>
@@ -282,10 +305,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             TxtLockdownExit.IsVisible = false;
             TxtLockdownExit.Text = "";
             TxtEmergencyExitNotice.IsVisible = false;
-            // Readout is Possession's; with no director on this head it stays collapsed (WPF hides it
-            // too whenever Possession is off).
-            TxtPossessionRung.IsVisible = false;
-            PossessionPips.IsVisible = false;
+            PaintPossessionReadout();
             UpdateEmergencyExitPulse();
             // WPF ApplyLockdownTheme / RestoreLockdownTheme (Lab.cs:1188/1211): the card goes crimson
             // on #1A0A0A; the override is dropped on exit, which leaves the XAML gradients (the values

@@ -40,6 +40,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             new("haptics", _ => CoreHaptics.Service?.PanicStop()),
             new("remote-haptics", _ => RemoteCommands.StopHaptics()),   // decisions 2026-10-08
             new("remote-overlays", _ => RemoteCommands.PanicDropOverlays()),   // a controller-held pink filter, spiral or haze never outlives a panic
+            // Lockdown's haunt: every possessed control back at once, the edge pulse and its shake gone.
+            // The lockdown itself is LockdownPauseRule's business, never this line's.
+            new("possession", sh => MainShellWindow.StopPossessionForPanic(sh)),
             new("takeover", sh => sh?.StopAutonomyForPanic()),           // WPF KillAllAudio -> Autonomy.Stop
             // WPF RunPanicStopTail StopEngine/StopAdHocEffects: pauses a running session; OnEngineStopped
             // then ends Takeover pulses, desktop overlays (subliminal/whisper, mind wipe, spiral, video,
