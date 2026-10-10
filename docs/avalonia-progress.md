@@ -1761,3 +1761,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/sync6-premium-page: +199
 - Premium page (main a1d8a7ff1): "premium" key on Home, silent "exclusives" redirect, shelf grouped Basic/Prime/Free under headers (Core PremiumShelfOrder git-mv), reserved seats dropped; fail-proven tests.
 - Left needs-port: header Premium spark (97/99) and vault flair (100).
+
+## avalonia-port/programs-run-3b: +619
+- Pause/Resume, Restart, Dismiss, mantra door and ritual photos live on the run panel; roadmap provider seeded lazily; presentation + the_takeover enrollable.
+- Lockdown refuses Pause/Resume/Restart/ritual/mantra door; Restart refused for unfinishable programs; strings x9; 22 fail-proofs, GATE-OK.
