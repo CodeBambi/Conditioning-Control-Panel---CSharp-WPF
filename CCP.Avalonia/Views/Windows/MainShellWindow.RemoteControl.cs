@@ -53,6 +53,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             r.SessionEnded += ended;
             r.CommandReceived += command;
             RemoteCommands.Head = this;   // the verbs that need a window (MainShellWindow.RemoteVerbs.cs)
+            Action<string, bool> feedback = (text, pending) => _avatarTubeWindow?.ShowEmoteFeedback(text, pending);
+            RemoteControlTabView.EmoteFeedback = feedback;
             Closed += (_, _) =>
             {
                 r.ControllerConnectedChanged -= connected;
@@ -60,6 +62,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 r.SessionEnded -= ended;
                 r.CommandReceived -= command;
                 if (ReferenceEquals(RemoteCommands.Head, this)) RemoteCommands.Head = null;
+                if (ReferenceEquals(RemoteControlTabView.EmoteFeedback, feedback)) RemoteControlTabView.EmoteFeedback = null;
                 _remoteOverlayTimer?.Stop();
                 DisposeRemoteHud();
             };

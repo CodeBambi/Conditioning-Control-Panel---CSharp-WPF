@@ -419,10 +419,24 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             box.Watermark = trimmed;   // WPF EmoteHelper.SetLastSentEmoteHint
         }
 
+        /// <summary>The avatar's emote bubble (WPF App.AvatarWindow?.ShowEmoteFeedback); the shell sets it.</summary>
+        internal static Action<string, bool>? EmoteFeedback;
+
+        private static void ShowEmoteFeedback(string text, bool pending)
+        {
+            try { EmoteFeedback?.Invoke(text, pending); }
+            catch (Exception ex) { Serilog.Log.Warning(ex, "[Avatar] ShowEmoteFeedback failed"); }
+        }
+
         /// <summary>WPF SendEmoteAndReportAsync: "Sent" green, debounce silent, else the salmon reason.</summary>
         internal static async Task<bool> SendEmoteAndReportAsync(string text, string icon, string kind, TextBlock? status)
         {
-            var (ok, error, retry) = await Relay.Value.SendEmoteAsync(text, icon, kind);
+            // WPF step 3.6: the avatar's bubble says "Sending..." at once, whichever surface fired, unless the
+            // send would bounce straight away (no session, or inside the debounce window), then "Sent: ...".
+            var relay = Relay.Value;
+            if (relay.IsActive && !relay.IsWithinDebounceWindow) ShowEmoteFeedback(text, true);
+            var (ok, error, retry) = await relay.SendEmoteAsync(text, icon, kind);
+            if (ok) ShowEmoteFeedback(text, false);
             if (error == "debounced" || status == null) return ok;
             status.Foreground = ok ? Sent : Failed;
             status.Text = ok ? Loc.Get("status_emote_sent")

@@ -99,7 +99,13 @@ public sealed class RemoteDirectoryApi
             req.Headers.Add("X-Auth-Token", id.Value.Token);
             req.Headers.Add("X-Caller-Unified-Id", id.Value.UnifiedId);
             using var res = await _http.SendAsync(req, budget.Token).ConfigureAwait(false);
-            if ((int)res.StatusCode == 409) return (null, true);
+            if ((int)res.StatusCode == 409)
+            {
+                // Contract D first (WPF :221): a merged-account 409 is about the caller, not the claim. The
+                // recovery swaps to the canonical account; this click is nothing, not a lost race.
+                if (await MergedAccountRecovery.TryHandleAsync(res).ConfigureAwait(false)) return (null, false);
+                return (null, true);
+            }
             if (!res.IsSuccessStatusCode)
             {
                 Log.Warning("[AvailableSubjects] claim failed: {Status}", (int)res.StatusCode);
