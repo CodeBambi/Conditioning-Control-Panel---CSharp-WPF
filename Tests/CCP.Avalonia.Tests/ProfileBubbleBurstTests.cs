@@ -43,8 +43,8 @@ public sealed class ProfileBubbleBurstTests
 
             CoreSettings.Current.MotionLevel = MotionLevel.Full;
             Dispatcher.UIThread.RunJobs();
-            if (!global::ConditioningControlPanel.Avalonia.Controls.AmbientFxCanvas.Env.AllowParticles)
-                return Task.CompletedTask;   // a tier with no particle budget on this host: WPF refuses too
+            Assert.SkipUnless(global::ConditioningControlPanel.Avalonia.Controls.AmbientFxCanvas.Env.AllowParticles,
+                "no particle budget on this host: WPF refuses the burst too");
             Assert.True(shell.BurstProfileBubble());
             Assert.Equal(1, shell.ProfileBubbleBursts);
         }
