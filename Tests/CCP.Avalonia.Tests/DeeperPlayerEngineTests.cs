@@ -197,4 +197,49 @@ public sealed class DeeperPlayerEngineTests
                 = (isRunning, start, stop, consent, confirm, notice);
         }
     });
+
+    [Fact]
+    public void ImportCopiesIntoTheLibraryOnceAndSkipsWhatIsNotAnEnhancement()
+    {
+        var root = Directory.CreateTempSubdirectory("ccp-deeper-import-").FullName;
+        var lib = Path.Combine(root, "library");
+        var src = Path.Combine(root, "src");
+        Directory.CreateDirectory(src);
+        var enh = Shake(2);
+        enh.Metadata.Name = "Night Drift";
+        var good = Path.Combine(src, "night.ccpenh.json");
+        // Written as the editor writes it (a load + save round trip), so the library copy is byte-for-meaning the same file.
+        File.WriteAllText(good, EnhancementSerializer.Save(enh));
+        File.WriteAllText(good, EnhancementSerializer.Save(EnhancementSerializer.LoadFromFile(good)));
+        var other = Path.Combine(src, "settings.json");
+        File.WriteAllText(other, "{\"theme\":\"dark\"}");
+        var (notify, remember) = (DeeperImport.Notify, DeeperImport.RememberDirectory);
+        var toasts = new List<(string Text, DeeperImport.Tone Tone)>();
+        string? remembered = null;
+        DeeperImport.Notify = (text, tone) => toasts.Add((text, tone));
+        DeeperImport.RememberDirectory = d => remembered = d;
+        try
+        {
+            var saved = DeeperImport.ImportFiles(new[] { good, other }, lib);
+            Assert.Equal(Path.Combine(lib, "Night Drift.ccpenh.json"), saved);
+            Assert.True(File.Exists(saved));
+            Assert.Equal(src, remembered);
+            Assert.Equal(DeeperImport.Tone.Success, Assert.Single(toasts).Tone);
+            Assert.Equal(Loc.GetF("deeper_import_done_one_fmt", "Night Drift.ccpenh.json"), toasts[0].Text);
+
+            toasts.Clear();
+            Assert.Equal(saved, DeeperImport.ImportFiles(new[] { good }, lib));   // same content: no "(2)" copy
+            Assert.Single(Directory.GetFiles(lib));
+            Assert.Equal(Loc.Get("deeper_import_already_in_library"), Assert.Single(toasts).Text);
+
+            toasts.Clear();
+            Assert.Null(DeeperImport.ImportFiles(new[] { other }, lib));
+            Assert.Equal(Loc.Get("deeper_import_skipped_not_enh"), Assert.Single(toasts).Text);
+        }
+        finally
+        {
+            (DeeperImport.Notify, DeeperImport.RememberDirectory) = (notify, remember);
+            Directory.Delete(root, true);
+        }
+    }
 }

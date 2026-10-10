@@ -10,6 +10,7 @@ using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia;
 using Avalonia.Media;
+using Avalonia.Platform.Storage;
 using Avalonia.Media.Immutable;
 using Avalonia.Threading;
 using ConditioningControlPanel.Avalonia.Views.Windows;
@@ -167,9 +168,52 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         private void BtnDeeperCatalogue_Click(object? sender, RoutedEventArgs e)
             => _ = Platform.ExternalOpener.OpenAsync(TopLevel.GetTopLevel(this), MainShellWindow.DeeperCatalogueUrl);
-        // ponytail: import needs EnhancementLibrary.FindDuplicateOf/PromoteToLibrary, still WPF-only;
-        // BtnDeeperImport is hidden in the axaml until they land.
-        private void BtnDeeperImport_Click(object? sender, RoutedEventArgs e) { }
+        /// <summary>The import picker (tests answer it without a dialog). Null or empty = cancelled.</summary>
+        internal Func<System.Threading.Tasks.Task<IReadOnlyList<string>?>>? PickImportFiles;
+
+        /// <summary>WPF BtnDeeperImport_Click (MainWindow.DeeperTab.cs:743): pick one or more
+        /// .ccpenh.json files, import them (Views/Deeper/DeeperImport), reload the rows.
+        /// ponytail: WPF also scrolled to and flashed the imported row (RevealDeeperLibraryRow, a
+        /// shell method that is not on this head yet); the row appears, unflashed.</summary>
+        private async void BtnDeeperImport_Click(object? sender, RoutedEventArgs e)
+        {
+            try
+            {
+                CoreBark.NotifyUiAction("deeper_import");
+                var paths = await (PickImportFiles ?? PickImportFilesAsync)();
+                if (paths == null || paths.Count == 0) return;
+                Views.Deeper.DeeperImport.ImportFiles(paths);
+                // Force-refresh now: a watcher's debounce can lag a fast manual import (WPF).
+                Owner?.InitializeDeeperHub();
+            }
+            catch (Exception ex) { Serilog.Log.Warning(ex, "Deeper import failed"); }
+        }
+
+        private async System.Threading.Tasks.Task<IReadOnlyList<string>?> PickImportFilesAsync()
+        {
+            if (TopLevel.GetTopLevel(this) is not { } top) return null;
+            global::Avalonia.Platform.Storage.IStorageFolder? start = null;
+            try
+            {
+                var last = CoreSettings.Current?.DeeperLastDirectory;
+                if (!string.IsNullOrEmpty(last) && Directory.Exists(last))
+                    start = await top.StorageProvider.TryGetFolderFromPathAsync(last);
+            }
+            catch { /* the picker opens wherever the platform likes */ }
+            var files = await top.StorageProvider.OpenFilePickerAsync(new global::Avalonia.Platform.Storage.FilePickerOpenOptions
+            {
+                Title = Loc.Get("deeper_import_dialog_title"),
+                AllowMultiple = true,
+                SuggestedStartLocation = start,
+                FileTypeFilter = new List<global::Avalonia.Platform.Storage.FilePickerFileType>
+                {
+                    new("Deeper enhancements (*.ccpenh.json)") { Patterns = new[] { "*.ccpenh.json" } },
+                    new("JSON files (*.json)") { Patterns = new[] { "*.json" } },
+                    new("All files (*.*)") { Patterns = new[] { "*" } },
+                },
+            });
+            return files.Select(f => f.TryGetLocalPath()).Where(p => !string.IsNullOrEmpty(p)).Select(p => p!).ToList();
+        }
         private void BtnDeeperNewEnhancement_Click(object? sender, RoutedEventArgs e)
             => Owner?.BtnDeeperNewEnhancement_Click(sender, e);
         private void BtnDeeperOpenLibraryFolder_Click(object? sender, RoutedEventArgs e) => Owner?.OpenDeeperLibraryFolder();
