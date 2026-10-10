@@ -178,6 +178,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                 case "exit":
                     _goonExiting = true;      // the watchdog stands down; the shell arms the 1200 ms close
                     return false;
+                case "boot-error":
+                    // WPF OnBootError also shows a message box naming the failure; here it is the log line
+                    // and the shell's close (not ported: the dialog).
+                    GoonHostService.BootFailedThisSession = true;
+                    return false;
                 case "fullscreen-set":
                     // WPF ApplyHostFullscreen: C# owns the toggle, echoes the REAL state, remembers it.
                     SetHostFullscreen((bool?)o["on"] ?? false);
@@ -260,8 +265,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                 case "stake-offer":
                 case "stake-state":
                 case "stake-settle":
-                    // SEAM(stakes): Services/Stakes/StakeBridge (shared with chess) is not in Core yet.
-                    // Nothing is offered, booked or settled; the page's stake row stays off.
+                    // SEAM(stakes): WPF hands these to StakeBridge.ForApp("goon", post) (Services/Stakes,
+                    // shared with chess, not in Core yet). Whoever ports it sets GoonStakes once; until
+                    // then nothing is offered, booked or settled and the page's stake row stays off.
+                    if (GoonStakes?.Invoke(o, frame => Post(frame)) == true) return true;
                     Log.Information("[Goon] {Type}: not ported (StakeBridge)", type);
                     return true;
                 case "peer-card-req":
@@ -354,6 +361,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                 Post(new { type = "net-post-result", id, status, body = text });
             });
         }
+
+        /// <summary>SEAM(stakes): the stake-limits / stake-offer / stake-state / stake-settle frames and
+        /// the way back for the bridge's <c>stake</c> frames (WPF GoonHostService.OnPageMessage :706,
+        /// PostStake :827). True = handled. One bridge for the life of the app: a settle watch it started
+        /// keeps running after the window closes, and posting to a closed window is a quiet no-op.</summary>
+        internal static Func<JObject, Action<JObject>, bool>? GoonStakes { get; set; }
 
         /// <summary>The peer-card fetch and the shell open; tests swap them for fakes.</summary>
         internal Func<JObject, Task<JObject?>> GoonPeerCard { get; set; } = o => GoonHostService.PeerCardAsync(o);

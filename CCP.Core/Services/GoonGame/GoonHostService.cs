@@ -70,6 +70,9 @@ namespace ConditioningControlPanel.Services.GoonGame
 
         public static bool CanHost => HostingAllowed();
 
+        /// <summary>The page reported boot-error this app session (a genuine load or init failure).</summary>
+        public static bool BootFailedThisSession { get; set; }
+
         // ---- the live window (seeded by the head) --------------------------------------------
 
         /// <summary>Opens (or focuses) the Goon window; true when one is live afterwards. Seeded by
