@@ -743,6 +743,7 @@ namespace ConditioningControlPanel.Avalonia
                 // Guided tours (WPF App.Tutorial): the head's TutorialService behind the CoreTutorial
                 // seam every page already calls, and a panic surface that ends a tour at once.
                 Tours.TutorialHead.Seed();
+                Tours.EmiTourNarrator.Attach(Tours.TutorialHead.Service);   // k23: WPF MainWindow.Settings.cs:570, EMI narrates a tour
                 Tours.TutorialHead.HookPanic();
                 Views.Windows.WelcomeShow.FirstShowService.HookPanic();   // EMI's welcome show stops first on a panic
 
