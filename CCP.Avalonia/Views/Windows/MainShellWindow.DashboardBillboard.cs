@@ -56,7 +56,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             var providers = BillboardProviders(weak);
             _billboardProviders = providers;
-            // A method, not a lambda: a closure here would share the one OpenBackRoom (static) holds.
+            // A method, not a lambda: a lambda here would capture cardHost/this into the display class
+            // the static OpenBackRoom already holds (via `weak`), rooting the closed shell.
             Closed += ReleaseBillboard;
             var deck = new BillboardDeck(() => providers, BillboardContextNow, snoozes, SaveBillboardSnoozes);
             var cardHost = new BillboardCardHost(deck);
