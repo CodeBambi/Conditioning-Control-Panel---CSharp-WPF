@@ -255,6 +255,14 @@ public sealed class TutorialTourTests : IDisposable
             Dispatcher.UIThread.RunJobs();
             Assert.True(CoreTutorial.IsActive);
             Assert.NotNull(Stage(shell));
+            // The XP bar card (window chrome, always on screen) is spotlit: a lit ring around the
+            // target, and the dim is a Path with the ring's hole, never a full-window sheet.
+            for (int i = 0; i < 4; i++) CoreTutorial.Next();
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal("sw-xp", CoreTutorial.CurrentStep!.Id);
+            var canvas = Stage(shell)!.GetVisualDescendants().OfType<Canvas>().First(c => c.Name == "SpotlightCanvas");
+            Assert.Null(canvas.Background);
+            Assert.Contains(canvas.Children, c => c is Border { IsHitTestVisible: false });
             shell.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Escape });
             Dispatcher.UIThread.RunJobs();
             Assert.False(CoreTutorial.IsActive);

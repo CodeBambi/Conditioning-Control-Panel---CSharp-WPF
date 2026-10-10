@@ -821,6 +821,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             {
                 if (_stage != null)
                 {
+                    // A target on a hidden page has a place in the tree and nothing on screen: report
+                    // it unmeasured, so the card is centred (and re-measured while the page settles)
+                    // instead of lighting an empty patch of the window.
+                    if (!element.IsEffectivelyVisible) return new Rect(0, 0, 0, 0);
                     var p = element.TranslatePoint(new Point(0, 0), _stage);
                     return p is { } tl ? new Rect(tl, element.Bounds.Size) : new Rect(0, 0, 0, 0);
                 }
