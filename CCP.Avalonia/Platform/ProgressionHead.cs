@@ -45,6 +45,7 @@ internal static class ProgressionHead
         try { OsNotifications.Show(Loc.Get("toast_level_up_title"), Loc.GetF("toast_level_up_body", newLevel)); }
         catch (Exception ex) { Log.Debug("level-up toast: {E}", ex.Message); }
         PlayLevelUpSound();
+        try { App.DiscordRpc?.UpdateLevel(newLevel); } catch (Exception ex) { Log.Debug("presence level: {E}", ex.Message); }   // WPF ProgressionService:309
     }
 
     /// <summary>WPF PlayLevelUpSound verbatim: the first lvup.mp3 found, master volume ^1.5 x 0.2625,

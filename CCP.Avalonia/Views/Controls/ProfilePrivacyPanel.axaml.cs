@@ -22,12 +22,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
     /// <c>Current.HasLinkedDiscord</c> (WPF MainWindow.AccountShell.cs:279-300), and it and Show level
     /// write their setting. The Login / Link Discord / Logout button runs AccountSettingsSection's
     /// flows (WPF BtnDiscordTabLogin_Click, MainWindow.Browser.cs:1366).
-    ///  - SEAM(discord rpc): <c>App.DiscordRpc</c> is not on this head, so the two presence settings
-    ///    are stored for the presence client and drive nothing yet.
+    ///  - Rich Presence and Show level drive <c>App.DiscordRpc</c> (lane z1); the Home quick toggle and
+    ///    this switch repaint each other through <c>App.RichPresenceChanged</c>.
     ///  - The profile load adopts the two consent values the server returns (allow DM, show online)
     ///    before the first push (Core ProfileAdopt.AdoptConsent); the other four are not in that reply.
-    ///  - not ported: the Home quick Rich Presence toggle repaints from the setting only on its own
-    ///    next refresh.</para>
+    ///  </para>
     ///
     /// The ctor uses <c>AvaloniaXamlLoader.Load</c>, so controls are reached with FindControl.
     /// </summary>
@@ -65,21 +64,28 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
             Wire("ChkGoonShareDiscordDm", s => s.GoonShareDiscordDm, (s, v) => s.GoonShareDiscordDm = v, push: true);
 
             // WPF ChkShowLevelInPresence_Changed: the setting (the presence client reads it; see the class note).
-            Wire("ChkDiscordTabShowLevel", s => s.DiscordShowLevelInPresence, (s, v) => s.DiscordShowLevelInPresence = v);
+            Wire("ChkDiscordTabShowLevel", s => s.DiscordShowLevelInPresence, (s, v) => s.DiscordShowLevelInPresence = v,
+                after: () => App.DiscordRpc?.UpdateLevel(CoreSettings.Current.PlayerLevel));   // WPF MainWindow.Patreon.cs:989
 
             // WPF ChkDiscordRichPresence_Changed (MainWindow.AccountShell.cs:279): never armed without a linked
             // Discord, so an anonymous invite-code account cannot expose itself by accident.
             Wire("ChkDiscordTabRichPresence", s => s.DiscordRichPresenceEnabled, (s, v) => s.DiscordRichPresenceEnabled = v,
                 refuseOn: s => !s.HasLinkedDiscord
                     ? ("Discord Not Linked", Loc.Get("msg_discord_rich_presence_requires_a_linked_disco"))
-                    : null);
+                    : null,
+                after: App.ApplyRichPresence);   // arm or drop the client; the Home quick toggle repaints
+
+            // The Home quick toggle moved: this switch repaints from the setting.
+            AttachedToVisualTree += (_, _) => { App.RichPresenceChanged -= RepaintRichPresence; App.RichPresenceChanged += RepaintRichPresence; };
+            DetachedFromVisualTree += (_, _) => App.RichPresenceChanged -= RepaintRichPresence;
 
             if (this.FindControl<Button>("BtnDiscordTabLogin") is { } login) login.Click += (_, _) => _ = LoginAsync(login);
         }
 
         private void Wire(string name, System.Func<global::ConditioningControlPanel.Models.AppSettings, bool> read,
             System.Action<global::ConditioningControlPanel.Models.AppSettings, bool> write, bool push = false,
-            System.Func<global::ConditioningControlPanel.Models.AppSettings, (string Title, string Message)?>? refuseOn = null)
+            System.Func<global::ConditioningControlPanel.Models.AppSettings, (string Title, string Message)?>? refuseOn = null,
+            System.Action? after = null)
         {
             if (this.FindControl<CheckBox>(name) is not { } box) return;
             box.IsCheckedChanged += (_, _) =>
@@ -99,10 +105,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
                 CoreSettings.Save();
                 Serilog.Log.Information("Privacy switch {Name} changed: {On}", name, on);
                 if (push) _ = PushSafe();
+                try { after?.Invoke(); } catch (System.Exception ex) { Serilog.Log.Debug("Privacy switch {Name} follow-up: {E}", name, ex.Message); }
                 // The rail's "N on, M off" line counts these.
                 if (TopLevel.GetTopLevel(this) is Window { Owner: Views.Windows.MainShellWindow shell })
                     shell.UpdateProfileSharingSummary();
             };
+        }
+
+        private void RepaintRichPresence()
+        {
+            _painting = true;
+            try { Paint("ChkDiscordTabRichPresence", CoreSettings.Current.DiscordRichPresenceEnabled); }
+            finally { _painting = false; }
         }
 
         private static async System.Threading.Tasks.Task PushSafe()
