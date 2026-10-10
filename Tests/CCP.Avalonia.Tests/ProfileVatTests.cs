@@ -99,10 +99,16 @@ public sealed class ProfileVatTests
     }
 
     [Fact]
-    public void TheChargeArcIsEmptyAtZeroAndAWholeCircleAtOne()
+    public Task TheChargeArcIsEmptyAtZeroAndAWholeCircleAtOne() => AvaloniaTestDispatcher.RunAsync(() =>
     {
+        // A geometry needs the render interface: this test must not lean on an earlier one having set the app up.
+        if (Application.Current is null)
+            AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>()
+                .UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                .SetupWithoutStarting();
         Assert.Null(MainShellWindow.BuildChargeArc(0));
         Assert.IsType<global::Avalonia.Media.EllipseGeometry>(MainShellWindow.BuildChargeArc(1));
         Assert.IsType<global::Avalonia.Media.StreamGeometry>(MainShellWindow.BuildChargeArc(0.4));
-    }
+        return Task.CompletedTask;
+    });
 }

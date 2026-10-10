@@ -22,6 +22,9 @@ namespace CCP.Avalonia.Tests;
 /// <summary>Racing Thoughts, BambiCloud levels (ledger P5): cloud-open / cloud-start drive the browser
 /// frame, the watcher's frames become the run's clock, a level whose pack is not owned is refused on
 /// the host, and the desktop only downloads audio under the remote media consent rule.</summary>
+// Runs alone: each test awaits with a race window open, and a panic test in another class running in
+// that gap would close every game window (PanicSurfaces "games") under it.
+[Collection(RunsAloneCollection.Name)]
 public sealed class RaceCloudTests
 {
     private sealed class FakeCloud : IRaceCloudWindow
@@ -84,6 +87,13 @@ public sealed class RaceCloudTests
         lock (posted) return posted.Where(p => (string?)p["type"] == type).ToList();
     }
 
+    // The host queues cloud work on the dispatcher (RaceQueue): wait for the queue, not for a clock.
+    private static async Task Queued()
+    {
+        await global::Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() => { }, global::Avalonia.Threading.DispatcherPriority.ContextIdle);
+        await Task.Delay(100);
+    }
+
     private static async Task Settle(GameWindow w)
     {
         await w.RaceAnalysis;
@@ -106,7 +116,7 @@ public sealed class RaceCloudTests
                 w.HandleMessage("{\"type\":\"cloud-open\",\"url\":\"https://evil.example/file/abc\"}");
                 w.HandleMessage("{\"type\":\"cloud-open\",\"front\":true}");
                 w.HandleMessage("{\"type\":\"cloud-start\"}");
-                await Task.Delay(100);
+                await Queued();
                 Assert.Equal(new[] { "back:https://bambicloud.com/file/abc", "back:", "front:", "start" }, cloud.Calls);
 
                 // Closed with no cloud track in hand: the "opening" plate comes back down.
@@ -130,13 +140,13 @@ public sealed class RaceCloudTests
                 w.RaceCanOpenCloud = _ => owned;
 
                 w.HandleMessage("{\"type\":\"cloud-open\",\"url\":\"https://bambicloud.com/file/abc\"}");
-                await Task.Delay(100);
+                await Queued();
                 Assert.Empty(cloud.Calls);
                 Assert.Equal(Loc.Get("race_track_locked"), (string?)Of(posted, "track-error").Single()["message"]);
 
                 // Their player started a source the account does not own: paused over there, refused here.
                 w.HandleMessage("{\"type\":\"cloud-start\"}");
-                await Task.Delay(100);
+                await Queued();
                 var src = Src();
                 cloud.Send(new { type = "cloud-track", src, title = "Track one", durationSec = 80 });
                 Assert.Contains(cloud.ToPage, m => (string?)m["type"] == "cloud-set-paused" && (bool)m["on"]!);
@@ -166,7 +176,7 @@ public sealed class RaceCloudTests
             try
             {
                 w.HandleMessage("{\"type\":\"cloud-start\"}");
-                await Task.Delay(100);
+                await Queued();
                 cloud.Send(new { type = "cloud-track", src = Src(), title = " Track one ", durationSec = 80 });
                 var clock = Of(posted, "track-clock")[^1];
                 Assert.True((bool)clock["playing"]!);
@@ -228,7 +238,7 @@ public sealed class RaceCloudTests
             {
                 w.RaceCloudHttp = new HttpClient(site);
                 w.HandleMessage("{\"type\":\"cloud-start\"}");
-                await Task.Delay(100);
+                await Queued();
                 cloud.Send(new { type = "cloud-track", src = Src(".wav"), title = "Quiet", durationSec = 20 });
                 await Settle(w);
                 Assert.Empty(site.Requests);
@@ -247,7 +257,7 @@ public sealed class RaceCloudTests
             {
                 w.RaceCloudHttp = new HttpClient(site);
                 w.HandleMessage("{\"type\":\"cloud-start\"}");
-                await Task.Delay(100);
+                await Queued();
                 var src = Src(".wav");
                 cloud.Send(new { type = "cloud-track", src, title = "Loud", durationSec = 20 });
                 await Settle(w);
