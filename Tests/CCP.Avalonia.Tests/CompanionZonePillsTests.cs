@@ -4,6 +4,9 @@ using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
+using System.Linq;
+using ConditioningControlPanel.Avalonia.Views.Controls.Companion.Runtime;
 using CCP.Avalonia.Testing;
 using ConditioningControlPanel.Avalonia.Views.Controls;
 using ConditioningControlPanel.Avalonia.Views.Controls.Companion;
@@ -60,6 +63,11 @@ public sealed class CompanionZonePillsTests
                 Dispatcher.UIThread.RunJobs();
                 Assert.Equal("companionlinks", w.CurrentTab);
                 Assert.True(room.FindControl<WorkshopAccordion>("WorkshopZone")!.ViewModel!.IsExpanded);
+                // The Library cell itself is on screen, not just the drawer (WPF maps it to companionlinks).
+                w.UpdateLayout();
+                var cell = room.GetVisualDescendants().OfType<WorkshopLibraryCell>().Single();
+                var top = cell.TranslatePoint(new Point(0, 0), scroll)!.Value.Y;
+                Assert.True(top >= 0 && top < scroll.Viewport.Height, $"library cell not in view (top {top}, viewport {scroll.Viewport.Height}, off {scroll.Offset.Y}, extent {scroll.Extent.Height}, cellH {cell.Bounds.Height})");
 
                 // Personality sits above: from down there the room scrolls back up to it.
                 w.UpdateLayout();

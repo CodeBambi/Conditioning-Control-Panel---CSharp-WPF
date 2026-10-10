@@ -830,4 +830,7 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
 - Applied: `personality`/`permissions`/`companionlinks` map to CompanionTab; OnTabShown scrolls to PersonalityZone /
   PermissionsZone / Workshop HER LIBRARY. Rows `5681c132a`, `f3a00a9dc` stay needs-port (folded into
   views-companion-v2-conversation). The f3a00a9dc wheel relay is n/a here (Avalonia chains wheel notches natively).
-- Test: `Tests/CCP.Avalonia.Tests/CompanionZonePillsTests.cs` (each of the three reveals fail-proven).
+- Test: `Tests/CCP.Avalonia.Tests/CompanionZonePillsTests.cs` (each of the three reveals fail-proven, log:
+  ~/ccp-port/evidence/review-sync6-companion-pages/fail-proofs.log). The Library-cell assertion found that
+  `WorkshopAccordion.ExpandAndReveal(cell)` scrolled to the drawer, not the cell (body not laid out yet); it now lays out
+  the page first, which also fixes the hero Switch chip -> roster deep link.
