@@ -35,6 +35,12 @@ public sealed class VaultGateDialog : Window
 {
     public const string PatreonUrl = "https://www.patreon.com/CodeBambi";
 
+    /// <summary>The site's own checkout (card or PayPal, monthly). {0} is basic or prime. WPF 750e76812.</summary>
+    public const string CardUrlFormat = "https://app.cclabs.app/subscribe?plan={0}&from=panel";
+
+    /// <summary>Test seam: every pay link leaves through ExternalOpener (sandbox-aware); tests swap it so no URL ever opens.</summary>
+    internal static Func<string, bool> Launch = ExternalOpener.Open;
+
     private static readonly IBrush CardBg = B("#FF151528"), RowBg = B("#252542"), Edge = B("#3D3D60"), Pink = B("#FF69B4"),
         Gold = B("#E5C76B"), Good = B("#7FD8A6"), Warn = B("#FFB347"), Text = B("#E0E0E0"), Muted = B("#B8B1CC"), Dim = B("#8079A3");
 
@@ -142,6 +148,7 @@ public sealed class VaultGateDialog : Window
         var open = PrimaryButton(Loc.Get(lab ? "vaultgate_open_lab" : "vaultgate_open_vault"));
         open.Click += (_, _) => { OpenPatreon("gate"); Close(); };
         _body.Children.Add(open);
+        _body.Children.Add(CardLink(lab, "gate"));
 
         var links = new Grid { Margin = new Thickness(0, 10, 0, 0), ColumnDefinitions = new ColumnDefinitions("*,Auto") };
         var signIn = Link(Loc.Get("vaultgate_signin"));
@@ -273,6 +280,7 @@ public sealed class VaultGateDialog : Window
         choose.HorizontalAlignment = HorizontalAlignment.Stretch;
         choose.Click += (_, _) => { OpenPatreon(lab ? "compare-lab" : "compare-vault"); Close(); };
         col.Children.Add(choose);
+        col.Children.Add(CardLink(lab, lab ? "compare-lab" : "compare-vault"));
         return new Border { Background = RowBg, BorderBrush = lab ? Gold : Edge, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(10), Padding = new Thickness(14), Child = col };
     }
 
@@ -297,6 +305,7 @@ public sealed class VaultGateDialog : Window
         var keep = PrimaryButton(Loc.Get("vaultgate_ending_keep"));
         keep.Click += (_, _) => { OpenPatreon("ending"); Close(); };
         _body.Children.Add(keep);
+        _body.Children.Add(CardLink(false, "ending"));
         var let = Link(Loc.Get("vaultgate_ending_let_close"));
         let.Margin = new Thickness(0, 12, 0, 0);
         let.Click += (_, _) => Close();
@@ -309,7 +318,23 @@ public sealed class VaultGateDialog : Window
     private static void OpenPatreon(string from)
     {
         Log.Information("[VaultGate] open Patreon from {From}", from);
-        if (!ExternalOpener.Open(PatreonUrl)) Log.Warning("[VaultGate] Patreon link refused or failed");
+        if (!Launch(PatreonUrl)) Log.Warning("[VaultGate] Patreon link refused or failed");
+    }
+
+    /// <summary>The other way to pay, under every Patreon button: the site's card / PayPal checkout (WPF CardLink).</summary>
+    private Button CardLink(bool lab, string from)
+    {
+        var link = Link(Loc.Get("vaultgate_or_card"));
+        link.Margin = new Thickness(0, 8, 0, 0);
+        if (link.Content is TextBlock t) t.TextAlignment = TextAlignment.Center;   // WPF CardLink: wrapped lines centred
+        link.Click += (_, _) => { OpenCard(lab ? "prime" : "basic", from); Close(); };
+        return link;
+    }
+
+    private static void OpenCard(string plan, string from)
+    {
+        Log.Information("[VaultGate] open card checkout ({Plan}) from {From}", plan, from);
+        if (!Launch(string.Format(CardUrlFormat, plan))) Log.Warning("[VaultGate] card checkout link refused or failed");
     }
 
     private static Control Chip(string text, IBrush? tint) => new Border

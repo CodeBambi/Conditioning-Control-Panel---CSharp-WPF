@@ -199,10 +199,11 @@
       <Setter Property="Background" Value="#5865F2"/>
       <Setter Property="BorderThickness" Value="0"/>
       <Setter Property="Cursor" Value="Hand"/>
-      <Setter Property="Padding" Value="12,5"/>
+      <Setter Property="Padding" Value="14,0"/>
       <Setter Property="Template">
         <ControlTemplate>
-          <Border x:Name="border" Background="{TemplateBinding Background}" CornerRadius="5"
+          <!-- WPF acd51fcf9: a 34 px pill on the bubble line. -->
+          <Border x:Name="border" Background="{TemplateBinding Background}" CornerRadius="17" Height="34"
                   Padding="{TemplateBinding Padding}" HorizontalAlignment="Stretch">
             <ContentPresenter Content="{TemplateBinding Content}"
                               ContentTemplate="{TemplateBinding ContentTemplate}"
@@ -232,52 +233,6 @@
       </Style>
       <Style Selector="^:pointerover /template/ TextBlock#arrow">
         <Setter Property="Foreground" Value="{DynamicResource PinkBrush}"/>
-      </Style>
-    </ControlTheme>
-
-    <!-- The quick-toggles row. Three liveries over one 14px-radius pill: neutral glass, the
-         cyan-accented Webcam card and the pink-accented Catalogue card. -->
-    <ControlTheme x:Key="VelvetPill" TargetType="Button">
-      <Setter Property="Cursor" Value="Hand"/>
-      <Setter Property="FontSize" Value="12"/>
-      <Setter Property="FontWeight" Value="Bold"/>
-      <Setter Property="Padding" Value="0"/>
-      <Setter Property="Background" Value="{DynamicResource ElevatedSurfaceBrush}"/>
-      <Setter Property="BorderBrush" Value="{DynamicResource GlassBorderBrush}"/>
-      <Setter Property="BorderThickness" Value="1"/>
-      <Setter Property="Template">
-        <ControlTemplate>
-          <Border x:Name="b" Background="{TemplateBinding Background}"
-                  BorderBrush="{TemplateBinding BorderBrush}"
-                  BorderThickness="{TemplateBinding BorderThickness}"
-                  CornerRadius="14">
-            <ContentPresenter Content="{TemplateBinding Content}"
-                              ContentTemplate="{TemplateBinding ContentTemplate}"
-                              HorizontalAlignment="Center" VerticalAlignment="Center"/>
-          </Border>
-        </ControlTemplate>
-      </Setter>
-      <Style Selector="^:pointerover /template/ Border#b">
-        <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
-        <Setter Property="Background" Value="{DynamicResource TransparentPinkBrush}"/>
-      </Style>
-    </ControlTheme>
-    <ControlTheme x:Key="VelvetPillWebcam" TargetType="Button" BasedOn="{StaticResource VelvetPill}">
-      <Setter Property="Background" Value="{DynamicResource AccentTintedBgBrush}"/>
-      <Setter Property="BorderBrush" Value="{DynamicResource SecondaryBrush}"/>
-      <Setter Property="BorderThickness" Value="1.5"/>
-      <Style Selector="^:pointerover /template/ Border#b">
-        <Setter Property="BorderBrush" Value="{DynamicResource SecondaryBrush}"/>
-        <Setter Property="Background" Value="{DynamicResource TransparentPinkBrush}"/>
-      </Style>
-    </ControlTheme>
-    <ControlTheme x:Key="VelvetPillCatalogue" TargetType="Button" BasedOn="{StaticResource VelvetPill}">
-      <Setter Property="Background" Value="{DynamicResource TransparentPinkBrush}"/>
-      <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
-      <Setter Property="BorderThickness" Value="1.5"/>
-      <Style Selector="^:pointerover /template/ Border#b">
-        <Setter Property="BorderBrush" Value="{DynamicResource SecondaryBrush}"/>
-        <Setter Property="Background" Value="{DynamicResource AccentTintedBgBrush}"/>
       </Style>
     </ControlTheme>
 
@@ -1359,30 +1314,21 @@
       </Border>
 
       <!-- ============================================================ -->
-      <!-- ACCOUNT STRIP (Phase 3) - the old "Quick Links" card,         -->
-      <!-- compressed from a four-row tile into one line.                -->
-      <!--                                                               -->
-      <!-- It is NOT redundant markup: every x:Name below is written by   -->
-      <!-- live code (BtnUnifiedLogin, LoggedInStatusPanel,               -->
-      <!-- TxtLoggedInName, ChkQuickDiscordRichPresence,                  -->
-      <!-- HelpBtnQuickLinks) and none may be dropped.                    -->
+      <!-- ACCOUNT STRIP - one line since WPF acd51fcf9 (nav polish wave  -->
+      <!-- 5): the name, Link phone and Logout as glass bubbles (Logout   -->
+      <!-- keeps a pink fill), a divider, the labelled Discord pill, the  -->
+      <!-- Rich Presence switch as a status bubble (lit when on), a       -->
+      <!-- divider, the five quick bubbles (41288a884), and the "?".      -->
+      <!-- One HoverBubbleBar dresses every glyph button. Every x:Name    -->
+      <!-- below is written by live code (Login.cs UpdateQuickLoginUI,    -->
+      <!-- HelpButtons, the view's click wiring); none may be dropped.    -->
       <!-- ============================================================ -->
-      <Border Grid.Row="2" CornerRadius="12" Padding="9,7"
+      <Border x:Name="AccountStrip" Grid.Row="2" CornerRadius="12" Padding="9,6"
               Background="{DynamicResource ElevatedSurfaceBrush}"
               BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
-        <Grid>
-          <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="*"/>
-            <ColumnDefinition Width="Auto"/>
-            <ColumnDefinition Width="Auto"/>
-            <ColumnDefinition Width="Auto"/>
-          </Grid.ColumnDefinitions>
-
-          <!-- The logged-out and logged-in faces share ONE cell: MainWindow.Login.cs flips
-               exactly these two visibilities against each other, so they must never be able to
-               claim two slots' worth of width between them. -->
-          <Grid Grid.Column="0">
-            <!-- Unified Login Button -->
+        <Grid ColumnDefinitions="*,Auto,Auto,Auto">
+          <!-- The logged-out and logged-in faces share ONE cell (Login.cs flips the two). -->
+          <Grid Grid.Column="0" Margin="0,0,10,0">
             <Button x:Name="BtnUnifiedLogin"
                     Theme="{StaticResource AccountPinkButton}"
                     FontSize="12"
@@ -1391,181 +1337,110 @@
               <TextBlock Text="{loc:Str btn_login_2}"/>
             </Button>
 
-            <!-- Logged In Status (shown when logged in) -->
+            <!-- Logged in: the name alone; "Logged in as" is its tooltip. -->
             <Border x:Name="LoggedInStatusPanel" IsVisible="False"
-                    Background="{DynamicResource PanelBgBrush}" CornerRadius="6" Padding="9,4"
-                    VerticalAlignment="Center"
-                    BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1">
-              <Grid>
-                <Grid.ColumnDefinitions>
-                  <ColumnDefinition Width="*"/>
-                  <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <StackPanel VerticalAlignment="Center">
-                  <TextBlock x:Name="TxtLoggedInAs" Text="{loc:Str label_logged_in_as}"
-                             Foreground="{DynamicResource TextMutedBrush}" FontSize="11"/>
-                  <TextBlock x:Name="TxtLoggedInName" Text="{loc:Str label_username}"
-                             Foreground="White" FontWeight="Bold" FontSize="14" Margin="0,1,0,0"
-                             TextTrimming="CharacterEllipsis">
-                    <TextBlock.Effect>
-                      <DropShadowEffect Color="#FF69B4" BlurRadius="10" OffsetX="0" OffsetY="0" Opacity="0.65"/>
-                    </TextBlock.Effect>
-                  </TextBlock>
-                </StackPanel>
-                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                  <Button x:Name="BtnLinkPhone"
-                          Margin="0,0,6,0" VerticalAlignment="Center"
-                          ToolTip.Tip="Sign in to the CCP mobile app by scanning a QR code"
-                          Padding="8,3" Background="{DynamicResource AccentTintedBgBrush}" Foreground="{DynamicResource PinkBrush}"
-                          BorderThickness="0" FontSize="10" Cursor="Hand">
-                    <TextBlock Text="📱 Link phone"/>
-                  </Button>
-                  <!-- Prominent, high-contrast Logout button -->
-                  <Button x:Name="BtnQuickLogout"
-                          Theme="{StaticResource AccountPinkButton}"
-                          VerticalAlignment="Center"
-                          Padding="12,4" FontSize="11" Cursor="Hand"
-                          ToolTip.Tip="{loc:Str btn_logout}">
-                    <TextBlock Text="{loc:Str btn_logout}"/>
-                  </Button>
-                </StackPanel>
-              </Grid>
+                    Background="Transparent" Padding="4,0" HorizontalAlignment="Left"
+                    VerticalAlignment="Center" ToolTip.Tip="{loc:Str label_logged_in_as}">
+              <TextBlock x:Name="TxtLoggedInName" Text="{loc:Str label_username}"
+                         Foreground="White" FontWeight="Bold" FontSize="15" MaxWidth="220"
+                         VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
+                <TextBlock.Effect>
+                  <DropShadowEffect Color="#FF69B4" BlurRadius="10" OffsetX="0" OffsetY="0" Opacity="0.65"/>
+                </TextBlock.Effect>
+              </TextBlock>
             </Border>
           </Grid>
 
-          <!-- Discord Join Button -->
-          <Button Grid.Column="1" x:Name="BtnDiscord"
-                  Theme="{StaticResource DiscordJoinButton}"
-                  ToolTip.Tip="{loc:Str tooltip_join_the_discord_community}" Cursor="Hand"
-                  VerticalAlignment="Center" Margin="10,0,0,0">
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-              <TextBlock Text="💬" FontSize="11" VerticalAlignment="Center"/>
-              <TextBlock Text="{loc:Str label_join_discord}" Foreground="White" FontSize="10" FontWeight="Bold"
-                         VerticalAlignment="Center" Margin="5,0,0,0"/>
-            </StackPanel>
-          </Button>
-          <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="10,0,0,0">
-            <ToolTip.Tip>
-              <Border Background="{DynamicResource SurfaceBgBrush}" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" Padding="10">
-                <StackPanel MaxWidth="280">
-                  <TextBlock Text="{loc:Str label_discord_rich_presence}" Foreground="{DynamicResource PinkBrush}" FontSize="12" FontWeight="Bold" Margin="0,0,0,6"/>
-                  <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8"
-                             Text="Shows &quot;Playing Conditioning Control Panel&quot; in your Discord status, along with your current level and session time."/>
-                  <TextBlock Text="{loc:Str label_who_can_see_this}" Foreground="{DynamicResource SecondaryBrush}" FontSize="11" FontWeight="Bold" Margin="0,0,0,4"/>
-                  <TextBlock Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap"
-                             Text="Only people who can already see your Discord activity status (friends, server members if enabled in your Discord privacy settings). This does NOT send notifications - it simply updates your &quot;Currently Playing&quot; status like any other game."/>
-                </StackPanel>
-              </Border>
-            </ToolTip.Tip>
-            <CheckBox x:Name="ChkQuickDiscordRichPresence" Theme="{StaticResource ToggleStyle}"
-                      RenderTransformOrigin="50%,50%">
-              <CheckBox.RenderTransform>
-                <ScaleTransform ScaleX="0.85" ScaleY="0.85"/>
-              </CheckBox.RenderTransform>
-            </CheckBox>
-            <TextBlock Text="{loc:Str label_rp}" Foreground="{DynamicResource TextMutedBrush}" FontSize="9"
-                       VerticalAlignment="Center" Margin="4,0,0,0"/>
-          </StackPanel>
+          <!-- Link phone, Logout and their divider follow the logged-in face's visibility. -->
+          <fx:HoverBubbleBar x:Name="HomeBubbleBar" Grid.Column="1"
+                             HorizontalAlignment="Right" VerticalAlignment="Center">
+            <Button x:Name="BtnLinkPhone"
+                    IsVisible="{Binding #LoggedInStatusPanel.IsVisible}"
+                    ToolTip.Tip="Sign in to the CCP mobile app by scanning a QR code"
+                    fx:HoverBubbleBar.Glyph="📱"
+                    fx:HoverBubbleBar.LabelKeys="btn_home_link_phone"/>
+            <Button x:Name="BtnQuickLogout"
+                    IsVisible="{Binding #LoggedInStatusPanel.IsVisible}"
+                    ToolTip.Tip="{loc:Str btn_logout}"
+                    fx:HoverBubbleBar.Glyph="⏻"
+                    fx:HoverBubbleBar.Fill="#FF69B4"
+                    fx:HoverBubbleBar.LabelKeys="btn_logout"/>
+            <Border x:Name="AccountStripDivider" Width="1" Height="18" Margin="12,0,4,0"
+                    VerticalAlignment="Center" Background="#40FFFFFF"
+                    IsVisible="{Binding #LoggedInStatusPanel.IsVisible}"/>
 
-          <Button x:Name="HelpBtnQuickLinks" Grid.Column="3"
+            <!-- Discord Join Button: the one labelled pill on the line. -->
+            <Button x:Name="BtnDiscord"
+                    Theme="{StaticResource DiscordJoinButton}"
+                    ToolTip.Tip="{loc:Str tooltip_join_the_discord_community}" Cursor="Hand"
+                    VerticalAlignment="Center">
+              <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                <TextBlock Text="💬" FontSize="11" VerticalAlignment="Center"/>
+                <TextBlock Text="{loc:Str label_join_discord}" Foreground="White" FontSize="11" FontWeight="Bold"
+                           VerticalAlignment="Center" Margin="6,0,0,0"/>
+              </StackPanel>
+            </Button>
+
+            <!-- Rich Presence as a status bubble: lit when on. Still the CheckBox the
+                 account mirror writes (IsChecked), just dressed by the bar. -->
+            <CheckBox x:Name="ChkQuickDiscordRichPresence"
+                      fx:HoverBubbleBar.Glyph="🎮"
+                      fx:HoverBubbleBar.LabelKeys="btn_home_discord_status">
+              <ToolTip.Tip>
+                <Border Background="{DynamicResource SurfaceBgBrush}" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" Padding="10">
+                  <StackPanel MaxWidth="280">
+                    <TextBlock Text="{loc:Str label_discord_rich_presence}" Foreground="{DynamicResource PinkBrush}" FontSize="12" FontWeight="Bold" Margin="0,0,0,6"/>
+                    <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8"
+                               Text="Shows &quot;Playing Conditioning Control Panel&quot; in your Discord status, along with your current level and session time."/>
+                    <TextBlock Text="{loc:Str label_who_can_see_this}" Foreground="{DynamicResource SecondaryBrush}" FontSize="11" FontWeight="Bold" Margin="0,0,0,4"/>
+                    <TextBlock Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap"
+                               Text="Only people who can already see your Discord activity status (friends, server members if enabled in your Discord privacy settings). This does NOT send notifications - it simply updates your &quot;Currently Playing&quot; status like any other game."/>
+                  </StackPanel>
+                </Border>
+              </ToolTip.Tip>
+            </CheckBox>
+            <Border Width="1" Height="18" Margin="12,0,4,0" VerticalAlignment="Center" Background="#40FFFFFF"/>
+
+            <!-- The five quick bubbles (WPF 41288a884). VelvetBtnSystem is the ONLY route to
+                 MainWindow.CardSystem_Click: never retire it without moving the handler. -->
+            <Button x:Name="VelvetBtnWebcam"
+                    fx:HoverBubbleBar.Glyph="📷"
+                    fx:HoverBubbleBar.LabelKeys="btn_home_webcam_mic"/>
+            <Button x:Name="VelvetBtnSystem"
+                    fx:HoverBubbleBar.Glyph="⚙"
+                    fx:HoverBubbleBar.LabelKeys="section_system"/>
+            <Button x:Name="VelvetBtnSchedulerRamp"
+                    fx:HoverBubbleBar.Glyph="📅"
+                    fx:HoverBubbleBar.LabelKeys="section_scheduler+section_intensity_ramp"/>
+            <Button x:Name="VelvetBtnCatalogue"
+                    ToolTip.Tip="Opens app.cclabs.app/catalogue in your browser"
+                    fx:HoverBubbleBar.Glyph="📚"
+                    fx:HoverBubbleBar.LabelKeys="btn_home_catalogue"/>
+            <Button x:Name="VelvetBtnAppInfo"
+                    fx:HoverBubbleBar.Glyph="ℹ"
+                    fx:HoverBubbleBar.LabelKeys="label_app_info"/>
+          </fx:HoverBubbleBar>
+
+          <Button x:Name="HelpBtnQuickLinks" Grid.Column="2"
                   Theme="{StaticResource HelpButtonStyle}" Tag="QuickLinks"
-                  VerticalAlignment="Center" Margin="8,0,0,0"/>
+                  VerticalAlignment="Center" Margin="10,0,0,0"/>
+
+          <!-- Diagnostics (this head only): a developer affordance, so one muted glyph, last.
+               It lived in the quick-toggles row, which WPF acd51fcf9 gave back to the mosaic. -->
+          <Button Grid.Column="3" x:Name="BtnOpenDiagnostics"
+                  VerticalAlignment="Center" Margin="4,0,0,0" Padding="2" FontSize="11" Opacity="0.6"
+                  Background="Transparent" BorderThickness="0" Cursor="Hand"
+                  Foreground="{DynamicResource TextMutedBrush}"
+                  Click="BtnOpenDiagnostics_Click"
+                  ToolTip.Tip="Open the Linux head's diagnostics window">
+            <TextBlock Text="🛠"/>
+          </Button>
         </Grid>
       </Border>
     </Grid>
 
-    <!-- ============================================================ -->
-    <!-- QUICK TOGGLES ROW - full width, under both the feature grid   -->
-    <!-- AND the right half. (Historic x:Name VelvetHelperButtonRow.)  -->
-    <!-- Keep this row at Height=30: it sits between the mosaic and    -->
-    <!-- the marquee inside the fixed design canvas, and every unit it -->
-    <!-- grows comes off the mosaic's star row (layout clips           -->
-    <!-- silently - #860).                                             -->
-    <!-- ============================================================ -->
-    <Grid Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="4" x:Name="VelvetHelperButtonRow"
-          Height="30" Margin="5,4,5,0">
-      <Grid.ColumnDefinitions>
-        <ColumnDefinition Width="*"/>
-        <ColumnDefinition Width="10"/>
-        <ColumnDefinition Width="*"/>
-        <ColumnDefinition Width="10"/>
-        <ColumnDefinition Width="*"/>
-        <ColumnDefinition Width="10"/>
-        <ColumnDefinition Width="*"/>
-        <ColumnDefinition Width="10"/>
-        <ColumnDefinition Width="*"/>
-      </Grid.ColumnDefinitions>
-      <!-- Webcam card — surfaced from the Lab for discoverability. Distinct Secondary (cyan)
-           accent + tinted fill so it stands out from the two neutral cards beside it. -->
-      <Button Grid.Column="0" x:Name="VelvetBtnWebcam"
-              Theme="{StaticResource VelvetPillWebcam}">
-        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-          <TextBlock Text="📷" FontSize="13" VerticalAlignment="Center" Margin="0,0,8,0"/>
-          <TextBlock Text="Webcam &amp; Mic" Foreground="White" VerticalAlignment="Center"/>
-        </StackPanel>
-      </Button>
-
-      <!-- System — the display / video switches plus the read-only jumps into Settings. It used
-           to be the ⚙ mosaic tile; the tile went to Brain Drain and the entry point came here.
-           This pill is now the ONLY route to MainWindow.CardSystem_Click: never retire it
-           without moving the handler somewhere else. -->
-      <Button Grid.Column="2" x:Name="VelvetBtnSystem"
-              Theme="{StaticResource VelvetPill}">
-        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-          <!-- No separate cog glyph: section_system already starts with the gear (same idiom as
-               the Scheduler pill below). -->
-          <TextBlock Text="{loc:Str section_system}" Foreground="White" VerticalAlignment="Center"/>
-        </StackPanel>
-      </Button>
-
-      <Button Grid.Column="8" x:Name="VelvetBtnAppInfo"
-              Theme="{StaticResource VelvetPill}">
-        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-          <TextBlock Text="ℹ" FontSize="16" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,8,0"
-                     Foreground="{DynamicResource PinkBrush}"/>
-          <TextBlock Text="{loc:Str label_app_info}" Foreground="White" VerticalAlignment="Center"/>
-        </StackPanel>
-      </Button>
-
-      <!-- Combined Scheduler + Intensity Ramp card. Label is two live-localized strings joined
-           by " + " so both halves stay translated. The pill navigates to the Studio rack, which
-           fires the same single "SchedulerRamp" NotifyFeatureOpened key the old popup did. -->
-      <Button Grid.Column="4" x:Name="VelvetBtnSchedulerRamp"
-              Theme="{StaticResource VelvetPill}">
-        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-          <!-- No separate 📅 glyph: section_scheduler already starts with the calendar emoji
-               (matches the inline ⚡ on Intensity Ramp). -->
-          <TextBlock Text="{loc:Str section_scheduler}" Foreground="White" VerticalAlignment="Center"/>
-          <TextBlock Text=" + " Foreground="White" VerticalAlignment="Center"/>
-          <TextBlock Text="{loc:Str section_intensity_ramp}" Foreground="White" VerticalAlignment="Center"/>
-        </StackPanel>
-      </Button>
-
-      <!-- CCP Catalogue card — opens the web catalogue to browse/share community presets and
-           sessions. Pink-tinted to flag it as the community/social action of the row. -->
-      <Button Grid.Column="6" x:Name="VelvetBtnCatalogue"
-              Theme="{StaticResource VelvetPillCatalogue}"
-              ToolTip.Tip="Opens app.cclabs.app/catalogue in your browser">
-        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-          <TextBlock Text="📚" FontSize="13" VerticalAlignment="Center" Margin="0,0,8,0"/>
-          <TextBlock Text="CCP Catalogue" Foreground="White" VerticalAlignment="Center"/>
-        </StackPanel>
-      </Button>
-
-      <!-- Diagnostics. Deliberately small and last in the row: a developer affordance, not a
-           setting. Opens this head's diagnostics window (platform, Core paths, engine values, a
-           live moderation verdict) as a SECOND window, so the shell keeps its state and that
-           window's own Back button is just a close. -->
-      <Button Grid.Column="6" x:Name="BtnOpenDiagnostics"
-              HorizontalAlignment="Right" VerticalAlignment="Bottom"
-              Margin="0,0,4,-2" Padding="8,2" FontSize="10"
-              Background="Transparent" BorderThickness="0" Cursor="Hand"
-              Foreground="{DynamicResource TextMutedBrush}"
-              Click="BtnOpenDiagnostics_Click"
-              ToolTip.Tip="Open the Linux head's diagnostics window">
-        <TextBlock Text="diagnostics"/>
-      </Button>
-    </Grid>
+    <!-- Row 2 (Auto) is empty since WPF acd51fcf9: the quick bubbles live on the account
+         strip's one line, and the row's height went back to the mosaic. -->
 
     <!-- Scrolling Marquee Banner - row 3, spans all columns -->
     <Border x:Name="MarqueeBanner" Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="4"

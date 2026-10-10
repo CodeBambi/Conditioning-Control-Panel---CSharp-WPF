@@ -76,7 +76,11 @@ public sealed class SocialPagesTests
             shell.Show();
             Dispatcher.UIThread.RunJobs();
 
-            Click(shell.Named<Button>("BtnNavFriends")!);
+            // The Social door (WPF MainWindow.xaml:621), then its Friends pill.
+            Click(shell.Named<Button>("DoorSocial")!);
+            Assert.Equal("social", global::ConditioningControlPanel.Services.UI.NavSections.SectionForTab(shell.CurrentTab));
+            Assert.Contains("active", shell.Named<Button>("DoorSocial")!.Classes);
+            Click(shell.PageStrip!.PillFor("friends")!);
             Assert.Equal("friends", shell.CurrentTab);
             var page = shell.Named<FriendsTabView>("FriendsTab")!;
             Assert.True(page.IsVisible);
@@ -95,7 +99,7 @@ public sealed class SocialPagesTests
             page.Drawer.RaiseEvent(esc);
             Assert.False(esc.Handled);
 
-            Click(shell.Named<Button>("BtnNavLeash")!);
+            Click(shell.PageStrip!.PillFor("leash")!);
             Assert.Equal("leash", shell.CurrentTab);
             Assert.False(page.IsVisible);
             var leash = shell.Named<LeashTabView>("LeashTab")!;

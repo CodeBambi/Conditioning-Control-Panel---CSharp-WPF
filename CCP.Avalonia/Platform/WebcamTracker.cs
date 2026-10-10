@@ -159,6 +159,8 @@ namespace ConditioningControlPanel.Avalonia.Platform
 
         private Run? _run;
         private Thread? _wedged;
+        /// <summary>A loop a timed-out Stop abandoned still holds the camera; Start refuses until it exits.</summary>
+        internal bool IsClosing => _wedged is { IsAlive: true };
         private readonly BlinkDetector _blink = new();
         private readonly GazeEngine _gaze = new();
         private int _busy;
@@ -196,7 +198,7 @@ namespace ConditioningControlPanel.Avalonia.Platform
                 StartWasStopped = false;
                 if (!WebcamConsent.IsCurrent(CoreSettings.Current)) { LastError = "Webcam consent is not current."; return false; }
                 // WPF #743: a loop a timed-out Stop gave up on may still hold the camera.
-                if (_wedged is { IsAlive: true })
+                if (IsClosing)
                 {
                     LastError = "The previous camera session is still closing. Try again in a moment, or restart the app.";
                     return false;

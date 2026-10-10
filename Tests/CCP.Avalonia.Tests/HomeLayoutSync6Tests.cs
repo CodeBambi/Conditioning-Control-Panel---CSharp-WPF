@@ -73,9 +73,13 @@ public sealed class HomeLayoutSync6Tests
                 Assert.Equal(0, body.Width);
                 Assert.False(s.FavoritesDrawerOpen);
 
-                // Pin from the rail row's menu while closed: the drawer slides out for a peek and
-                // writes nothing; the peek's end puts it away.
-                var row = w.Named<Button>("BtnNavHaptics")!;
+                // Pin from a RECENT chip's menu while closed (the rail rows that pinned left with
+                // cd426fe36): the drawer slides out for a peek and writes nothing; the peek's end
+                // puts it away.
+                w.ShowTab("haptics");
+                w.ShowTab("settings");
+                Dispatcher.UIThread.RunJobs();
+                var row = (Button)dash.FindControl<StackPanel>("RecentList")!.Children[0];
                 row.RaiseEvent(new ContextRequestedEventArgs());
                 Dispatcher.UIThread.RunJobs();
                 var item = Assert.IsType<MenuItem>(Assert.Single(row.ContextMenu!.Items));
@@ -250,6 +254,41 @@ public sealed class HomeLayoutSync6Tests
                 Assert.Equal(ConditioningControlPanel.Services.UI.WindowFitRule.DefaultHeightDip, shell.Height);
             }
             finally { shell.Close(); }
+            return Task.CompletedTask;
+        });
+    }
+
+    /// <summary>e2c475a8a: the drawer handle's motes include the Embers layer (WPF
+    /// SettingsTabView.xaml.cs:260), sparks that fill in one per quarter second.</summary>
+    [Fact]
+    public async Task FavoritesDrawerHandleRaisesEmbers()
+    {
+        await AvaloniaTestDispatcher.RunAsync(() =>
+        {
+            EnsureApp();
+            var s = CoreSettings.Current;
+            var motionBefore = s.MotionLevel;
+            bool perfBefore = s.PerformanceMode;
+            MainShellWindow? w = null;
+            try
+            {
+                s.MotionLevel = MotionLevel.Full;
+                s.PerformanceMode = false;
+                w = new MainShellWindow();
+                w.Show();
+                Dispatcher.UIThread.RunJobs();
+                var fx = w.Named<SettingsTabView>("SettingsTab")!
+                    .FindControl<ConditioningControlPanel.Avalonia.Controls.AmbientFxCanvas>("FavoritesDrawerFx")!;
+                Assert.True(fx.IsRunning);
+                for (int i = 0; i < 8; i++) fx.StepEmbers(0.3f);
+                Assert.True(fx.EmberCount > 0, $"embers {fx.EmberCount}");
+            }
+            finally
+            {
+                w?.Close();
+                s.MotionLevel = motionBefore;
+                s.PerformanceMode = perfBefore;
+            }
             return Task.CompletedTask;
         });
     }

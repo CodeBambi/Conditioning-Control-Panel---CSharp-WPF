@@ -60,6 +60,8 @@ internal sealed class IsolateProcessStateAttribute : BeforeAfterTestAttribute
             // window a test left open holds the next test's startup surfaces, so close it first.
             OpenWindows.CloseLeftovers();
             ConditioningControlPanel.Avalonia.Platform.StartupLadder.ResetForTests();
+            // A Ctrl+K a test pressed and never released would swallow the next test's press (P02).
+            ConditioningControlPanel.Avalonia.Views.Windows.SettingsPaletteWindow.ChordReleased();
             Current?.Restore();
             Current = null;
         });

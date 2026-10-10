@@ -1,7 +1,7 @@
 // PORTED from ConditioningControlPanel/MainWindow/MainWindow.AchievementsTab.cs. The card grid, meter,
 // filters, reward band, unlock refresh and tile FX live in CCP.Avalonia/Views/Tabs/AchievementsTabView
 // (that view owns the grid this file built into on WPF). What stays here is what WPF keeps on the
-// window: the three nav handlers and the Season Recap re-view, reading Core SeasonRecapStore.
+// window: the Season Recap re-view, reading Core SeasonRecapStore.
 using System;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
@@ -14,15 +14,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
     public partial class MainShellWindow
     {
-        private void BtnAchievements_Click(object? sender, RoutedEventArgs e) => ShowTab("achievements");
-
-        private void BtnCompanion_Click(object? sender, RoutedEventArgs e) => ShowTab("companion");
-
-        /// <summary>WPF AchievementsTab.cs:115: opens the Leaderboard and surfaces the Season Recap
-        /// re-view button only when a persisted snapshot exists.</summary>
-        private void BtnLeaderboard_Click(object? sender, RoutedEventArgs e)
+        /// <summary>WPF AchievementsTab.cs:115 (the old rail entry's handler): surface the Season
+        /// Recap re-view button only when a persisted snapshot exists. The entry left the rail, so this
+        /// rides every way into the Leaderboard (OnTabShown), where WPF's strip pill lost it.</summary>
+        private void RefreshSeasonRecapReview()
         {
-            ShowTab("leaderboard");
             try
             {
                 if (Named<Tabs.LeaderboardTabView>("LeaderboardTab")?.FindControl<Button>("BtnViewSeasonRecap") is { } btn)

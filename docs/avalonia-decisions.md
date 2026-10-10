@@ -874,3 +874,6 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
 - Tests: `Tests/CCP.Avalonia.Tests/ProgramsRunControlsTests.cs`, `Tests/CCP.Core.Tests/ProgramRitualTests.cs` (oracle tests 1-4),
   `ProgramServiceStartupTests.AppStartupSeedsTheRoadmapProviderLazily` (6), `ProgramCapabilitiesTests`, `LockdownVeilTests`.
   Fail-proofs: ~/ccp-port/evidence/review-programs-run-3b/fail-proofs.log.
+## 2026-10-10: Vault gate card/PayPal checkout link (avalonia-port/sync6-gate-pay)
+- Mirrors WPF 750e76812 exactly (supervisor-approved, P44): same URL `https://app.cclabs.app/subscribe?plan={basic|prime}&from=panel`,
+  same copy (`vaultgate_or_card`), opened only through ExternalOpener on a user click; tests use a fake launcher, never a real URL.

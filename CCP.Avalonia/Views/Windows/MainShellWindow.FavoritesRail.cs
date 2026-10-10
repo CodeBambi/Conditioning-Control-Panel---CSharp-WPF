@@ -34,22 +34,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private static readonly (string Element, string Id)[] FavoritePinMap =
         {
             ("DoorHome", "door.home"), ("DoorStudio", "door.studio"), ("DoorCompanion", "door.companion"),
-            ("DoorPlay", "door.play"), ("DoorYou", "door.you"), ("DoorLibrary", "door.library"),
+            ("DoorPlay", "door.play"), ("DoorYou", "door.you"), ("DoorSocial", "door.social"), ("DoorLibrary", "door.library"),
             ("DoorSettings", "door.settings"),
-            ("BtnSettings", "tab.settings"), ("BtnNavStudio", "tab.studio"), ("BtnPresets", "tab.presets"),
-            ("BtnNavHaptics", "tab.haptics"), ("BtnCompanion", "tab.companion"),
-            ("BtnNavBambiTakeover", "tab.bambitakeover"), ("BtnNavSheListening", "tab.shelistening"),
-            ("BtnNavAwareness", "tab.awareness"), ("BtnLab", "tab.play"), ("BtnDeeper", "tab.deeper"),
-            ("BtnPatreonExclusives", "tab.exclusives"), ("BtnNavGradedIntake", "tab.gradedintake"),
-            ("BtnNavLockdown", "tab.lockdown"), ("BtnNavBlinkTrainer", "tab.blinktrainer"),
-            ("BtnNavRemoteControl", "tab.remotecontrol"), ("BtnAvailableSubjects", "tab.availablesubjects"),
-            ("BtnDiscordTab", "tab.discord"), ("BtnNavSpiral", "tab.spiral"), ("BtnQuests", "tab.quests"),
-            ("BtnAchievements", "tab.achievements"), ("BtnEnhancements", "tab.enhancements"),
-            ("BtnPrograms", "tab.programs"), ("BtnLeaderboard", "tab.leaderboard"),
-            ("BtnOpenAssetsTop", "tab.assets"), ("BtnNavMods", "launch.mods"),
-            ("BtnNavCatalogue", "launch.catalogue"), ("BtnNavPhrases", "launch.phrases"),
-            ("BtnNavMediaLog", "launch.medialog"),
-            ("BtnNavJustDrop", "door.justdrop"),
+            // Nav rework (2026-10-06): the door rows (BtnSettings ... BtnNavMediaLog, BtnNavJustDrop)
+            // left the rail for the pages' pill strips, so their pin rows went with them (WPF :68).
             ("BtnPlayRemoteControl", "tab.remotecontrol"), ("BtnPlayBlinkTrainer", "tab.blinktrainer"),
             ("BtnPlayGradedIntake", "tab.gradedintake"), ("BtnPlayFyp", "tab.fyp"),
             ("BtnPlayLockdown", "tab.lockdown"),
@@ -139,7 +127,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (face != null) chip.Background = face;
             if (locked && this.TryFindResource("Tier1GoldBorderBrush", out var gold) && gold is IBrush g) chip.BorderBrush = g;
             chip.Click += (_, _) => OpenDestination(entry);
-            AttachPinMenu(chip, entry.Id, holdRail: false);
+            AttachPinMenu(chip, entry.Id);
             return chip;
         }
 
@@ -298,13 +286,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 bool onPlayWall = element.StartsWith("BtnPlay", StringComparison.Ordinal);
                 var target = onPlayWall ? play?.FindControl<Control>(element) : Named<Control>(element);
                 if (target == null) { Log.Debug("Favorites rail: no element named {Name} to pin", element); continue; }
-                AttachPinMenu(target, id, holdRail: !onPlayWall);
+                AttachPinMenu(target, id);
             }
         }
 
-        /// <summary>WPF AttachPinMenu (:436). The rail hold is taken on Opened and given back on
-        /// Closed - the two halves of one open (the v6.9.5 "rail stops minimizing" bug).</summary>
-        internal void AttachPinMenu(Control target, string id, bool holdRail)
+        /// <summary>WPF AttachPinMenu (:436): a Pin/Unpin menu rebuilt on each open. No rail hold:
+        /// the section rail never overlays the page, so there is nothing to keep open.</summary>
+        internal void AttachPinMenu(Control target, string id)
         {
             var menu = new ContextMenu();
             target.ContextMenu = menu;
@@ -323,9 +311,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 item.Click += (_, _) => TogglePinned(id);
                 menu.Items.Add(item);
             };
-            if (!holdRail) return;
-            menu.Opened += (_, _) => HoldNavRailOpen(menu);
-            menu.Closed += (_, _) => ReleaseNavRailOpen(menu);
         }
     }
 }
