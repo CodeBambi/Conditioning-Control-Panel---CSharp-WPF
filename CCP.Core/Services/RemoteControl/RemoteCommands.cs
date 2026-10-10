@@ -11,12 +11,13 @@ namespace ConditioningControlPanel.Services
     /// Verbs that need a window (pink filter, spiral, the Melt haze, a lock card now, Takeover, the session
     /// verbs) go through <see cref="Head"/>; with no head they refuse. No tier or waiver check here: WPF
     /// has none on the receiving side either (the relay only hands a session the verbs of its tier).
-    /// ponytail: play_hypnotube (the controller supplies a url: owner call) still refuses.
+    /// play_hypnotube is site-locked by <see cref="RemoteVideoLink"/> (owner, 2026-10-10).
     /// </summary>
     public static class RemoteCommands
     {
         public const string NotOnThisBuild = "not on this build";
         public const string NoOverlayHere = "no overlay on this display";
+        public const string NothingShown = "nothing was shown";
 
         /// <summary>What the desktop head does for the verbs Core cannot (MainShellWindow.RemoteVerbs.cs).
         /// Every member runs on the UI thread. A string result is the refusal the controller sees, null = done.</summary>
@@ -45,6 +46,12 @@ namespace ConditioningControlPanel.Services
             /// controller never supplies one) / stop_wallpaper and every stop path (false: the desktop the
             /// subject had comes back). A reason when this system cannot change the wallpaper.</summary>
             string? Wallpaper(bool on) => NotOnThisBuild;
+            /// <summary>play_hypnotube: an address <see cref="RemoteVideoLink"/> already passed, opened in the
+            /// embedded browser. A reason when it was not opened (a game owns the screen, offline).</summary>
+            string? PlayVideoLink(string absoluteUri) => NotOnThisBuild;
+            /// <summary>WPF StopBrowserVideoFromRemote: every stop path and panic. Nothing unless a
+            /// controller's video link is up.</summary>
+            void StopVideoLink() { }
         }
 
         public static volatile IRemoteHead? Head;
@@ -258,7 +265,10 @@ namespace ConditioningControlPanel.Services
             {
                 case "trigger_flash":
                     if (CoreFlash.ShowProvider is not { } flash) return NotOnThisBuild;
-                    flash();
+                    // Owner 2026-10-10: the tab is charged only for a picture that was shown (busy, do not
+                    // disturb or no screen = nothing shown, nothing booked). WPF 7.1.5 books either way.
+                    if (CoreFlash.TryShowProvider is { } tryFlash) { if (!tryFlash()) return NothingShown; }
+                    else flash();
                     Chaster("remote_media");   // Circe's tab: what the controller sends lands on the wearer's tab
                     return null;
                 case "trigger_subliminal":
@@ -278,9 +288,16 @@ namespace ConditioningControlPanel.Services
                 case "stop_bounce_text": CoreBouncingText.Stop(); return null;
                 case "trigger_video":
                     if (CoreEngine.Video is not { } video) return NotOnThisBuild;
-                    var played = video.Trigger();
-                    Chaster("remote_video");   // WPF :1357-1358 books the send whether or not a video was already up
-                    return played ? null : "a video is already playing";
+                    // Owner 2026-10-10: booked only when the video starts. WPF 7.1.5 (:1357-1358) books the
+                    // send even when one was already up; the port does not.
+                    if (!video.Trigger()) return "a video is already playing";
+                    Chaster("remote_video");
+                    return null;
+                case "play_hypnotube":
+                    // The url is the one thing crossing the trust boundary: RemoteVideoLink is the whole rule,
+                    // and only its AbsoluteUri travels on. Never booked on the tab (as WPF).
+                    if (!RemoteVideoLink.TryParse(p?["url"]?.ToString(), out var link)) return RemoteVideoLink.Refused;
+                    return Head is { } hv ? hv.PlayVideoLink(link.AbsoluteUri) : NotOnThisBuild;
                 case "start_video": if (CoreEngine.Video == null) return NotOnThisBuild; CoreEngine.Video.Start(); return null;
                 case "stop_video": CoreEngine.Video?.Stop(); return null;
                 case "show_pink_filter": return Overlay("pink", true);
@@ -359,6 +376,7 @@ namespace ConditioningControlPanel.Services
                 CoreFlash.Stop(); CoreSubliminal.Stop(); CoreBubbles.Stop(); CoreBouncingText.Stop();
                 CoreEngine.Video?.Stop(); CoreEngine.BubbleCount?.Stop(); LockCardScheduler.Instance.Stop();
             }
+            try { head?.StopVideoLink(); } catch (Exception ex) { Serilog.Log.Warning(ex, "[RemoteControl] video link stop failed"); }   // WPF :988
             try { head?.CloseCards(); } catch (Exception ex) { Serilog.Log.Warning(ex, "[RemoteControl] card close failed"); }
             // WPF App.Wallpaper?.Deactivate() on both stop paths: the subject's own desktop comes back.
             try { head?.Wallpaper(false); } catch (Exception ex) { Serilog.Log.Warning(ex, "[RemoteControl] wallpaper restore failed"); }

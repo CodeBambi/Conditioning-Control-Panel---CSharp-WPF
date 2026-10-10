@@ -477,6 +477,12 @@ namespace ConditioningControlPanel.Avalonia
                     Views.Overlays.FlashOverlay.TriggerOnce(host);
                     NoteFeatureUsed(ConditioningControlPanel.Services.Companion.Brain.MemorySignalWriter.FeatureFlash);
                 };
+                CoreFlash.TryShowProvider = () =>
+                {
+                    if (desktop.MainWindow == null || Views.Overlays.FlashOverlay.IsBusy) return false;
+                    CoreFlash.ShowProvider?.Invoke();
+                    return Views.Overlays.FlashOverlay.IsBusy;   // TriggerOnce claims the surface before its first await
+                };
 
                 // Subliminal and bouncing-text surfaces. Core owns the schedule / the motion;
                 // these draw on click-through overlays (Views/Overlays), hosted like the flash.

@@ -16,6 +16,9 @@ namespace ConditioningControlPanel
     {
         /// <summary>Draw one ambient burst. Null when no head has a flash surface.</summary>
         public static volatile Action? ShowProvider;
+        /// <summary>One flash now, for a caller that must know: true only when a picture went up (false =
+        /// busy, held by do not disturb, no screen). The remote verb books Circe's Tab on it.</summary>
+        public static volatile Func<bool>? TryShowProvider;
 
         /// <summary>True while the head's previous burst is still going (WPF <c>_isBusy</c>).</summary>
         public static volatile Func<bool>? IsBusyProvider;
