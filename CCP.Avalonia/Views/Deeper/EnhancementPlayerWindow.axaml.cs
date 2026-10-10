@@ -873,11 +873,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             if (e.Property != RangeBase.ValueProperty) return;
             // WPF EnhancementAudioPlayer.Volume (0..1). The panel is hidden in video mode.
             if (_audio != null) _audio.Volume = _sliderVolume.Value / 100.0;
-            // ponytail: needs EnhancementAudioPlayer.Volume, wired when it moves to Core — both
-            // directions: the write on drag, and UpdateVolumeFromPlayer's read-back on open, which
-            // is why the WPF handler carried a _suppressVolumeSync re-entrancy flag. Not routed to
-            // the video's volume instead: this panel is hidden in video mode (ShowMediaPaneFor), so
-            // a viewer never sees it while a video is what is playing.
+            // The write on drag is the line above. Left from WPF: UpdateVolumeFromPlayer's read-back on
+            // open (and its _suppressVolumeSync flag). Not routed to the video's volume: this panel is
+            // hidden in video mode (ShowMediaPaneFor), so a viewer never sees it while a video plays.
         }
 
         // ====================================================================================

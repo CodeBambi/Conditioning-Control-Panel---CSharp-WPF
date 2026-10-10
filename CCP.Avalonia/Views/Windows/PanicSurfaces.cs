@@ -59,12 +59,26 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             new("corner-gif", _ => Overlays.CornerGifOverlay.StopAll()),
             // WPF :2005 "tube speech": voice line, bubble, thinking + listening dots (tube#T2).
             new("tube", _ => AvatarTube.AvatarTubeWindow.PanicSilenceLive()),
-            new("lock-cards", _ => MainShellWindow.StopLockCards()),      // WPF LockCardService.Stop(dismissOpenCards: true)
+            // WPF "modal / topmost cards" (:2015-2024): the lock cards, then the help popover and the settings palette.
+            new("lock-cards", _ => { try { MainShellWindow.StopLockCards(); } finally { CloseHelpAndPalette(); } }),      // WPF LockCardService.Stop(dismissOpenCards: true)
             new("attention-test", _ => Overlays.AttentionTestTarget.CloseAll()),   // the style editor's Test target (P06; WPF left it up)
             new("deeper-editor-audio", _ => Deeper.DeeperEditorWindow.PauseAllForPanic()),   // P06; WPF left it playing
             new("deeper-player", _ => Deeper.EnhancementPlayerWindow.StopAllForPanic()),    // media, engine and its effects
             new("camera", _ => MainShellWindow.StopCameraForPanic()),     // decision C: last, fire-and-forget
         };
+
+        /// <summary>Test seams for <see cref="CloseHelpAndPalette"/>.</summary>
+        internal static Action CloseHelpPopover = () => global::ConditioningControlPanel.Avalonia.Controls.HelpPopover.CloseActive();
+        internal static Action CloseSettingsPalette = () => SettingsPaletteWindow.CloseIfOpen();
+
+        /// <summary>WPF PanicStopEverySurface "help popover" + "settings palette" (:2019-2024). CloseIfOpen,
+        /// never TryConsumeEscape: a palette still open here did not claim the press (panic rebound to F8),
+        /// and consuming would burn the Escape grace window the caller's decision depends on.</summary>
+        private static void CloseHelpAndPalette()
+        {
+            try { CloseHelpPopover(); } catch (Exception ex) { Serilog.Log.Warning(ex, "Panic: help popover close failed"); }
+            try { CloseSettingsPalette(); } catch (Exception ex) { Serilog.Log.Warning(ex, "Panic: settings palette close failed"); }
+        }
 
         /// <summary>WPF AnyGameSurfaceOwnsTheScreen. Sample BEFORE <see cref="StopAll"/>.</summary>
         internal static bool AnyOwnsTheScreen()

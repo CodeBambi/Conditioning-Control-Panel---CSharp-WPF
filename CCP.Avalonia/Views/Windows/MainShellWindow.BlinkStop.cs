@@ -28,8 +28,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private bool _rapidBlinkRecalInProgress;
 
         /// <summary>Panic surfaces the blink stop leaves alone: WPF StopAllForRecalibration never closed
-        /// game windows, the intake or a Chaos descent, and the camera must stay up to recalibrate.</summary>
-        internal static readonly HashSet<string> BlinkStopSkips = new() { "intake", "games", "chaos", "camera" };
+        /// game windows (a Chaos descent is one now) or the intake, and the camera must stay up to recalibrate.</summary>
+        internal static readonly HashSet<string> BlinkStopSkips = new() { "intake", "games", "camera" };
 
         /// <summary>Test seam: what a fired gesture does after the stop pass (the recalibrate offer).</summary>
         internal Func<Task>? BlinkRecalOfferForTests;

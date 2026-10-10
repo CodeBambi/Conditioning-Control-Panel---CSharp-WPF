@@ -20,8 +20,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
     /// report-bug (:390) and the crash sentinel (:327).
     /// DtRH is a trance game: nothing here adds a sound, a flash or a shake WPF does not have.
     /// The haptic-state feed and the tap before each bark drive Core DtrhHapticDirector.
-    /// not ported: bark (no chaos bark hooks on this head),
-    /// the freeze's pause of a spoken companion line, the session stats store, the tray tuck.
+    /// Barks route through RouteDtrhBark (Director partial): a recorded line or nothing.
+    /// not ported: the freeze's pause of a spoken companion line, the session stats store, the tray tuck.
     /// </summary>
     internal sealed partial class GameWindow
     {

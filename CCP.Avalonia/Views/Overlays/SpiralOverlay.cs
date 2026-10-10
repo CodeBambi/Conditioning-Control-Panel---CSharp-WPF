@@ -57,8 +57,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         /// <summary>WPF GetSpiralPath: with Randomize on, a random spiral from the pool, picked at
         /// overlay START only (never per tick: the decoded frames are keyed by path and a mid-run
         /// re-decode hitches); else the configured file if it exists, else the active mod's spiral,
-        /// else the shipped one. ponytail: video spirals (.mp4 etc., WPF MediaElement) decode to no
-        /// frames and show nothing.</summary>
+        /// else the shipped one. A video spiral (.mp4 etc., WPF MediaElement) plays through
+        /// SpiralOverlay.Hold.cs ("the video spiral"), silent.</summary>
         internal static string SourcePath()
         {
             var s = CoreSettings.Current;

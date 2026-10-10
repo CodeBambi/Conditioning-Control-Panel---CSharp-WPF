@@ -77,8 +77,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             // WPF Launch: friends see "in the Arcademy" while the window is up.
             try { Platform.FriendsHead.Service?.EnterActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Arcademy); }
             catch (Exception ex) { Log.Debug("[Game] arcademy friends presence: {E}", ex.Message); }
-            // SEAM(emi-desk): WPF also tells the desk mascot (NoteOpen, FarewellForArcademy, Fire arcademyOpened / arcademyClosed);
-            // the port's desk has no event bus yet. SEAM(shell): WPF tucks the main window into the tray while the Arcademy is up.
+            // The desk mascot hears arcademyOpened / arcademyClosed on EmiDeskBus (GameWindow.Emi.cs).
+            // SEAM(emi-desk): WPF also calls NoteOpen and FarewellForArcademy; neither is called here yet.
+            // SEAM(shell): WPF tucks the main window into the tray while the Arcademy is up.
             ArmArcademyBootDeadline();
             HookArcademyVideo(true);
         }

@@ -31,10 +31,9 @@
      (Play*HeroPlate) and PlayTabView.axaml.cs paints it - see RefreshHeroArt, which also repaints
      on CoreMods.ModChanged. Every scrim and card colour underneath stays exactly where it was:
      that is the no-art fallback, and it is what draws if a plate fails to resolve.
-     The two Chaos checkboxes are a REAL round-trip, not placeholders: ChaosAnnouncerEnabled and
-     ChaosWebGameEnabled are both in Core, so where WPF binds Source={x:Static local:App.Settings}
-     TwoWay, LoadChaosBoxes / the two _Changed handlers in the code-behind read and write
-     CoreSettings instead. -->
+     The two native-Chaos checkboxes are gone with the native run (owner, 2026-10-10: Chaos is the
+     web descent). AppSettings.ChaosAnnouncerEnabled / ChaosWebGameEnabled stay in Core for the WPF
+     app, which still reads them; nothing on this head does. -->
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
