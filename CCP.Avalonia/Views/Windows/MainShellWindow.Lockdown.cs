@@ -24,17 +24,38 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             global::Avalonia.Controls.ToolTip.SetTip(c, held ? Loc.Get("tooltip_you_are_in_lockdown_mode_there_is_no_escape") : null);
         }
 
+        // Counts Lockdown activations so a re-attached control can tell "same run" from "new run".
+        // Static hook on the service only (no control captured), so nothing leaks (P41).
+        private static LockdownService? s_runSource;
+        private static int s_run;
+        private static int LockdownRun()
+        {
+            if (LockdownService.Current is { } ld && !ReferenceEquals(ld, s_runSource))
+            {
+                s_runSource = ld;
+                ld.LockdownActivated += () => s_run++;
+            }
+            return s_run;
+        }
+
         /// <summary>HoldUnderLockdown on every Lockdown start/end while <paramref name="c"/> is attached
-        /// (P41: subscribe on attach, drop on detach); repainted on attach for a lockdown already running.</summary>
+        /// (P41: subscribe on attach, drop on detach). Like WPF the hold is decided at the Lockdown event,
+        /// so a re-attach mid-run (rack switch) repaints that decision instead of re-evaluating it.</summary>
         internal static void HoldWhileLockdown(global::Avalonia.Controls.Control c, System.Func<bool> held)
         {
             LockdownService? ld = null;
-            void Apply() => global::Avalonia.Threading.Dispatcher.UIThread.Post(() => HoldUnderLockdown(c, held()));
+            bool decided = false; int decidedRun = -1; // the hold given in run decidedRun
+            void Apply() => global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                decided = held(); decidedRun = LockdownRun();
+                HoldUnderLockdown(c, decided);
+            });
             c.AttachedToVisualTree += (_, _) =>
             {
                 ld = LockdownService.Current;
                 if (ld != null) { ld.LockdownActivated += Apply; ld.LockdownDeactivated += Apply; }
-                HoldUnderLockdown(c, held());
+                if (decidedRun != LockdownRun()) { decided = held(); decidedRun = LockdownRun(); }
+                HoldUnderLockdown(c, LockdownActive && decided);
             };
             c.DetachedFromVisualTree += (_, _) =>
             {

@@ -514,6 +514,12 @@ public sealed class LockdownVeilTests
             host.Show();
             var late = Host(host, new VideoFeatureControl()).FindControl<CheckBox>("ChkStrict")!;   // attached mid-run
             Assert.False(late.IsEnabled);
+            var lateBubble = Host(host, new BubbleCountFeatureControl());
+            s.BubbleCountStrictLock = true;    // ticked mid-run, then detached and re-attached
+            host.Content = null;
+            Host(host, lateBubble);
+            Assert.True(lateBubble.FindControl<CheckBox>("ChkStrict")!.IsEnabled, "WPF greys only at activation (Lab.cs:652), not on re-attach");
+            s.BubbleCountStrictLock = false;
             host.Close();
             studio.FocusRackEntry("bubblecount");
             Frame();
