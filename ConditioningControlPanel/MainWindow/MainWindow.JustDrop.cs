@@ -107,10 +107,6 @@ namespace ConditioningControlPanel
             {
                 var available = JustDropService.DoorAvailable;
 
-                // The rail row (Studio > Creator Tools).
-                if (BtnNavJustDrop != null)
-                    BtnNavJustDrop.Visibility = available ? Visibility.Visible : Visibility.Collapsed;
-
                 // Then the one other surface that renders the flag. There were two until
                 // 2026-09-12, when the dashboard's nameless tease tile became the Deeper editor
                 // tile and stopped reading this flag at all.

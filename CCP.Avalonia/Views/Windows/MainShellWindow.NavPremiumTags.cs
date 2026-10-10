@@ -19,7 +19,7 @@
 // HookNavPremiumTags' subscriptions.
 //
 // Callers this layer does not own: InitializeNavRail and RefreshNavPremiumTags' repaint callers
-// live in MainShellWindow.NavRail.cs / MainShellWindow.PremiumRail.cs, and the collapse fade that
+// live in MainShellWindow.NavRail.cs / MainShellWindow.FavoritesRail.cs, and the collapse fade that
 // reads NavPremiumTagElements is SetNavRailExpanded in MainShellWindow.NavRail.cs.
 
 using System.Collections.Generic;
@@ -35,8 +35,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// which is also its ExclusiveFeature key. Adding a rail row for a sold feature means
         /// adding its pill in MainShellWindow.axaml and one row here; nothing else.
         ///
-        /// <para>Two roster entries deliberately have no row: "fyp" and "justdrop" are window
-        /// launchers, not rail entries, so there is nothing to tag.</para>
+        /// <para>"fyp" deliberately has no row (a window launcher). WPF also tags "justdrop"
+        /// (TagPremiumJustDrop on BtnNavJustDrop, Studio > Creator Tools, since 2026-09-11); that row
+        /// is missing here until JustDropService/JustDropHostService exist on this head
+        /// (MainShellWindow.JustDrop.cs).</para>
         /// </summary>
         private IEnumerable<(Border? Tag, string Key)> NavPremiumTagMap
         {
@@ -70,6 +72,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 if (tag is null) continue;
                 tag.IsVisible = IsNavEntryLocked(key);
             }
+            // WPF :158: the dashboard's favorites chips read the same answer, so they repaint on
+            // the same triggers instead of keeping hooks of their own.
+            RefreshFavoritesRail();
         }
 
         /// <summary>WPF MainWindow.NavPremiumTags.cs:178, over Core's roster and the entitlement seam.

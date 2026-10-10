@@ -141,6 +141,8 @@ namespace ConditioningControlPanel
                     });
                     RegisterTabFx("settings", tab.MosaicFx);
                 }
+                // The favorites drawer's motes (the view starts them itself; this parks them).
+                RegisterTabFx("settings", tab.FavoritesDrawerFx);
 
                 // 3. Centre logo: the drift follows the wordmark FACE, so the intake flip
                 //    collapsing it stops the clock instead of animating something invisible.

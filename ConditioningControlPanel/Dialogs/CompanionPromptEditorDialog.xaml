@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
         xmlns:local="clr-namespace:ConditioningControlPanel"
+        xmlns:companion="clr-namespace:ConditioningControlPanel.Views.Controls.Companion"
         Title="{loc:Str dialog_customize_ai_companion}"
         Width="700" Height="750"
         WindowStartupLocation="CenterOwner"
@@ -376,32 +377,8 @@
                             These links apply to ALL personalities, regardless of which preset is active.
                         </TextBlock>
 
-                        <!-- Links List -->
-                        <Border Background="{DynamicResource PanelBgBrush}" CornerRadius="4" Padding="8" Margin="0,0,0,8">
-                            <ListBox x:Name="LstKnowledgeLinks" Height="120"
-                                     Background="Transparent" BorderThickness="0"
-                                     Foreground="White" FontSize="11"
-                                     SelectionMode="Single">
-                                <ListBox.ItemTemplate>
-                                    <DataTemplate>
-                                        <StackPanel Margin="0,2">
-                                            <TextBlock Text="{Binding Title}" Foreground="{DynamicResource PinkBrush}" FontWeight="SemiBold"/>
-                                            <TextBlock Text="{Binding Url}" Foreground="#707070" FontSize="10"/>
-                                            <TextBlock Text="{Binding Description}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
-                                                       TextWrapping="Wrap" Visibility="{Binding Description, Converter={StaticResource NullToCollapsedConverter}}"/>
-                                        </StackPanel>
-                                    </DataTemplate>
-                                </ListBox.ItemTemplate>
-                            </ListBox>
-                        </Border>
-
-                        <!-- Add/Remove Buttons -->
-                        <StackPanel Orientation="Horizontal">
-                            <Button Content="{loc:Str btn_add_link}" Style="{StaticResource ResetButton}"
-                                    Padding="12,6" Click="AddKnowledgeLink_Click"/>
-                            <Button Content="{loc:Str btn_remove_selected}" Style="{StaticResource ResetButton}"
-                                    Padding="12,6" Margin="8,0,0,0" Click="RemoveKnowledgeLink_Click"/>
-                        </StackPanel>
+                        <!-- Links list: the shared editor, also hosted on Companion > Links -->
+                        <companion:KnowledgeLinksEditor x:Name="KnowledgeLinks"/>
                     </StackPanel>
                 </Expander>
 

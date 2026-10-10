@@ -10,9 +10,10 @@
 //   the "? box" doorbell + hover flip - ApplyMysteryFx/ApplyMysteryBreath/ApplyMysteryBadgeVisibility/
 //     EnsureMysteryTileFx/RequestMysteryFace/RunMysteryFlip/Open/SettleMysteryPlate/StartMysteryPop;
 //   the centre wordmark's drift and sheen - ApplyLogoDrift/ApplyLogoSheenTimer/SweepLogoSheen;
-//   the premium rail hover lift/art nudge and live-dot pulse - PrepareRailArtNudge/ApplyRailHover/
-//     ApplyRailDotPulse;
 //   the browser card's frame sweep and status pulse - ApplyBrowserFrameSweep/ApplyBrowserStatusPulse.
+// Not to port: PrepareRailArtNudge/ApplyRailHover/ApplyRailDotPulse were retired with the premium
+// quick-toggle rail on WPF (2026-09-11); the dashboard column is the favorites rail now
+// (MainShellWindow.FavoritesRail.cs).
 
 using System;
 using System.Linq;

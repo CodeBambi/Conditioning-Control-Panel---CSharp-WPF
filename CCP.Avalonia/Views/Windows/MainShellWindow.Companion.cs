@@ -119,9 +119,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 _avatarTubeWindow = new AvatarTubeWindow(this);
                 PropertyChanged += (_, e) => { if (e.Property == WindowStateProperty) OnShellStateForTube(); };
 
-                // ponytail: AvatarMuted has nowhere to land - AvatarTubeWindow.SetMuteAvatar is in
-                // the Speech.cs partial that did not cross. The setting is still read and saved by
-                // the room's mute toggle, so it is honoured the moment that partial lands.
+                // WPF SetMuteAvatar(AvatarMuted) at build: this tube reads the setting live
+                // (AvatarTubeWindow.IsMuted), so the room's mute toggle needs no push here.
 
                 if (showNow)
                 {

@@ -1171,6 +1171,18 @@ public class QuestService : IDisposable
         return board;
     }
 
+    /// <summary>True while a daily seat or the weekly quest is still in play. The companion only
+    /// suggests the quests page while this holds (ccp-bugs #1387: "keeps suggesting open quests but
+    /// all quests are completed").</summary>
+    public bool HasUnfinishedQuest() => AnyUnfinished(Progress.DailyQuests, Progress.WeeklyQuest);
+
+    /// <summary>Pure half of <see cref="HasUnfinishedQuest"/>.</summary>
+    public static bool AnyUnfinished(IEnumerable<ActiveQuest?>? daily, ActiveQuest? weekly)
+    {
+        if (weekly != null && !weekly.IsCompleted) return true;
+        return daily?.Any(q => q != null && !q.IsCompleted) == true;
+    }
+
     /// <summary>The first seat still in play, or null once the board is finished.</summary>
     private ActiveQuest? FirstUnfinishedDailySlot()
     {
@@ -1502,7 +1514,11 @@ public class QuestService : IDisposable
     /// </summary>
     public void TrackLockdownCompleted(TimeSpan served)
     {
-        if (!LockdownCountsForQuests(served)) return;
+        // Logged either way so a "lockdowns do not count" report (#1388) answers itself from the log.
+        var counts = LockdownCountsForQuests(served);
+        Log.Information("Quest: lockdown of {Minutes:F1} min {Verdict} (minimum {Min} min)",
+            served.TotalMinutes, counts ? "counts" : "is too short to count", LockdownQuestMinimum.TotalMinutes);
+        if (!counts) return;
         UpdateQuestProgress(QuestCategory.Lockdown, 1);
     }
 

@@ -34,16 +34,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
     ///    <c>ToImmutable()</c>.
     ///  - PreviewKeyDown -> KeyDown, DragMove() -> BeginMoveDrag(e).
     /// </summary>
-    // STILL UNREACHABLE, and the reason has changed: the type blocker is gone (ProgramDefinition,
-    // ProgramEnrollment and ProgramService are all in CCP.Core as of this layer), but the CALLER is
-    // not ported. Its only WPF call site is BtnProgramEnroll_Click in
-    // ConditioningControlPanel/MainWindow/MainWindow.ProgramsTab.cs:2010, whose twin here,
-    // CCP.Avalonia/Views/Windows/MainShellWindow.ProgramsTab.cs, is still a stub - and crucially
-    // the RUN panel it would switch to on success is unported too. Wiring the enrol button before
-    // that panel exists would take a confirmed enrolment, write programs.json, start the day clock
-    // and leave the tab sitting on the browse list saying "Enroll" - a UI lying about a run that
-    // is now underway. The gate to bring with the caller is ProgramService.CanEnroll(def, out
-    // reason) BEFORE the dialog opens, and Enroll(...) only on an awaited true.
+    // Caller: MainShellWindow.EnrollProgramAsync (programs 3a), the twin of WPF BtnProgramEnroll_Click
+    // (MainWindow.ProgramsTab.cs:1999): ProgramService.CanEnroll BEFORE the dialog, Enroll only on true.
     public partial class ProgramEnrollDialog : Window
     {
         private readonly ProgramDefinition _program;

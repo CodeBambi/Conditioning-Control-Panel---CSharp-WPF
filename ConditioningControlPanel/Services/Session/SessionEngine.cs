@@ -1114,7 +1114,6 @@ namespace ConditioningControlPanel.Services
             // Save lock card pool (deep copy)
             _savedLockCardPool = new Dictionary<string, bool>(current.LockCardPhrases);
 
-            _savedSettings.PopQuizEnabled = current.PopQuizEnabled;
             _savedSettings.PopQuizFrequency = current.PopQuizFrequency;
             _savedSettings.BubbleCountEnabled = current.BubbleCountEnabled;
             _savedSettings.BubbleCountFrequency = current.BubbleCountFrequency;
@@ -1774,7 +1773,6 @@ namespace ConditioningControlPanel.Services
                 _savedLockCardPool = null;
             }
 
-            current.PopQuizEnabled = _savedSettings.PopQuizEnabled;
             current.PopQuizFrequency = _savedSettings.PopQuizFrequency;
             current.BubbleCountEnabled = _savedSettings.BubbleCountEnabled;
             current.BubbleCountFrequency = _savedSettings.BubbleCountFrequency;

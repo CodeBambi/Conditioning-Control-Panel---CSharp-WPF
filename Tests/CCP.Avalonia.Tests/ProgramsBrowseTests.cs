@@ -21,6 +21,46 @@ namespace CCP.Avalonia.Tests;
 
 public sealed class ProgramsBrowseTests
 {
+    private static string ExpectedReason(ProgramDefinition p) =>
+        ProgramService.UnavailableReason(p, ConditioningControlPanel.Avalonia.Platform.ProgramCapabilities.IsAvailable)
+        ?? Loc.Get("programs_unavailable");
+
+    /// <summary>
+    /// programs-3a test 7: a refused card renders the "needs X" reason as real text in the card,
+    /// never the raw loc key; Firmware Install needs the keyword engine.
+    /// </summary>
+    [Fact]
+    public async Task RefusedCardRendersTheMissingFeature()
+    {
+        await AvaloniaTestDispatcher.RunAsync(() =>
+        {
+            EnsureAvalonia();
+            Window? host = null;
+            var previousLanguage = LocalizationManager.Instance.CurrentLanguage;
+            try
+            {
+                LocalizationManager.Instance.SetLanguage("en");
+                var view = new ProgramsTabView { Width = 1200, Height = 900 };
+                host = new Window { Width = 1200, Height = 900, Content = view };
+                host.Show();
+                Dispatcher.UIThread.RunJobs();
+                Dispatcher.UIThread.RunJobs();
+
+                var texts = view.FindControl<ListBox>("ProgramLibraryList")!
+                    .GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text ?? "").ToArray();
+                Assert.Contains("Not available on this build yet: needs Keyword Triggers.", texts);
+                Assert.DoesNotContain(texts, t => t.Contains("programs_needs_feature"));
+            }
+            finally
+            {
+                LocalizationManager.Instance.SetLanguage(previousLanguage);
+                host?.Close();
+                Dispatcher.UIThread.RunJobs();
+            }
+            return Task.CompletedTask;
+        });
+    }
+
     /// <summary>WPF 608ff3181 (ccp-bugs #966): a mod switch reorders the open list, that mod's programs first.</summary>
     [Fact]
     public async Task ModSwitchPutsThatModsProgramsFirst()
@@ -81,9 +121,11 @@ public sealed class ProgramsBrowseTests
                 Assert.Equal(definitions.Select(program => program.Id), rows.Select(row => row.ProgramId));
                 Assert.Equal(definitions.Select(program => program.Title), rows.Select(row => row.Title));
                 Assert.All(rows, row => Assert.False(row.IsActionEnabled));
-                // Nothing can be started here, so no card may blame a missing pledge.
+                // Nothing can be started here, so no card may blame a missing pledge. A program this
+                // head can never finish names what it needs instead (programs-3a decision).
                 var unavailable = Loc.Get("programs_unavailable");
-                Assert.All(rows, row => Assert.Equal(unavailable, row.ReasonText));
+                Assert.All(rows, row => Assert.Equal(ExpectedReason(row.Definition), row.ReasonText));
+                Assert.Equal(unavailable, rows.Single(row => row.ProgramId == "first_week").ReasonText);
                 Assert.All(rows, row => Assert.True(row.ReasonVisible));
                 Assert.Contains(rows, row => row.IsLocked);
                 Assert.Contains(rows, row => row.TierLabel == Loc.Get("programs_tier_premium"));
@@ -182,8 +224,7 @@ public sealed class ProgramsBrowseTests
                     view.FindControl<TextBlock>("TxtProgramDetailsTitle")!.Text);
                 Assert.Equal(selected.Chapters.Count,
                     view.FindControl<ItemsControl>("ProgramDetailsChapterList")!.ItemCount);
-                Assert.Equal(Loc.Get("programs_unavailable"),
-                    ((ProgramBrowseItem)list.SelectedItem!).ReasonText);
+                Assert.Equal(ExpectedReason(selected), ((ProgramBrowseItem)list.SelectedItem!).ReasonText);
             }
             finally
             {

@@ -225,7 +225,41 @@
         <DataTemplate x:Key="LbRowTemplate">
             <!-- Padding/Margin here are density-critical: they set the row pitch, and the
                  pitch is what decides how many rows survive above the sticky you-bar. -->
-            <Border Background="Transparent" CornerRadius="9" Padding="10,3" Margin="4,0">
+            <!-- Polish wave 10 (depth): every row is a FLOATING card (the float rim, a short
+                 float band under it); the player's own row is "on", so it sits PRESSED IN
+                 (pressed bevel + shade, ActiveSinkPx = 1 px down, no band). The 1 px rim is paid
+                 for out of the padding (10,3 -> 9,2), so the row pitch is unchanged. -->
+            <Grid>
+            <Rectangle x:Name="LbRowFloat" Height="4" VerticalAlignment="Bottom" Margin="14,0,14,-3"
+                       IsHitTestVisible="False" Fill="{DynamicResource DepthFloatBand}">
+                <Rectangle.Style>
+                    <Style TargetType="Rectangle">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsCurrentUser}" Value="True">
+                                <Setter Property="Visibility" Value="Hidden"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Rectangle.Style>
+            </Rectangle>
+            <Border x:Name="LbRowCard" CornerRadius="9" Padding="9,2" Margin="4,0" BorderThickness="1">
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Setter Property="Background" Value="Transparent"/>
+                        <Setter Property="BorderBrush" Value="{DynamicResource DepthFloatRim}"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsCurrentUser}" Value="True">
+                                <Setter Property="Background" Value="{DynamicResource DepthPressedShade}"/>
+                                <Setter Property="BorderBrush" Value="{DynamicResource DepthPressedBevel}"/>
+                                <Setter Property="RenderTransform">
+                                    <Setter.Value>
+                                        <TranslateTransform Y="1"/>
+                                    </Setter.Value>
+                                </Setter>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
                 <Border.ToolTip>
                     <StackPanel MaxWidth="300">
                         <TextBlock Text="{Binding DisplayName}" FontWeight="Bold" FontSize="13"
@@ -489,6 +523,7 @@
                     </StackPanel>
                 </Grid>
             </Border>
+            </Grid>
         </DataTemplate>
 
         <!-- ============================= tier band ============================= -->
@@ -716,7 +751,7 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <!-- season name + live countdown -->
+                <!-- which board this is (seasons are retired: no season name, no countdown) -->
                 <StackPanel Grid.Column="0" VerticalAlignment="Center" MinWidth="180" Margin="0,0,14,0">
                     <TextBlock x:Name="TxtLeaderboardSeason" x:FieldModifier="internal"
                                FontSize="13" FontWeight="Bold"
@@ -825,8 +860,12 @@
                             Content="&#x21BB;" ToolTip="{loc:Str btn_refresh}" Click="BtnRefreshLeaderboard_Click"/>
                     <Button x:Name="BtnJumpToMe" x:FieldModifier="internal" Style="{StaticResource LbIconButton}"
                             Content="&#x25CE;" ToolTip="{loc:Str btn_jump_to_me}" Click="BtnJumpToMe_Click"/>
-                    <Button x:Name="BtnViewSeasonRecap" x:FieldModifier="internal" Style="{StaticResource LbTextButton}"
-                            Content="{loc:Str recap_btn_view}" Visibility="Collapsed" Click="BtnViewSeasonRecap_Click"/>
+                    <!-- Seasons are retired (owner, 2026-09-24): the recap button stays in the tree for its
+                         callers but its host never shows, whatever they set on the button itself. -->
+                    <Border x:Name="SeasonRecapHost" x:FieldModifier="internal" Visibility="Collapsed">
+                        <Button x:Name="BtnViewSeasonRecap" x:FieldModifier="internal" Style="{StaticResource LbTextButton}"
+                                Content="{loc:Str recap_btn_view}" Visibility="Collapsed" Click="BtnViewSeasonRecap_Click"/>
+                    </Border>
                     <Button x:Name="HelpBtnLeaderboard" x:FieldModifier="internal" Style="{StaticResource HelpButtonStyle}"
                             VerticalAlignment="Center" Margin="6,0,0,0" Tag="Leaderboard"/>
                 </StackPanel>
@@ -895,6 +934,12 @@
             </Border>
 
             <Grid Grid.Row="1">
+                <!-- Polish wave 10 (depth): the list is a SUNKEN well. The floor sits under the
+                     rows; the top / left bands and the lit foot are drawn over them (hit-test
+                     off), the lamp being top-left. Same MaxWidth as the list. -->
+                <Border x:Name="LbWellFloor" x:FieldModifier="internal" CornerRadius="10" IsHitTestVisible="False"
+                        MaxWidth="{StaticResource LbBlockWidth}" HorizontalAlignment="Stretch"
+                        Background="{DynamicResource DepthWellFloorBrush}"/>
                 <!-- ScrollUnit=Pixel is deliberate and load-bearing for "Jump to me".
                      The WPF default is Item scrolling, where VerticalOffset counts ROWS,
                      the last row on screen is always drawn half-cut against the viewport
@@ -954,6 +999,16 @@
                         </Style>
                     </ListView.ItemContainerStyle>
                 </ListView>
+
+                <Grid x:Name="LbWellBands" x:FieldModifier="internal" IsHitTestVisible="False"
+                      MaxWidth="{StaticResource LbBlockWidth}" HorizontalAlignment="Stretch">
+                    <Rectangle x:Name="LbWellTop" x:FieldModifier="internal" Height="9" VerticalAlignment="Top"
+                               RadiusX="10" RadiusY="10" Fill="{DynamicResource DepthWellTop}"/>
+                    <Rectangle x:Name="LbWellLeft" x:FieldModifier="internal" Width="6" HorizontalAlignment="Left"
+                               Fill="{DynamicResource DepthWellLeft}"/>
+                    <Rectangle x:Name="LbWellFoot" x:FieldModifier="internal" Height="1" VerticalAlignment="Bottom"
+                               Margin="10,0" Fill="{DynamicResource DepthWellFoot}"/>
+                </Grid>
 
                 <!-- Sits just under the legend, NOT vertically centred: centred, it floated in
                      ~500px of void and read as a rendering accident rather than as the answer

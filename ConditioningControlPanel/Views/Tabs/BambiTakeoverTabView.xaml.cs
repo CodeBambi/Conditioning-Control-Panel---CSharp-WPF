@@ -49,6 +49,12 @@ namespace ConditioningControlPanel.Views.Tabs
                 ? "features/bambi takeover.png"
                 : "features/takeover.png";
 
+        /// <summary>The one-line link to the companion's one permissions list.</summary>
+        private void OpenCompanionPermissions_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw) mw.ShowTab("permissions");
+        }
+
         private void BambiTakeoverTabView_Loaded(object sender, RoutedEventArgs e)
         {
             if (!_modArtHooked && App.Mods != null)

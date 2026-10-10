@@ -2,15 +2,19 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:emi="clr-namespace:ConditioningControlPanel.Services.EmiDesk"
-             Height="48" Width="222" MinWidth="216" MaxWidth="236" UseLayoutRounding="True" SnapsToDevicePixels="True">
+             Height="29" Width="138" UseLayoutRounding="True" SnapsToDevicePixels="True">
+    <!-- Nav polish wave 6 (owner): the pill reads 20% smaller than the 0.75-scaled 48x222 it
+         was, and its "?" sits ON the pill. Sized natively (the header no longer scales it), so
+         the text renders at its own size instead of being shrunk. The "?" is a sibling laid over
+         the outline's right end, never a child of WalletButton: a Button inside a Button would
+         bubble its Click into the wallet's own handler and open both popups. -->
     <Grid>
-        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
         <Button x:Name="WalletButton" Background="Transparent" BorderThickness="0" Padding="0"
                 Cursor="Hand" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
             <Button.Template>
                 <ControlTemplate TargetType="Button">
                     <Border x:Name="Outline" Background="#271A32" BorderBrush="#B982B5" BorderThickness="1"
-                            CornerRadius="16" Padding="4,0,12,0">
+                            CornerRadius="14" Padding="2,0,23,0">
                         <ContentPresenter/>
                     </Border>
                     <ControlTemplate.Triggers>
@@ -21,8 +25,8 @@
                 </ControlTemplate>
             </Button.Template>
             <Grid>
-                <Grid.ColumnDefinitions><ColumnDefinition Width="50"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                <Viewbox Width="48" Height="46" IsHitTestVisible="False">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="31"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <Viewbox Width="30" Height="28" IsHitTestVisible="False">
                     <!-- The croupier EMI from the Back Room's prize counter (gold casing, visor, bow tie,
                          feather duster), as a pixel sprite split into two layers over a 954x995 canvas:
                          the body and the waving arm. EMI stays planted, only the arm layer turns, about
@@ -41,24 +45,26 @@
                                      Margin="320,297,0,0" Width="389" Height="349"/>
                     </Grid>
                 </Viewbox>
-                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="3,0,0,0">
-                    <TextBlock x:Name="WalletLabel" TextTrimming="CharacterEllipsis" Foreground="#D9BCD9" FontSize="10"/>
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="2,0,0,0">
+                    <TextBlock x:Name="WalletLabel" TextTrimming="CharacterEllipsis" Foreground="#D9BCD9" FontSize="8"
+                               LineHeight="9" LineStackingStrategy="BlockLineHeight"/>
                     <StackPanel Orientation="Horizontal" RenderTransformOrigin="0.5,0.5">
                         <StackPanel.RenderTransform><ScaleTransform x:Name="BalancePulse"/></StackPanel.RenderTransform>
                         <Path Data="M0,8 L6,0 12,8 6,16 Z M0,8 L12,8 M6,0 L4,8 6,16 8,8 Z"
-                              Width="13" Height="18" Stretch="Fill" Fill="#FFD580" Stroke="#FFF0C5" StrokeThickness="0.7"
-                              VerticalAlignment="Center" Margin="0,0,7,0"/>
-                        <TextBlock x:Name="BalanceText" Text="0" Foreground="#FFF0CA" FontSize="24" FontWeight="Bold"/>
+                              Width="8" Height="11" Stretch="Fill" Fill="#FFD580" Stroke="#FFF0C5" StrokeThickness="0.6"
+                              VerticalAlignment="Center" Margin="0,0,4,0"/>
+                        <TextBlock x:Name="BalanceText" Text="0" Foreground="#FFF0CA" FontSize="15" FontWeight="Bold"
+                                   LineHeight="17" LineStackingStrategy="BlockLineHeight"/>
                     </StackPanel>
                 </StackPanel>
             </Grid>
         </Button>
         <Canvas x:Name="SparkleLayer" IsHitTestVisible="False" ClipToBounds="False"/>
-        <Border x:Name="GainBadge" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-9,5,0"
-                Background="#34223F" BorderBrush="#FFD580" BorderThickness="1" CornerRadius="9" Padding="7,2"
+        <Border x:Name="GainBadge" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-8,24,0"
+                Background="#34223F" BorderBrush="#FFD580" BorderThickness="1" CornerRadius="8" Padding="5,1"
                 Visibility="Collapsed" IsHitTestVisible="False">
             <Border.RenderTransform><TranslateTransform x:Name="GainShift"/></Border.RenderTransform>
-            <TextBlock x:Name="GainText" Foreground="#FFE8A9" FontSize="12" FontWeight="Bold"/>
+            <TextBlock x:Name="GainText" Foreground="#FFE8A9" FontSize="10" FontWeight="Bold"/>
         </Border>
         <Popup x:Name="InvitePopup" PlacementTarget="{Binding ElementName=WalletButton}" Placement="Bottom"
                VerticalOffset="7" AllowsTransparency="True" StaysOpen="False" PopupAnimation="None">
@@ -76,8 +82,12 @@
             </Border>
         </Popup>
         <!-- "What are sparkles for?" The same small help circle the settings sections use
-             (HelpButtonStyle), hover for the one-liner, click for the card below. -->
-        <Button x:Name="HelpButton" Grid.Column="1" Style="{DynamicResource HelpButtonStyle}" Margin="6,0,0,0"/>
+             (HelpButtonStyle), hover for the one-liner, click for the card below. Since nav
+             polish wave 6 it rides inside the pill's right end (the outline's right padding
+             keeps the balance clear of it), 17 px, in the pill's own lilac. -->
+        <Button x:Name="HelpButton" Style="{DynamicResource HelpButtonStyle}" Width="17" Height="17"
+                HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,5,0"
+                Background="#33201F2E" BorderBrush="#B982B5" Foreground="#F2DDF0"/>
         <Popup x:Name="HelpPopup" PlacementTarget="{Binding ElementName=WalletButton}" Placement="Bottom"
                VerticalOffset="7" AllowsTransparency="True" StaysOpen="False" PopupAnimation="None">
             <Border Width="360" KeyboardNavigation.TabNavigation="Cycle" Background="#24182E" BorderBrush="#C996C3" BorderThickness="1" CornerRadius="14" Padding="17">

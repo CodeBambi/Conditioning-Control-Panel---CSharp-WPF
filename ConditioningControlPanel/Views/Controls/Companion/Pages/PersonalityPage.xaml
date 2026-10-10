@@ -1,0 +1,74 @@
+<UserControl x:Class="ConditioningControlPanel.Views.Controls.Companion.Pages.PersonalityPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Localization">
+    <!-- Companion > Personality: the ONE home for the personality. Pick (CompanionPickerCard),
+         presets / re-interview / adjust (the room's MakeHerYoursView), the full prompt editor
+         (Advanced) and community prompts. Every control here is the live one, hosted, never
+         copied. Behaviour + Triggers moved to Companion > AI in 7.1.3 (folded here, nobody found them). -->
+    <UserControl.Resources>
+        <Style x:Key="PageButton" TargetType="Button">
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Background" Value="#33FF69B4"/>
+            <Setter Property="Padding" Value="14,7"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#55FF69B4"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#77FF69B4"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+        <StackPanel Margin="24,16,24,24" MaxWidth="1100" HorizontalAlignment="Stretch">
+            <!-- Readability pass (polish 8): the shared type scale, one page title, one subtitle. -->
+            <TextBlock Text="{loc:Str nav_tab_personality}" Style="{StaticResource Type.PageTitle}"/>
+            <TextBlock Text="{loc:Str companion_page_personality_intro}" Style="{StaticResource Type.PageSubtitle}" Margin="0,4,0,16"/>
+
+            <!-- Who: the same picker Customise and the chat's "who" entry use -->
+            <Border Background="#14FFFFFF" CornerRadius="10" Padding="16" Margin="0,0,0,16">
+                <ContentControl x:Name="PickerHost" Focusable="False"/>
+            </Border>
+
+            <!-- Presets, re-interview, adjust -->
+            <ContentControl x:Name="PresetsHost" Focusable="False" Margin="0,0,0,16"/>
+
+            <!-- Advanced: the full prompt editor (trait dashboard, fork, knowledge links) -->
+            <Border x:Name="AdvancedRow" Background="#14FFFFFF" CornerRadius="10" Padding="16" Margin="0,0,0,16">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="{loc:Str companion_page_personality_advanced}" Style="{StaticResource Type.CardTitle}"/>
+                        <TextBlock Text="{loc:Str companion_page_personality_advanced_note}" Style="{StaticResource Type.Body}" Margin="0,2,12,0"/>
+                    </StackPanel>
+                    <Button x:Name="BtnOpenPromptEditor" Grid.Column="1" Style="{StaticResource PageButton}" VerticalAlignment="Center"
+                            Content="{loc:Str companion_page_personality_open_editor}" Click="OpenPromptEditor_Click"/>
+                </Grid>
+            </Border>
+
+            <!-- Community prompts: browse / import / export / refresh -->
+            <Border Background="#14FFFFFF" CornerRadius="10" Padding="16" Margin="0,0,0,16">
+                <StackPanel>
+                    <TextBlock Text="{loc:Str companion_page_personality_community}" Style="{StaticResource Type.CardTitle}" Margin="0,0,0,8"/>
+                    <ContentControl x:Name="CommunityHost" Focusable="False"/>
+                </StackPanel>
+            </Border>
+
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

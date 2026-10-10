@@ -121,6 +121,7 @@ internal static class WpfRenderHarness
         "Resources/Theme/Brushes.xaml",
         "Resources/Theme/Controls.xaml",
         "Resources/Theme/Converters.xaml",
+        "Resources/Theme/Depth.xaml",
         "Resources/Theme/MainWindow.xaml"
     };
 
