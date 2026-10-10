@@ -109,6 +109,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             }
             try { Platform.FriendsHead.Service?.EnterActivity(PresenceActivity.Goon); } catch { }
             StartGoonWatch();
+            DuckGoonMain();
             Log.Information("[Goon] host attached");
         }
 
@@ -139,6 +140,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             ReleaseGoonNoise();
             CloseGoonTransfer();
             GoonHostService.DetachWindow();
+            RestoreGoonMain();
             try
             {
                 Platform.FriendsHead.Service?.LeaveActivity(PresenceActivity.GoonHosting);
@@ -190,9 +192,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                     _goonExiting = true;      // the watchdog stands down; the shell arms the 1200 ms close
                     return false;
                 case "boot-error":
-                    // WPF OnBootError also shows a message box naming the failure; here it is the log line
-                    // and the shell's close (not ported: the dialog).
+                    // WPF OnBootError: the shell closes the window, then a box names the failure.
                     GoonHostService.BootFailedThisSession = true;
+                    ShowGoonBootError((string?)o["msg"]);
                     return false;
                 case "fullscreen-set":
                     // WPF ApplyHostFullscreen: C# owns the toggle, echoes the REAL state, remembers it.
@@ -230,8 +232,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                 case "discord-prefs":
                 {
                     var echo = GoonHostService.OnDiscordPrefs(o, out var sharedChanged, out var rpOff);
-                    // not ported: the immediate profile sync push WPF kicks on a change (the flags ride the
-                    // next scheduled sync) and the rich presence retract (no Discord RPC on this head).
+                    // not ported: the immediate profile sync push WPF kicks on a change, and the rich presence
+                    // retract (no Discord RPC on this head).
+                    // SEAM(sync): Core SyncPush.Sent carries no goon_share_avatar / goon_share_dm at all, so a
+                    // push here would send nothing the server's room snapshot reads; when SyncPush sends them,
+                    // call Platform.AccountSeed.Sync?.PushAsync("goon-prefs") on sharedChanged.
                     if (rpOff) Log.Information("[Goon] rich presence switched off (no RPC client on this head)");
                     if (sharedChanged) KickGoonAvatarRefresh();
                     Post(echo);
@@ -303,9 +308,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                     Log.Information("[Goon] rp-state {S}: not ported (no Discord RPC client)", GoonHostService.RichPresenceState(o) ?? "(dropped)");
                     return true;
                 case "share-card":
-                    // not ported: GoonShareCard (clipboard / save dialog for the recap PNG).
-                    Log.Information("[Goon] share-card: not ported");
-                    Post(new { type = "share-card-result", id = (string?)o["id"], ok = false, error = "unavailable" });
+                    OnGoonShareCard(o);      // GameWindow.GoonShell.cs: PNG bytes only, clipboard or the save dialog
                     return true;
                 default:
                     return false;

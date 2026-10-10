@@ -292,8 +292,11 @@ public sealed class GoonHostTests
             try
             {
                 w.HandleMessage("{\"type\":\"ready\"}");
+                // A share-card that is not a card (no action, no PNG) is refused in the page's own vocabulary.
                 w.HandleMessage("{\"type\":\"share-card\",\"id\":\"s1\",\"op\":\"copy\"}");
-                Assert.False((bool)Assert.Single(Of(posted, "share-card-result"))["ok"]!);
+                var refused = Assert.Single(Of(posted, "share-card-result"));
+                Assert.False((bool)refused["ok"]!);
+                Assert.Equal("bad-action", (string?)refused["error"]);
             }
             finally { w.Close(); }
             return Task.CompletedTask;

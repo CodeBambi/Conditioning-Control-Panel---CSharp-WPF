@@ -147,6 +147,22 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
         private readonly TextBlock _txtReason, _txtSource;
         private readonly NativeWebView? _web;
 
+        /// <summary>WebView2's browser switches (WPF GoonHostService.cs:284, ChaosWebViewHost): media starts
+        /// without a click, and a game behind another window keeps its timers (a live shared match clock).
+        /// ONE constant for every WebHost: they share a user-data folder, and WebView2 refuses a second
+        /// environment on a folder whose running browser was started with different switches.
+        /// ponytail: WebKitGTK has no such switch here; autoplay there needs the page's own gesture.</summary>
+        internal const string WindowsBrowserArguments =
+            "--autoplay-policy=no-user-gesture-required --disable-background-timer-throttling --disable-backgrounding-occluded-windows";
+
+        private static void OnEnvironmentRequested(object? sender, WebViewEnvironmentRequestedEventArgs e)
+        {
+            if (e is WindowsWebView2EnvironmentRequestedEventArgs win)
+                win.AdditionalBrowserArguments = string.IsNullOrWhiteSpace(win.AdditionalBrowserArguments)
+                    ? WindowsBrowserArguments
+                    : win.AdditionalBrowserArguments + " " + WindowsBrowserArguments;
+        }
+
         public WebHost()
         {
             AvaloniaXamlLoader.Load(this);
@@ -162,6 +178,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
                 try
                 {
                     _web = new NativeWebView();
+                    _web.EnvironmentRequested += OnEnvironmentRequested;
                     // Subscribed once, here, rather than when a caller sets AllowNavigation: the
                     // gate has to be live for the FIRST navigation too, and a caller that assigns
                     // the predicate and the Source in that order would otherwise race the engine.
