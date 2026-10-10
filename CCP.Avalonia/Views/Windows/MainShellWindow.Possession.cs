@@ -4,11 +4,10 @@
 // this is the room it haunts: the shell's edge pulse, the short list of possessable controls and the
 // two micro-tics this head can draw.
 //
-// Narrower than WPF on purpose (HB13): the registry is an explicit list of DISPLAY-ONLY controls, so no
-// button, toggle, timer or exit ever moves under the pointer (PossessionOffLimits.IsReservedName is
-// applied on top). WPF walks the whole visual tree for poss:Possession.Role; that walk (673 lines), the
-// other 30 effects, the three scenes, the warden glide, the ember charge / outline / cursor ring, the
-// possession audio tics and PossessionRemember are not on this head.
+// Narrower than WPF on purpose (HB13): only DISPLAY controls are enrolled, so no button, toggle, timer
+// or exit ever moves under the pointer. Views mark victims with poss:Possession.Role and the shell
+// walks its visual tree (Services/Possession/Possession.cs: PossessionTree holds the refusals). The
+// deck here: nudge, typo, breathe, drift, rewrite, melt, glyphrot, crack, retitle (Services/Possession/*.cs).
 
 using System;
 using System.Collections.Generic;
@@ -38,11 +37,91 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             {
                 PossessionDirector.Current?.Dispose();
                 PossessionDirector.Current = new PossessionDirector(lockdown, PossessionHeadEffects(), PossessionHostFor(() => Current));
+                PossessionDirector.Current.Scenes.AddRange(PossessionHeadScenes());
+                InstallPossessionRemember(lockdown);
+                lockdown.LockdownActivated += () => Dispatcher.UIThread.Post(() => PostPossessionRulesIfFirstTime(() => Current));
             }
             catch (Exception ex) { Log.Warning(ex, "Possession: install failed"); }
         }
 
-        internal static IPossessionEffect[] PossessionHeadEffects() => new IPossessionEffect[] { new PossessionNudge(), new PossessionBreathe() };
+        /// <summary>The deck this head can draw, in the WPF catalog's rung order (k18 added typo,
+        /// drift, rewrite, melt, glyphrot, crack, retitle from Services/Possession/).</summary>
+        internal static IPossessionEffect[] PossessionHeadEffects() => new IPossessionEffect[]
+        {
+            new PossessionNudge(), new Services.Possession.Effects.TypoEffect(), new PossessionBreathe(),
+            new Services.Possession.Effects.DriftEffect(), new Services.Possession.Effects.RewriteEffect(),
+            new Services.Possession.Effects.ToastEffect(),
+            new Services.Possession.Effects.MeltEffect(), new Services.Possession.Effects.GlyphRotEffect(),
+            new Services.Possession.Effects.XpDrainEffect(),
+            new Services.Possession.Effects.CrackEffect(),
+            new Services.Possession.Effects.RetitleEffect(),
+            new Services.Possession.Effects.GlitchPortraitEffect(),
+        };
+
+        internal const string PossessionRulesKey = "intro:possession";
+
+        /// <summary>WPF ShowPossessionRulesIfFirstTime (MainWindow.Lab.cs): the first lockdown that runs
+        /// with Possession on, the warden states the rules: a bark now, and the rules card. WPF opens
+        /// the card at once when the app is quiet; the card is a modal over the shell, which would sit
+        /// on the Emergency Exit as the lockdown starts, so this head always files it as an Inbox row
+        /// (the title and summary are WPF's own literals). The flag is spent when the card OPENS.</summary>
+        internal static void PostPossessionRulesIfFirstTime(Func<MainShellWindow?> shell)
+        {
+            try
+            {
+                var s = CoreSettings.Current;
+                if (s == null || !s.LockdownPossessionEnabled || s.LockdownPossessionIntroSeen) return;
+                Platform.StartupLadder.Inbox.File(new Services.Startup.InboxItem
+                {
+                    Key = PossessionRulesKey,
+                    Glyph = "\U0001F576",
+                    Title = "The warden's rules",
+                    Summary = "What possession does before the room starts moving.",
+                    Open = () =>
+                    {
+                        var live = CoreSettings.Current;
+                        if (live != null && !live.LockdownPossessionIntroSeen)
+                        {
+                            live.LockdownPossessionIntroSeen = true;
+                            CoreSettings.Save();
+                        }
+                        FeatureIntroPopup.ShowIfFirstTime("possession", shell());
+                    },
+                });
+                CoreBark.Raise(PossessionBarkTriggers.Rules, null);
+            }
+            catch (Exception ex) { Log.Warning(ex, "Possession: failed to post the first-run rules"); }
+        }
+
+        /// <summary>WPF PossessionRemember.Install: arm on a Full Doki exit, and spend a charge armed by
+        /// the last run once this launch's window has been up for twenty seconds.</summary>
+        private static DispatcherTimer? _possessionRememberTimer;
+
+        private static void InstallPossessionRemember(LockdownService lockdown)
+        {
+            try
+            {
+                _possessionRememberTimer?.Stop();
+                PossessionRemember.Current?.Dispose();
+                var remember = PossessionRemember.Current = new PossessionRemember(lockdown, PossessionHostFor(() => Current));
+                remember.SchedulePendingCharge(DateTime.UtcNow);
+                if (!remember.IsWaiting) return;
+                _possessionRememberTimer = new DispatcherTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Background, (t, _) =>
+                {
+                    remember.Tick(DateTime.UtcNow);
+                    if (!remember.IsWaiting) (t as DispatcherTimer)?.Stop();
+                });
+                _possessionRememberTimer.Start();
+            }
+            catch (Exception ex) { Log.Warning(ex, "Possession: remember install failed"); }
+        }
+
+        /// <summary>WPF PossessionSceneCatalog, minus the rail sweep (its victims are the rail doors,
+        /// which are buttons and not enrolled on this head).</summary>
+        internal static IPossessionScene[] PossessionHeadScenes() => new IPossessionScene[]
+        {
+            new Services.Possession.Scenes.TheCountScene(), new Services.Possession.Scenes.WhereYouAreScene(),
+        };
 
         /// <summary>The director's host over a shell (the live one at run time, a test's own in tests).</summary>
         internal static PossessionHost PossessionHostFor(Func<MainShellWindow?> shell) => new()
@@ -68,37 +147,50 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private readonly Dictionary<string, PossessionTarget> _possessionTargets = new(StringComparer.Ordinal);
 
-        /// <summary>(name, tab that owns it or null for the shell, role, display name for the warden).</summary>
-        private static readonly (string Name, string? Tab, PossessionRole Role, string Display)[] PossessionRegistry =
-        {
-            ("TxtPossessionRung", "LockdownTab", PossessionRole.Label, "the readout"),
-            ("PossessionPips", "LockdownTab", PossessionRole.Card, "the pips"),
-            ("TxtTitleBarVersion", null, PossessionRole.Label, "the title"),
-            ("TxtPlayerTitle", null, PossessionRole.Label, "your title"),
-        };
-
-        /// <summary>The possessable controls that exist right now. Targets are cached by key so a
-        /// cooldown or a live booking survives the next read.</summary>
+        /// <summary>The possessable controls that exist right now: every control in this window's
+        /// visual tree that a view tagged with poss:Possession.Role (WPF EnumerateTagged), minus all
+        /// that PossessionTree refuses (anything pressed, typed in, excluded or reserved by name).
+        /// Targets are cached by key so a cooldown or a live booking survives the next read.</summary>
         internal IReadOnlyList<PossessionTarget> PossessionTargets()
         {
-            var list = new List<PossessionTarget>();
-            foreach (var (name, tab, role, display) in PossessionRegistry)
+            HookPossessionPress();
+            return PossessionTree.Collect(this, _possessionTargets);
+        }
+
+        // ---- the reactive layer (WPF PossessionEvents, the card half) -----------------------------
+        // A press on a haunted room's card makes that card breathe. The press is only WATCHED: it is
+        // never handled, so whatever was pressed still gets it. Not here, on purpose: a pressed rail
+        // door dropping (a button), Start / Stop dodging the pointer (a stop control may never get
+        // harder to hit), and the typo that answers a changed setting (a setting can be changed by a
+        // remote controller, and no remote path may feed the haunt).
+        private bool _possessionPressHooked;
+
+        private void HookPossessionPress()
+        {
+            if (_possessionPressHooked) return;
+            _possessionPressHooked = true;
+            AddHandler(PointerPressedEvent, (_, e) =>
             {
-                if (PossessionOffLimits.IsReservedName(name)) continue;   // a room the user must be able to leave
-                if (!_possessionTargets.TryGetValue(name, out var t))
+                try { PossessionReactToPress(e.Source as Visual); }
+                catch (Exception ex) { Log.Debug("Possession: reactive press failed: {E}", ex.Message); }
+            }, global::Avalonia.Interactivity.RoutingStrategies.Tunnel, handledEventsToo: true);
+        }
+
+        /// <summary>The card (if any) the pressed visual sits in asks the director for a breath.</summary>
+        internal void PossessionReactToPress(Visual? source)
+        {
+            if (PossessionDirector.Current is not { IsHaunting: true } director) return;
+            for (var v = source; v != null; v = global::Avalonia.VisualTree.VisualExtensions.GetVisualParent(v))
+            {
+                if (v is not Control c || Services.Possession.Possession.GetRole(c) != PossessionRole.Card) continue;
+                foreach (var t in PossessionTargets())
                 {
-                    Control? c = tab == null ? Named<Control>(name) : Named<Control>(tab)?.FindControl<Control>(name);
-                    if (c == null) continue;
-                    t = new PossessionTarget
-                    {
-                        Element = c, Role = role, Key = name, DisplayName = display,
-                        IsVisible = () => c.IsEffectivelyVisible && c.Bounds.Width > 0,
-                    };
-                    _possessionTargets[name] = t;
+                    if (!ReferenceEquals(t.Element, c)) continue;
+                    director.RequestReactive("breathe", t);
+                    return;
                 }
-                list.Add(t);
+                return;
             }
-            return list;
         }
 
         // ---- the edge pulse (WPF EmberAttribution.EdgePulse) --------------------------------------

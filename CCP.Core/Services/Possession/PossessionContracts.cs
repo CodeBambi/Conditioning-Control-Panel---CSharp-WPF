@@ -94,6 +94,15 @@ public interface IPossessionEffect
     Task UndoAsync(TimeSpan duration);
 }
 
+/// <summary>A choreography (WPF IPossessionScene behind its PossessionSceneEffect adapter): a haunt
+/// the director starts with NO target. It reads the host registry itself, books each victim it takes
+/// (PossessionTarget.IsLive) and gives every one back on undo, under the same rules as any effect.</summary>
+public interface IPossessionScene : IPossessionEffect
+{
+    /// <summary>How many live slots the scene takes while it plays (PossessionDeck.FitsConcurrency).</summary>
+    int Beats { get; }
+}
+
 /// <summary>Bark trigger names raised by the Possession layer (WPF BarkService.NotifyPossession*).</summary>
 public static class PossessionBarkTriggers
 {

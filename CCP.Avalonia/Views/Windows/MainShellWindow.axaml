@@ -52,6 +52,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+        xmlns:poss="clr-namespace:ConditioningControlPanel.Services.Possession;assembly=CCP.Avalonia"
         xmlns:views="clr-namespace:ConditioningControlPanel.Avalonia.Views.Tabs"
         xmlns:cmp="clr-namespace:ConditioningControlPanel.Avalonia.Views.Controls"
         xmlns:fx="clr-namespace:ConditioningControlPanel.Avalonia.Controls"
@@ -337,7 +338,7 @@
                 <!-- Icon and Title -->
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0,0,0">
                     <TextBlock Text="💗" FontSize="18" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                    <TextBlock x:Name="TxtTitleBarVersion" Text="{loc:Str app_title}" Foreground="{DynamicResource TextLightBrush}" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="TxtTitleBarVersion" poss:Possession.Role="Label" poss:Possession.Name="the title bar" Text="{loc:Str app_title}" Foreground="{DynamicResource TextLightBrush}" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center"/>
                 </StackPanel>
 
                 <!-- Title-bar status pills (right-aligned, visible from every tab):
@@ -1077,6 +1078,7 @@
                              HorizontalAlignment="Left" VerticalAlignment="Center"
                              Stretch="Uniform" StretchDirection="DownOnly">
                         <TextBlock x:Name="TxtPlayerTitle" Text="{loc:Str label_basic_subject}" Foreground="{DynamicResource PinkBrush}"
+                                   poss:Possession.Role="Title" poss:Possession.Name="the title"
                                    FontSize="18" FontWeight="Bold"
                                    ToolTip.Tip="{Binding #TxtPlayerTitle.Text}">
                             <TextBlock.Effect>
@@ -1888,6 +1890,7 @@
                             <Border CornerRadius="11" Background="{DynamicResource DepthRaisedSheen}"
                                     IsHitTestVisible="False"/>
                             <TextBlock x:Name="TxtLevelLabel" Text="{loc:Str label_lvl_1_2}" Foreground="White"
+                                       poss:Possession.Role="Label" poss:Possession.Name="the level label"
                                        FontWeight="ExtraBold" FontSize="14" VerticalAlignment="Center" Margin="9,1"/>
                         </Grid>
                     </Border>

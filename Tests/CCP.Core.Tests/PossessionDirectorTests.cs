@@ -38,6 +38,138 @@ public sealed class PossessionDirectorTests
         public Task UndoAsync(TimeSpan duration) { Undone.Add(duration); IsLive = false; return Task.CompletedTask; }
     }
 
+    private sealed class FakeScene : IPossessionScene
+    {
+        public string Id => "scene_fake";
+        public PossessionRung MinRung => PossessionRung.Melt;
+        public PossessionIntensity MinIntensity => PossessionIntensity.Gentle;
+        public bool IsBig => true;
+        public bool UsesFlicker => false;
+        public double Weight => 1;
+        public TimeSpan HoldFor => TimeSpan.Zero;
+        public IReadOnlyList<PossessionRole> Roles { get; } = Array.Empty<PossessionRole>();
+        public int Beats { get; init; } = 2;
+        public bool IsLive { get; private set; }
+        public int Applied;
+        public readonly List<PossessionRung> Rungs = new();
+        public readonly List<TimeSpan> Undone = new();
+        public bool CanApply(PossessionContext ctx, PossessionTarget? target) => target == null;
+        public Task ApplyAsync(PossessionContext ctx, PossessionTarget? target, CancellationToken ct)
+        {
+            Applied++; IsLive = true; Rungs.Add(ctx.Rung);
+            return Task.CompletedTask;
+        }
+        public Task UndoAsync(TimeSpan duration) { Undone.Add(duration); IsLive = false; return Task.CompletedTask; }
+    }
+
+    [Fact]
+    public void FromMeltAScenePlaysOnTheRoll_NeverBelowIt_NeverWhenItDoesNotFit_AndPanicEndsIt()
+    {
+        using var r = new Rig();
+        var scene = new FakeScene();
+        var wide = new FakeScene { Beats = 99 };       // can never fit the room
+        r.Director.Scenes.Add(wide);
+        r.Director.Scenes.Add(scene);
+        r.Lockdown.Activate(TimeSpan.FromMinutes(20));
+
+        for (double f = 0.09; f < 0.34; f += 0.01) r.TickAt(f);       // Settle and Drift: no scenes
+        Assert.Equal(0, scene.Applied);
+
+        for (double f = 0.36; f < 0.84 && scene.Applied == 0; f += 0.004) r.TickAt(f);
+        Assert.Equal(1, scene.Applied);
+        Assert.All(scene.Rungs, rung => Assert.True(rung >= PossessionRung.Melt));
+        Assert.Equal(0, wide.Applied);
+        Assert.True(r.Director.LiveEffectCount >= 1);
+
+        r.Director.PanicStop();
+        Assert.Equal(new[] { TimeSpan.Zero }, scene.Undone);          // a scene comes back like any ghost
+        Assert.False(scene.IsLive);
+        Assert.Equal(0, r.Director.LiveEffectCount);
+    }
+
+    [Fact]
+    public void AReactiveAnswerNeedsARunningHaunt_IsThrottled_AndStaysQuietAfterAPanic()
+    {
+        using var r = new Rig();
+        r.Director.RequestReactive("breathe", r.Card);          // no lockdown: nothing
+        Assert.Equal(0, r.Effect.Applied);
+
+        r.Lockdown.Activate(TimeSpan.FromMinutes(20));
+        r.Director.RequestReactive("nosuch", r.Card);
+        r.Director.RequestReactive("breathe", r.Card, PossessionRung.Collapse);   // the rung is not there yet
+        Assert.Equal(0, r.Effect.Applied);
+
+        r.Director.RequestReactive("breathe", r.Card);
+        Assert.Equal(1, r.Effect.Applied);
+        Assert.True(r.Card.IsLive);
+        Assert.Equal(PossessionRung.Settle, r.Director.CurrentRung);              // an answer never climbs the ladder
+
+        r.Director.PanicStop();
+        Assert.False(r.Card.IsLive);
+        r.Clock = r.Clock.AddSeconds(7);                        // past the throttle, inside the panic quiet
+        r.Director.RequestReactive("breathe", r.Card);
+        Assert.Equal(1, r.Effect.Applied);
+
+        r.Lockdown.Deactivate();
+        r.Director.RequestReactive("breathe", r.Card);          // the lockdown is over
+        Assert.Equal(1, r.Effect.Applied);
+    }
+
+    [Fact]
+    public void AFullDokiLockdownIsRememberedOnce_TwentySecondsIntoTheNextLaunch_AndNeverDuringALockdown()
+    {
+        var s = CoreSettings.Current;
+        var savedPending = s.LockdownPossessionRememberPending;
+        try
+        {
+            using (var eerie = new Rig(intensity: (int)PossessionIntensity.Eerie))
+            {
+                s.LockdownPossessionRememberPending = false;
+                using var quiet = new PossessionRemember(eerie.Lockdown, new PossessionHost());
+                eerie.Lockdown.Activate(TimeSpan.FromMinutes(20));
+                eerie.Lockdown.Deactivate();
+                Assert.False(s.LockdownPossessionRememberPending);          // only Full Doki is remembered
+            }
+
+            using var r = new Rig(intensity: (int)PossessionIntensity.FullDoki);
+            var pulses = new List<double>();
+            bool usable = false;
+            using var remember = new PossessionRemember(r.Lockdown, new PossessionHost { IsUsable = () => usable, EdgePulse = pulses.Add });
+            r.Lockdown.Activate(TimeSpan.FromMinutes(20));
+            r.Lockdown.Deactivate();
+            Assert.True(s.LockdownPossessionRememberPending);
+            Assert.False(remember.IsWaiting);                               // armed for the NEXT launch, not this one
+
+            var t0 = new DateTime(2026, 10, 11, 9, 0, 0, DateTimeKind.Utc);
+            remember.SchedulePendingCharge(t0);
+            Assert.False(s.LockdownPossessionRememberPending);              // taken off the books at once
+            Assert.True(remember.IsWaiting);
+            remember.Tick(t0.AddSeconds(30));                               // no window yet
+            usable = true;
+            remember.Tick(t0.AddSeconds(31));
+            remember.Tick(t0.AddSeconds(50));                               // 19 s of window: not yet
+            Assert.Empty(pulses);
+            remember.Tick(t0.AddSeconds(51));
+            Assert.Equal(new[] { PossessionRemember.ChargeStrength }, pulses);
+            Assert.Contains(r.Barks, b => b.Trigger == PossessionBarkTriggers.Remember);
+            Assert.True(remember.Spent);
+            remember.Tick(t0.AddSeconds(90));                               // once
+            remember.SchedulePendingCharge(t0.AddSeconds(91));
+            Assert.Single(pulses);
+
+            // Armed again, but a lockdown is running when the moment comes: spent silently.
+            s.LockdownPossessionRememberPending = true;
+            using var second = new PossessionRemember(r.Lockdown, new PossessionHost { IsUsable = () => true, EdgePulse = pulses.Add });
+            second.SchedulePendingCharge(t0);
+            second.Tick(t0.AddSeconds(1));
+            r.Lockdown.Activate(TimeSpan.FromMinutes(20));
+            second.Tick(t0.AddSeconds(22));
+            Assert.True(second.Spent);
+            Assert.Single(pulses);
+        }
+        finally { s.LockdownPossessionRememberPending = savedPending; }
+    }
+
     private sealed class Rig : IDisposable
     {
         public readonly LockdownService Lockdown = new();

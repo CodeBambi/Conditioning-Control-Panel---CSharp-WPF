@@ -44,6 +44,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
+             xmlns:poss="clr-namespace:ConditioningControlPanel.Services.Possession;assembly=CCP.Avalonia"
              x:Class="ConditioningControlPanel.Avalonia.Views.Tabs.LockdownTabView">
 
     <!-- Velvet Kit 2 · round 4. Lockdown's hue is burnt orange: the page is a timed cage, not a
@@ -445,10 +446,12 @@
                                                  OnLockdownActivated / RungChanged in MainWindow.Lab.cs. -->
                                             <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
                                                 <TextBlock x:Name="TxtPossessionRung"
+                                                           poss:Possession.Role="Label" poss:Possession.Name="the readout"
                                                            Text="" FontSize="11.5" FontWeight="SemiBold"
                                                            Foreground="#FF8A5C" VerticalAlignment="Center"
                                                            Margin="0,0,10,0"/>
                                                 <StackPanel x:Name="PossessionPips"
+                                                            poss:Possession.Role="Card" poss:Possession.Name="the pips"
                                                             Orientation="Horizontal" VerticalAlignment="Center">
                                                     <Border Width="8" Height="8" CornerRadius="4" Margin="0,0,5,0" Background="#33FF8A5C"/>
                                                     <Border Width="8" Height="8" CornerRadius="4" Margin="0,0,5,0" Background="#33FF8A5C"/>
