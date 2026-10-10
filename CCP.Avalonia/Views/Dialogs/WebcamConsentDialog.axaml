@@ -13,9 +13,9 @@
        whitespace between <Run>s     -> moved inside the Run text (Avalonia drops it) -->
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:ctl="clr-namespace:ConditioningControlPanel.Avalonia.Controls"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="ConditioningControlPanel.Avalonia.Views.Dialogs.WebcamConsentDialog"
-        Title="Webcam Tracking - Privacy and Consent"
+        Title="{loc:Str webcam_consent_title}"
         Width="640" Height="640"
         WindowStartupLocation="CenterOwner"
         CanResize="False"
@@ -121,14 +121,14 @@
         <!-- ─── STEP 1 — What this enables ─── -->
         <ScrollViewer x:Name="PanelStep1" Grid.Row="1" VerticalScrollBarVisibility="Auto">
             <StackPanel>
-                <TextBlock Theme="{StaticResource DlgHeader}" Text="Webcam Tracking - Lab Feature"/>
-                <TextBlock Theme="{StaticResource DlgSub}" Text="Optional. Off by default. Powers two new Lab features."/>
+                <TextBlock Theme="{StaticResource DlgHeader}" Text="{loc:Str webcam_consent_header}"/>
+                <TextBlock Theme="{StaticResource DlgSub}" Text="{loc:Str webcam_consent_sub}"/>
 
                 <TextBlock Theme="{StaticResource DlgBody}" Margin="0,24,0,0"
-                           Text="This optional feature uses your webcam to detect when you blink, open your mouth, or look at parts of the screen. Detection runs entirely on your computer using AI models bundled with the app - no internet connection is used."/>
+                           Text="{loc:Str webcam_consent_intro}"/>
 
                 <TextBlock Theme="{StaticResource DlgBody}" Margin="0,16,0,0" FontWeight="SemiBold" Foreground="{StaticResource PinkBrush}"
-                           Text="What you get:"/>
+                           Text="{loc:Str webcam_consent_what_you_get}"/>
 
                 <TextBlock Theme="{StaticResource DlgBody}" Margin="14,8,0,0">
                     <Run FontWeight="Bold">• Webcam Triggers</Run>
@@ -143,15 +143,15 @@
                 </TextBlock>
 
                 <TextBlock Theme="{StaticResource DlgBody}" Margin="0,28,0,0" Foreground="#9090A8" FontStyle="Italic"
-                           Text="Before turning this on, the next screen explains exactly what we do with the camera - and what we never do. Read it carefully."/>
+                           Text="{loc:Str webcam_consent_next_screen}"/>
             </StackPanel>
         </ScrollViewer>
 
         <!-- ─── STEP 2 — Privacy contract ─── -->
         <ScrollViewer x:Name="PanelStep2" Grid.Row="1" VerticalScrollBarVisibility="Auto" IsVisible="False">
             <StackPanel>
-                <TextBlock Theme="{StaticResource DlgHeader}" Text="Your camera frames stay on this computer."/>
-                <TextBlock Theme="{StaticResource DlgSub}" Text="Always. Read each line."/>
+                <TextBlock Theme="{StaticResource DlgHeader}" Text="{loc:Str webcam_consent_promise_header}"/>
+                <TextBlock Theme="{StaticResource DlgSub}" Text="{loc:Str consent_always_read}"/>
 
                 <Border Margin="0,24,0,0" Padding="20" CornerRadius="6" Background="#1F1F38" BorderBrush="{StaticResource PinkBrush}" BorderThickness="0,0,0,3">
                     <StackPanel>
@@ -201,10 +201,10 @@
                 </Border>
 
                 <TextBlock Theme="{StaticResource DlgBody}" Margin="0,18,0,0" Foreground="#B8B8C8"
-                           Text="Want to verify? The source code for this feature is public."/>
+                           Text="{loc:Str consent_verify_source}"/>
                 <ctl:SafeHyperlinkButton x:Name="LnkSource" Padding="0" Foreground="{StaticResource PinkBrush}"
                                  NavigateUri="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/blob/main/ConditioningControlPanel/Services/Webcam/WebcamTrackingService.cs">
-                    <TextBlock Text="View on GitHub →" FontSize="14"/>
+                    <TextBlock Text="{loc:Str consent_view_github}" FontSize="14"/>
                 </ctl:SafeHyperlinkButton>
             </StackPanel>
         </ScrollViewer>
@@ -212,56 +212,56 @@
         <!-- ─── STEP 3 — Explicit consent ─── -->
         <ScrollViewer x:Name="PanelStep3" Grid.Row="1" VerticalScrollBarVisibility="Auto" IsVisible="False">
             <StackPanel>
-                <TextBlock Theme="{StaticResource DlgHeader}" Text="Confirm consent"/>
-                <TextBlock Theme="{StaticResource DlgSub}" Text="Each box must be checked. None are pre-checked."/>
+                <TextBlock Theme="{StaticResource DlgHeader}" Text="{loc:Str consent_confirm_header}"/>
+                <TextBlock Theme="{StaticResource DlgSub}" Text="{loc:Str consent_boxes_hint}"/>
 
                 <CheckBox x:Name="ChkConsent1" Theme="{StaticResource DlgCheckbox}" Margin="0,24,0,0">
-                    <TextBlock TextWrapping="Wrap" Text="I understand camera frames stay on this device and are never transmitted."/>
+                    <TextBlock TextWrapping="Wrap" Text="{loc:Str webcam_consent_chk1}"/>
                 </CheckBox>
                 <CheckBox x:Name="ChkConsent2" Theme="{StaticResource DlgCheckbox}">
-                    <TextBlock TextWrapping="Wrap" Text="I understand frames are processed in memory and never saved to disk."/>
+                    <TextBlock TextWrapping="Wrap" Text="{loc:Str webcam_consent_chk2}"/>
                 </CheckBox>
                 <CheckBox x:Name="ChkConsent3" Theme="{StaticResource DlgCheckbox}">
-                    <TextBlock TextWrapping="Wrap" Text="I am the only person in front of this camera, or others present have given consent."/>
+                    <TextBlock TextWrapping="Wrap" Text="{loc:Str webcam_consent_chk3}"/>
                 </CheckBox>
 
                 <TextBlock Theme="{StaticResource DlgBody}" Margin="0,28,0,8" FontWeight="SemiBold"
-                           Text="Type ENABLE in capitals to confirm:"/>
+                           Text="{loc:Str consent_type_enable}"/>
                 <TextBox x:Name="TxtConfirm" FontSize="14" Padding="10,8" Background="#1F1F38" Foreground="White"
                          BorderBrush="#3A3A52" BorderThickness="1" CaretBrush="White"/>
 
                 <TextBlock x:Name="TxtConfirmHint" Theme="{StaticResource DlgBody}" Margin="0,8,0,0" Foreground="#8888A0" FontStyle="Italic"
-                           Text="Waiting for: 3 checkboxes + ENABLE typed."/>
+                           Text="{loc:Str consent_waiting_initial}"/>
             </StackPanel>
         </ScrollViewer>
 
         <!-- ─── STEP 4 — Calibration prompt ─── -->
         <ScrollViewer x:Name="PanelStep4" Grid.Row="1" VerticalScrollBarVisibility="Auto" IsVisible="False">
             <StackPanel>
-                <TextBlock Theme="{StaticResource DlgHeader}" Text="Calibration"/>
-                <TextBlock Theme="{StaticResource DlgSub}" Text="Quick one-time setup so the camera knows where you're looking."/>
+                <TextBlock Theme="{StaticResource DlgHeader}" Text="{loc:Str blink_trainer_calibration_label}"/>
+                <TextBlock Theme="{StaticResource DlgSub}" Text="{loc:Str webcam_consent_cal_sub}"/>
 
                 <TextBlock Theme="{StaticResource DlgBody}" Margin="0,24,0,0"
-                           Text="Two options. You can switch later from the Lab card."/>
+                           Text="{loc:Str webcam_consent_cal_options}"/>
 
                 <Border Margin="0,16,0,0" Padding="18" CornerRadius="6" Background="#1F1F38">
                     <StackPanel>
-                        <TextBlock Theme="{StaticResource DlgBody}" FontWeight="Bold" Foreground="{StaticResource PinkBrush}" Text="Fast (about 10 seconds)"/>
+                        <TextBlock Theme="{StaticResource DlgBody}" FontWeight="Bold" Foreground="{StaticResource PinkBrush}" Text="{loc:Str webcam_consent_cal_fast}"/>
                         <TextBlock Theme="{StaticResource DlgBody}" Margin="0,4,0,0"
-                                   Text="Just left vs right gaze. Enough for the Focus Training game."/>
+                                   Text="{loc:Str webcam_consent_cal_fast_desc}"/>
                     </StackPanel>
                 </Border>
 
                 <Border Margin="0,12,0,0" Padding="18" CornerRadius="6" Background="#1F1F38">
                     <StackPanel>
-                        <TextBlock Theme="{StaticResource DlgBody}" FontWeight="Bold" Foreground="{StaticResource PinkBrush}" Text="Full (about 45 seconds)"/>
+                        <TextBlock Theme="{StaticResource DlgBody}" FontWeight="Bold" Foreground="{StaticResource PinkBrush}" Text="{loc:Str webcam_consent_cal_full}"/>
                         <TextBlock Theme="{StaticResource DlgBody}" Margin="0,4,0,0"
-                                   Text="Twenty-five-point precision (5×5 grid). Needed for &quot;long stare&quot; triggers and stare-to-pop bubbles."/>
+                                   Text="{loc:Str webcam_consent_cal_full_desc}"/>
                     </StackPanel>
                 </Border>
 
                 <TextBlock Theme="{StaticResource DlgBody}" Margin="0,20,0,0" Foreground="#9090A8" FontStyle="Italic"
-                           Text="You can also skip and calibrate later. The Lab cards will be visible but features that need calibration will show a &quot;Calibrate to enable&quot; hint until you do."/>
+                           Text="{loc:Str webcam_consent_cal_skip_note}"/>
             </StackPanel>
         </ScrollViewer>
 
@@ -275,22 +275,22 @@
             </Grid.ColumnDefinitions>
 
             <Button x:Name="BtnCancel" Grid.Column="0" Theme="{StaticResource DlgSecondaryButton}" HorizontalAlignment="Left"
-                    Content="Cancel"/>
+                    Content="{loc:Str btn_cancel}"/>
 
             <Button x:Name="BtnBack" Grid.Column="1" Theme="{StaticResource DlgSecondaryButton}" Margin="0,0,8,0"
-                    Content="← Back" IsVisible="False"/>
+                    Content="{loc:Str consent_back}" IsVisible="False"/>
 
             <Button x:Name="BtnNext" Grid.Column="2" Theme="{StaticResource DlgPrimaryButton}"
-                    Content="I want to know more →"/>
+                    Content="{loc:Str consent_know_more}"/>
 
             <Button x:Name="BtnEnable" Grid.Column="2" Theme="{StaticResource DlgPrimaryButton}"
-                    Content="Enable Webcam Tracking" IsEnabled="False" IsVisible="False"/>
+                    Content="{loc:Str webcam_consent_enable}" IsEnabled="False" IsVisible="False"/>
 
             <Button x:Name="BtnSkipCal" Grid.Column="2" Theme="{StaticResource DlgSecondaryButton}" Margin="0,0,8,0"
-                    Content="Calibrate later" IsVisible="False"/>
+                    Content="{loc:Str webcam_consent_cal_later}" IsVisible="False"/>
 
             <Button x:Name="BtnCalNow" Grid.Column="3" Theme="{StaticResource DlgPrimaryButton}"
-                    Content="Calibrate now" IsVisible="False"/>
+                    Content="{loc:Str webcam_consent_cal_now}" IsVisible="False"/>
         </Grid>
     </Grid>
 </Window>
