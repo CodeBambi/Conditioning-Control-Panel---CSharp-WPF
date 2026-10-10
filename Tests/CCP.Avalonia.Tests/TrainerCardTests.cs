@@ -144,11 +144,15 @@ public sealed partial class AccountSeedTests
     {
         var s = CoreSettings.Current;
         var old = (s.OfflineMode, LeaderboardTabView.NewClient, CoreAccount.UnifiedUserId);
+        var oldPerf = s.PerformanceMode;
         var wire = new CardWire();
         try
         {
             LeaderboardTabView.NewClient = () => new LeaderboardClient(wire);
             (s.OfflineMode, CoreAccount.UnifiedUserId) = (false, "u9");
+            // A pointer-timing test: with the shell's ambient FX running, each headless press pumps long enough
+            // that two presses never land inside the double-click time (ClickCount stayed 1). Rest the FX.
+            s.PerformanceMode = true;
             await AvaloniaTestDispatcher.RunAsync(async () =>
             {
                 if (global::Avalonia.Application.Current is null)
@@ -166,10 +170,18 @@ public sealed partial class AccountSeedTests
                 var list = board.FindControl<ListBox>("LstLeaderboard")!;
                 var row = list.GetRealizedContainers().First(c => c.DataContext is LeaderboardRow);
                 var at = row.TranslatePoint(new Point(40, row.Bounds.Height / 2), w)!.Value;
-                for (var i = 0; i < 2; i++)
+                // A double click is two presses inside the platform's double-click time. If a slow pump still split the
+                // pair into two single clicks, let the click count lapse and
+                // click again. Never a second open (the GET count below still pins one).
+                for (var attempt = 0; attempt < 3 && w.ProfilePage?.IsEffectivelyVisible != true; attempt++)
                 {
-                    w.MouseDown(at, global::Avalonia.Input.MouseButton.Left);
-                    w.MouseUp(at, global::Avalonia.Input.MouseButton.Left);
+                    if (attempt > 0) { await Task.Delay(800); Dispatcher.UIThread.RunJobs(); }
+                    for (var i = 0; i < 2; i++)
+                    {
+                        w.MouseDown(at, global::Avalonia.Input.MouseButton.Left);
+                        w.MouseUp(at, global::Avalonia.Input.MouseButton.Left);
+                    }
+                    Dispatcher.UIThread.RunJobs();
                 }
                 for (var i = 0; i < 50 && !wire.Seen.Any(r => r.Contains("/user/lookup")); i++) { await Task.Delay(10); Dispatcher.UIThread.RunJobs(); }
 
@@ -199,6 +211,7 @@ public sealed partial class AccountSeedTests
         finally
         {
             (s.OfflineMode, LeaderboardTabView.NewClient, CoreAccount.UnifiedUserId) = old;
+            s.PerformanceMode = oldPerf;
         }
     }
 
