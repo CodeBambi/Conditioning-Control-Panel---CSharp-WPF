@@ -877,3 +877,18 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
 ## 2026-10-10: Vault gate card/PayPal checkout link (avalonia-port/sync6-gate-pay)
 - Mirrors WPF 750e76812 exactly (supervisor-approved, P44): same URL `https://app.cclabs.app/subscribe?plan={basic|prime}&from=panel`,
   same copy (`vaultgate_or_card`), opened only through ExternalOpener on a user click; tests use a fake launcher, never a real URL.
+## 2026-10-10: Companion > Personality / Permissions / Links without a v2 page (avalonia-port/sync6-companion-pages)
+- Question: WPF `5681c132a` gives the three Companion pills real pages that ADOPT the live room zones, because v2 collapses
+  the room. This head has no v2 ConversationPage: its Companion tab is the full room, so adopting would strip the visible
+  room; `CompanionPickerCard` is not ported either.
+- Options: A) port the three pages + KnowledgeLinksEditor, with an Avalonia-only seam handing the zones back to the room
+  when the Companion tab shows; B) zone pills that open the Companion tab scrolled to the zone (like playeyes/folders/ramp);
+  C) leave the rows needs-port until views-companion-v2-conversation lands.
+- Choice: B + C. Decided by: supervisor (ponytail: no throwaway seam; reparenting live zones is fragile).
+- Applied: `personality`/`permissions`/`companionlinks` map to CompanionTab; OnTabShown scrolls to PersonalityZone /
+  PermissionsZone / Workshop HER LIBRARY. Rows `5681c132a`, `f3a00a9dc` stay needs-port (folded into
+  views-companion-v2-conversation). The f3a00a9dc wheel relay is n/a here (Avalonia chains wheel notches natively).
+- Test: `Tests/CCP.Avalonia.Tests/CompanionZonePillsTests.cs` (each of the three reveals fail-proven, log:
+  ~/ccp-port/evidence/review-sync6-companion-pages/fail-proofs.log). The Library-cell assertion found that
+  `WorkshopAccordion.ExpandAndReveal(cell)` scrolled to the drawer, not the cell (body not laid out yet); it now lays out
+  the page first, which also fixes the hero Switch chip -> roster deep link.

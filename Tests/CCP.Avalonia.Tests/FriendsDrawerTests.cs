@@ -52,10 +52,12 @@ public sealed class FriendsDrawerTests
         }
     }
 
-    /// <summary>Lets a click's async handler finish: dispatcher turns, no clock.</summary>
+    /// <summary>Lets a click's async handler finish: dispatcher turns until done or a 10 s wall-clock cap.
+    /// A turn count alone ran out on a loaded gate before the thread-pool send continuation posted back.</summary>
     private static async Task Until(Func<bool> done)
     {
-        for (var i = 0; i < 500 && !done(); i++)
+        var end = DateTime.UtcNow.AddSeconds(10);
+        while (!done() && DateTime.UtcNow < end)
             await global::Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() => { }, global::Avalonia.Threading.DispatcherPriority.Background);
     }
 
