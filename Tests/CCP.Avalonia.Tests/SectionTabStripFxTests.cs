@@ -167,4 +167,36 @@ public sealed class SectionTabStripFxTests
             return Task.CompletedTask;
         });
     }
+
+    /// <summary>WPF PaintSectionWash: the page wash travels to the new section hue and lands on it.</summary>
+    [Fact]
+    public async Task TheSectionWashTravelsToTheNewHue_AndLandsOnIt()
+    {
+        await AvaloniaTestDispatcher.RunAsync(async () =>
+        {
+            if (Application.Current is null)
+                AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>()
+                    .UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                    .SetupWithoutStarting();
+            var w = new global::ConditioningControlPanel.Avalonia.Views.Windows.MainShellWindow();
+            try
+            {
+                w.Show();
+                w.ShowTab("presets");
+                Dispatcher.UIThread.RunJobs();
+                for (int i = 0; i < 60 && w.SectionWashTweening; i++) { await Task.Delay(16); Dispatcher.UIThread.RunJobs(); }
+                uint first = w.SectionWashHueShown;
+                Assert.Equal(NavStripRules.Accent(w.LitNavSection), first);
+
+                w.ShowTab("quests");
+                Dispatcher.UIThread.RunJobs();
+                uint target = NavStripRules.Accent(w.LitNavSection);
+                Assert.NotEqual(first, target);
+                for (int i = 0; i < 60 && w.SectionWashTweening; i++) { await Task.Delay(16); Dispatcher.UIThread.RunJobs(); }
+                Assert.False(w.SectionWashTweening);
+                Assert.Equal(target, w.SectionWashHueShown);
+            }
+            finally { w.Close(); }
+        });
+    }
 }
