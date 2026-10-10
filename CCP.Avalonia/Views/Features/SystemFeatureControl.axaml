@@ -71,7 +71,7 @@
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="Force video GPU decode" FontSize="13" FontWeight="SemiBold"
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_force_video_gpu_decode}" FontSize="13" FontWeight="SemiBold"
                                            Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
                                 <CheckBox Grid.Column="1" x:Name="ChkVideoGpuDecode"
                                           Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
@@ -83,7 +83,7 @@
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="Blurred video background" FontSize="13" FontWeight="SemiBold"
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_blurred_video_background}" FontSize="13" FontWeight="SemiBold"
                                            Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
                                 <CheckBox Grid.Column="1" x:Name="ChkVideoBlurBg"
                                           Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>

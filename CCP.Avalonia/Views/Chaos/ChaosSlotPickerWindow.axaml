@@ -23,7 +23,7 @@
      the WPF original too - the picker was never localized - so there is no {loc:Str} in this
      view and no key has been invented for one. -->
 <Window xmlns="https://github.com/avaloniaui"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="ConditioningControlPanel.Avalonia.Views.Chaos.ChaosSlotPickerWindow"
         Title="Down the Rabbit Hole"
         SystemDecorations="None"
@@ -123,7 +123,7 @@
                 </StackPanel>
                 <Button x:Name="BtnClose" Width="34" Height="34" VerticalAlignment="Top"
                         HorizontalAlignment="Right" Theme="{StaticResource GhostBtn}" Padding="0"
-                        FontSize="15" ToolTip.Tip="Cancel">
+                        FontSize="15" ToolTip.Tip="{loc:Str btn_cancel}">
                     <TextBlock Text="✕"/>
                 </Button>
             </Grid>
@@ -144,7 +144,7 @@
                     </StackPanel>
                     <Button x:Name="BtnOpenFolder" Theme="{StaticResource GhostBtn}"
                             Padding="12,6" FontSize="12" Margin="14,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="Open folder"/>
+                        <TextBlock Text="{loc:Str btn_spiral_open_folder}"/>
                     </Button>
                 </StackPanel>
             </Border>
@@ -152,7 +152,7 @@
             <!-- Actions -->
             <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right">
                 <Button x:Name="BtnCancel" Theme="{StaticResource GhostBtn}" Margin="0,0,10,0">
-                    <TextBlock Text="Cancel"/>
+                    <TextBlock Text="{loc:Str btn_cancel}"/>
                 </Button>
                 <Button x:Name="BtnDescend" Theme="{StaticResource PrimaryBtn}">
                     <TextBlock Text="Descend  ↓"/>

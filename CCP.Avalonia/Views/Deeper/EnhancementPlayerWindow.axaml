@@ -25,7 +25,7 @@
         xmlns:controls="clr-namespace:ConditioningControlPanel.Avalonia.Views.Controls"
         xmlns:deeper="clr-namespace:ConditioningControlPanel.Avalonia.Views.Deeper"
         x:Class="ConditioningControlPanel.Avalonia.Views.Deeper.EnhancementPlayerWindow"
-        Title="Deeper Player"
+        Title="{loc:Str deeper_player_title}"
         Height="768" Width="900" MinHeight="504" MinWidth="640"
         WindowStartupLocation="CenterOwner"
         Background="{DynamicResource DarkerBgBrush}"

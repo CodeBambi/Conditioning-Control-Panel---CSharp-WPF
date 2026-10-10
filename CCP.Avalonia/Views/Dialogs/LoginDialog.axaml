@@ -287,7 +287,7 @@
                              Width="200" Height="3" Margin="0,0,0,15"
                              Foreground="#9333EA" Background="{DynamicResource AccentTintedBgBrush}"/>
 
-                <TextBlock x:Name="BtnDeviceCodeCancel" Text="Cancel" Margin="0,0,0,0"
+                <TextBlock x:Name="BtnDeviceCodeCancel" Text="{loc:Str btn_cancel}" Margin="0,0,0,0"
                            FontSize="12" Foreground="{DynamicResource TextMutedBrush}"
                            HorizontalAlignment="Center" Cursor="Hand"/>
             </StackPanel>
