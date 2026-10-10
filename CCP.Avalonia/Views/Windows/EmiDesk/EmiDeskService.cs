@@ -91,7 +91,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                 int summons = EmiState.NoteSummon();
                 RaiseOutChanged();
                 Log.Information("[EmiDesk] summoned ({Why}), firstBoot={First}, summon #{N}", why ?? "user", first, summons);
-                OnSummoned(why);
+                OnSummoned(why, summons);
             }
             catch (Exception ex)
             {

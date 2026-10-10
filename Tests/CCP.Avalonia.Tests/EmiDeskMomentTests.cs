@@ -132,3 +132,42 @@ public sealed class EmiDeskMomentTests
         }
     });
 }
+
+/// <summary>HC8, the nudges: a track outside the lines file's vocabulary falls back to its fixed line,
+/// and the safety silence beats a nudge like it beats everything else.</summary>
+[Collection(RunsAloneCollection.Name)]
+public sealed class EmiDeskNudgeDrawTests
+{
+    private const string Bare =
+        "{\"version\":1,\"moments\":{\"panicPressed\":{\"pools\":[\"h\"],\"odds\":0.0,\"priority\":3,\"hold\":true,\"tailMs\":300000}}," +
+        "\"pools\":{\"h\":[{\"id\":\"h1\",\"t\":\"\",\"face\":\"-_-\",\"spice\":0}]},\"asks\":[]}";
+
+    [Fact]
+    public void AnUnknownTrackUsesItsFallback_AndAHoldSilencesIt()
+    {
+        var engine = EmiLineEngine.FromJson(Bare);
+
+        var pet = EmiDeskService.DrawNudge(EmiNudgeMachine.PetTrack, engine);
+        Assert.NotNull(pet);
+        Assert.Equal("pat me. it's allowed.", pet!.Text);
+        Assert.False(pet.Hold);
+        Assert.NotNull(EmiDeskService.DrawNudge(EmiNudgeMachine.RingTrack, engine));
+        Assert.NotNull(EmiDeskService.DrawNudge(EmiNudgeMachine.PinTrack, engine));
+        Assert.Null(EmiDeskService.DrawNudge("not a track", engine));
+
+        engine.Draw("panicPressed");
+        Assert.Null(EmiDeskService.DrawNudge(EmiNudgeMachine.PetTrack, engine));
+    }
+
+    [Fact]
+    public void WithNoHeadTheWorldIsNeverQuiet()
+    {
+        var prev = EmiNudgeWorld.QuietProbe;
+        try
+        {
+            EmiNudgeWorld.QuietProbe = null;
+            Assert.False(new EmiNudgeWorld().Quiet);   // unset reads as "not quiet": never a nag
+        }
+        finally { EmiNudgeWorld.QuietProbe = prev; }
+    }
+}

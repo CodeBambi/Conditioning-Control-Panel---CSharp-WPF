@@ -156,10 +156,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         }
 
         /// <summary>The tail of WPF Summon :332-395: pick the greeting, schedule it, fire the summon beats.</summary>
-        private void OnSummoned(string? why)
+        private void OnSummoned(string? why, int summons)
         {
             try
             {
+                StartNudges(summons);
                 _summonMoment = ChooseGreetMoment();
                 _summonVia = string.Equals(why, "hotkey", StringComparison.OrdinalIgnoreCase) ? "hotkey" : "rail";
                 _summonTouring = string.Equals(why, "tour", StringComparison.OrdinalIgnoreCase);
@@ -193,6 +194,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                 CancelSummonMoment();
                 Fire("dismissed", new { minutes = MinutesOut() });
                 _lastDismissUtc = DateTime.UtcNow;
+                StopNudges();
             }
             catch (Exception ex) { Log.Debug(ex, "[EmiDesk] dismiss beats failed"); }
         }
