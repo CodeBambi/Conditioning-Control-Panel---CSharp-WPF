@@ -128,6 +128,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     var notes = CoreReleaseContent.PatchNotes;
                     if (string.IsNullOrWhiteSpace(notes)) return;
                     Log.Information("Version changed from {Old} to {New}, showing What's New", last, current);
+                    ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("afterUpdate", new { target = current });   // WPF MainWindow.Marquee.cs:325, before the stamp
                     var title = $"What's New in v{current}";
                     if (WhatsNewPresenter != null) await WhatsNewPresenter(title, notes);
                     else if (IsVisible) await new Dialogs.WhatsNewDialog(title, notes).ShowDialogSafe(this);

@@ -106,6 +106,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         public void Show(string path, bool strict) => Dispatcher.UIThread.Invoke(() =>
         {
             _healUsed = false;   // WPF PlayVideo: one output heal per clip; the heal's replay keeps it spent
+            if (App.Achievements?.Progress?.TotalVideoMinutes <= 0) ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("firstVideoEver");   // WPF VideoService.cs:3198
             Play(path, strict);
         });
 
@@ -600,7 +601,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             }
             foreach (var t in _targets.ToList())
             {
-                if (elapsed >= t.Due) { t.Remove(); _targets.Remove(t); continue; }
+                if (elapsed >= t.Due) { t.Remove(); _targets.Remove(t); if (_targets.Count == 0) ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.ReleaseHold("attentionCheckShown"); continue; }
                 t.Move(dt);
             }
         }
@@ -625,6 +626,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                 };
                 batch.Add(t);
                 _targets.Add(t);
+                ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("attentionCheckShown");   // WPF VideoService.cs:5844: a HOLD, released when no target is left
             }
             // Whichever route gets here (mouse, toy button) runs the same idempotent pipeline.
             void Hit(Target t)
@@ -634,6 +636,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                 PlayPop();
                 Scheduler.NoteHit();
                 foreach (var o in batch) { _targets.Remove(o); if (o != t) o.Remove(); }
+                if (_targets.Count == 0) ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.ReleaseHold("attentionCheckShown");   // WPF VideoService.cs:5718
                 t.FadeOut();
                 Log.Information("ATTENTION: Hit {Hits}/{Spawned}", Scheduler.AttentionHits, Scheduler.AttentionSpawned);
             }
@@ -912,6 +915,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                 _graceTimer = _guard = null;
                 _spawnTimes.Clear();
                 _targets.Clear();
+                ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.ReleaseHold("attentionCheckShown");   // the clip is gone: a hold must not outlive its reason
                 DisarmToyInput();
                 // Stop joins the decoder thread, so after it no callback touches the frame buffer.
                 if (_player != null)

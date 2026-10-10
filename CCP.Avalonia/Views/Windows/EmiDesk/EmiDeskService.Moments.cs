@@ -169,6 +169,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
             try
             {
                 StartNudges(summons);
+                MaybeOfferBookOnSummon(summons);
                 _summonMoment = ChooseGreetMoment();
                 if (TakeKnockContact() is { } contact) _summonMoment = contact;   // WPF :340: the knock picks by population
                 _summonVia = string.Equals(why, "hotkey", StringComparison.OrdinalIgnoreCase) ? "hotkey" : "rail";
@@ -200,6 +201,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         {
             try
             {
+                CancelOfferBeats();
                 CancelSummonMoment();
                 Fire("dismissed", new { minutes = MinutesOut() });
                 _lastDismissUtc = DateTime.UtcNow;
@@ -234,6 +236,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                 _summonMoment = null;
                 bool touring = _summonTouring;
                 _summonTouring = false;
+                ScheduleEmptyLibraryBeat();   // WPF :930: a few seconds behind the hello, never inside it
                 if (string.IsNullOrEmpty(moment)) return;
                 Fire(moment!, new { via = _summonVia, minutes = MinutesOut(), touring });
             }

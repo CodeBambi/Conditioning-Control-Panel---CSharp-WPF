@@ -194,6 +194,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 e.Cancel = true;
                 Hide();
                 HideAvatarTube();
+                ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("minimizedToTray");   // WPF WindowChrome.cs:362: the X to tray branch only
                 if (!_shownFirstMinimizeNotification)
                 {
                     _shownFirstMinimizeNotification = true;

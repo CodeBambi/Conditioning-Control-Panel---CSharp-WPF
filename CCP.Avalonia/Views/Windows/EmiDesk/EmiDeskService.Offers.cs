@@ -14,8 +14,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
     /// <see cref="EmiOffers"/>; this file only says what this head can do. An action left null is
     /// an effect the engine never offers, so there is no dead chip.
     ///
-    /// <para>not ported: <c>spiral</c>, <c>video</c> and <c>rain</c> effects (no timed spiral, no
-    /// non-strict single-video play and no gif rain on this head yet); asks that need them are
+    /// <para>not ported: <c>spiral</c> and <c>rain</c> effects (no timed spiral and no gif rain on
+    /// this head yet); asks that need them are
     /// dropped at draw time, exactly as an infeasible effect is in WPF.</para>
     /// </summary>
     internal sealed partial class EmiDeskService
@@ -46,6 +46,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
             CanStartTour = () => TourStarter() != null,
             BookOpen = () => _window?.Book is { IsVisible: true },
             OpenBook = () => _window?.OpenBook(),
+            PlayVideo = path => Overlays.MandatoryVideoOverlay.Instance.Scheduler.Trigger(strictOverride: false, path: path),
             Burst = duration =>
             {
                 if (Shell is { } host) Overlays.FlashOverlay.TriggerOnce(host, 4, duration, null);

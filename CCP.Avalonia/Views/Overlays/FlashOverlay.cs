@@ -95,6 +95,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                 {
                     if (!_warnedEmpty) Log.Warning("Flash: no images found in {Path} and no online clips ready yet (remote on: {Remote})", ImagesPath(), FlashSourceRules.RemoteEnabled(CoreSettings.Current));
                     _warnedEmpty = true;
+                    ConditioningControlPanel.Services.EmiDesk.EmiOffers.AnnounceEmptyLibrary();   // WPF FlashService.cs:978
                     return;
                 }
 
