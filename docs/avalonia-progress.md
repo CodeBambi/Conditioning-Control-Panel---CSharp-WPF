@@ -1745,3 +1745,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/sync6-social-pages: +403
 - Friends page (drawer in page mode) and Leash page (WPF empty state) behind temporary You-door entries; Leaderboard opens on All-Time with no season countdown.
 - Chip tooltip carries the full name, HT box takes a pasted link; Lobby badge lease, Social medallion and Leash "?" stay needs-port (blockers named).
+
+## avalonia-port/sync6-home-layout: +797
+- Home: favorites drawer at the right edge, fold arrow pill (companion strip removed), one LVL chip, window opens at 1661 x 1002 and shrinks evenly (WindowFitRule moved to Core); 6 of 13 rows ported.
+- Still needs porting: hover bubbles, banner FX, marquee drum, rail icons/EMI label, Sparkle pill, animated logo.
