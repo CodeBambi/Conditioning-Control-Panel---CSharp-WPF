@@ -1773,3 +1773,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/sync6-companion-ai-page: +251
 - Companion > AI page: the AI pill opens it, and it shows the room's live Connection drawer, Behaviour and Triggers cells and memory diary, giving them back on hide. Rows 138 and 140 are ported; 136 is n/a (no ConversationPage on this head).
 - CompanionAiPageTests (fail-proven) plus a live Keincheck run.
+
+## avalonia-port/sync6-tonight-board-b: +651
+- Tonight Board: Waiting/Resume/Event providers on the Avalonia Home deck. Pure cards (git mv) and adapters are now in Core behind a `BillboardHead` seam both heads fill; tests are fail-proven.
+- Live/Board/Showcase, drawn art and animation polish are left for sync6-tonight-board-c (all 20 rows moved there).
