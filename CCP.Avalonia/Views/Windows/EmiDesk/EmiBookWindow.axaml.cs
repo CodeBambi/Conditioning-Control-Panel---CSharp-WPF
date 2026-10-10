@@ -339,6 +339,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         private static readonly FontFamily FaceFont =
             new("Noto Sans Mono, DejaVu Sans Mono, Consolas, monospace");
 
+        /// <summary>WPF BtnFirstShow: replay EMI's welcome show. Test seam.</summary>
+        internal Action ReplayShow = () => WelcomeShow.FirstShowService.Open();
+
         /// <summary>WPF BtnCompleteGuide: the website manual (EmiCodex.OpenManualInBrowser). Test seam.</summary>
         internal static Action OpenManual = ConditioningControlPanel.Avalonia.Views.Windows.Codex.OpenManualInBrowser;
 
@@ -346,6 +349,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         {
             _btnClose.Click += (_, _) => CloseBook();
             this.FindControl<Button>("BtnCompleteGuide")!.Click += (_, _) => OpenManual();
+            // WPF EmiBookWindow.xaml.cs:232: the book closes, then the welcome show opens.
+            this.FindControl<Button>("BtnFirstShow")!.Click += (_, _) => { _owner?.CloseBook(); ReplayShow(); };
             _btnPrev.Click += (_, _) => Step(-1);
             _btnNext.Click += (_, _) => Step(+1);
             _btnGo.Click += (_, _) => Go();
