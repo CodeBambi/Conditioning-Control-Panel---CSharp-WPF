@@ -64,6 +64,12 @@ namespace ConditioningControlPanel.Avalonia
             // The name is matched against every Control under the Views namespace (simple name
             // or full name). Until this existed the flag ignored its argument and always drew
             // AppShell, so 20 of the first 21 ported views had never been rendered by anything.
+            // --scale N (with --render-view / --render-all): render at N x DPI, e.g. --scale 2.
+            var scl = Array.IndexOf(args, "--scale");
+            if (scl >= 0 && scl + 1 < args.Length && double.TryParse(args[scl + 1], System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out var scale) && scale > 0)
+                RenderProof.Scale = scale;
+
             var rv = Array.IndexOf(args, "--render-view");
             if (rv >= 0)
             {

@@ -5,4 +5,5 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("CCP.Avalonia.Consent.Tests")]
 [assembly: InternalsVisibleTo("CCP.Avalonia.GeneralSettings.Tests")]
 [assembly: InternalsVisibleTo("CCP.Avalonia.Report.Tests")]
+[assembly: InternalsVisibleTo("CCP.Avalonia.Snapshot.Tests")]
 [assembly: InternalsVisibleTo("CCP.Avalonia.Tests")]

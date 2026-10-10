@@ -877,3 +877,67 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
 ## 2026-10-10: Vault gate card/PayPal checkout link (avalonia-port/sync6-gate-pay)
 - Mirrors WPF 750e76812 exactly (supervisor-approved, P44): same URL `https://app.cclabs.app/subscribe?plan={basic|prime}&from=panel`,
   same copy (`vaultgate_or_card`), opened only through ExternalOpener on a user click; tests use a fake launcher, never a real URL.
+## 2026-10-10: Companion > Personality / Permissions / Links without a v2 page (avalonia-port/sync6-companion-pages)
+- Question: WPF `5681c132a` gives the three Companion pills real pages that ADOPT the live room zones, because v2 collapses
+  the room. This head has no v2 ConversationPage: its Companion tab is the full room, so adopting would strip the visible
+  room; `CompanionPickerCard` is not ported either.
+- Options: A) port the three pages + KnowledgeLinksEditor, with an Avalonia-only seam handing the zones back to the room
+  when the Companion tab shows; B) zone pills that open the Companion tab scrolled to the zone (like playeyes/folders/ramp);
+  C) leave the rows needs-port until views-companion-v2-conversation lands.
+- Choice: B + C. Decided by: supervisor (ponytail: no throwaway seam; reparenting live zones is fragile).
+- Applied: `personality`/`permissions`/`companionlinks` map to CompanionTab; OnTabShown scrolls to PersonalityZone /
+  PermissionsZone / Workshop HER LIBRARY. Rows `5681c132a`, `f3a00a9dc` stay needs-port (folded into
+  views-companion-v2-conversation). The f3a00a9dc wheel relay is n/a here (Avalonia chains wheel notches natively).
+- Test: `Tests/CCP.Avalonia.Tests/CompanionZonePillsTests.cs` (each of the three reveals fail-proven, log:
+  ~/ccp-port/evidence/review-sync6-companion-pages/fail-proofs.log). The Library-cell assertion found that
+  `WorkshopAccordion.ExpandAndReveal(cell)` scrolled to the drawer, not the cell (body not laid out yet); it now lays out
+  the page first, which also fixes the hero Switch chip -> roster deep link.
+
+## 2026-10-10: reference-render CI, WPF and Avalonia side by side (avalonia-port/reference-render-ci)
+- Advised by: supervisor, user-approved.
+- Decision: a separate workflow, `.github/workflows/reference-render.yml` (build.yml untouched), renders every WPF
+  `Window`/`UserControl` on `windows-latest` (the only place WPF runs) and every Avalonia view with `--render-all`
+  on ubuntu, then `.github/scripts/pair-renders.py` pairs them per `docs/avalonia-parity.md` row into
+  `<row-id>.png` (WPF left, Avalonia right), `index.html`, `summary.json`, `_unpaired.txt`. Artifacts kept 30 days;
+  `~/ccp-port/bin/fetch-renders.sh <branch>` downloads the latest.
+- WPF side: `Tests/ConditioningControlPanel.Tests/WpfReferenceRender.cs`, opt-in on `CCP_REFERENCE_RENDER_DIR` (a
+  no-op otherwise, so the normal suite is unchanged). Reuses `WpfRenderHarness` (real App.xaml theme, STA thread) and
+  the suite's CCP_USERDATA_DIR sandbox; no `App.OnStartup`, so no services, network or devices. `App.Settings` is a
+  default `SettingsService` in that sandbox. Windows are never shown: their content is lifted into a host and drawn
+  offscreen (the LeashExplainRenderTests trick), at the design size or 1280x800; controls at their size or 900x600.
+  A type that throws or exceeds 30 s is a line in `_failures.txt`, never a failed run.
+- Pairing maps a file to its type by basename up to the first `.`, so shell partials pair `MainWindow` with
+  `MainShellWindow`; a type rendered on both heads wins (e.g.
+  `AchievementsTabView` on a MainWindow partial row), else the first file per side that has a render. These images are evidence for a reviewer, not a
+  verdict: a row still needs the ledger's Keincheck run to become `verified`.
+## 2026-10-10: Fluent UI System Icons replace glyphs and icon-emoji (avalonia-port/icons-infra, lane L0a)
+- User decision: every icon in CCP.Avalonia is a Fluent UI System Icon; WPF and the Core language files are unchanged.
+  Design: ~/ccp-port/evidence/oracle/fluent-icons.md (oracle-deep); package API: ~/ccp-port/evidence/icons/package-api.md.
+- Package `FluentIcons.Avalonia` 2.1.343 (MIT, ~5 MB, built for Avalonia 12.0; proven on 12.1.2 headless by
+  IconGlyphRenderTests), wrapped in one control `fx:IconGlyph`; only `Controls/Icons/*` names `FluentIcons.*`
+  (`IconKind`/`IconVariant` global aliases), so a bundled-font fallback edits one folder.
+- Defaults (supervisor-approved): extension glyphs for spiral + bubbles; the worker narrowed it to the spiral only, because
+  2.1.343 has Fluent BubbleMultiple (the oracle had flagged it missing) - revisit if it reads wrong;
+  EmiDesk pixel art kept; Chaster uses Key (the padlock means premium); user/custom session and preset icons stay
+  emoji (content); typographic stand-ins (✕ ✓ ▾ › ●) in scope except prose, bullets and PasswordChar.
+- Semantic brushes (`Theme/Icons.axaml`) carry the colour emoji used to (tier gold/violet, success, warn, danger,
+  gold, gem, fire; hearts use the live PinkBrush), >= 3:1 on SurfaceBg/PanelBg/DarkerBg. Parity rows of converted
+  surfaces read "divergent by decision: fluent-icons 2026-10-10".
+## 2026-10-10: No desktop notifications from tests or sandboxes (avalonia-port/no-desktop-notify-in-tests)
+- Question: the user saw a real "Someone just connected to your remote session." popup nobody caused.
+  `RemoteControlShellTests`' FakeRelay reports `controller_connected:true` -> `NotifyRemoteControllerJoined` ->
+  `OsNotifications.Show` -> org.freedesktop.Notifications on the user's session bus.
+- Options: A) gate on the existing sandbox signal (`SandboxNet.Active`, set when CorePaths honours CCP_USERDATA_DIR; the
+  same one ExternalOpener uses); B) a new env check; C) test-only DBUS_SESSION_BUS_ADDRESS (the gate does this too, but a
+  bare `dotnet test` does not).
+- Choice: A. Decided by: supervisor brief. `NotifyAsync` returns 0 (not delivered) in a sandbox, so `Decide` falls back to
+  the in-app toast / drop exactly as with no server; only `--notify-check` passes `live: true` (the deliberate probe).
+  `OsNotifications.Sink` is the test seam (honoured before D-Bus); `BusAttempts` counts real bus calls.
+- Other desktop side effects reviewed: `ExternalOpener` (xdg-open/Launcher) already sandbox-gated; `pactl` calls are
+  read-only lists; `parec`/`pw-record` mic capture only on a user-started mic feature; `AppUpdater` cmd.exe is Windows;
+  DataSettings relaunch is user-confirmed; the tray icon and `PortalPanicShortcut` run only on the real desktop path
+  (`CreateTray`/`StartPanicKey` are App-startup only, never in tests). Left unchanged: the portal binds a safety (panic)
+  shortcut and a kc live run is a deliberate desktop session; no notify-send/xdg-open elsewhere.
+- Test: `OsNotificationsTests.Sandbox_never_reaches_the_session_bus` (fail-proven: guard removed -> red) and
+  `RemoteControlShellTests` asserts the join raised exactly one notification via the Sink (fail-proven: call disabled -> red).
+  Log (run with DBUS_SESSION_BUS_ADDRESS=disabled:): ~/ccp-port/evidence/review-no-desktop-notify-in-tests/fail-proofs.log.
