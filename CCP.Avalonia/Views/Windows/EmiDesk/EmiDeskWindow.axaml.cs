@@ -2474,6 +2474,20 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                 StopChromeGrace();
                 TearDownReactions();
                 TearDownVox();
+                // hunt3 IC3: off the service's moment event, and the timers no tear-down above stops.
+                if (_askHooked)
+                {
+                    _askHooked = false;
+                    KeyDown -= OnAskKeyDown;
+                    EmiDeskService.Instance.MomentFired -= OnMomentForAsk;
+                }
+                _askTimer?.Stop();
+                _fxSweepTimer?.Stop();
+                _holdTimer?.Stop();
+                _propTimer?.Stop();
+                _weightShiftTween?.Stop();
+                _moveScaleTween?.Stop();
+                _moveShiftTween?.Stop();
             }
             catch (Exception ex)
             {
