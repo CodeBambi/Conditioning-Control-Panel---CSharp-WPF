@@ -40,7 +40,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
         /// <summary>WPF BootFailedThisSession: the door's own "did not start" memory for this run of the app.</summary>
         internal static bool ArcademyBootFailedThisSession { get; private set; }
 
-        private bool _arcPanicSuspended, _arcExiting, _arcVideoSuspended, _arcVideoHooked;
+        private bool _arcPanicSuspended, _arcExiting, _arcVideoSuspended, _arcVideoHooked, _arcSafetyOpen;
         private DateTime _arcLastPanicPressUtc = DateTime.MinValue;
         private DateTime _arcLastProgressUtc = DateTime.UtcNow;
         private DispatcherTimer? _arcExitWatchdog, _arcBootWatch, _arcVideoWatch;
@@ -78,14 +78,25 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             try { Platform.FriendsHead.Service?.EnterActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Arcademy); }
             catch (Exception ex) { Log.Debug("[Game] arcademy friends presence: {E}", ex.Message); }
             // The desk mascot hears arcademyOpened / arcademyClosed on EmiDeskBus (GameWindow.Emi.cs).
-            // SEAM(emi-desk): WPF also calls NoteOpen and FarewellForArcademy; neither is called here yet.
-            // SEAM(shell): WPF tucks the main window into the tray while the Arcademy is up.
+            // NoteOpen + her goodbye come first (GameWindow.Arcademy.Shell.cs), as WPF orders them.
+            EmiArcademyOpen();
             ArmArcademyBootDeadline();
             HookArcademyVideo(true);
+            HookArcademyBrowserVideo(true);
+            // The panel is tucked away while the Arcademy owns the screen; Closed brings it back.
+            _arcSafetyOpen = true;
+            Closed += (_, _) => CloseArcademySafety();   // a page that never said ready still closes through here
+            TuckShellForArcademy();
         }
 
         private void CloseArcademySafety()
         {
+            if (!_arcSafetyOpen) return;   // once: CloseArcademy and the window's own Closed both land here
+            _arcSafetyOpen = false;
+            // First, and on its own: whatever else fails below, the panel comes back.
+            RestoreShellAfterArcademy();
+            StopArcademyFarewell(dismissNow: true);
+            HookArcademyBrowserVideo(false);
             try { Platform.FriendsHead.Service?.LeaveActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Arcademy); }
             catch (Exception ex) { Log.Debug("[Game] arcademy friends presence: {E}", ex.Message); }
             CancelArcademyExitWatchdog();
@@ -257,8 +268,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
 
         /// <summary>A mandatory video fully covers the class: the page drops every effect and pauses.
         /// The port's scheduler raises the start only, so the end is watched (1 s) while the suspend stands.
-        /// SEAM(browser-video): WPF also suspends for a browser video takeover (BrowserMediaService
-        /// PlayingChanged under ProtectBrowserVideoPlayback); the port has no browser media service.</summary>
+        /// The browser video takeover is the same freeze on its own signal (GameWindow.Arcademy.Shell.cs).</summary>
         private void HookArcademyVideo(bool on)
         {
             try

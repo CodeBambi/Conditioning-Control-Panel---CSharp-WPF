@@ -115,6 +115,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (CoreSettings.Current is { } s) Scheduler.NoteManualStop(s, DateTime.Now);
         }
 
+        /// <summary>WPF MinimizeToTrayForChaos: a game tucks the panel away. False = no tray here, nothing was hidden.</summary>
+        internal bool MinimizeToTrayForChaos() { if (Tray is null || !TrayHostPresent()) return false; Hide(); HideAvatarTube(); return true; }
+
         private void MinimizeToTrayForScheduler()
         {
             if (Tray is null || !TrayHostPresent()) return;
