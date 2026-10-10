@@ -998,6 +998,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         private void OnBodyPointerPressed(object? sender, PointerPressedEventArgs e)
         {
             if (!e.GetCurrentPoint(_bodyRoot).Properties.IsLeftButtonPressed) return;
+            if (PresentationActive) { e.Handled = true; return; }   // WPF: the show owns her
             if (InputLocked || _transiting) { e.Handled = true; return; }
             try
             {
@@ -1025,6 +1026,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
 
         private void OnBodyPointerMoved(object? sender, PointerEventArgs e)
         {
+            if (PresentationActive) { e.Handled = true; return; }   // WPF: the show owns her
             try
             {
                 if (!_dragging)
@@ -1057,6 +1059,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
 
         private void OnBodyPointerReleased(object? sender, PointerReleasedEventArgs e)
         {
+            if (PresentationActive) { e.Handled = true; return; }   // WPF: the show owns her
             try
             {
                 if (e.InitialPressMouseButton == MouseButton.Right) { OnBodyRightClick(e); return; }
@@ -1215,6 +1218,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
 
         private void OnCloseClick(object? sender, RoutedEventArgs e)
         {
+            // WPF :1922: her x during the show stops the show, then sends her away.
+            if (PresentationActive) { e.Handled = true; _stopPresentation?.Invoke(); Dismiss(); return; }
             try
             {
                 e.Handled = true;
@@ -1466,6 +1471,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         private void OnGripPointerPressed(object? sender, PointerPressedEventArgs e)
         {
             if (!e.GetCurrentPoint(_resizeGrip).Properties.IsLeftButtonPressed) return;
+            if (PresentationActive) { e.Handled = true; return; }   // WPF: the show owns her
             if (InputLocked || _transiting) { e.Handled = true; return; }
             try
             {
@@ -2358,11 +2364,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         {
             try
             {
+                // WPF Fx.cs :447: a step scheduled before the show began (or ended) never lands in the other world.
+                int epoch = _presentationEpoch;
                 DispatcherTimer.RunOnce(() =>
                 {
                     try
                     {
                         if (_closingForGood) return;
+                        if (epoch != _presentationEpoch) return;
                         act();
                     }
                     catch (Exception ex)
