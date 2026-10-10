@@ -15,26 +15,32 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
     /// milestones (MainWindow.Patreon.cs ChkShareAchievements_Changed / ChkShareLevelUps_Changed) and
     /// Goon Game rich presence (ChkGoonRichPresence_Changed, local only by contract).</para>
     ///
-    /// <para><b>What is not, and why.</b> On a consent surface the push is the half that matters:
-    ///  - SEAM(core sync): Allow DMs, Share profile picture, Show online status, the public real
-    ///    avatar and the two Goon share flags each push to the server on change in WPF
-    ///    (<c>App.ProfileSync.SyncProfileAsync</c>) so a REVOKE lands at once. Core
-    ///    <c>SyncPush.Sent</c> does not carry those fields (SyncBody.Field has them: AllowDiscordDm,
-    ///    ShowOnlineStatus, ShareProfilePicture, PublicShareAvatar, GoonShareAvatar, GoonShareDm). A
-    ///    local write alone would read "not shared" over data the server still holds, so these six
-    ///    stay unwired until SyncPush sends them.
-    ///  - SEAM(discord rpc): Rich Presence and Show level drive <c>App.DiscordRpc</c>, which this head
-    ///    does not have. Rich Presence must also refuse to arm without
-    ///    <c>Current.HasLinkedDiscord</c> (WPF MainWindow.AccountShell.cs:279-300).
-    ///  - SEAM(account): the Login / Link Discord / Logout button needs the sign-in, link and logout
-    ///    flows that live in Views/Controls/AppSettings/AccountSettingsSection (WPF
-    ///    BtnDiscordTabLogin_Click, MainWindow.Browser.cs:1366).</para>
+    /// <para><b>Page wave k2 (2026-10-10).</b> The six consent switches (Allow DMs, Share profile
+    /// picture, Show online status, the public real avatar, the two Goon share flags) write, save and
+    /// push through Core <c>SyncPush.PushPrivacyAsync</c>, so a REVOKE lands at once; the flags ride
+    /// every push until a sync delivers them. Rich Presence refuses to arm without
+    /// <c>Current.HasLinkedDiscord</c> (WPF MainWindow.AccountShell.cs:279-300), and it and Show level
+    /// write their setting. The Login / Link Discord / Logout button runs AccountSettingsSection's
+    /// flows (WPF BtnDiscordTabLogin_Click, MainWindow.Browser.cs:1366).
+    ///  - SEAM(discord rpc): <c>App.DiscordRpc</c> is not on this head, so the two presence settings
+    ///    are stored for the presence client and drive nothing yet.
+    ///  - not ported: the server's values are not adopted on profile load (WPF does), and the Home
+    ///    quick Rich Presence toggle repaints from the setting only on its own next refresh.</para>
     ///
     /// The ctor uses <c>AvaloniaXamlLoader.Load</c>, so controls are reached with FindControl.
     /// </summary>
     public partial class ProfilePrivacyPanel : UserControl
     {
         private bool _painting;
+
+        /// <summary>The push behind the six consent switches (WPF App.ProfileSync.SyncProfileAsync on change, so a
+        /// revoke lands at once). Tests swap it.</summary>
+        internal static System.Func<System.Threading.Tasks.Task> PushPrivacy = () =>
+            Platform.AccountSeed.Sync?.PushPrivacyAsync() ?? System.Threading.Tasks.Task.CompletedTask;
+
+        /// <summary>The "Discord not linked" box of the Rich Presence guard. Tests swap it.</summary>
+        internal System.Func<Window?, string, string, System.Threading.Tasks.Task> Tell = (owner, title, message) =>
+            owner is { IsVisible: true } ? Views.Dialogs.MessageDialog.ShowAsync(owner, title, message) : System.Threading.Tasks.Task.CompletedTask;
 
         public ProfilePrivacyPanel()
         {
@@ -45,10 +51,33 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
             Wire("ChkDiscordTabShareAchievements", s => s.DiscordShareAchievements, (s, v) => s.DiscordShareAchievements = v);
             Wire("ChkDiscordTabShareLevelUps", s => s.DiscordShareLevelUps, (s, v) => s.DiscordShareLevelUps = v);
             Wire("ChkGoonRichPresence", s => s.GoonRichPresence, (s, v) => s.GoonRichPresence = v);   // never synced
+
+            // The six consent switches: write, save, push (WPF MainWindow.Patreon.cs ChkAllowDiscordDm_Changed,
+            // ChkShareProfilePicture_Changed, ChkShowOnlineStatus_Changed, ChkPublicShareRealAvatar_Changed,
+            // ChkGoonShareAvatar_Changed, ChkGoonShareDiscordDm_Changed).
+            Wire("ChkDiscordTabShowOnline", s => s.ShowOnlineStatus, (s, v) => s.ShowOnlineStatus = v, push: true);
+            Wire("ChkDiscordTabAllowDm", s => s.AllowDiscordDm, (s, v) => s.AllowDiscordDm = v, push: true);
+            Wire("ChkDiscordTabSharePfp", s => s.ShareProfilePicture, (s, v) => s.ShareProfilePicture = v, push: true);
+            Wire("ChkPublicShareRealAvatar", s => s.PublicShareRealAvatar, (s, v) => s.PublicShareRealAvatar = v, push: true);
+            Wire("ChkGoonShareAvatar", s => s.GoonShareAvatar, (s, v) => s.GoonShareAvatar = v, push: true);
+            Wire("ChkGoonShareDiscordDm", s => s.GoonShareDiscordDm, (s, v) => s.GoonShareDiscordDm = v, push: true);
+
+            // WPF ChkShowLevelInPresence_Changed: the setting (the presence client reads it; see the class note).
+            Wire("ChkDiscordTabShowLevel", s => s.DiscordShowLevelInPresence, (s, v) => s.DiscordShowLevelInPresence = v);
+
+            // WPF ChkDiscordRichPresence_Changed (MainWindow.AccountShell.cs:279): never armed without a linked
+            // Discord, so an anonymous invite-code account cannot expose itself by accident.
+            Wire("ChkDiscordTabRichPresence", s => s.DiscordRichPresenceEnabled, (s, v) => s.DiscordRichPresenceEnabled = v,
+                refuseOn: s => !s.HasLinkedDiscord
+                    ? ("Discord Not Linked", Loc.Get("msg_discord_rich_presence_requires_a_linked_disco"))
+                    : null);
+
+            if (this.FindControl<Button>("BtnDiscordTabLogin") is { } login) login.Click += (_, _) => _ = LoginAsync(login);
         }
 
         private void Wire(string name, System.Func<global::ConditioningControlPanel.Models.AppSettings, bool> read,
-            System.Action<global::ConditioningControlPanel.Models.AppSettings, bool> write)
+            System.Action<global::ConditioningControlPanel.Models.AppSettings, bool> write, bool push = false,
+            System.Func<global::ConditioningControlPanel.Models.AppSettings, (string Title, string Message)?>? refuseOn = null)
         {
             if (this.FindControl<CheckBox>(name) is not { } box) return;
             box.IsCheckedChanged += (_, _) =>
@@ -57,12 +86,46 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
                 var s = CoreSettings.Current;
                 var on = box.IsChecked == true;
                 if (read(s) == on) return;
+                if (on && refuseOn?.Invoke(s) is { } refusal)
+                {
+                    _painting = true;
+                    try { box.IsChecked = false; } finally { _painting = false; }
+                    _ = Tell(TopLevel.GetTopLevel(this) as Window, refusal.Title, refusal.Message);
+                    return;
+                }
                 write(s, on);
                 CoreSettings.Save();
+                Serilog.Log.Information("Privacy switch {Name} changed: {On}", name, on);
+                if (push) _ = PushSafe();
                 // The rail's "N on, M off" line counts these.
                 if (TopLevel.GetTopLevel(this) is Window { Owner: Views.Windows.MainShellWindow shell })
                     shell.UpdateProfileSharingSummary();
             };
+        }
+
+        private static async System.Threading.Tasks.Task PushSafe()
+        {
+            try { await PushPrivacy(); }
+            catch (System.Exception ex) { Serilog.Log.Warning(ex, "Privacy switch: immediate sync push failed"); }
+        }
+
+        /// <summary>WPF BtnDiscordTabLogin_Click (MainWindow.Browser.cs:1366): signed in with Discord = log it out
+        /// (the whole account when it was the last provider); an account without Discord = link it; no account =
+        /// the sign-in dialog. The flows are AccountSettingsSection's. The sign-in and link dialogs belong to the
+        /// shell, so this dialog steps aside for them first.</summary>
+        internal async System.Threading.Tasks.Task LoginAsync(Button button)
+        {
+            try
+            {
+                var host = TopLevel.GetTopLevel(this) as Window;
+                var shell = host as Views.Windows.MainShellWindow ?? host?.Owner as Views.Windows.MainShellWindow;
+                if (Platform.AccountSeed.Discord == null || shell == null) return;
+                bool signedIn = Platform.AccountSeed.Discord.IsAuthenticated;
+                if (!signedIn && host is Views.Dialogs.ProfilePrivacyDialog dialog) dialog.Close();
+                await AppSettings.AccountSettingsSection.ProviderButtonAsync("discord", shell, signedIn ? null : button);
+            }
+            catch (System.Exception ex) { Serilog.Log.Warning(ex, "Privacy panel Discord button failed"); }
+            finally { Refresh(); }
         }
 
         /// <summary>The panel joins a window only when its dialog opens, after the shell's offline
@@ -85,8 +148,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
                 status.Text = linked ? Loc.GetF("label_connected_as_0", discord!.Username) : Loc.Get("label_not_connected");
             if (this.FindControl<TextBlock>("TxtDiscordTabInfo") is { } info)
                 info.Text = Loc.Get(linked ? "label_discord_account_linked" : "label_link_discord_for_community_features");
-            if (this.FindControl<Button>("BtnDiscordTabLogin")?.Content is TextBlock word)
-                word.Text = Loc.Get(linked ? "btn_logout" : string.IsNullOrEmpty(s.UnifiedId) ? "btn_login" : "btn_link_discord_2");
+            if (this.FindControl<Button>("BtnDiscordTabLogin") is { } login)
+            {
+                // The link flow swaps the content for its "Connecting" word; put a TextBlock back either way.
+                var text = Loc.Get(linked ? "btn_logout" : string.IsNullOrEmpty(s.UnifiedId) ? "btn_login" : "btn_link_discord_2");
+                if (login.Content is TextBlock word) word.Text = text;
+                else login.Content = new TextBlock { Text = text };
+            }
 
             _painting = true;
             try
