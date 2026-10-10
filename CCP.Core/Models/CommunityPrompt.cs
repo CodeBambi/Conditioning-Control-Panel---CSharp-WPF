@@ -145,7 +145,7 @@ namespace ConditioningControlPanel.Models
         /// </summary>
         public static CommunityPrompt FromCurrentSettings(string name, string author, string description)
         {
-            var currentSettings = App.Settings?.Current?.CompanionPrompt ?? CompanionPromptSettings.GetDefaults();
+            var currentSettings = CoreSettings.Service?.Current?.CompanionPrompt ?? CompanionPromptSettings.GetDefaults();
 
             return new CommunityPrompt
             {

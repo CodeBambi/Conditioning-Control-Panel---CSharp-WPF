@@ -22,7 +22,8 @@ public sealed class SessionRunnerTests : IDisposable
     private const string Id = "runner-golden";
     private static readonly string[] AllowedSettingsChanges =
         { "TotalSessions", "RecentSessionStartsUtc", "LastSessionModId", "SameModRun",
-          "TotalConditioningMinutes" };   // the engine stop credits the run (ConditioningTime, WPF StopConditioningTimeTracker)
+          "TotalConditioningMinutes",     // the engine stop credits the run (ConditioningTime, WPF StopConditioningTimeTracker)
+          "SeasonFeatureUse" };           // which features the session engaged (WPF SessionEngine.cs:297 TrackFeature)
     private static readonly string[] Timestamps = { "started_at", "ended_at", "timestamp", "session_time_seconds" };
 
     private readonly SessionLogService _logs = new();
