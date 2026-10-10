@@ -91,7 +91,7 @@ public sealed class FirstRunGateDeadClickTests
 
         shell.ShowTab("settings");
         Card("CardVault").RaiseEvent(new RoutedEventArgs(FeatureCard.ClickEvent));
-        Assert.Equal("exclusives", shell.CurrentTab);
+        Assert.Equal("premium", shell.CurrentTab);
 
         shell.OpenNavSection("library");   // the Media Log is a Library launcher pill now
         shell.PageStrip!.PillFor("medialog")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));

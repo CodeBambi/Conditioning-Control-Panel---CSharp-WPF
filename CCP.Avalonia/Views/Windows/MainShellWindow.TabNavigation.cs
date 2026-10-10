@@ -91,7 +91,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             ["lockdown"] = "LockdownTab",        ["blinktrainer"] = "BlinkTrainerTab",
             ["shelistening"] = "SheListeningTab", ["gradedintake"] = "GradedIntakeTab",
             ["appsettings"] = "AppSettingsTab",  ["spiral"] = "SpiralTab",
-            ["exclusives"] = "ExclusivesTab", ["chaster"] = "ChasterTab",
+            ["premium"] = "ExclusivesTab", ["chaster"] = "ChasterTab",
             ["friends"] = "FriendsTab",          ["leash"] = "LeashTab",
             // Nav rework zone pills (WPF MainWindow.TabNavigation.cs:521/572/666): places inside a page.
             ["playeyes"] = "PlayTab", ["playsessions"] = "PlayTab", ["folders"] = "AssetsTab", ["ramp"] = "StudioTab",
@@ -112,7 +112,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// deliberately NOT an entry here.</para>
         /// </summary>
         private static readonly Dictionary<string, string> BarkTabAliases =
-            new(StringComparer.OrdinalIgnoreCase) { ["play"] = "lab" };
+            new(StringComparer.OrdinalIgnoreCase)
+            {
+                ["play"] = "lab",
+                // WPF :93 (polish 12): a rule keyed `tab_eq: "exclusives"` still hears the vault opening.
+                ["premium"] = "exclusives",
+            };
+
+        /// <summary>Old keys that land on their new home without a word (WPF MainWindow.SectionChrome.cs
+        /// SilentRedirectKeys): "exclusives" is the Premium page again, Home > Premium (Core NavSections.Redirects).</summary>
+        internal static readonly string[] SilentRedirectKeys = { "exclusives" };
 
         /// <summary>
         /// Shows one tab and hides the rest, and lights the rail row that owns it. Case-insensitive
@@ -123,6 +132,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         internal void ShowTab(string? tab)
         {
             tab = (tab ?? string.Empty).ToLowerInvariant();
+            // WPF :228 TryRedirectSilentTab, at the door before anything counts the old key.
+            if (Array.IndexOf(SilentRedirectKeys, tab) >= 0
+                && Services.UI.NavSections.Redirects.TryGetValue(tab, out var moved)) { ShowTab(moved.Tab); return; }
             // The dashboard's RECENT rail, at the door before the intercepts (WPF :121), so a
             // window key counts as an open like any tab (MainShellWindow.FavoritesRail.cs).
             NoteDestinationOpened(tab);
@@ -221,7 +233,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     case "friends": Named<Tabs.FriendsTabView>("FriendsTab")?.OnShown(); break;
 
                     // WPF MainWindow.Exclusives.cs RefreshExclusivesTab "on tab show": gates can move between visits.
-                    case "exclusives": RefreshExclusivesTab(); break;
+                    case "premium": RefreshExclusivesTab(); break;
                     // WPF MainWindow.TabNavigation.cs:588-593 (AnimateTabIn is the header's ponytail).
                     case "chaster": Named<Tabs.ChasterTabView>("ChasterTab")?.OnTabShown(); break;
                     // WPF MainWindow.TabNavigation.cs:433-438: rescan the library, re-sync presets, AssetsFx entrance.
@@ -250,7 +262,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>WPF MaybeShowFeatureIntro (MainWindow.TabNavigation.cs:1094): through the
         /// startup ladder, so a quiet window turns the card into an Inbox row. ponytail: no
         /// FirstShowService on this head, so WPF's first-show early return has nothing to read.</summary>
-        private void MaybeShowFeatureIntro(string key, string? doorTab = null)
+        internal void MaybeShowFeatureIntro(string key, string? doorTab = null)
         {
             try { FeatureIntroPopup.ShowWhenStartupSettles(key, this, NavDoorForTab(doorTab ?? key)); }
             catch (Exception ex) { Serilog.Log.Warning(ex, "Feature intro hook failed for {Key}", key); }
