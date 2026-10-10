@@ -20,6 +20,9 @@ namespace ConditioningControlPanel
         public static volatile Action<double>? IntensityProvider;
         public static volatile Func<int>? ClipCountProvider;
         public static volatile Action? ReloadClipsProvider;
+        /// <summary>WPF BrainDrainService.RefreshVolume: re-read the volume settings onto a clip that
+        /// is ALREADY playing (the volume slider, #1104).</summary>
+        public static volatile Action? RefreshVolumeProvider;
 
         public static void Start() { try { StartProvider?.Invoke(); } catch { } }
         public static void Stop() { try { StopProvider?.Invoke(); } catch { } }
@@ -27,6 +30,7 @@ namespace ConditioningControlPanel
         public static void SetIntensity(double value) { try { IntensityProvider?.Invoke(value); } catch { } }
         public static int ClipCount { get { try { return ClipCountProvider?.Invoke() ?? 0; } catch { return 0; } } }
         public static void ReloadClips() { try { ReloadClipsProvider?.Invoke(); } catch { } }
+        public static void RefreshVolume() { try { RefreshVolumeProvider?.Invoke(); } catch { } }
     }
 
     /// <summary>The pure numbers of WPF BrainDrainService (same values).</summary>

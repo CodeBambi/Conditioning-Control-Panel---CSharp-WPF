@@ -254,3 +254,59 @@ public sealed class BrainDrainOverlayTests
         });
     }
 }
+
+/// <summary>X2: the Brain Drain volume slider turns a clip that is already playing (WPF RefreshVolume).</summary>
+[Collection(RunsAloneCollection.Name)]
+public sealed class BrainDrainLiveVolumeTests
+{
+    private sealed class FakeVoice : ConditioningControlPanel.Avalonia.Platform.MindWipePlayer.IVoice
+    {
+        public double Last = -1;
+        public bool Disposed;
+        public double Volume { set => Last = value; }
+        public void Dispose() => Disposed = true;
+    }
+
+    [Fact]
+    public void The_playing_clip_takes_the_new_volume_and_an_idle_player_is_left_alone()
+    {
+        var s = CoreSettings.Current;
+        var (enabled, master, volume) = (s.BrainDrainEnabled, s.MasterVolume, s.BrainDrainVolume);
+        var oldProvider = CoreBrainDrain.RefreshVolumeProvider;
+        var voice = new FakeVoice();
+        double startedAt = -1;
+        var player = new ConditioningControlPanel.Avalonia.Platform.BrainDrainPlayer(
+            (clip, vol, loop, done) => { startedAt = vol; return voice; }, roll: () => 0.0);
+        try
+        {
+            player.RefreshVolume();                       // nothing playing: nothing to turn
+            Assert.Equal(-1, voice.Last);
+
+            s.BrainDrainEnabled = true; s.MasterVolume = 100; s.BrainDrainVolume = 80;
+            player.Start();
+            typeof(ConditioningControlPanel.Avalonia.Platform.BrainDrainPlayer)
+                .GetField("_clips", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+                .SetValue(player, new[] { "clip.mp3" });
+            player.Intensity = 100;
+            for (var i = 0; i < 2000 && startedAt < 0; i++) player.Tick();
+            Assert.Equal(0.8, startedAt, 3);
+
+            CoreBrainDrain.RefreshVolumeProvider = player.RefreshVolume;
+            s.BrainDrainVolume = 25;
+            CoreBrainDrain.RefreshVolume();               // what the card's slider calls
+            Assert.Equal(0.25, voice.Last, 3);
+
+            s.MasterVolume = 50;
+            CoreBrainDrain.RefreshVolume();
+            Assert.Equal(0.125, voice.Last, 3);
+        }
+        finally
+        {
+            player.Stop();
+            Assert.True(voice.Disposed || startedAt < 0);
+            CoreBrainDrain.RefreshVolumeProvider = oldProvider;
+            s.BrainDrainEnabled = enabled; s.MasterVolume = master; s.BrainDrainVolume = volume;
+            CoreSettings.SaveImmediate();
+        }
+    }
+}
