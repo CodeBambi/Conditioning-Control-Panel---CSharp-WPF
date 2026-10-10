@@ -88,10 +88,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// (SpiralOverlay.ReleaseAllHolds). Tests swap it.</summary>
         internal static Action StopEmiRain { get; set; } = EmiDesk.EmiDeskService.StopRain;
 
+        /// <summary>EMI's own spiral hold (owner "emi") lets go on every panic route too, the ones a lock
+        /// card or the palette consumes included (no stop pass runs there). Nobody else's hold is touched.
+        /// Tests swap it.</summary>
+        internal static Action ReleaseEmiSpiral { get; set; } =
+            () => Overlays.SpiralOverlay.Release(EmiDesk.EmiDeskService.EmiOwner, MainShellWindow.Current);
+
         internal static void ArmSafetyHold()
         {
             try { StopEmiRain(); }
             catch (Exception ex) { Serilog.Log.Debug(ex, "Panic: EMI rain stop failed"); }
+            try { ReleaseEmiSpiral(); }
+            catch (Exception ex) { Serilog.Log.Debug(ex, "Panic: EMI spiral release failed"); }
             ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("panicPressed");   // WPF MainWindow.xaml.cs:1585: a hold with a five minute silence tail, armed first
             try { App.Achievements?.TrackPanicPressed(); } catch { /* WPF MainWindow.xaml.cs:1849: the relapse window opens */ }
             try { SafetyHold(); }
@@ -152,10 +160,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         /// <summary>Stops every surface in order. One failing stop never skips the rest. Never throws.</summary>
-        internal static void StopAll(string reason, MainShellWindow? shell = null)
+        /// <param name="holdArmed">The caller already ran <see cref="ArmSafetyHold"/> for this press (the
+        /// panic key arms it in its first lines, before the rungs that return early): arm once, not twice
+        /// (hunt3 IC8: EMI heard "panicPressed" twice a press).</param>
+        internal static void StopAll(string reason, MainShellWindow? shell = null, bool holdArmed = false)
         {
             Serilog.Log.Information("Panic: stopping every surface ({Reason})", reason);
-            ArmSafetyHold();
+            if (!holdArmed) ArmSafetyHold();
             SwitchOffKeywordTriggers();
             shell ??= MainShellWindow.Current;
             foreach (var s in All)
