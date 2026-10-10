@@ -5,7 +5,7 @@ usage: pair-renders.py <parity.md> <wpf-dir> <avalonia-dir> <out-dir>
 
 Reads docs/avalonia-parity.md rows (id | WPF file(s) | Avalonia file(s) | status | notes), maps
 each backticked file to a type name (basename up to the first '.', so MainWindow.Foo.cs ->
-MainWindow and MainShellWindow.Foo.cs -> MainShellWindow), takes the first one per side that has a
+MainWindow and MainShellWindow.Foo.cs -> MainShellWindow), prefers a type rendered on both heads, else the first one per side that has a
 <TypeName>.png render, and writes <out>/<row-id>.png = WPF left | Avalonia right. Also writes
 _unpaired.txt (renders no row used), index.html and summary.json. Needs Pillow.
 """
@@ -81,8 +81,11 @@ def main(parity, wpf_dir, ava_dir, out_dir):
     f = font(14)
     summary = {"wpf_renders": len(wpf), "avalonia_renders": len(ava), "rows": []}
     for rid, ws, as_, status in rows(parity):
-        w = next((s for s in ws if s in wpf), None)
-        a = next((s for s in as_ if s in ava), None)
+        # A type rendered on both heads (e.g. AchievementsTabView on a MainWindow.AchievementsTab row)
+        # beats the main window; otherwise the first file per side that has a render.
+        both = next((s for s in ws + as_ if s in wpf and s in ava), None)
+        w = both or next((s for s in ws if s in wpf), None)
+        a = both or next((s for s in as_ if s in ava), None)
         if not w and not a:
             continue
         used_w.add(w)

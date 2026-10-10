@@ -78,11 +78,12 @@ public class WpfReferenceRender
                 continue;
             }
 
-            var ctor = type.GetConstructors().FirstOrDefault(c => c.GetParameters().All(p => p.IsOptional));
+            // Fewest parameters first; required ones get "" / default / null (see RenderOne).
+            var ctor = type.GetConstructors().OrderBy(c => c.GetParameters().Count(p => !p.IsOptional)).FirstOrDefault();
             if (ctor == null)
             {
-                failures.Add($"{name}: no parameterless constructor");
-                index[name] = new { file = (string?)null, ok = false, error = "no parameterless constructor" };
+                failures.Add($"{name}: no public constructor");
+                index[name] = new { file = (string?)null, ok = false, error = "no public constructor" };
                 continue;
             }
 
@@ -118,7 +119,11 @@ public class WpfReferenceRender
 
     private static (int, int) RenderOne(ConstructorInfo ctor, string path)
     {
-        var args = ctor.GetParameters().Select(p => p.HasDefaultValue ? p.DefaultValue : null).ToArray();
+        var args = ctor.GetParameters().Select(p =>
+            p.HasDefaultValue ? p.DefaultValue
+            : p.ParameterType == typeof(string) ? ""
+            : p.ParameterType.IsValueType ? Activator.CreateInstance(p.ParameterType)
+            : null).ToArray();
         var view = (FrameworkElement)ctor.Invoke(args);
 
         FrameworkElement root;
@@ -159,8 +164,14 @@ public class WpfReferenceRender
     private static int Size(double design, int fallback) =>
         double.IsNaN(design) || design < 1 || double.IsInfinity(design) ? fallback : (int)Math.Ceiling(design);
 
-    private static string FirstLine(Exception ex) =>
-        $"{ex.GetType().Name}: {ex.Message}".Split('\n')[0].Trim();
+    /// <summary>Type, message and the first product frame - enough to tell a harness gap from a bug.</summary>
+    private static string FirstLine(Exception ex)
+    {
+        var frame = (ex.StackTrace ?? "").Split('\n')
+            .FirstOrDefault(l => l.Contains("ConditioningControlPanel.", StringComparison.Ordinal)
+                                 && !l.Contains(".Tests.", StringComparison.Ordinal))?.Trim();
+        return $"{ex.GetType().Name}: {ex.Message}".Split('\n')[0].Trim() + (frame == null ? "" : " | " + frame);
+    }
 
     private static IEnumerable<Type> Loadable(Assembly a)
     {
