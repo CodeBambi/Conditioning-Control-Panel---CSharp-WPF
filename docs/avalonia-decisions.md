@@ -910,3 +910,16 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
   `MainShellWindow`; a type rendered on both heads wins (e.g.
   `AchievementsTabView` on a MainWindow partial row), else the first file per side that has a render. These images are evidence for a reviewer, not a
   verdict: a row still needs the ledger's Keincheck run to become `verified`.
+## 2026-10-10: Fluent UI System Icons replace glyphs and icon-emoji (avalonia-port/icons-infra, lane L0a)
+- User decision: every icon in CCP.Avalonia is a Fluent UI System Icon; WPF and the Core language files are unchanged.
+  Design: ~/ccp-port/evidence/oracle/fluent-icons.md (oracle-deep); package API: ~/ccp-port/evidence/icons/package-api.md.
+- Package `FluentIcons.Avalonia` 2.1.343 (MIT, ~5 MB, built for Avalonia 12.0; proven on 12.1.2 headless by
+  IconGlyphRenderTests), wrapped in one control `fx:IconGlyph`; only `Controls/Icons/*` names `FluentIcons.*`
+  (`IconKind`/`IconVariant` global aliases), so a bundled-font fallback edits one folder.
+- Defaults (supervisor-approved): extension glyphs for spiral + bubbles; the worker narrowed it to the spiral only, because
+  2.1.343 has Fluent BubbleMultiple (the oracle had flagged it missing) - revisit if it reads wrong;
+  EmiDesk pixel art kept; Chaster uses Key (the padlock means premium); user/custom session and preset icons stay
+  emoji (content); typographic stand-ins (✕ ✓ ▾ › ●) in scope except prose, bullets and PasswordChar.
+- Semantic brushes (`Theme/Icons.axaml`) carry the colour emoji used to (tier gold/violet, success, warn, danger,
+  gold, gem, fire; hearts use the live PinkBrush), >= 3:1 on SurfaceBg/PanelBg/DarkerBg. Parity rows of converted
+  surfaces read "divergent by decision: fluent-icons 2026-10-10".

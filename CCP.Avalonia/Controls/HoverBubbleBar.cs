@@ -30,8 +30,9 @@ namespace ConditioningControlPanel.Avalonia.Controls
     /// layout stays 34 px and nothing beside it moves. A ToggleButton child (the Rich Presence
     /// CheckBox) is lit while checked. Every 9 s one bubble (round robin) pulses to 1.15 under
     /// AllowAmbientLoops; Motion Off = instant states. Children without a Glyph are left alone.
-    /// Head difference: WPF draws Segoe MDL2 glyphs, which Linux has no font for; the bubbles carry
-    /// the colour emoji the old pills already used (CLAUDE.md: Avalonia renders them natively).
+    /// Head difference: WPF draws Segoe MDL2 glyphs, which Linux has no font for; the bubbles draw
+    /// Fluent icons through IconGlyph: <see cref="IconProperty"/>, or the <see cref="GlyphProperty"/>
+    /// emoji mapped through IconMap. A lit switch wears the Filled variant.
     /// </summary>
     public sealed class HoverBubbleBar : StackPanel
     {
@@ -46,6 +47,12 @@ namespace ConditioningControlPanel.Avalonia.Controls
             AvaloniaProperty.RegisterAttached<HoverBubbleBar, Control, string>("Glyph", "");
         public static string GetGlyph(Control o) => o.GetValue(GlyphProperty);
         public static void SetGlyph(Control o, string v) => o.SetValue(GlyphProperty, v);
+
+        /// <summary>The bubble's Fluent icon; wins over <see cref="GlyphProperty"/>.</summary>
+        public static readonly AttachedProperty<IconKind?> IconProperty =
+            AvaloniaProperty.RegisterAttached<HoverBubbleBar, Control, IconKind?>("Icon");
+        public static IconKind? GetIcon(Control o) => o.GetValue(IconProperty);
+        public static void SetIcon(Control o, IconKind? v) => o.SetValue(IconProperty, v);
 
         /// <summary>Loc keys for the label, joined by '+' ("section_scheduler+section_intensity_ramp").</summary>
         public static readonly AttachedProperty<string> LabelKeysProperty =
@@ -77,7 +84,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
             public Border Plate = null!;
             public Border LabelHost = null!;
             public TextBlock Label = null!;
-            public TextBlock Glyph = null!;
+            public IconGlyph Glyph = null!;
             public ScaleTransform Scale = null!;
             public Color RestColor, HoverColor;
             public bool Expanded;
@@ -114,7 +121,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
         protected override void OnInitialized()
         {
             base.OnInitialized();
-            foreach (var b in Children.OfType<Button>().Where(b => !string.IsNullOrEmpty(GetGlyph(b))).ToList())
+            foreach (var b in Children.OfType<Button>().Where(b => GetIcon(b) != null || !string.IsNullOrEmpty(GetGlyph(b))).ToList())
                 Dress(b);
         }
 
@@ -152,15 +159,15 @@ namespace ConditioningControlPanel.Avalonia.Controls
             }
 
             var labelHost = new Border { Width = 0, ClipToBounds = true, Child = label, VerticalAlignment = VerticalAlignment.Stretch };
-            var glyph = new TextBlock
+            var glyph = new IconGlyph
             {
-                Text = GetGlyph(b),
-                FontSize = 15,
+                Size = 16,
                 Foreground = Brushes.White,
                 Width = BubbleSize - 3,
-                TextAlignment = TextAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
             };
+            if (GetIcon(b) is { } icon) glyph.Kind = icon;
+            else glyph.Emoji = GetGlyph(b);
             var scale = new ScaleTransform(1, 1);
             var plate = new Border
             {
@@ -233,8 +240,12 @@ namespace ConditioningControlPanel.Avalonia.Controls
             var hue = Hue;
             p.Plate.BorderBrush = new SolidColorBrush(on ? hue : WithAlpha(hue, 0.45));
             p.Glyph.Opacity = on ? 1.0 : 0.55;
+            p.Glyph.Variant = on ? IconVariant.Filled : IconVariant.Regular;
             p.Plate.Effect = on ? new DropShadowEffect { Color = hue, BlurRadius = 12, OffsetX = 0, OffsetY = 0, Opacity = 0.75 } : null;
         }
+
+        /// <summary>The bubble's icon. Test seam.</summary>
+        internal IconGlyph? GlyphOf(Button b) => _parts.TryGetValue(b, out var p) ? p.Glyph : null;
 
         /// <summary>Is a switch bubble painted lit?</summary>
         public bool IsLit(Button b) => _parts.TryGetValue(b, out var p) && p.Plate.Effect != null;
@@ -336,16 +347,10 @@ namespace ConditioningControlPanel.Avalonia.Controls
 
         /// <summary>
         /// Several labels the old pills carried start with an emoji ("⚙ System", "📅 Scheduler"):
-        /// the bubble already shows a glyph, so the label drops everything before the first letter
-        /// or digit. Two keys join as "A + B".
+        /// the bubble already shows the icon, so the label drops its icon cluster(s) (IconText).
+        /// Two keys join as "A + B".
         /// </summary>
-        public static string StripLeadingGlyph(string? s)
-        {
-            if (string.IsNullOrEmpty(s)) return "";
-            int i = 0;
-            while (i < s.Length && !char.IsLetterOrDigit(s, i)) i++;
-            return s.Substring(i).Trim();
-        }
+        public static string StripLeadingGlyph(string? s) => IconText.Bare(s);
 
         private sealed class LabelJoin : IMultiValueConverter
         {
