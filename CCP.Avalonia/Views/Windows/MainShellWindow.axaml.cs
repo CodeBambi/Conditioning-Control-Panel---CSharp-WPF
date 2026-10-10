@@ -117,6 +117,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             InitializeDescentFuse(); // MainShellWindow.DescentFuse.cs (WPF MainWindow ctor); no-op without App.DescentCountdown
             InitializeSpiralRoom();  // MainShellWindow.SpiralRoom.cs (WPF MainWindow ctor): the rail row
             InitializeProfileBubble(); // MainShellWindow.ProfileBubble.cs (WPF MainWindow ctor): face + reactions
+            InitializeProfileVat();    // MainShellWindow.ProfileVat.cs: the XP vat follows the Profile page (z1)
             InitializeProfileFx();     // MainShellWindow.ProfileFx.cs: search glow + OG border loop gate
             InitializeInboxBadge(); // MainShellWindow.Inbox.cs (WPF MainWindow.Inbox.cs:27)
             // Merge 2026-10-09: the announcement check runs once, from InitializeServerBanners

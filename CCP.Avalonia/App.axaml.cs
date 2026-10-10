@@ -46,6 +46,8 @@ namespace ConditioningControlPanel.Avalonia
         internal static MediaHistoryService? MediaHistory { get; set; }
         /// <summary>THE FUSE (WPF App.DescentCountdown). Built before the shell so its spark can subscribe.</summary>
         internal static Services.Descent.DescentCountdownService? DescentCountdown { get; set; }
+        /// <summary>WPF App.Descent: the read-only reader of the server's descent block (the vat, the spiral).</summary>
+        internal static Services.Descent.DescentService? Descent { get; set; }
 
         /// <summary>The Core quest board (WPF App.Quests), built by StartQuests before the shell.</summary>
         internal static QuestService? Quests { get; set; }
@@ -527,6 +529,12 @@ namespace ConditioningControlPanel.Avalonia
                         () => Achievements?.Progress?.UnlockedAchievements, () => Sessions?.IsRunning == true,
                         sanitizeCosmetics: Views.Windows.MainShellWindow.SanitizeOwnWardrobe)
                         { Countdown = DescentCountdown };
+                    // WPF App.Descent, with its three askers besides the Trainer Card: profile loaded, a sync
+                    // accepted (once a block has been seen) and the silent migration (lane z1).
+                    Descent ??= new Services.Descent.DescentService();
+                    sync.StageLadder = () => Descent?.Current?.Stage;
+                    sync.MigrationApplied = () => Descent?.NotifySurfaces("descent migration committed");
+                    sync.Accepted = () => { if (Descent?.HasSeenBlock == true) Descent.RequestRefresh("v2 sync accepted"); };
                     CoreProgression.AddXPProvider = ProgressionBank.Add;
                     // WPF App.SkillTree + ProfileSync.PurchaseSkillAsync: the Skill Tree's buy (k2).
                     SkillPurchase.Current = new SkillPurchase

@@ -368,6 +368,7 @@
                                                     HorizontalAlignment="Center" VerticalAlignment="Top"
                                                     Padding="7,2,7,2.5" Cursor="Help"
                                                     BorderBrush="#FFF3D0" BorderThickness="1"
+                                                    BoxShadow="0 1 6 0 #73000000"
                                                     RenderTransformOrigin="50%,50%">
                                                 <Border.Background>
                                                     <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
@@ -375,9 +376,6 @@
                                                         <GradientStop Color="#E9A93B" Offset="1"/>
                                                     </LinearGradientBrush>
                                                 </Border.Background>
-                                                <Border.Effect>
-                                                    <DropShadowEffect Color="#000000" BlurRadius="6" OffsetX="0" OffsetY="1" Opacity="0.45"/>
-                                                </Border.Effect>
                                                 <ToolTip.Tip>
                                                     <TextBlock Text="{loc:Str profile_vat_help_tip}"
                                                                TextWrapping="Wrap" MaxWidth="320"/>

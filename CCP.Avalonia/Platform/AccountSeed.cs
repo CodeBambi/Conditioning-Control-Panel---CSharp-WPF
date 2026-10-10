@@ -137,12 +137,15 @@ internal static class AccountSeed
         // EntitlementTierSync.SignedInWithV2: a rise only for a V2 account with a token.
         if (!string.IsNullOrEmpty(s.AuthToken))
             EntitlementTierRule.ApplyRise(s, EntitlementTierRule.ParseTier(user.EffectiveTierRaw), DateTime.UtcNow);
-        ProfileAdopt.AdoptReadBeforeWrite(s, user);
+        // A migration submit still waiting for its ack: the server quotes the pre-migration ledger (WPF holds it too).
+        if (!ConditioningControlPanel.Services.Descent.DescentMigrationChoices.IsValid(s.PendingDescentMigrationChoice))
+            ProfileAdopt.AdoptReadBeforeWrite(s, user);
         CoreSettings.Save();
         Log.Information("Profile load: Level {Level} ({Xp} XP into level) after adopt", s.PlayerLevel, (int)s.PlayerXP);
         if (Sync is { } sync)
         {
             sync.MarkLoaded(user.Achievements);
+            App.Descent?.RequestRefresh("profile loaded");   // WPF MainWindow.xaml.cs:753
             sync.StartHeartbeat();
             await sync.PushAsync("after load");
         }
@@ -188,6 +191,7 @@ internal static class AccountSeed
         CoreSettings.Save();
         App.Achievements?.Reset();
         Sync?.Reset();
+        App.Descent?.Reset();   // WPF MainWindow.Login.cs:363: one account's vat never shows on the next
     }
 
     /// <summary>All three validate at once, as WPF starts them (App.xaml.cs). Never throws.</summary>

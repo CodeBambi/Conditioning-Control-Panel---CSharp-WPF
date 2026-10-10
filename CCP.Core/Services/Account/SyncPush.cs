@@ -23,7 +23,7 @@ namespace ConditioningControlPanel.Services
     public sealed class SyncPush
     {
         public const SyncBody.Field Sent = SyncBody.Field.UnifiedId | SyncBody.Field.Xp | SyncBody.Field.Level
-            | SyncBody.Field.DescentEpoch | SyncBody.Field.Achievements;
+            | SyncBody.Field.DescentEpoch | SyncBody.Field.DescentAuto | SyncBody.Field.Achievements;
         public static readonly TimeSpan Cooldown = TimeSpan.FromSeconds(30);
         public static readonly TimeSpan HeartbeatInterval = TimeSpan.FromSeconds(120);
         private static readonly TimeSpan NudgeSettle = TimeSpan.FromSeconds(3), NudgeCooldownSlack = TimeSpan.FromSeconds(2);
@@ -95,6 +95,12 @@ namespace ConditioningControlPanel.Services
         public bool Loaded { get; private set; }
         /// <summary>The fuse fed by each successful response's <c>descent_countdown</c> block.</summary>
         public Descent.DescentCountdownService? Countdown { get; set; }
+        /// <summary>The stage ladder in hand (the head's DescentService block), for the migration's drip queue.</summary>
+        public Func<Descent.DescentStage?>? StageLadder { get; set; }
+        /// <summary>The silent restore wrote the ledger: the head repaints what reads level, XP and the spiral.</summary>
+        public Action? MigrationApplied { get; set; }
+        /// <summary>A sync the server accepted (WPF asks the descent block again here: today's XP just landed).</summary>
+        public Action? Accepted { get; set; }
         public DateTime? LastSyncTime { get; private set; }
 
         /// <param name="localAchievements">This install's unlocked achievement ids.</param>
@@ -141,6 +147,7 @@ namespace ConditioningControlPanel.Services
             Xp = (int)ProfileAdopt.TotalXp(s),
             Level = s.PlayerLevel,
             DescentEpoch = Descent.DescentEpochs.ClientEpoch,
+            DescentAuto = true,   // this head takes the offer silently (DescentMigration.ApplyRestore)
             Achievements = achievements?.Distinct().OrderBy(a => a, StringComparer.Ordinal).ToList(),
             Cosmetics = cosmetics,
             AllowDiscordDm = s.AllowDiscordDm,
@@ -204,6 +211,16 @@ namespace ConditioningControlPanel.Services
                 var privacyVersion = Volatile.Read(ref _privacyVersion);
                 var privacy = privacyVersion != Volatile.Read(ref _privacyDelivered);
                 var body = JsonConvert.SerializeObject(Body(s, server?.Concat(_localAchievements() ?? Array.Empty<string>()), cosmetics, privacy));
+                // THE CHOICE SUBMIT (WPF SyncProfileAsync): grafted on only while a choice waits for its ack, so
+                // every other sync is byte-identical. The re-derived ledger rides the ordinary xp/level fields.
+                var pendingChoice = s.PendingDescentMigrationChoice;
+                var migrationInFlight = Descent.DescentMigrationChoices.IsValid(pendingChoice);
+                if (migrationInFlight)
+                {
+                    var grafted = JObject.Parse(body);
+                    grafted["descent_migration"] = new JObject { ["choice"] = pendingChoice };
+                    body = grafted.ToString(Formatting.None);
+                }
                 var tokenUsed = s.AuthToken;
                 HttpRequestMessage NewRequest()
                 {
@@ -260,16 +277,30 @@ namespace ConditioningControlPanel.Services
                 try
                 {
                     var reply = JObject.Parse(json);
-                    ProfileAdopt.ApplySyncResponse(s, reply, UtcNow());
-                    // WPF HandleDescentMigrationAck: settle/heal an account migrated on any device. This head never
-                    // takes the offer (no descent_auto), so only the ack half runs here.
+                    // While a submit is unacked the server still quotes the pre-migration ledger: only a response
+                    // carrying the ack may move level, XP or the watermark (WPF "holding the ceremony's ledger").
+                    if (migrationInFlight && !Descent.DescentMigration.IsAck(reply))
+                        Log.Warning("[Descent] Migration submit was not acknowledged in this response - holding Level {Level}, will re-submit on the next sync.", s.PlayerLevel);
+                    else
+                        ProfileAdopt.ApplySyncResponse(s, reply, UtcNow());
+                    // WPF HandleDescentMigrationAck: settle/heal an account migrated on any device.
                     Descent.DescentMigrationAck.Apply(s, reply);
+                    // WPF HandleDescentMigrationOffer -> ApplyOfferNow: the offer is taken at once, as "restore",
+                    // with no window. The submit rides the next sync (the pending choice is on disk).
+                    if (Descent.DescentMigration.ReadOffer(reply) is { } offer
+                        && Descent.DescentMigration.ApplyRestore(s, offer, StageLadder?.Invoke(), UtcNow()))
+                    {
+                        LastSyncTime = null;   // the submit is not held behind the cooldown
+                        try { MigrationApplied?.Invoke(); } catch (Exception ex) { Log.Debug("MigrationApplied: {E}", ex.Message); }
+                        var submit = Task.Run(() => PushAsync("descent migration submit", waitForGate: true));
+                    }
                 }
                 catch (Exception ex) { Log.Debug("V2 Sync: Could not parse server flags: {Error}", ex.Message); }
                 // THE FUSE's cache, off the RAW body (WPF ProfileSyncService.HandleDescentCountdown).
                 if (Countdown != null && Descent.DescentCountdownService.TryReadCeremonyAt(json, out var ceremonyAt))
                     Countdown.ApplyCeremonyAt(ceremonyAt);
                 CoreSettings.Save();
+                try { Accepted?.Invoke(); } catch (Exception ex) { Log.Debug("SyncPush.Accepted: {E}", ex.Message); }
                 return true;
             }
             catch (Exception ex)
