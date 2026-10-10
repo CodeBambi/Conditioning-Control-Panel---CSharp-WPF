@@ -130,10 +130,27 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (block != ConditioningControlPanel.Services.Safety.BlinkStopGate.Block.None)
             {
                 Serilog.Log.Information("Tray: Stop everything refused ({Reason})", block);
+                // Owner, 10 Oct 2026: a refusal says why, in one line. Nothing else changes.
+                if (TrayStopNoticeKey(block) is { } why)
+                {
+                    try { TrayNotice(Loc.Get("app_title"), Loc.Get(why)); }
+                    catch (Exception ex) { Serilog.Log.Debug("Tray: refusal notice failed: {E}", ex.Message); }
+                }
                 return;
             }
             PanicSurfaces.StopAll("tray");   // the same stop pass as the key, camera included (decision C)
         }
+
+        /// <summary>The one line a refused tray stop shows (null: nothing to say; Lockdown has its own message).</summary>
+        internal static string? TrayStopNoticeKey(ConditioningControlPanel.Services.Safety.BlinkStopGate.Block block) => block switch
+        {
+            ConditioningControlPanel.Services.Safety.BlinkStopGate.Block.NoEscape => "tray_stop_refused_panic_off",
+            ConditioningControlPanel.Services.Safety.BlinkStopGate.Block.StrictLock => "tray_stop_refused_strict",
+            _ => null,
+        };
+
+        /// <summary>How the tray says one line (the OS toast, as the tray balloon; tests listen here).</summary>
+        internal static Action<string, string> TrayNotice = (title, body) => Platform.OsNotifications.Show(title, body);
 
         /// <summary>Why the tray stop is refused right now; None when the panic key would run too.</summary>
         internal static ConditioningControlPanel.Services.Safety.BlinkStopGate.Block TrayStopBlock()

@@ -6693,6 +6693,8 @@
   "tray_wake": "Acordar",
   "tray_show": "Mostrar a janela",
   "tray_stop_everything": "Parar tudo",
+  "tray_stop_refused_panic_off": "Nada foi parado. A tecla de pânico está desativada.",
+  "tray_stop_refused_strict": "Nada foi parado. O bloqueio estrito está ativo.",
   "panic_portal_description": "Pânico: parar tudo",
   "panic_portal_bound": "Tecla de pânico em qualquer janela: {0}",
   "panic_portal_unavailable": "A tecla de pânico só funciona enquanto uma janela do CCP ou outra X11 está em foco. Fora disso, use \"Parar tudo\" na bandeja.",

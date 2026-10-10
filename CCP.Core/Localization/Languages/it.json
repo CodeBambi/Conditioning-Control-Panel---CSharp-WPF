@@ -8495,6 +8495,8 @@
   "help_heading_tips": "Tips",
   "help_heading_how_it_works": "How it works",
   "tray_stop_everything": "Stop everything",
+  "tray_stop_refused_panic_off": "Niente è stato fermato. Il tasto panico è disattivato.",
+  "tray_stop_refused_strict": "Niente è stato fermato. Il Blocco Rigido è attivo.",
   "panic_portal_description": "Panic: stop everything",
   "panic_portal_bound": "Panic key in every window: {0}",
   "panic_portal_unavailable": "The panic key works only while an X11 app has focus; use tray › Stop everything.",

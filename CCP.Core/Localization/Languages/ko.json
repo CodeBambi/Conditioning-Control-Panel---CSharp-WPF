@@ -6693,6 +6693,8 @@
   "tray_wake": "깨우기",
   "tray_show": "창 보이기",
   "tray_stop_everything": "모두 중지",
+  "tray_stop_refused_panic_off": "아무것도 멈추지 않았어요. 패닉 키가 꺼져 있어요.",
+  "tray_stop_refused_strict": "아무것도 멈추지 않았어요. 엄격 잠금이 켜져 있어요.",
   "panic_portal_description": "패닉: 모두 중지",
   "panic_portal_bound": "모든 창에서 패닉 키: {0}",
   "panic_portal_unavailable": "패닉 키는 CCP 등 X11 창에 포커스가 있을 때만 작동합니다. 그 외에는 트레이의 '모두 중지'를 사용하세요.",

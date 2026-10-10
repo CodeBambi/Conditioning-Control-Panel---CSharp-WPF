@@ -7308,6 +7308,8 @@
   "tray_wake": "Wake them up",
   "tray_show": "Show the window",
   "tray_stop_everything": "Stop everything",
+  "tray_stop_refused_panic_off": "Nothing stopped. The panic key is switched off.",
+  "tray_stop_refused_strict": "Nothing stopped. Strict Lock is on.",
   "panic_portal_description": "Panic: stop everything",
   "panic_portal_bound": "Panic key in every window: {0}",
   "panic_portal_unavailable": "The panic key works only while an X11 app has focus; use tray › Stop everything.",

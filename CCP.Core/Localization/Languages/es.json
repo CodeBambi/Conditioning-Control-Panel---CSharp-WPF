@@ -6693,6 +6693,8 @@
   "tray_wake": "Despertarles",
   "tray_show": "Mostrar la ventana",
   "tray_stop_everything": "Detener todo",
+  "tray_stop_refused_panic_off": "No se ha detenido nada. La tecla de pánico está desactivada.",
+  "tray_stop_refused_strict": "No se ha detenido nada. El bloqueo estricto está activo.",
   "panic_portal_description": "Pánico: detener todo",
   "panic_portal_bound": "Tecla de pánico en cualquier ventana: {0}",
   "panic_portal_unavailable": "La tecla de pánico solo funciona mientras una ventana de CCP u otra X11 tiene el foco. En otro caso usa «Detener todo» en la bandeja.",
