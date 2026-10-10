@@ -1800,3 +1800,19 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/sync6-tube-avatar: +369
 - Tube cel title plate (floating plate, raised coin arrows) and Embers motes in the glass (AmbientFxCanvas Embers/Retint/RunWhileInactive); sync6 rows 2889ddb23, bd95424c8 ported.
 - TubeMotesTests (fail-proven x3); render evidence only, no live check.
+
+## avalonia-port/sync6-premium-page-b: +830
+- Header Premium spark ported (rows 97/99): PremiumSparkRules/Field moved to Core, Avalonia `PremiumSpark` draws it, clock gated by visibility/motion and stopped on detach; `PremiumSparkTests` fail-proven, live Free check.
+- Row 100 (vault flair, no header row on Premium, Home ring) left needs-port for sync6-premium-page-c.
+
+## avalonia-port/sync6-launcher-badges: +106
+- Launcher whole-card launch + once-per-window grow to seat every tile row (WPF 7.1.5 d0001dd5e); 2 fail-proven tests.
+- Badge hue/seen-dim folded to shell-nav-rail and win-launcher Lobby fold (no surface yet).
+
+## avalonia-port/sync6-companion-pages: +134
+- Companion Personality/Permissions/Links pills open the Companion tab scrolled to their zone (zone pills until the v2 page lands; decision B+C).
+- Rows 5681c132a/f3a00a9dc stay needs-port, folded into views-companion-v2-conversation; CompanionZonePillsTests fail-proven.
+
+## avalonia-port/reference-render-ci: +430
+- reference-render.yml: WPF (Windows) vs Avalonia renders paired per parity row into side-by-side PNGs; first run 173 WPF / 213 Avalonia / 280 rows paired.
+- Opt-in WpfReferenceRender test + pair-renders.py; fetch with ~/ccp-port/bin/fetch-renders.sh <branch>.
