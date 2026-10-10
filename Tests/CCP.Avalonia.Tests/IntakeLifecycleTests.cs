@@ -56,9 +56,11 @@ public sealed class IntakeLifecycleTests
         main.Show();
         main.WindowState = WindowState.Maximized;
 
-        GradedIntakeTabView.OpenIntake(main, duckMain: true);
+        var run = GradedIntakeTabView.OpenIntake(main, duckMain: true);
         Assert.Equal(WindowState.Minimized, main.WindowState);
         Assert.True(Only().HeartbeatWatchRunning);
+        Assert.Same(run, GradedIntakeTabView.OpenIntake(main, duckMain: true)); // one live run: focused, not doubled
+        Assert.Same(run, Only());
 
         IntakeHostWindow.CloseAllForPanic();                       // panic is one of the close paths
         Assert.Empty(IntakeHostWindow.Snapshot());

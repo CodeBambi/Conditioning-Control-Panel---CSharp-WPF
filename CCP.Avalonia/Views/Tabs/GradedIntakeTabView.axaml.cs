@@ -196,8 +196,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         internal static Windows.IntakeHostWindow OpenIntake(Window? owner, bool duckMain, bool recovery = false)
         {
             var shell = owner as Windows.MainShellWindow;
-            var lifetime = Application.Current?.ApplicationLifetime as global::Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime;
-            if (lifetime?.Windows.OfType<Windows.IntakeHostWindow>().FirstOrDefault() is { } live)
+            // The window registry, not lifetime.Windows (null under tests); a closing window has already left it.
+            if (Windows.IntakeHostWindow.Snapshot().FirstOrDefault() is { } live)
             {
                 live.Activate();
                 return live;
