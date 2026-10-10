@@ -221,6 +221,8 @@ namespace ConditioningControlPanel.Avalonia
                             as global::Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.Shutdown());
                 });
             App.SplashOnStartup = true;
+            // The real app only (never a headless check or a test): game pages get WPF's https://ccp.* origins.
+            Platform.WebAssetServer.VirtualHostsEnabled = true;
             app.StartWithClassicDesktopLifetime(args);
             App.StartupFailure?.Throw();   // a failed startup crashes non-zero, as it did before the splash
             return 0;
