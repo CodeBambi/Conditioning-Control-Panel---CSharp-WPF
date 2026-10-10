@@ -52,6 +52,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             // Real banking, never the cloned test state: the race pays Sparks into the same
             // chaos_meta.json the descent banks into.
             _raceMeta = new DtrhMetaBridge(testMode: false, Post);
+            // The chart's decoder (WPF: NAudio) is this head's LibVLC; Core only reads the WAV it writes.
+            TrackDecoder.ToWavProvider ??= RaceTrackPlayer.TranscodeToWav;
             Closed += (_, _) => DisposeRace();
             StartRaceHeartbeatWatch();
             try { Platform.FriendsHead.Service?.EnterActivity(PresenceActivity.Race); }
