@@ -208,13 +208,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             {
                 switch (row.Game)
                 {
-                    // INTERIM: the game hosts are not ported (WPF PieceByPieceHostService.JoinOpenTable(key),
-                    // GoonHostService.Launch(joinCode: key)), so Join opens the GAME on its own lobby, not the table,
-                    // exactly as the friends drawer's Join does.
+                    // WPF PieceByPieceHostService.JoinOpenTable(key): the board opens and sits at that p_ table
+                    // (a pbp:friend frame, mode join; the page runs its own lobby.join, refusals included).
                     case LobbyGame.Chess:
-                        Log.Information("[Lobby] join chess: the game opens on its own lobby (no table join on this head yet)");
-                        LobbyLaunchGame("piecebypiece");
+                        LobbyJoinChess(row.Key);
                         break;
+                    // SEAM(g3): INTERIM, the Goon host is not ported (WPF GoonHostService.Launch(joinCode: key)),
+                    // so Join opens the GAME on its own lobby, not the table.
                     case LobbyGame.Goon:
                         Log.Information("[Lobby] join Goon: the game opens on its own lobby (no join code on this head yet)");
                         LobbyLaunchGame("goon");
@@ -232,6 +232,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>Test seam: what a Lobby Join / Host press opens (the game window, by game id).</summary>
         internal static Action<string> LobbyLaunchGame { get; set; } = id => Games.GameWindow.Launch(id);
 
+        /// <summary>Test seams: the Lobby's chess doors (WPF PieceByPieceHostService.JoinOpenTable / HostOpenTable).</summary>
+        internal static Action<string> LobbyJoinChess { get; set; } = key => Games.GameWindow.PbpJoinOpenTable(key);
+        internal static Action LobbyHostChess { get; set; } = () => Games.GameWindow.PbpHostOpenTable();
+
         /// <summary>The host bar (and the empty state's buttons): each game's own host door.</summary>
         internal void LobbyHost(LobbyGame game)
         {
@@ -241,11 +245,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 switch (game)
                 {
                     case LobbyGame.Chess:
-                        // INTERIM: WPF PieceByPieceHostService.HostOpenTable(). The host is not ported, so this
-                        // opens the game; the player hosts from the game's own door.
-                        Log.Information("[Lobby] host chess: the game opens on its own lobby (no host door on this head yet)");
-                        LobbyLaunchGame("piecebypiece");
+                        // WPF PieceByPieceHostService.HostOpenTable(): the board opens and lists a table at
+                        // the page's default clock (a pbp:friend frame, mode host).
+                        LobbyHostChess();
                         break;
+                    // SEAM(g3): the Goon host door below is still the interim (WPF GoonHostService.LaunchToHost()).
                     case LobbyGame.Goon:
                         // Patrons host; everyone else sees the gate. INTERIM: WPF GoonHostService.LaunchToHost();
                         // here the game opens on its own lobby.
