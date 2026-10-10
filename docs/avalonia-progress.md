@@ -1824,3 +1824,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/icons-infra: +1000
 - Fluent UI System Icons infrastructure (L0a): fx:IconGlyph/IconLabel/IconMap/IconText, {loc:StrBare}, Theme/Icons.axaml brushes and ramp; PremiumGateFx and HoverBubbleBar now go through IconGlyph.
 - Tests: render (non-blank, not .notdef, inherited Foreground, Regular != Filled), map/split, contrast; 16 fail-proofs; --scale 2 renders.
+
+## avalonia-port/no-desktop-notify-in-tests: +73
+- OsNotifications no longer talks to D-Bus in a CCP_USERDATA_DIR sandbox (only `--notify-check` opts in); Sink/BusAttempts seams.
+- RemoteControlShellTests asserts the join notification via the Sink; sandbox no-bus test; both fail-proven.

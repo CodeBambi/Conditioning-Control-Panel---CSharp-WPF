@@ -923,3 +923,21 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
 - Semantic brushes (`Theme/Icons.axaml`) carry the colour emoji used to (tier gold/violet, success, warn, danger,
   gold, gem, fire; hearts use the live PinkBrush), >= 3:1 on SurfaceBg/PanelBg/DarkerBg. Parity rows of converted
   surfaces read "divergent by decision: fluent-icons 2026-10-10".
+## 2026-10-10: No desktop notifications from tests or sandboxes (avalonia-port/no-desktop-notify-in-tests)
+- Question: the user saw a real "Someone just connected to your remote session." popup nobody caused.
+  `RemoteControlShellTests`' FakeRelay reports `controller_connected:true` -> `NotifyRemoteControllerJoined` ->
+  `OsNotifications.Show` -> org.freedesktop.Notifications on the user's session bus.
+- Options: A) gate on the existing sandbox signal (`SandboxNet.Active`, set when CorePaths honours CCP_USERDATA_DIR; the
+  same one ExternalOpener uses); B) a new env check; C) test-only DBUS_SESSION_BUS_ADDRESS (the gate does this too, but a
+  bare `dotnet test` does not).
+- Choice: A. Decided by: supervisor brief. `NotifyAsync` returns 0 (not delivered) in a sandbox, so `Decide` falls back to
+  the in-app toast / drop exactly as with no server; only `--notify-check` passes `live: true` (the deliberate probe).
+  `OsNotifications.Sink` is the test seam (honoured before D-Bus); `BusAttempts` counts real bus calls.
+- Other desktop side effects reviewed: `ExternalOpener` (xdg-open/Launcher) already sandbox-gated; `pactl` calls are
+  read-only lists; `parec`/`pw-record` mic capture only on a user-started mic feature; `AppUpdater` cmd.exe is Windows;
+  DataSettings relaunch is user-confirmed; the tray icon and `PortalPanicShortcut` run only on the real desktop path
+  (`CreateTray`/`StartPanicKey` are App-startup only, never in tests). Left unchanged: the portal binds a safety (panic)
+  shortcut and a kc live run is a deliberate desktop session; no notify-send/xdg-open elsewhere.
+- Test: `OsNotificationsTests.Sandbox_never_reaches_the_session_bus` (fail-proven: guard removed -> red) and
+  `RemoteControlShellTests` asserts the join raised exactly one notification via the Sink (fail-proven: call disabled -> red).
+  Log (run with DBUS_SESSION_BUS_ADDRESS=disabled:): ~/ccp-port/evidence/review-no-desktop-notify-in-tests/fail-proofs.log.
