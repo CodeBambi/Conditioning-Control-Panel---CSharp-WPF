@@ -25,8 +25,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
     /// and SubliminalLayer draws the most recent card only).</para>
     ///
     /// <para>Whisper audio, ducking, XP and the Bambi Freeze/Reset pair: <see cref="SubliminalWhisperShow"/>.
-    /// ponytail: not here yet - SubliminalStealsFocus (always no-activate here), the solid-mode
-    /// shared host (same look, separate windows here).</para>
+    /// SubliminalStealsFocus: the card is activated after it shows (WPF :764-765), still click-through.
+    /// ponytail: not here yet - the solid-mode shared host (same look, separate windows here).</para>
     /// </summary>
     internal static class SubliminalOverlay
     {
@@ -70,9 +70,24 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                 }
                 w.Closed += (_, _) => Active.Remove(w);
                 Active.Add(w);
-                w.Show();
+                Present(w, s.SubliminalStealsFocus);
                 w.Run(alpha, hold);
             }
+        }
+
+        /// <summary>The platform's activate. Tests swap it (RunsAlone).</summary>
+        internal static Action<Window> ActivateCard = w => w.Activate();
+
+        /// <summary>WPF SubliminalService.cs:730, :764-765: show the card, and with the "steals focus"
+        /// switch on hand it the foreground too. It stays click-through to the mouse either way; with the
+        /// switch off it never activates. An X11 override-redirect window may be refused focus by the
+        /// window manager: that is the platform's answer, not an error.</summary>
+        internal static void Present(Window card, bool stealsFocus)
+        {
+            card.Show();
+            if (!stealsFocus) return;
+            try { ActivateCard(card); }
+            catch (Exception ex) { Log.Debug("Subliminal: focus steal refused: {E}", ex.Message); }
         }
 
         /// <summary>Take every card off screen now (WPF <c>TearDownSurfaces</c> on Stop).</summary>
@@ -125,7 +140,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             if (!s.SubBackgroundTransparent)
                 grid.Children.Add(new Rectangle { Fill = new SolidColorBrush(Parse(s.SubBackgroundColor, Colors.Black)) });
 
-            var family = new FontFamily(string.IsNullOrWhiteSpace(s.SubliminalFont) ? "Arial" : s.SubliminalFont + ", Arial");
+            var family = Helpers.FontPicker.Resolve(s.SubliminalFont, "Arial");
             TextBlock Text(Color c, double x, double y) => new()
             {
                 Text = text,

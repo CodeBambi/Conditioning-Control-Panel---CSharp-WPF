@@ -294,10 +294,48 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             RebuildCurveEditor();
         }
 
-        /// <summary>ponytail: needs the haptics bus (App's device manager). The WPF handler fired a
-        /// one-shot buzz on the selected pattern so the author could feel it.</summary>
-        private void BtnTestHaptic_Click(object? sender, RoutedEventArgs e)
-            => Log.Debug("DeeperEditor: test-haptic needs the haptics device bus");
+        /// <summary>Where the haptic test's refusals are shown (WPF ShowStripMessage, 4 s). Tests read it.</summary>
+        internal static Action<string> HapticTestNotice = text =>
+            App.Notifications.Show(text, Helpers.NotificationType.Warning);
+
+        /// <summary>WPF BtnTestHaptic_Click (DeeperEditorWindow.xaml.cs:2739): play the selected
+        /// pattern once on the connected toy so the author can feel it. The preview waives the master
+        /// toggle, never the Pattern routing row.</summary>
+        private async void BtnTestHaptic_Click(object? sender, RoutedEventArgs e)
+        {
+            if (_selectedHaptic == null) return;
+
+            IList<double[]>? kf = null;
+            if (_selectedHaptic.CustomPattern != null && _selectedHaptic.CustomPattern.Count > 0)
+                kf = _selectedHaptic.CustomPattern;
+            else if (!string.IsNullOrEmpty(_selectedHaptic.PatternName)
+                     && StockHapticPatterns.TryGet(_selectedHaptic.PatternName, out var named) && named != null)
+                kf = named;
+
+            if (kf == null) return;
+            var durationMs = (int)Math.Max(50, _selectedHaptic.Duration * 1000);
+            var samples = StockHapticPatterns.Sample(kf, _selectedHaptic.Intensity, durationMs);
+            try
+            {
+                var haptics = CoreHaptics.Service;
+                if (haptics == null || !haptics.IsConnected)
+                {
+                    HapticTestNotice(Loc.Get("deeper_editor_haptic_test_no_device"));
+                    return;
+                }
+                if (!haptics.Settings.V2.Rule(global::ConditioningControlPanel.Services.Haptics.Core.HapticLayer.Pattern).Enabled)
+                {
+                    HapticTestNotice(Loc.Get("deeper_editor_haptic_test_row_off"));
+                    return;
+                }
+                var ok = await haptics.PreviewSyncPatternAsync(samples, durationMs, _selectedHaptic.Target);
+                if (!ok) HapticTestNotice(Loc.Get("deeper_editor_haptic_test_premium"));
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "DeeperEditor: haptic test failed");
+            }
+        }
 
         private void BtnDeleteHaptic_Click(object? sender, RoutedEventArgs e)
         {
@@ -603,7 +641,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             for (int i = 0; i < _enhancement.Regions.Count; i++)
             {
                 var r = _enhancement.Regions[i];
-                CmbRuleRegion.Items.Add(string.IsNullOrEmpty(r.Label) ? r.Id : $"{r.Id} — {r.Label}");
+                CmbRuleRegion.Items.Add(string.IsNullOrEmpty(r.Label) ? r.Id : $"{r.Id} - {r.Label}");
                 if (_selectedRule?.RegionConstraint == r.Id) selected = i + 1;
             }
             CmbRuleRegion.SelectedIndex = selected;
@@ -1532,7 +1570,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             for (int i = 0; i < _enhancement.Regions.Count; i++)
             {
                 var r = _enhancement.Regions[i];
-                combo.Items.Add(string.IsNullOrEmpty(r.Label) ? r.Id : $"{r.Id} — {r.Label}");
+                combo.Items.Add(string.IsNullOrEmpty(r.Label) ? r.Id : $"{r.Id} - {r.Label}");
                 if (r.Id == currentId) selected = i + (allowNone ? 1 : 0);
             }
             if (selected < 0) selected = combo.Items.Count > 0 ? 0 : -1;
@@ -1559,14 +1597,23 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         // Preview button
         // ---------------------------------------------------------------------------------
 
-        /// <summary>ponytail: needs App.DeeperPlayer + App.DeeperHost. The player window itself is
-        /// already ported (EnhancementPlayerWindow), but it takes the live enhancement plus those
-        /// two services, so opening it is left to the layer that moves them. HealEmptyTriggerRegionIds
-        /// below is real and still runs, since it is pure data repair.</summary>
+        /// <summary>WPF BtnPreview_Click (DeeperEditorWindow.xaml.cs:4163): heal the band rules, then
+        /// open the live enhancement in the one shared player (reused when it is already open, so a
+        /// second Preview cannot kill the first window's playback).</summary>
         private void BtnPreview_Click(object? sender, RoutedEventArgs e)
         {
-            HealEmptyTriggerRegionIds();
-            Log.Debug("DeeperEditor: preview needs App.DeeperPlayer + App.DeeperHost");
+            try
+            {
+                HealEmptyTriggerRegionIds();
+                EnhancementPlayerWindow.ShowOrActivate(this,
+                    w => w.LoadEnhancementFromMemory(_enhancement, "editor-preview"));
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Deeper editor: opening Player from Preview failed");
+                _ = MessageDialog.ShowAsync(this, Loc.Get("deeper_editor_preview_failed_title"),
+                    Loc.GetF("deeper_editor_preview_open_failed_fmt", $"{ex.GetType().Name}: {ex.Message}"));
+            }
         }
 
         /// <summary>

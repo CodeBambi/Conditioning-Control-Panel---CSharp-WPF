@@ -35,8 +35,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
     /// (<see cref="FlashBurstWindow"/>). The ambient rhythm is Core <c>CoreFlash</c>, which calls
     /// this.</para>
     ///
-    /// <para>ponytail: no Natasha's favourite, no luminance sync, no jackpot remix, no picture
-    /// override (TriggerFlashOnceWithImage).</para>
+    /// <para>Natasha's favourite (the flash dodge), luminance sync and the picture override
+    /// (TriggerFlashOnceWithImage) are FlashOverlay.Natasha.cs. ponytail: no jackpot remix (no
+    /// JackpotRemixDirector on this head).</para>
     /// </summary>
     internal static partial class FlashOverlay
     {
@@ -62,7 +63,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         /// reaches <c>Screens</c>. Like WPF's _isBusy, a second press is ignored from the click
         /// until the burst's last flash has spawned. The overrides are WPF TriggerFlashOnce's
         /// (amount, duration ms, size %); null keeps the user's setting.</summary>
-        public static async void TriggerOnce(Visual host, int? amount = null, int? durationMs = null, int? size = null)
+        public static void TriggerOnce(Visual host, int? amount = null, int? durationMs = null, int? size = null) =>
+            TriggerOnce(host, amount, durationMs, size, null);
+
+        /// <param name="leadImage">A pinned first picture (<see cref="TriggerOnceWithImage"/>), already resolved.</param>
+        internal static async void TriggerOnce(Visual host, int? amount, int? durationMs, int? size, string? leadImage)
         {
             if (_busy) return;
             if (!X11Overlay.IsAvailable)
@@ -85,11 +90,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                 var primary = Math.Max(0, screens.ToList().FindIndex(x => x.IsPrimary));
                 var targets = PinkFilterOverlay.ResolveScreenIndices(s.GlobalTargetMonitor, s.DualMonitorEnabled, screens.Count, primary);
                 var occupied = Active.Select(a => a.Rect).ToList();
-                var flashes = await Task.Run(() => LoadPictures(BurstCount(amount, s, Rng), screens, targets, s, occupied, size));
+                var flashes = await Task.Run(() => LoadPictures(BurstCount(amount, s, Rng), screens, targets, s, occupied, size, leadImage));
                 if (flashes.Count == 0)
                 {
                     if (!_warnedEmpty) Log.Warning("Flash: no images found in {Path} and no online clips ready yet (remote on: {Remote})", ImagesPath(), FlashSourceRules.RemoteEnabled(CoreSettings.Current));
                     _warnedEmpty = true;
+                    ConditioningControlPanel.Services.EmiDesk.EmiOffers.AnnounceEmptyLibrary();   // WPF FlashService.cs:978
                     return;
                 }
 
@@ -119,7 +125,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                                 if (frames != null) foreach (var f in frames.Value.Frames) f.Dispose();
                                 return;
                             }
+                            var luminance = LuminanceFor(bmp, path);   // before Spawn: an animated flash frees the still
                             refused = !Spawn(bmp, rect, screen, alpha, fade, lifetime, frames, withSound: sound != null);
+                            if (!refused) PushLuminance(luminance, lifetime);   // WPF FlashService.cs:2119
                             // WPF FlashService.cs:1608 records the batch; per shown image here, so the
                             // log's media count is exactly what reached the screen.
                             if (!refused) App.Sessions?.SessionLog.RecordImages(new[] { path });
@@ -189,6 +197,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                 w.Popped += fromGaze => OnFlashPopped(w, fromGaze);
             }
             lifetime = ResolveLifetime(lifetime, CoreSettings.Current);   // stay-until-popped / hydra child
+            // Natasha's favourite (WPF :1860-1870): dealt before the look, so the halo is hers; it stays
+            // up at least as long as its ring, or a short flash would be a free dodge nobody made.
+            w.IsNatasha = RollNatasha(CoreSettings.Current, clickable, _pendingGeneration, Rng);
+            if (w.IsNatasha && lifetime.TotalMilliseconds < ConditioningControlPanel.Services.Chaster.NatashasFavourite.DodgeMinLifetimeMs)
+                lifetime = TimeSpan.FromMilliseconds(ConditioningControlPanel.Services.Chaster.NatashasFavourite.DodgeMinLifetimeMs);
             rect = ApplyFx(w, rect, screen, lifetime, CoreSettings.Current, Rng, withSound ?? SoundPlaying);   // lucky, glow, corners, XP
             // Motion is decided before the window maps: a pendulum needs the bigger rig window.
             var motion = BuildMotion(rect, screen, CoreSettings.Current, Rng, PendulumNeighbours(screen));
@@ -212,6 +225,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             w.Show();
             w.Run(alpha, fade, lifetime);
             if (motion != null) StartDrift(w, motion);
+            if (w.IsNatasha) StartNatashaDodge(w);   // WPF :2128
             return true;
         }
 
@@ -355,7 +369,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         /// decode-at-display-size - never a full-resolution source held per window.
         /// </summary>
         private static List<(Bitmap Bitmap, PixelRect Rect, string Path, PixelRect Screen, (List<Bitmap> Frames, TimeSpan Delay)? Anim)> LoadPictures(int count, IReadOnlyList<Screen> screens,
-            int[] targets, AppSettings s, List<PixelRect> occupied, int? size)
+            int[] targets, AppSettings s, List<PixelRect> occupied, int? size, string? lead = null)
         {
             var root = CorePaths.EffectiveAssets;
             var dir = Path.Combine(root, "images");
@@ -376,14 +390,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             RemoteFlashSource.EnsurePrefetch();
             var haveLocal = files.Count > 0 || packCount > 0;
             var remoteReady = RemoteFlashSource.ReadyCount;
-            if (!haveLocal && remoteReady == 0) return result;
+            if (!haveLocal && remoteReady == 0 && lead == null) return result;
 
             for (var tries = Math.Max(count * 5, 20); result.Count < count && tries > 0; tries--)
             {
                 string path, identity;
                 string? clip = null, packTemp = null;
-                var remote = remoteReady > 0 && FlashSourceRules.ShouldDrawRemote(s, haveLocal, Rng);
-                if (remote && RemoteFlashSource.TryTake(Rng) is { } item)
+                var remote = lead == null && remoteReady > 0 && FlashSourceRules.ShouldDrawRemote(s, haveLocal, Rng);
+                if (lead != null)
+                {
+                    path = identity = lead;   // the pinned picture leads the burst, once
+                    lead = null;
+                }
+                else if (remote && RemoteFlashSource.TryTake(Rng) is { } item)
                 {
                     path = item.PosterPath;   // decoded like any local still
                     identity = item.Url;      // history + session log key on the source, never the temp file

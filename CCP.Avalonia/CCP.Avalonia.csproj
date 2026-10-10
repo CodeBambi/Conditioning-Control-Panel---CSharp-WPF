@@ -217,6 +217,12 @@
     <AvaloniaResource Include="..\Assets\app.ico" Link="Resources\app.ico" />
     <!-- WPF EmiFace.PixelFont's shipped Press Start 2P (Resources/emi/fonts), for the ring cards. -->
     <AvaloniaResource Include="..\Assets\emi\fonts\*.ttf" Link="Resources\emi\fonts\%(Filename)%(Extension)" />
+    <!-- EMI desk lines: read from disk beside the exe by Core EmiLineEngine (WPF ConditioningControlPanel.csproj:656). -->
+    <Content Include="..\Assets\emi\desk-lines.json" Link="Resources\emi\desk-lines.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+    </Content>
     <!-- Fredoka (SIL OFL 1.1, licence beside it): the rounded display face WPF packs as /Fonts/#Fredoka.
          Views name it "Fredoka, Segoe UI"; Platform/AppFonts.cs maps the name to this resource on
          every OS, so no call site carries a path. -->

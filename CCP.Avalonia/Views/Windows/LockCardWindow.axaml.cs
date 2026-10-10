@@ -566,6 +566,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private void CompleteCard()
         {
             var completionTime = (DateTime.Now - _startTime).TotalSeconds;
+            if (!_isTest) ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("lockCardSolved");   // WPF LockCardService.cs:65; no try count on this head, so no {n}
 
             // The XP award, WPF's body verbatim including the !_isTest gate and the strict 1.5x
             // multiplier. App.Progression is CoreProgression here; the WPF call is already a
@@ -581,6 +582,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 CoreProgression.AddXP(xpAmount, "LockCard");
                 // WPF AchievementService.TrackLockCardCompletion's quest call (:759), same !_isTest gate (progression#41).
                 try { App.Quests?.TrackLockCardCompleted(); } catch (Exception ex) { Log.Debug("lock card quest credit: {E}", ex.Message); }
+                Platform.ChasterHead.NoteLockCard(_totalErrors);   // WPF AchievementService.cs:763, same !_isTest gate
                 try { Completed?.Invoke(); } catch (Exception ex) { Log.Debug("lock card completed handler: {E}", ex.Message); }   // WPF TotalLockCardsCompleted, read by the leash task host
             }
 

@@ -542,7 +542,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             {
                 if (on) right.Children.Add(StateBadge("ON ✓"));
                 var toggle = StepperButton(on ? "switch off" : "switch on", u.Id);
-                ToolTip.SetTip(toggle, on ? "switched on — shapes your next descent." : "switched off — sits out the descent.");
+                ToolTip.SetTip(toggle, on ? "switched on - shapes your next descent." : "switched off - sits out the descent.");
                 toggle.Click += HabitToggle_Click;
                 right.Children.Add(toggle);
             }
@@ -1389,10 +1389,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
         /// readable — the recall surface for all the one-time in-run teaches.</summary>
         private static readonly (string Glyph, string Name, string Desc)[] DiaryVerbs =
         {
-            ("✋", "hold to snap", "press and HOLD a live (ringed) bubble about a second to defuse it — costs 30 focus. a quick click, or letting go early, TRIGGERS it instead."),
+            ("✋", "hold to snap", "press and HOLD a live (ringed) bubble about a second to defuse it - costs 30 focus. a quick click, or letting go early, TRIGGERS it instead."),
             ("○", "click the treats", "a tap pops a treat: its payload plays, the streak climbs, and +10 focus flows back (+15 from heavies and rabbits)."),
-            ("🌊", "right-click · the ripple", "casts a wave from your cursor (near the bubbles): treats pop fully paid, trances snap clean, rabbits get flung. one charge, gathered back over time — READY on the sidebar means it's in your hand."),
-            ("◌", "focus", "the defuse fuel: max 100, you fall in with 50, no regen on its own. when the bar runs red you can't afford a hold — farm treats before touching a live one (pressing one anyway triggers it in your grip)."),
+            ("🌊", "right-click · the ripple", "casts a wave from your cursor (near the bubbles): treats pop fully paid, trances snap clean, rabbits get flung. one charge, gathered back over time - READY on the sidebar means it's in your hand."),
+            ("◌", "focus", "the defuse fuel: max 100, you fall in with 50, no regen on its own. when the bar runs red you can't afford a hold - farm treats before touching a live one (pressing one anyway triggers it in your grip)."),
             ("🔥", "lust", "the orange bar. climbs while you perform and pays up to x2 at full burn; an unblocked trigger cools it to zero."),
             ("💨", "never let treats rot", "a treat that fades unpopped HALVES your streak. chase the rewards too, not just the threats."),
             ("🐇", "catch the white rabbit", "everything slows to a crawl for six seconds. with the Spanker worn, you smack it into the field instead."),
@@ -1606,7 +1606,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
                 {
                     "Easy" => "x1.0 pay. the calmest fall: baseline spawn pace, the longest trances, and the strange bubbles roll half as often.",
                     "Medium" => "x1.3 on every payout. bubbles surface ~30% faster and the field holds ~14% more of them at once.",
-                    "Hard" => "x1.7 on every payout. ~70% faster spawns, ~30% more on screen, shorter trances — and the Bound hunts here on any rank.",
+                    "Hard" => "x1.7 on every payout. ~70% faster spawns, ~30% more on screen, shorter trances - and the Bound hunts here on any rank.",
                     "Extreme" => extremeUnlocked
                         ? "x2.2 on every payout. spawns at more than double pace, ~48% more on screen. the deepest the hole goes."
                         : null,   // the unlock-path tooltip owns the locked pill
@@ -1813,33 +1813,33 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             new("What the Rabbit Hole is", "howto_1", new[]
             {
                 new HowToLine("", "", "", "",
-                    "Bubbles drift up the screen carrying flashes, videos and overlays. Pop the good ones, snap the dangerous ones before they go off, and ride it deeper. One descent is about **five minutes** — survive the waves, take what she offers, climb out a little more hers."),
+                    "Bubbles drift up the screen carrying flashes, videos and overlays. Pop the good ones, snap the dangerous ones before they go off, and ride it deeper. One descent is about **five minutes** - survive the waves, take what she offers, climb out a little more hers."),
             }),
             new("What you do", "howto_2", new[]
             {
-                new HowToLine("🫧", "#FFFF9FD0", "Left-click", "#FFFF9FD0", "pop the treats — the soft pink bubbles. One click builds your streak and refills your focus."),
-                new HowToLine("◉", "#FFFFD228", "Press & hold", "#FFFFD228", "the glowing bubbles are live. Keep pressing until they snap — let one finish and it goes off (a flash or video fires)."),
+                new HowToLine("🫧", "#FFFF9FD0", "Left-click", "#FFFF9FD0", "pop the treats - the soft pink bubbles. One click builds your streak and refills your focus."),
+                new HowToLine("◉", "#FFFFD228", "Press & hold", "#FFFFD228", "the glowing bubbles are live. Keep pressing until they snap - let one finish and it goes off (a flash or video fires)."),
                 new HowToLine("🌊", "#FF7AE0FF", "Right-click", "#FF7AE0FF", "the ripple. A wave near the bubbles pops treats, snaps live ones and scatters rabbits. Strong, but slow to gather again."),
                 new HowToLine("🐇", "#FFFF69B4", "The rabbits", "#FFFF69B4", "chase them for little bonuses. Everything else down there is yours to find out."),
             }),
             new("The two bars", "howto_3", new[]
             {
-                new HowToLine("", "", "FOCUS", "#FFFFFFFF", "your nerve. Snapping live bubbles spends it; popping treats refills it. Run dry and you can't snap — so keep feeding."),
+                new HowToLine("", "", "FOCUS", "#FFFFFFFF", "your nerve. Snapping live bubbles spends it; popping treats refills it. Run dry and you can't snap - so keep feeding."),
                 new HowToLine("", "", "HEAT", "#FFFFFFFF", "the burn. It climbs every time something triggers. Let it run high and the descent gets harder to resist."),
             }),
             new("A descent", "howto_4", new[]
             {
                 new HowToLine("", "", "", "",
-                    "Four waves, then it ends. Between waves she offers you a **mantra** — pick one and it bends the rules for that run only. Finish the whole descent for the full reward; slip out early and you forfeit it."),
+                    "Four waves, then it ends. Between waves she offers you a **mantra** - pick one and it bends the rules for that run only. Finish the whole descent for the full reward; slip out early and you forfeit it."),
             }),
             new("What you keep", "howto_5", new[]
             {
                 new HowToLine("", "", "", "",
                     "Every descent earns **XP** toward your normal level, plus **Sparks** (gold) you carry back out."),
                 new HowToLine("", "", "", "",
-                    "Spend Sparks in **the dollhouse** — accessories at the table by the door, charms, active toys you trigger mid-descent, and the seamstress's bench for permanent upgrades."),
+                    "Spend Sparks in **the dollhouse** - accessories at the table by the door, charms, active toys you trigger mid-descent, and the seamstress's bench for permanent upgrades."),
                 new HowToLine("", "", "", "",
-                    "The more descents you finish, the higher your **RANK** — curious, tempted, slipping, entranced, devoted… — and the more of the Rabbit Hole opens up to you."),
+                    "The more descents you finish, the higher your **RANK** - curious, tempted, slipping, entranced, devoted… - and the more of the Rabbit Hole opens up to you."),
             }),
         };
 
@@ -2135,7 +2135,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
                 new("Flash", "a treat carrying an image. pops clean, pays focus back.", "●", Color.FromRgb(0xFF, 0x9F, 0xD0), true),
                 new("Subliminal", "a treat that whispers on the way past.", "●", Color.FromRgb(0xC9, 0xC4, 0xE8), true),
                 new("Spiral", "live. snap it or it takes the screen for a while.", "●", Color.FromRgb(0x8B, 0x5C, 0xF6), true),
-                new("White Rabbit", "fast, small, and worth chasing — everything slows when you catch one.", "✧", Color.FromRgb(0xFF, 0x4D, 0xC4), true),
+                new("White Rabbit", "fast, small, and worth chasing - everything slows when you catch one.", "✧", Color.FromRgb(0xFF, 0x4D, 0xC4), true),
                 new("Lucky Bubble", "pays gold on the spot. rare.", "🍀", Color.FromRgb(0xFF, 0xD7, 0x00), true),
                 new("The Echo", "it repeats the last thing that got through.", "◌", Color.FromRgb(0xC9, 0xC4, 0xE8), false),
                 new("The Chaperone", "it wants to help. it does not help.", "💞", Color.FromRgb(0x9C, 0xE8, 0xFF), false),

@@ -36,8 +36,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
     /// WPF's vout heal, but on the same shared LibVLC (docs/avalonia-decisions.md). Ambient bubbles
     /// are paused by the Core scheduler.
     /// ponytail: missing against WPF - the off-thread UI-wedge watchdog and the LibVLC retire/quarantine
-    /// (a Stop that hangs in native code still hangs the UI thread), the toy-button/gaze/haptics
-    /// attention inputs, no-activate z-order, and the remote-media offer after the "no videos" dialog.
+    /// (a Stop that hangs in native code still hangs the UI thread), the gaze attention input and
+    /// no-activate z-order. The toy-button input is <see cref="ToyPressed"/>; the remote-media offer
+    /// after the "no videos" dialog is <see cref="Platform.RemoteMediaOffer"/>.
     /// </summary>
     internal sealed class MandatoryVideoOverlay : IMandatoryVideoHost
     {
@@ -105,6 +106,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         public void Show(string path, bool strict) => Dispatcher.UIThread.Invoke(() =>
         {
             _healUsed = false;   // WPF PlayVideo: one output heal per clip; the heal's replay keeps it spent
+            if (App.Achievements?.Progress?.TotalVideoMinutes <= 0) ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("firstVideoEver");   // WPF VideoService.cs:3198
             Play(path, strict);
         });
 
@@ -599,7 +601,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             }
             foreach (var t in _targets.ToList())
             {
-                if (elapsed >= t.Due) { t.Remove(); _targets.Remove(t); continue; }
+                if (elapsed >= t.Due) { t.Remove(); _targets.Remove(t); if (_targets.Count == 0) ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.ReleaseHold("attentionCheckShown"); continue; }
                 t.Move(dt);
             }
         }
@@ -620,16 +622,77 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                 t.Root.PointerPressed += (_, e) =>
                 {
                     e.Handled = true;
-                    if (caught) return;
-                    caught = true;
-                    PlayPop();
-                    Scheduler.NoteHit();
-                    foreach (var o in batch) { _targets.Remove(o); if (o != t) o.Remove(); }
-                    t.FadeOut();
-                    Log.Information("ATTENTION: Hit {Hits}/{Spawned}", Scheduler.AttentionHits, Scheduler.AttentionSpawned);
+                    Hit(t);
                 };
                 batch.Add(t);
                 _targets.Add(t);
+                ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("attentionCheckShown");   // WPF VideoService.cs:5844: a HOLD, released when no target is left
+            }
+            // Whichever route gets here (mouse, toy button) runs the same idempotent pipeline.
+            void Hit(Target t)
+            {
+                if (caught) return;
+                caught = true;
+                PlayPop();
+                Scheduler.NoteHit();
+                foreach (var o in batch) { _targets.Remove(o); if (o != t) o.Remove(); }
+                if (_targets.Count == 0) ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.ReleaseHold("attentionCheckShown");   // WPF VideoService.cs:5718
+                t.FadeOut();
+                Log.Information("ATTENTION: Hit {Hits}/{Spawned}", Scheduler.AttentionHits, Scheduler.AttentionSpawned);
+            }
+            if (batch.Count > 0) { _toyBatches.Add((batch, Hit)); ArmToyInput(); }
+        }
+
+        // ---- "squeeze your toy" attention checks (WPF VideoService.cs:5747-5881, PHASE F) ----
+
+        private readonly List<(List<Target> Batch, Action<Target> Hit)> _toyBatches = new();
+        private ConditioningControlPanel.Services.Haptics.ToyInputService? _toyInput;
+
+        /// <summary>WPF: Haptics.Settings.AttentionCheckToyButton AND ToyInputEnabled. Tests swap it.</summary>
+        internal static Func<bool> ToyButtonArmed = () =>
+            CoreHaptics.Service is { } h && h.Settings.AttentionCheckToyButton && h.Settings.ToyInputEnabled;
+
+        private void ArmToyInput()
+        {
+            if (_toyInput != null || CoreHaptics.Service is not { } h) return;
+            try { (_toyInput = h.ToyInput).ButtonPressed += OnToyButton; }
+            catch { _toyInput = null; }
+        }
+
+        private void DisarmToyInput()
+        {
+            _toyBatches.Clear();
+            if (_toyInput is not { } input) return;
+            _toyInput = null;
+            try { input.ButtonPressed -= OnToyButton; } catch (Exception ex) { Log.Debug("Toy input unhook: {E}", ex.Message); }
+        }
+
+        private void OnToyButton(object? sender, ConditioningControlPanel.Services.Haptics.Core.HapticToyEvent e)
+        {
+            if (Dispatcher.UIThread.CheckAccess()) ToyPressed();
+            else Dispatcher.UIThread.Post(() => ToyPressed());
+        }
+
+        /// <summary>A toy button press satisfies the check IN ADDITION to the click (it never replaces
+        /// it), and only while a spawn's targets are on screen. True when it scored.</summary>
+        internal bool ToyPressed()
+        {
+            try
+            {
+                _toyBatches.RemoveAll(b => !b.Batch.Any(_targets.Contains));   // resolved or expired spawns
+                if (_toyBatches.Count == 0 || _gracePaused || !ToyButtonArmed()) return false;
+                var (batch, hit) = _toyBatches[0];
+                var live = batch.First(_targets.Contains);
+                Log.Information("ATTENTION: satisfied by toy button press");
+                hit(live);
+                _toyBatches.RemoveAt(0);
+                _ = CoreHaptics.Service?.PostEvent(ConditioningControlPanel.Services.Haptics.Core.HapticEventKind.ToyButtonReward);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("Toy-button attention hit failed: {E}", ex.Message);
+                return false;
             }
         }
 
@@ -814,8 +877,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         {
             var owner = (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow;
             if (owner == null) return;
-            _ = Dialogs.MessageDialog.ShowAsync(owner, Loc.Get("video_no_videos_title"), NoVideosMessage(Scheduler));
+            _ = ShowNoVideosAsync(owner);
         });
+
+        /// <summary>WPF VideoService.cs:2511-2518: the offer comes AFTER the box closes, never over it,
+        /// and never for the length-filter case (that library has files; another source is the wrong fix).</summary>
+        private async System.Threading.Tasks.Task ShowNoVideosAsync(Window owner)
+        {
+            try
+            {
+                var filterEmptied = NoVideosReason.LengthFilterEmptied(Scheduler.LastFunnelEnabled, Scheduler.LastFunnelDuration);
+                await Dialogs.MessageDialog.ShowAsync(owner, Loc.Get("video_no_videos_title"), NoVideosMessage(Scheduler));
+                if (!filterEmptied) Platform.RemoteMediaOffer.Offer("videos", owner);
+            }
+            catch (Exception ex) { Log.Debug("VideoService: no-videos dialog failed: {E}", ex.Message); }
+        }
 
         /// <summary>WPF TriggerVideo's guidance text: #1352 names the length filter when it emptied a
         /// library that has files, else the add-files hint.</summary>
@@ -839,6 +915,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                 _graceTimer = _guard = null;
                 _spawnTimes.Clear();
                 _targets.Clear();
+                ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.ReleaseHold("attentionCheckShown");   // the clip is gone: a hold must not outlive its reason
+                DisarmToyInput();
                 // Stop joins the decoder thread, so after it no callback touches the frame buffer.
                 if (_player != null)
                 {

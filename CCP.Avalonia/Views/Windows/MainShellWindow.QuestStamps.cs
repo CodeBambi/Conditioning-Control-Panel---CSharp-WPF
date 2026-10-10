@@ -15,7 +15,10 @@
 //  - the card opens BELOW the cluster (a popup over its trigger flickers);
 //  - WPF's BackEase on the pop is carried as its keyframes (linear between), the overshoot being
 //    the 1.35 key itself.
-// Not ported yet: the card's art strip, and dropping the art cache on a mod switch.
+// The card leads with the quest's art strip (132 px, the kind and the reward as chips on it, the green
+// check over it when done). A mod switch drops the decoded art and repaints (DropArtCache, wired to
+// CoreMods.ModChanged here; the shell's mod re-skin may call it too, it is safe to call twice).
+// Not ported: the card's drop shadow (WPF DropShadowEffect blur 20; the popup has no room around the card).
 
 using System;
 using System.Collections.Generic;
@@ -97,7 +100,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private Border? _stampPopCard;
         private readonly TranslateTransform _stampPopSlide = new();
         private DispatcherTimer? _stampPopTween;
-        private TextBlock? _stampPopKind, _stampPopXp, _stampPopName, _stampPopDesc, _stampPopProgress, _stampPopRemaining;
+        private TextBlock? _stampPopKind, _stampPopXp, _stampPopName, _stampPopDesc, _stampPopProgress, _stampPopRemaining, _stampPopIcon;
+        private Image? _stampPopArt;
+        private Border? _stampPopDone;
+        private static readonly IBrush QuestStampChipFill = StampInk(0xB01A1A2E);
         private Border? _stampPopFill;
 
         // ---- test seams -------------------------------------------------------------
@@ -107,6 +113,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         internal string? HoveredQuestStamp => _hoveredStampKey;
         internal bool QuestStampCardPainted => _stampPopCard != null;
         internal string? QuestStampCardName => _stampPopName?.Text;
+        internal Image? QuestStampCardArt => _stampPopArt;
+        internal bool QuestStampCardDoneShown => _stampPopDone?.IsVisible == true;
+        internal int QuestStampArtDrops { get; private set; }
         internal double QuestStampCardOpacity => _stampPopCard?.Opacity ?? 0;
         internal Panel? QuestStampCell(string key) => _stampInfos.TryGetValue(key, out var i) ? i.Cell : null;
         internal (double Scale, double Angle) QuestStampPose(string key) =>
@@ -123,6 +132,26 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         // ---- wiring -----------------------------------------------------------------
 
+        /// <summary>
+        /// Mod switched (WPF OnQuestStampsModChanged): the same quest can resolve to a different picture, so
+        /// the decoded art the stamps and the Quests tab share is dropped, the card closes and everything
+        /// that showed the art repaints. The one door for it: the shell's mod re-skin calls this too.
+        /// Safe to call twice and from any thread.
+        /// </summary>
+        internal void DropArtCache()
+        {
+            try
+            {
+                if (!Dispatcher.UIThread.CheckAccess()) { Dispatcher.UIThread.Post(DropArtCache); return; }
+                QuestsTabView.ClearQuestArtCache();
+                QuestStampArtDrops++;
+                HideStampPopup();
+                RefreshQuestStamps();
+                if (Named<QuestsTabView>("QuestsTab") is { IsVisible: true } questsTab) questsTab.RefreshQuestUI();
+            }
+            catch (Exception ex) { Log.Debug("[QuestStamps] mod switch: {E}", ex.Message); }
+        }
+
         /// <summary>Called from the constructor; wires again on Opened / Activated until the quest
         /// service exists (it can start after the first window on this head).</summary>
         internal void InitializeQuestStamps()
@@ -134,6 +163,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     _questStampsWired = true;
                     if (Named<Grid>("QuestStampHost") is { } host) host.RenderTransform = _stampHostScale;
                     LocalizationManager.Instance.LanguageChanged += OnQuestStampsLanguageChanged;
+                    // WPF :207-211: the stamps are the one quest surface on screen whatever the tab, so the mod
+                    // switch is heard here.
+                    EventHandler<ConditioningControlPanel.Models.ModPackage> modChanged = (_, _) => DropArtCache();
+                    CoreMods.ModChanged += modChanged;
+                    Closed += (_, _) => CoreMods.ModChanged -= modChanged;
                     Opened += (_, _) => InitializeQuestStamps();
                     Activated += (_, _) => { if (!ReferenceEquals(_questStampsService, App.Quests)) InitializeQuestStamps(); };
                     // A popup is a window: it does not travel with the main window and has no
@@ -457,40 +491,96 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private void EnsureStampPopup()
         {
             if (_stampPopup != null || Named<Grid>("QuestStampHost") is not { } host) return;
+            // WPF EnsureStampPopup (MainWindow.QuestStamps.cs:632-815): sizes, margins and order are the original's.
+            _stampPopArt = new Image { Stretch = Stretch.UniformToFill };
+            var artScrim = new Border
+            {
+                Height = 48,
+                VerticalAlignment = VerticalAlignment.Bottom,
+                Background = new LinearGradientBrush
+                {
+                    StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+                    EndPoint = new RelativePoint(0, 1, RelativeUnit.Relative),
+                    GradientStops = { new GradientStop(Color.FromArgb(0x00, 0, 0, 0), 0), new GradientStop(Color.FromArgb(0xB0, 0, 0, 0), 1) },
+                },
+            };
             _stampPopKind = new TextBlock { FontSize = 10.5, FontWeight = FontWeight.Bold };
-            _stampPopXp = new TextBlock { FontSize = 11, FontWeight = FontWeight.SemiBold, HorizontalAlignment = HorizontalAlignment.Right };
-            _stampPopName = new TextBlock { FontSize = 14, FontWeight = FontWeight.Bold, Foreground = QuestStampWhiteInk, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 0) };
-            _stampPopDesc = new TextBlock { FontSize = 12, Foreground = QuestStampMutedInk, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 3, 0, 8) };
-            _stampPopFill = new Border { Height = 6, CornerRadius = new CornerRadius(3), HorizontalAlignment = HorizontalAlignment.Left, Width = 0 };
-            _stampPopProgress = new TextBlock { FontSize = 11.5, FontWeight = FontWeight.SemiBold };
-            _stampPopRemaining = new TextBlock { FontSize = 11.5, Foreground = QuestStampMutedInk, HorizontalAlignment = HorizontalAlignment.Right };
+            _stampPopXp = new TextBlock { FontSize = 10.5, FontWeight = FontWeight.Bold, FontFamily = new FontFamily("Segoe UI Emoji, Segoe UI Symbol, Segoe UI") };
+            // the green check over a finished quest's art (no Effect: WPF's 8 px text shadow is not carried)
+            _stampPopDone = new Border
+            {
+                Background = StampInk(0x992D4A2D),
+                IsVisible = false,
+                Child = new TextBlock
+                {
+                    Text = "\u2713", Foreground = QuestStampDoneInk, FontSize = 60, FontWeight = FontWeight.Bold,
+                    HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
+                },
+            };
+            static Border Chip(Control content, HorizontalAlignment side) => new()
+            {
+                Background = QuestStampChipFill, CornerRadius = new CornerRadius(9), Padding = new Thickness(8, 2, 8, 2),
+                Margin = new Thickness(8), HorizontalAlignment = side, VerticalAlignment = VerticalAlignment.Top, Child = content,
+            };
+            var artFrame = new Border
+            {
+                Height = 132,
+                CornerRadius = new CornerRadius(11, 11, 0, 0),
+                Background = QuestStampDarkFill,
+                ClipToBounds = true,
+                Tag = "stamp-card-art",
+                Child = new Panel
+                {
+                    Children = { _stampPopArt, artScrim, Chip(_stampPopKind, HorizontalAlignment.Left), Chip(_stampPopXp, HorizontalAlignment.Right), _stampPopDone },
+                },
+            };
+
+            _stampPopIcon = new TextBlock
+            {
+                FontSize = 15, Foreground = QuestStampWhiteInk, FontFamily = new FontFamily("Segoe UI Emoji, Segoe UI Symbol, Segoe UI"),
+                VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0),
+            };
+            _stampPopName = new TextBlock { FontSize = 14, FontWeight = FontWeight.Bold, Foreground = QuestStampWhiteInk, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
+            _stampPopDesc = new TextBlock { FontSize = 11.5, Foreground = QuestStampMutedInk, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 9) };
+            _stampPopFill = new Border { CornerRadius = new CornerRadius(4), HorizontalAlignment = HorizontalAlignment.Left, Width = 0 };
+            _stampPopProgress = new TextBlock { FontSize = 12, FontWeight = FontWeight.Bold, HorizontalAlignment = HorizontalAlignment.Left };
+            _stampPopRemaining = new TextBlock { FontSize = 11, Foreground = QuestStampMutedInk, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
             var track = new Border
             {
-                Height = 6,
+                Height = 10,
                 Width = QuestStampPopTrackWidth,
-                CornerRadius = new CornerRadius(3),
+                CornerRadius = new CornerRadius(4),
                 Background = QuestStampDarkFill,
                 HorizontalAlignment = HorizontalAlignment.Left,
                 Child = _stampPopFill,
             };
+            var title = new DockPanel();
+            DockPanel.SetDock(_stampPopIcon, Dock.Left);
+            title.Children.Add(_stampPopIcon);
+            title.Children.Add(_stampPopName);
+            var body = new StackPanel
+            {
+                Margin = new Thickness(14, 11, 14, 12),
+                Children =
+                {
+                    title, _stampPopDesc, track,
+                    new Panel { Margin = new Thickness(0, 7, 0, 0), Children = { _stampPopProgress, _stampPopRemaining } },
+                    new TextBlock
+                    {
+                        Text = ConditioningControlPanel.Localization.Loc.Get("tooltip_quest_stamps"), Foreground = QuestStampMutedInk, FontSize = 10,
+                        TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 9, 0, 0), Opacity = 0.75,
+                    },
+                },
+            };
             _stampPopCard = new Border
             {
                 Width = QuestStampPopWidth,
-                CornerRadius = new CornerRadius(10),
-                Padding = new Thickness(14, 10, 14, 12),
+                CornerRadius = new CornerRadius(12),
                 Background = QuestStampPanelFill,
                 BorderThickness = new Thickness(1.5),
                 RenderTransform = _stampPopSlide,
                 IsHitTestVisible = false,
-                Child = new StackPanel
-                {
-                    Children =
-                    {
-                        new Panel { Children = { _stampPopKind, _stampPopXp } },
-                        _stampPopName, _stampPopDesc, track,
-                        new Panel { Margin = new Thickness(0, 5, 0, 0), Children = { _stampPopProgress, _stampPopRemaining } },
-                    },
-                },
+                Child = new StackPanel { Children = { artFrame, body } },
             };
             _stampPopup = new Popup
             {
@@ -516,6 +606,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (ghost)
             {
                 // WPF's own (unkeyed) lines for an empty seat.
+                _stampPopArt!.Source = null;
+                _stampPopDone!.IsVisible = false;
+                _stampPopIcon!.Text = "";
                 _stampPopName!.Text = info.IsWeekly ? "No weekly quest yet" : "No quest in this slot";
                 _stampPopDesc!.Text = "It will be here after the next roll.";
                 _stampPopXp!.Text = "";
@@ -526,6 +619,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             }
             var def = info.Def!;
             var quest = info.Quest!;
+            _stampPopArt!.Source = QuestsTabView.GetQuestArt(def);
+            _stampPopDone!.IsVisible = info.Completed;
+            _stampPopIcon!.Text = def.Icon;
             _stampPopName!.Text = QuestStampText(def.LocalizedName, def.Name);
             _stampPopDesc!.Text = QuestStampText(def.LocalizedDescription, def.Description);
             var (xp, bonus) = QuestsTabView.ComputeQuestXpDisplay(def, CoreSettings.Current);

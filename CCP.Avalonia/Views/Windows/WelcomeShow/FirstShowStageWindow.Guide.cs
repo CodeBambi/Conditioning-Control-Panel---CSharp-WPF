@@ -18,14 +18,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.WelcomeShow
     //
     // Head differences: WPF stretched the stage over the virtual desktop for the guide; a window spanning
     // monitors of different scale is not something Avalonia lays out, so the stage moves to the monitor
-    // the app window is on instead. WPF lit the previewed feature card (FeatureCard.SetTutorialPreview);
-    // this head's card has no preview state, so the card is highlighted but not lit.
+    // the app window is on instead. The previewed feature card is lit while its help button is the target
+    // (FeatureCard.SetTutorialPreview, appearance only) and goes back to its truth when the target clears.
     internal sealed partial class FirstShowStageWindow
     {
         private bool _guiding, _waitForHover;
         private int _guideIndex = -1;
         private double _hoverTime, _targetWait;
         private Control? _guideTarget;
+        private FeatureCard? _previewCard;
+        internal FeatureCard? PreviewCard => _previewCard;
         private string? _targetName;
         private readonly FirstShowHighlight _highlight = new();
         private double _highlightWait;
@@ -110,6 +112,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.WelcomeShow
 
         private void ClearGuideTarget()
         {
+            _previewCard?.SetTutorialPreview(false); _previewCard = null;
             if (_guideTarget != null)
             {
                 try { global::ConditioningControlPanel.Avalonia.Controls.HelpPopover.CloseActive(); }
@@ -134,6 +137,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.WelcomeShow
                     var card = all.OfType<FeatureCard>().FirstOrDefault(x => !x.IsLocked &&
                         !string.IsNullOrEmpty(x.HelpSectionId) && x.FindControl<Button>("BtnHelp") is { IsEffectivelyVisible: true });
                     _guideTarget = card?.FindControl<Button>("BtnHelp");
+                    _previewCard = card;
+                    _previewCard?.SetTutorialPreview(true);
                 }
                 else _guideTarget = all.FirstOrDefault(x => x.Name == _targetName);
                 _targetWait += dt;

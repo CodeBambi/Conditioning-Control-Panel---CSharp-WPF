@@ -112,6 +112,29 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
         /// </summary>
         public event Action<string>? WebMessage;
 
+        /// <summary>
+        /// One extra request header for a url, or null (the usual answer). The stand-in for WPF's
+        /// <c>AddWebResourceRequestedFilter</c> + <c>Request.Headers.SetHeader</c> (JustDropHostService.AttachAuthHeader):
+        /// the caller's rule decides, per request, whether its credential rides along. Never logged.
+        /// </summary>
+        public Func<Uri, (string Name, string Value)?>? RequestHeader { get; set; }
+
+        /// <summary>Requests <see cref="RequestHeader"/> stamped (tests, logs; never the value).</summary>
+        internal int StampedRequests { get; private set; }
+
+        private void StampRequestHeader(WebResourceRequestedEventArgs e)
+        {
+            var rule = RequestHeader;
+            if (rule is null) return;
+            try
+            {
+                var uri = e.Request?.Uri;
+                if (uri is null || rule(uri) is not { } header) return;
+                if (e.Request!.Headers.TrySet(header.Name, header.Value)) StampedRequests++;
+            }
+            catch (Exception ex) { Log.Debug("WebHost: request header not set: {Error}", ex.Message); }
+        }
+
         /// <summary>The seam the engine's WebMessageReceived routes through (headless tests drive it).</summary>
         internal void OnWebMessage(string? body)
         {
@@ -231,6 +254,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
                     _web.NavigationStarted += OnNavigationStarted;
                     _web.NavigationCompleted += (_, e) => OnNavigationCompleted(e.Request ?? _web?.Source);
                     _web.WebMessageReceived += (_, e) => OnWebMessage(e.Body);
+                    _web.WebResourceRequested += (_, e) => StampRequestHeader(e);   // k9: RequestHeader below
                     _webSlot.Children.Add(_web);
                 }
                 catch (Exception ex)

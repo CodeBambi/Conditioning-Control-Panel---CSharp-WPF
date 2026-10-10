@@ -383,7 +383,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             var tracker = Platform.WebcamTracker.Instance;
             if (focus.CanRunOverride == null && !tracker.IsRunning)
             {
-                TxtPlayFocusGazeStatus.Text = "Starting webcam…";
+                TxtPlayFocusGazeStatus.Text = Loc.Get("label_focus_gaze_starting_webcam");
                 if (!await tracker.StartAsync())
                 {
                     SyncFocusGazeToggle(false);

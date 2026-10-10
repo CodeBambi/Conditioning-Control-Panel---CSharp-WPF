@@ -193,6 +193,7 @@ namespace ConditioningControlPanel.Services
             if (ss.BubblesEnabled && !ss.BubblesIntermittent && ss.BubblesStartMinute > 0 && minutes >= ss.BubblesStartMinute)
             {
                 var freq = ss.BubblesFrequency + (int)((minutes - ss.BubblesStartMinute) / 5);
+                EmiRampStep(freq - ss.BubblesFrequency);   // WPF SessionEngine.cs:797
                 if (s.BubblesFrequency != freq)
                 {
                     s.BubblesFrequency = freq;

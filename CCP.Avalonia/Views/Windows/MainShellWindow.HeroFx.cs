@@ -42,11 +42,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// so they come off again when the window closes.</summary>
         private void HookLevelDisplay()
         {
-            Action<double, string> awarded = (_, _) => Dispatcher.UIThread.Post(UpdateLevelDisplay);
+            // THE BANK gets the award first (MainShellWindow.BankFx.cs): it arms its hold, repaints, and either
+            // hands the readout straight back (weather) or stages it behind a flight of tokens (a completion).
+            InitializeBankFx();
+            Action<double, string> awarded = (amount, source) => Dispatcher.UIThread.Post(() => OnBankAward(amount, source));
             Action<int> levelUp = _ => Dispatcher.UIThread.Post(() => { FlashLevelUp(); PopLevelChip(); BurstLevelUp(); UpdateLevelDisplay(); });
             ProgressionBank.Awarded += awarded;
             ProgressionBank.LevelUp += levelUp;
-            Closed += (_, _) => { ProgressionBank.Awarded -= awarded; ProgressionBank.LevelUp -= levelUp; _xpOdometer?.Stop(); };
+            Closed += (_, _) => { ProgressionBank.Awarded -= awarded; ProgressionBank.LevelUp -= levelUp; ShutdownBankFx(); _xpOdometer?.Stop(); };
             if (Named<Border>("XPBar")?.Parent is Control track)
                 track.SizeChanged += (_, _) => FillXpBar(animate: false);
             // WPF XPBarTrack_ToolTipOpening (MainWindow.UiUpdates.cs:2897): the ambient-bubble daily
@@ -68,9 +71,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 var xp = s.PlayerXP;
                 var needed = XpCurve.GetXPForLevel(level, XpCurve.EpochOf(s));
                 if (Named<TextBlock>("TxtLevelLabel") is { } label) label.Text = $"LVL {level}";
-                if (Named<TextBlock>("TxtXP") is { } txt) AnimateXpReadout(txt, xp, needed, level);
-                _xpFraction = Math.Min(1.0, needed > 0 ? xp / needed : 0);
-                FillXpBar(animate: true);
+                // THE BANK gets first refusal: while a pot is collecting or tokens are in the air the readout and
+                // the bar belong to the flight, and BankFx remembers the target instead (WPF AnimateXpDisplay).
+                if (!TryHoldXpDisplay(xp, needed, level))
+                {
+                    if (Named<TextBlock>("TxtXP") is { } txt) AnimateXpReadout(txt, xp, needed, level);
+                    _xpFraction = Math.Min(1.0, needed > 0 ? xp / needed : 0);
+                    FillXpBar(animate: true);
+                }
 
                 // WPF RefreshProfileMenu (MainWindow.ProfileBubble.cs:315-326): same numbers as the bar.
                 if (Named<TextBlock>("ProfileMenuLevel") is { } menuLevel) menuLevel.Text = $"{Loc.Get("label_level")} {level}";
@@ -112,20 +120,26 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// </summary>
         private void AnimateXpReadout(TextBlock txt, double xp, double needed, int level)
         {
-            _xpOdometer?.Stop();
-            _xpOdometer = null;
             double from = (!double.IsNaN(_lastXpShown) && level == _lastXpLevelShown) ? _lastXpShown : 0;
-            _xpOdometerTarget = $"{(int)xp} / {(int)needed} XP";
             _lastXpShown = xp;
             _lastXpLevelShown = level;
-            if (!AmbientFxCanvas.Env.AllowTransitions || !IsVisible
+            RunXpOdometer(txt, from, xp, needed, global::ConditioningControlPanel.Motion.MotionTimings.OdometerSeconds);
+        }
+
+        /// <summary>The count itself, shared with THE BANK's landings (StepBankCounter): from one value to
+        /// another in <paramref name="seconds"/>, quadratic ease out, the denominator baked into the text.</summary>
+        private void RunXpOdometer(TextBlock txt, double from, double xp, double needed, double seconds)
+        {
+            _xpOdometer?.Stop();
+            _xpOdometer = null;
+            _xpOdometerTarget = $"{(int)xp} / {(int)needed} XP";
+            if (!AmbientFxCanvas.Env.AllowTransitions || !IsVisible || seconds <= 0
                 || Math.Abs(xp - from) < global::ConditioningControlPanel.Motion.MotionTimings.OdometerMinStep)
             {
                 txt.Text = $"{(int)xp} / {(int)needed} XP";
                 return;
             }
             string tail = " / " + ((int)needed) + " XP";
-            double seconds = global::ConditioningControlPanel.Motion.MotionTimings.OdometerSeconds;
             txt.Text = from.ToString("F0", System.Globalization.CultureInfo.CurrentCulture) + tail;
             var started = System.Diagnostics.Stopwatch.GetTimestamp();
             DispatcherTimer? timer = null;

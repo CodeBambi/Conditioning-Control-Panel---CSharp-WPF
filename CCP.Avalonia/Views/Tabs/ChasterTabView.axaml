@@ -148,8 +148,8 @@
     </UserControl.Resources>
 
     <Panel x:Name="PageRoot" ClipToBounds="True">
-        <!-- the ground (WPF ChasterTabView.xaml:262-308): the launcher's backdrop, the glow off the hero art, the vignette.
-             Still layers: the turning spiral watermark and the ambient motes are not on this head. -->
+        <!-- the ground (WPF ChasterTabView.xaml:262-308): the launcher's backdrop, the spiral watermark, the glow off the
+             hero art, the vignette, the ambient fog and dust. ChasterTabView.Fx.cs turns the spiral and runs the canvas. -->
         <Border CornerRadius="18">
             <Border.Background>
                 <RadialGradientBrush GradientOrigin="22%,18%" Center="22%,18%" RadiusX="100%" RadiusY="95%">
@@ -160,6 +160,18 @@
                 </RadialGradientBrush>
             </Border.Background>
         </Border>
+        <!-- The spiral watermark, turning once every 90 s under the hero. -->
+        <Panel x:Name="SpiralLayer" Width="760" Height="760" HorizontalAlignment="Right" VerticalAlignment="Top"
+               Margin="0,-300,-260,0" Opacity="0.1" IsHitTestVisible="False" RenderTransformOrigin="50%,50%">
+            <Path x:Name="SpiralPath" StrokeThickness="2.2" StrokeLineCap="Round">
+                <Path.Stroke>
+                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                        <GradientStop Color="{DynamicResource FxGlowColor}" Offset="0"/>
+                        <GradientStop Color="{DynamicResource FxParticleColor}" Offset="1"/>
+                    </LinearGradientBrush>
+                </Path.Stroke>
+            </Path>
+        </Panel>
         <Border x:Name="GlowLayer" Opacity="0.3" IsHitTestVisible="False" CornerRadius="18">
             <Border.Background>
                 <RadialGradientBrush GradientOrigin="78%,12%" Center="78%,12%" RadiusX="50%" RadiusY="55%">
@@ -177,6 +189,7 @@
                 </RadialGradientBrush>
             </Border.Background>
         </Border>
+        <fx:AmbientFxCanvas x:Name="Ambient" IsHitTestVisible="False"/>
     <ScrollViewer x:Name="PageScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
         <Grid Margin="26,22,26,20" MaxWidth="1080" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
             <!-- header: the name, and the account -->
@@ -260,7 +273,7 @@
                 <!-- THE PAPER TAG, hanging off the lock: what is on the tab, when it lands, UNPAID (WPF :443-492). Click: the bill. -->
                 <Panel Width="380" HorizontalAlignment="Right" ZIndex="5">
                     <Panel x:Name="PaperTag" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="-8,0,0,14" IsVisible="False"
-                           Cursor="Hand" Background="Transparent" RenderTransformOrigin="50%,0%" RenderTransform="rotate(-6deg)">
+                           Cursor="Hand" Background="Transparent">
                         <Rectangle Width="1.4" Height="14" Fill="#B0F3EAD9" HorizontalAlignment="Center" VerticalAlignment="Top"/>
                         <Border Width="164" Margin="0,12,0,0" Background="#FFF3EAD9" CornerRadius="4" Padding="12,10,12,10"
                                 BoxShadow="0 4 14 0 #73000000">
@@ -298,7 +311,7 @@
                     <Grid x:Name="HeroLower" ColumnDefinitions="Auto,*">
                     <Panel x:Name="CalendarRow" IsVisible="False" VerticalAlignment="Top" Margin="0,2,18,0">
                         <!-- a torn-off wall-calendar sheet, pinned a little crooked -->
-                        <StackPanel x:Name="Sheet" Margin="0,0,0,6" RenderTransform="rotate(-1.5deg)">
+                        <StackPanel x:Name="Sheet" Margin="0,0,0,6">
                             <Path Fill="#FFF3EAD9" Stretch="Fill" Height="9" Margin="0,0,0,-1"
                                   Data="M 0,9 L 0,5 L 6,2 L 12,6 L 18,1 L 25,5 L 31,2 L 38,6 L 44,0 L 51,5 L 57,2 L 64,6 L 70,1 L 77,5 L 83,3 L 90,6 L 96,1 L 100,4 L 100,9 Z"/>
                             <Border Background="#FFF3EAD9" Padding="10,12,10,10" BoxShadow="0 4 14 0 #73000000">
@@ -455,6 +468,8 @@
                             <Panel x:Name="CapTrack" Height="6" Margin="0,10,0,0">
                                 <Border Background="#22FFFFFF" CornerRadius="3"/>
                                 <Border x:Name="CapFill" Width="0" HorizontalAlignment="Left" CornerRadius="3" Background="#FF6B8A"/>
+                                <!-- the bloom at the tip: lights as the fill arrives, then fades (WPF MotionFx.BarFill) -->
+                                <Border x:Name="CapBloom" Width="0" HorizontalAlignment="Left" CornerRadius="3" Background="#FFFFC0CB" Opacity="0"/>
                             </Panel>
                         </StackPanel>
                     </Border>
@@ -482,13 +497,12 @@
                 <!-- the scrap: the calendar's paper, torn top, a red pin through a punched hole, tilted -->
                 <Panel x:Name="LadderScrap" Grid.Column="1" Width="236" Margin="18,2,6,4" VerticalAlignment="Top"
                        RenderTransformOrigin="50%,0%" PointerEntered="LadderScrap_PointerEntered">
+                    <!-- the paper's shadow is the body's BoxShadow, as on the calendar sheet: an Effect here would sit over
+                         the page's looping ground (the port's FX rule) -->
                     <StackPanel>
-                        <StackPanel.Effect>
-                            <DropShadowEffect Color="#000000" BlurRadius="14" OffsetX="0" OffsetY="4" Opacity="0.45"/>
-                        </StackPanel.Effect>
                         <Path Fill="#FFF3EAD9" Stretch="Fill" Height="9" Margin="0,0,0,-1"
                               Data="M 0,9 L 0,4 L 7,1 L 13,5 L 20,2 L 26,6 L 33,1 L 39,4 L 46,0 L 52,5 L 59,2 L 66,6 L 72,2 L 79,5 L 85,1 L 92,5 L 100,3 L 100,9 Z"/>
-                        <Border Background="#FFF3EAD9" Padding="12,14,12,10">
+                        <Border Background="#FFF3EAD9" Padding="12,14,12,10" BoxShadow="0 4 14 0 #73000000">
                             <StackPanel>
                                 <TextBlock Text="{loc:Str chaster_ladder_title}" FontFamily="Fredoka, Segoe UI" FontSize="15" FontWeight="SemiBold" Foreground="#FF241A2E"/>
                                 <Border BorderBrush="#CCC8244A" BorderThickness="1.5" CornerRadius="3" Padding="6,1,6,1" HorizontalAlignment="Left" Margin="1,4,0,8">
@@ -774,8 +788,10 @@
                             <Grid Margin="6,4,6,4" ColumnDefinitions="*,Auto">
                                 <TextBlock x:Name="TxtTrailerWhy" Grid.Column="0" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Opacity="0.85"
                                            TextWrapping="Wrap"/>
+                                <!-- the floating figure lifts off this plate every 1.7 s (WPF TrailerFigureAnchor, :1105) -->
+                                <Border x:Name="TrailerFigureAnchor" Grid.Column="1" Width="56" Height="22" VerticalAlignment="Bottom" Margin="8,0,0,0"/>
                                 <TextBlock x:Name="TxtTrailerFigure" Grid.Column="1" FontFamily="Consolas, Courier New" FontSize="13" FontWeight="Bold"
-                                           VerticalAlignment="Bottom" Margin="8,0,0,0"/>
+                                           VerticalAlignment="Bottom" HorizontalAlignment="Right" Margin="8,0,0,0"/>
                             </Grid>
                         </StackPanel>
                     </Border>
@@ -783,5 +799,13 @@
             </StackPanel>
         </Grid>
     </ScrollViewer>
+        <!-- the event layers (WPF :1159-1166): rings, then sparks. The spark canvas is SMALL and moves to the anchor:
+             a burst's travel and dot size scale with its canvas, and one spanning the page threw sparks the size of a card. -->
+        <Canvas x:Name="ShockwaveCanvas" IsHitTestVisible="False" ClipToBounds="True"/>
+        <Canvas x:Name="BurstHost" IsHitTestVisible="False" ClipToBounds="True">
+            <fx:AmbientFxCanvas x:Name="BurstLayer" Width="560" Height="560" IsHitTestVisible="False"/>
+        </Canvas>
+        <!-- the page's edge, the launcher's window edge at card weight -->
+        <Border BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1.5" CornerRadius="18" Opacity="0.45" IsHitTestVisible="False"/>
     </Panel>
 </UserControl>

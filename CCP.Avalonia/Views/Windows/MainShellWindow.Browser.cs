@@ -112,7 +112,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             catch (Exception ex) { Log.Debug("Failed to toggle browser audio: {Error}", ex.Message); }
         }
 
-        private WebHost? BrowserView => BrowserPage?.FindControl<WebHost>("BrowserWebHost");
+        // Lane k16: the pop-out window's host while the browser is popped out, else the card's.
+        private WebHost? BrowserView => BrowserPage?.LiveBrowserHost ?? BrowserPage?.FindControl<WebHost>("BrowserWebHost");
 
         /// <summary>Homepage of whichever site radio is selected. BambiCloud is the default, as on
         /// WPF, including the "both deselected after an external link" case.</summary>

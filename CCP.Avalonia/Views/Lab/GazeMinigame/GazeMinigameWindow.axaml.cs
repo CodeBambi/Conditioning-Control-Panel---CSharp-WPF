@@ -512,7 +512,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
                 bool sharedImages = focus.ImageCount > 0 && ignore.Any(p => p.ImageCount > 0);
                 bool sharedVideos = VideoRoundsPlayable && focus.VideoCount > 0 && ignore.Any(p => p.VideoCount > 0);
                 if (!sharedImages && !sharedVideos)
-                    reason = "Focus and Ignore don't share a content type — pick sets that both have images, or both have videos.";
+                    reason = "Focus and Ignore don't share a content type - pick sets that both have images, or both have videos.";
             }
 
             _btnStartGame.IsEnabled = reason == null;
@@ -687,7 +687,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
             }
             _txtVibrationStatus.Text = CoreHaptics.Service?.IsConnected == true
                 ? "Haptic device connected."
-                : "Haptic device not connected — setting saved but no vibration will fire.";
+                : "Haptic device not connected - setting saved but no vibration will fire.";
         }
 
         private void UpdateRewardAudioVisibility()
@@ -746,7 +746,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
                 problems.Add($"videos ({_settings.VideoMaxDurationSec}s)");
             if (problems.Count > 0)
             {
-                _txtPassTimeWarn.Text = $"Pass time exceeds {string.Join(" and ", problems)} display time — those rounds will time out before you can pass.";
+                _txtPassTimeWarn.Text = $"Pass time exceeds {string.Join(" and ", problems)} display time - those rounds will time out before you can pass.";
                 _txtPassTimeWarn.IsVisible = true;
             }
             else
@@ -781,7 +781,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame
             catch (Exception ex) { Log.Warning(ex, "GazeMinigame: calibration dialog failed"); }
 
             if (Tracker.Calibration == null)
-                ShowReadyBanner("Still not calibrated — run a 16-point gaze calibration so the game can read which side you're looking at.", showCalibrateAction: true);
+                ShowReadyBanner("Still not calibrated - run a 16-point gaze calibration so the game can read which side you're looking at.", showCalibrateAction: true);
             else
                 HideReadyBanner();
         }

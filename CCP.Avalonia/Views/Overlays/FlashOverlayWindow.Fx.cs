@@ -226,6 +226,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             var outcome = FlashDrag.Release(m, now, CoreSettings.Current.MotionLevel);
             // WPF EndLayerDrag: a tap pops exactly as a click; a place or a fling only moves (no hydra).
             if (outcome == FlashDragOutcome.Tap && !IsLeaving) Pop();
+            else if (outcome == FlashDragOutcome.Fling) RaiseFlung();   // Natasha's red flash flung away in time: dodged
         }
 
         // ---- Exit ----

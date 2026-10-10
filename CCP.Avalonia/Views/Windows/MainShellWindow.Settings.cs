@@ -118,12 +118,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 // Desktop or a drive root.
                 if (IsPersonalFolderRoot(selected))
                 {
-                    await MessageDialog.ShowAsync(owner, "Pick a folder of your own",
-                        "That folder is one of your system's own - your Desktop, Documents, " +
-                        "Pictures, Downloads, your home folder or a whole drive." +
-                        Environment.NewLine + Environment.NewLine +
-                        "The app both reads and writes here, so pick or make a folder that holds " +
-                        "nothing but your assets.");
+                    await MessageDialog.ShowAsync(owner, Loc.Get("assets_folder_personal_title"),
+                        Loc.Get("assets_folder_personal_body"));
                     return null;
                 }
 

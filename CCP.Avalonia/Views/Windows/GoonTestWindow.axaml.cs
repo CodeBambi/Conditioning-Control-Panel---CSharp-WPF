@@ -124,7 +124,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private void Stub(string verb)
         {
-            _txtStatus.Text = $"{verb}: not wired on this head — GoonGame transports are still in the WPF project.";
+            _txtStatus.Text = $"{verb}: not wired on this head - GoonGame transports are still in the WPF project.";
         }
 
         /// <summary>

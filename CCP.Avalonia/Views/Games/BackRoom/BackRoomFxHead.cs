@@ -21,8 +21,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Games.BackRoom;
 ///
 /// <para>Ported: flash-burst (FlashOverlay), the three sub primitives (SubliminalOverlay), the Brain
 /// Drain melt and haze (BrainDrainOverlay's timed drain) and the colour wash (a TintOverlayWindow
-/// under the WPF wash envelope, colour only). Not ported: gif-rain, glitch wash, gif-full, gif-from,
-/// the Loom spiral and tunnel vision (no overlay on this head yet).</para>
+/// under the WPF wash envelope), and on <see cref="BackRoomOverlays"/> the glitch wash, gif-full, gif-from, the
+/// picture inside a wash, tunnel vision and the Loom spiral, and gif-rain on <see cref="GifCascadeOverlay"/>.</para>
 ///
 /// <para>No CCP feature toggle gates any of it (the Back Room is an authored show): only the
 /// effective motion level (OS reduced motion) and Calm shape a fire. It stops only what it started:
@@ -41,7 +41,7 @@ internal sealed class BackRoomFxHead : IBackRoomFxSink
         get
         {
             lock (SharedLock)
-                return _shared ??= new BackRoomFx(Sink, new UiFxScheduler(), ReadEnvironment, supports: p => Supported.Contains(p));
+                return _shared ??= new BackRoomFx(Sink, new UiFxScheduler(), ReadEnvironment, xp: PayPictureXp, supports: p => Supported.Contains(p));
         }
     }
 
@@ -50,7 +50,116 @@ internal sealed class BackRoomFxHead : IBackRoomFxSink
     {
         FxPrim.FlashBurst, FxPrim.SubSingle, FxPrim.SubSeq, FxPrim.SubBurst9,
         FxPrim.BrainDrainMelt, FxPrim.Haze, FxPrim.Wash,
+        FxPrim.GlitchBubbles, FxPrim.GifFull, FxPrim.GifFrom, FxPrim.SpiralFull, FxPrim.SpiralLoom,
+        FxPrim.GifRain,
     };
+
+    /// <summary>A Back Room picture pays as a flash image does (WPF BackRoomFxServices.PayPictureXp, CONTRACT 10.14):
+    /// the base through AddXP as Flash. The lucky flash roll is not on this head (see MainShellWindow.Enhancements).</summary>
+    internal static Action<int> PayPictureXp = baseXp =>
+    {
+        try { CoreProgression.AddXP(baseXp, "Flash"); } catch (Exception ex) { Log.Debug("[BackRoom] picture xp: {E}", ex.Message); }
+    };
+
+    /// <summary><c>Resources/web</c>, the folder <c>ccp.game</c> maps.</summary>
+    internal static string WebRoot => Path.Combine(AppContext.BaseDirectory, "Resources", "web");
+
+    /// <summary>
+    /// A dealt media url back to the local file behind it (WPF TryLocalPath). On this head a dealt url is
+    /// usually on the loopback listener, so it is first read back as the virtual url it stands for. Only
+    /// the two origins the room maps (<c>ccp.assets</c>, <c>ccp.game</c>) are accepted, and the file comes
+    /// from the asset server's own resolver, so a hostile url in a deal cannot name a path outside them.
+    /// </summary>
+    internal static string? TryLocalPath(string? url, WebAssetServer server)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(url) || !Uri.TryCreate(url, UriKind.Absolute, out var uri)) return null;
+            if (server.IsLoopback(uri)) uri = server.ToVirtual(uri);
+            if (!server.IsVirtual(uri) || uri.Host is not ("ccp.assets" or WebAssetServer.GameHost)) return null;
+            var path = server.ResolveVirtual(uri, out _, out _);
+            return path != null && File.Exists(path) ? Path.GetFullPath(path) : null;
+        }
+        catch (Exception ex) { Log.Debug("[BackRoom] bad media url: {E}", ex.Message); return null; }
+    }
+
+    private static readonly string[] DrawableExtensions =
+        { ".gif", ".webp", ".png", ".jpg", ".jpeg", ".jfif", ".bmp" };
+
+    /// <summary>True when a dealt url names something the picture overlays can decode (a clip is not).</summary>
+    internal static bool IsDrawablePicture(string? url)
+    {
+        var bare = url ?? string.Empty;
+        int cut = bare.IndexOfAny(new[] { '?', '#' });
+        var ext = Path.GetExtension(cut >= 0 ? bare[..cut] : bare);
+        return Array.FindIndex(DrawableExtensions, e => string.Equals(e, ext, StringComparison.OrdinalIgnoreCase)) >= 0;
+    }
+
+    private const int StandInProbes = 8;
+
+    /// <summary>WPF StandInFor: a picture the overlays CAN open, standing in for a dealt clip they cannot. One of the
+    /// player's own animated files (at most 8 header reads), else the bundled loop. The same key gives the same
+    /// stand-in for the whole sit-down. Null only when there is nothing at all.</summary>
+    internal static string? StandInFor(string? key, IReadOnlyList<string>? library, string? webRoot)
+    {
+        int n = 0;
+        foreach (var ch in key ?? string.Empty)
+            if (char.IsDigit(ch)) n = n * 10 + (ch - '0');
+        try
+        {
+            var own = (library ?? Array.Empty<string>())
+                .Where(f => !string.IsNullOrWhiteSpace(f) && !f.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+                .Where(f => Path.GetExtension(f).Equals(".gif", StringComparison.OrdinalIgnoreCase)
+                         || Path.GetExtension(f).Equals(".webp", StringComparison.OrdinalIgnoreCase))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            var rng = new Random(unchecked(n * 31 + 7));
+            for (int i = 0, probes = 0; i < own.Count && probes < StandInProbes; i++, probes++)
+            {
+                int j = rng.Next(i, own.Count);
+                (own[i], own[j]) = (own[j], own[i]);
+                if (BackRoomMedia.ProbeAnimated(own[i]).Ok && File.Exists(own[i])) return own[i];
+            }
+        }
+        catch (Exception ex) { Log.Debug("[BackRoom] stand-in library: {E}", ex.Message); }
+        try
+        {
+            if (string.IsNullOrEmpty(webRoot)) return null;
+            var loop = Path.Combine(webRoot, "backroom", "stations", "slot", "fallback", $"gif{n % BackRoomMedia.Slots}.webp");
+            return File.Exists(loop) ? loop : null;
+        }
+        catch (Exception ex) { Log.Debug("[BackRoom] stand-in loop: {E}", ex.Message); return null; }
+    }
+
+    /// <summary>The local file a dealt item shows as (tests swap it). A clip (every online pick) takes the stand-in.</summary>
+    internal static Func<BackRoomGif?, string?> LocalFile = gif =>
+    {
+        if (gif == null) return null;
+        if (!IsDrawablePicture(gif.Url)) return StandInFor(gif.Key, BackRoomMedia.LocalImagePaths(), WebRoot);
+        return TryLocalPath(gif.Url, WebAssetServer.Shared);
+    };
+
+    /// <summary>The glitch wash's picture: one from the flash pool, as WPF ChaosFlashOverlay.PickImage (tests swap it).</summary>
+    internal static Func<string?> GlitchPick = () => FlashOverlay.GetChaosImagePaths(1).FirstOrDefault(f => !f.StartsWith("http", StringComparison.OrdinalIgnoreCase));
+
+    // The woven spiral's file probes, kept per SpiralPath for a few seconds (WPF WovenFor).
+    private static readonly Dictionary<string, string?> WovenHits = new(StringComparer.Ordinal);
+    private static string? _wovenFor;
+    private static long _wovenAt = long.MinValue / 2;
+
+    private static string? WovenFor(string preset, string? spiralPath)
+    {
+        lock (WovenHits)
+        {
+            if (_wovenFor != spiralPath || Now - _wovenAt > 5000) { WovenHits.Clear(); _wovenFor = spiralPath; _wovenAt = Now; }
+            preset = BackRoomSpiralSource.Preset(preset);
+            if (!WovenHits.TryGetValue(preset, out var hit))
+                WovenHits[preset] = hit = BackRoomSpiralSource.Resolve(preset, spiralPath,
+                    ConditioningControlPanel.Services.Chaos.DtrhLoomStore.SpiralsFolder, WebRoot, File.Exists);
+            return hit;
+        }
+    }
 
     /// <summary>Any attached visual of the open room (it only reaches <c>Screens</c>). Set by the host
     /// while a room is open; null = no room, nothing shows.</summary>
@@ -76,8 +185,9 @@ internal sealed class BackRoomFxHead : IBackRoomFxSink
             CoreIntensity.Full => BackRoomFxIntensity.Full,
             _ => BackRoomFxIntensity.Normal,
         };
-        // No spiral source: the Loom spiral overlay is not on this head, so a spiral step resolves to nothing.
-        return new FxEnvironment(motion, intensity, null);
+        // Every Back Room spiral is Loom-woven: the player's own weave, else the bundled one for the preset.
+        var spiralPath = s.SpiralPath;
+        return new FxEnvironment(motion, intensity, preset => WovenFor(preset, spiralPath));
     }
 
     public void FlashBurst(int amount, double opacity, int gapMs)
@@ -141,9 +251,9 @@ internal sealed class BackRoomFxHead : IBackRoomFxSink
 
     public void Wash(FxRgb color, double peak, BackRoomGif? picture, Action shown)
     {
-        // The picture inside a wash is not ported (no decoder window here), so `shown` never runs and no XP is paid.
         if (Host is not { } host || _washRefused || !X11Overlay.IsAvailable) return;
         StopWash();
+        BackRoomOverlays.StopSlot(BackRoomOverlays.WashPicture);
         _washColor = color;
         _washPeak = Math.Clamp(peak, 0, BackRoomFxPlan.WashPeak);
         _washStart = Now;
@@ -171,6 +281,9 @@ internal sealed class BackRoomFxHead : IBackRoomFxSink
         _washTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(33) };
         _washTimer.Tick += (_, _) => WashTick();
         _washTimer.Start();
+        // The picture in the middle rides the same envelope; `shown` (and its XP) only once it is really on.
+        if (picture != null && LocalFile(picture) is { } file)
+            BackRoomOverlays.WashWithPicture(host, file, _washPeak, WashEnvelope, shown);
     }
 
     private void WashTick()
@@ -189,16 +302,62 @@ internal sealed class BackRoomFxHead : IBackRoomFxSink
         _wash.Clear();
     }
 
-    // ---- no overlay on this head: never reached, the dispatcher skips these as unknown ----
+    // ---- gif-rain: the cascade (WPF BackRoomFxServices.GifRain, same numbers as the Chaos payload) ----
 
-    public void GifRain(int count, int durationMs, double opacity) { }
-    public void GlitchWash(int durationMs, double opacity) { }
-    public void GifFull(BackRoomGif gif, int durationMs, double opacity, Action shown) { }
-    public bool GifFrom(BackRoomGif gif, FxCssRect? from, int durationMs, double scale, double dim, Action shown) => false;
-    public void SpiralLoom(string gifPath, int durationMs, double alpha, bool hold, bool slow) { }
-    public void ReleaseSpiralLoom() { }
-    public void Tunnel(double level) { }
-    public void CancelTunnel() { }
+    /// <summary>WPF GifCascadePayload.GIF_SIZE / FALL_SPEED / START_SCALE.</summary>
+    internal const double RainGifSize = 400, RainFallSpeed = 3.6, RainStartScale = 0.45;
+
+    public void GifRain(int count, int durationMs, double opacity)
+    {
+        if (Host is not { } host) return;
+        // A rain already on screen keeps its own; a second cascade on top is noise.
+        if (GifCascadeOverlay.IsRaining) return;
+        double seconds = Math.Max(1.0, durationMs / 1000.0);
+        GifCascadeOverlay.Show(host, BackRoomOverlays.RainOwner, Math.Max(1, count) / seconds, seconds,
+            RainGifSize, RainFallSpeed, opacity, RainStartScale);
+    }
+
+    /// <summary>The room's web view on screen for a gif-from's rect (WPF BackRoomFxServices.Viewport). Tests swap it.</summary>
+    internal static Func<RoomViewport?> Viewport = () => BackRoomFromMap.Read(Host);
+
+    // ---- the room's own overlay windows (BackRoomOverlays) ----
+
+    public void GlitchWash(int durationMs, double opacity)
+    {
+        if (Host is not { } host) return;
+        string? pick;
+        try { pick = GlitchPick(); } catch (Exception ex) { Log.Debug("[BackRoom] glitch pick: {E}", ex.Message); pick = null; }
+        if (pick != null) BackRoomOverlays.Full(BackRoomOverlays.Glitch, host, pick, durationMs, opacity, null);
+    }
+
+    public void GifFull(BackRoomGif gif, int durationMs, double opacity, Action shown)
+    {
+        if (Host is { } host && LocalFile(gif) is { } path) BackRoomOverlays.Full(BackRoomOverlays.Hero, host, path, durationMs, opacity, shown);
+    }
+
+    public bool GifFrom(BackRoomGif gif, FxCssRect? from, int durationMs, double scale, double dim, Action shown)
+    {
+        if (Host is not { } host || LocalFile(gif) is not { } path) return false;
+        double aspect = gif.W > 0 && gif.H > 0 ? (double)gif.W / gif.H : 4.0 / 3;
+        RoomViewport? vp = null;
+        try { vp = Viewport(); } catch (Exception ex) { Log.Debug("[BackRoom] room viewport read: {E}", ex.Message); }
+        BackRoomOverlays.GifFrom(host, path, aspect, durationMs, scale, dim, shown, from, vp);
+        return true;
+    }
+
+    public void SpiralLoom(string gifPath, int durationMs, double alpha, bool hold, bool slow)
+    {
+        if (Host is { } host) BackRoomOverlays.Spiral(host, gifPath, durationMs, alpha, slow);
+    }
+
+    public void ReleaseSpiralLoom() => BackRoomOverlays.ReleaseSpiral();
+
+    public void Tunnel(double level)
+    {
+        if (Host is { } host) BackRoomOverlays.Tunnel(host, level); else BackRoomOverlays.CancelTunnel();
+    }
+
+    public void CancelTunnel() => BackRoomOverlays.CancelTunnel();
 
     /// <summary>Panic, suspend, close: everything the room started goes now.</summary>
     public void StopAll()
@@ -206,6 +365,7 @@ internal sealed class BackRoomFxHead : IBackRoomFxSink
         if (!Dispatcher.UIThread.CheckAccess()) { Dispatcher.UIThread.Post(StopAll); return; }
         StopDrain();
         StopWash();
+        BackRoomOverlays.StopAll();
         // final: false, so the player's own flashes can show again after the room is gone.
         if (Recent(_flashAt)) { try { FlashOverlay.CloseAll(false); } catch (Exception ex) { Log.Debug("[BackRoom] flash stop: {E}", ex.Message); } }
         if (Recent(_subAt)) { try { SubliminalOverlay.CloseAll(); } catch (Exception ex) { Log.Debug("[BackRoom] sub stop: {E}", ex.Message); } }

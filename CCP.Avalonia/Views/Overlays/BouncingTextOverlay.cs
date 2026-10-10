@@ -156,8 +156,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
 
         internal static FontFamily Family()
         {
-            var f = CoreSettings.Current.BouncingTextFont;
-            return new FontFamily(string.IsNullOrWhiteSpace(f) ? "Segoe UI" : f + ", Segoe UI");
+            return Helpers.FontPicker.Resolve(CoreSettings.Current.BouncingTextFont, "Segoe UI");
         }
 
         private static (double, double) Measure(string text, int size)

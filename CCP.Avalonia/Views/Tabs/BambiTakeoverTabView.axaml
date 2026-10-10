@@ -710,7 +710,7 @@
                                                             VerticalAlignment="Center" Margin="14,0"
                                                             Minimum="0" Maximum="100" SmallChange="5" LargeChange="20" TickFrequency="10"/>
                                                     <TextBlock x:Name="TxtMantraChantVolume" Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right"
-                                                               FontSize="13" FontWeight="Bold" Foreground="{DynamicResource PinkBrush}" Text="—"/>
+                                                               FontSize="13" FontWeight="Bold" Foreground="{DynamicResource PinkBrush}" Text="-"/>
                                                 </Grid>
 
                                                 <Grid Height="36" Background="Transparent">
@@ -725,7 +725,7 @@
                                                             VerticalAlignment="Center" Margin="14,0"
                                                             Minimum="0" Maximum="60" SmallChange="1" LargeChange="5" TickFrequency="5"/>
                                                     <TextBlock x:Name="TxtMantraChantGap" Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right"
-                                                               FontSize="13" FontWeight="Bold" Foreground="{DynamicResource PinkBrush}" Text="—"/>
+                                                               FontSize="13" FontWeight="Bold" Foreground="{DynamicResource PinkBrush}" Text="-"/>
                                                 </Grid>
 
                                                 <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,6"/>

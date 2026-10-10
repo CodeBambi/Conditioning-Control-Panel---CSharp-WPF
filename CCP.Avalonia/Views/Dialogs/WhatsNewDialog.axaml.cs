@@ -33,7 +33,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
         /// <summary>Render/design constructor: sample data so --render-view can draw the dialog,
         /// with a tour action so the optional CTA is drawn too.</summary>
         internal WhatsNewDialog() : this(
-            "v7.0.0 — The Spiral",
+            "v7.0.0 - The Spiral",
             "• The Avalonia head now renders every ported view headless on Linux.\n" +
             "• Companion overlays no longer stutter when the spiral is at full intensity.\n" +
             "• Fixed a crash on startup when no audio device was present.\n" +

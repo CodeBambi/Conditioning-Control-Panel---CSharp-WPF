@@ -182,27 +182,27 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (!available)
             {
                 tab.SL_StatusDot.Fill = new SolidColorBrush(Color.FromRgb(0x5A, 0x4A, 0x6A));
-                tab.SL_StatusTitle.Text = "Microphone not ready";
+                tab.SL_StatusTitle.Text = Loc.Get("shelisten_status_not_ready_title");
                 tab.SL_StatusSub.Text =
                     !CoreSpeech.HasCaptureDevice
-                        ? "No microphone detected — connect one to use voice."
+                        ? Loc.Get("shelisten_status_no_mic")
                         : CoreSpeech.ModelStatus == CoreSpeechModelStatus.LoadFailed
-                            ? "Speech model found but it would not load — remove any extra model you added under Resources\\Models\\vosk, then restart."
-                            : "Offline speech model not installed yet — voice stays off until it is.";
+                            ? Loc.GetF("shelisten_status_load_failed", "Resources\\Models\\vosk")
+                            : Loc.Get("shelisten_status_not_installed");
                 return;
             }
 
             if (armed)
             {
                 tab.SL_StatusDot.Fill = new SolidColorBrush(Color.FromRgb(0x90, 0xEE, 0x90));
-                tab.SL_StatusTitle.Text = "She's listening";
-                tab.SL_StatusSub.Text = "The mic is open. Call her, then say a command.";
+                tab.SL_StatusTitle.Text = Loc.Get("shelisten_status_on_title");
+                tab.SL_StatusSub.Text = Loc.Get("shelisten_status_on_sub");
             }
             else
             {
                 tab.SL_StatusDot.Fill = new SolidColorBrush(Color.FromRgb(0xFF, 0xC1, 0x07));
-                tab.SL_StatusTitle.Text = "Mic off";
-                tab.SL_StatusSub.Text = "Tap Start listening so she can hear you. Works with or without Takeover.";
+                tab.SL_StatusTitle.Text = Loc.Get("shelisten_status_off_title");
+                tab.SL_StatusSub.Text = Loc.Get("shelisten_status_off_sub");
             }
         }
 
@@ -216,10 +216,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             if (!CoreSpeech.IsAvailable)
             {
-                await Dialogs.MessageDialog.ShowAsync(this, "She's Listening",
+                await Dialogs.MessageDialog.ShowAsync(this, Loc.Get("tab_shelistening"),
                     CoreSpeech.HasCaptureDevice
-                        ? "The offline speech model isn't installed yet, so the mic can't start."
-                        : "No microphone detected — connect one to use voice control.");
+                        ? Loc.Get("shelisten_start_no_model")
+                        : Loc.Get("shelisten_start_no_mic"));
                 return;
             }
             if (!s.MicConsentGiven)
@@ -253,8 +253,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             try
             {
-                if (!await Dialogs.MessageDialog.ConfirmAsync(this, "Revoke microphone consent",
-                        "This turns off every voice feature (wake word, push-to-talk, spoken mantras, voice lock cards) and clears your mic consent. You'll be asked again next time you enable one.",
+                if (!await Dialogs.MessageDialog.ConfirmAsync(this, Loc.Get("shelisten_revoke_title"),
+                        Loc.Get("shelisten_revoke_body"),
                         defaultToCancel: true))
                     return;
                 RevokeMicConsent();
@@ -294,7 +294,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>WPF SL_Calibrate_Click's first branch: this head has no sherpa wake engine
         /// (App.WakeWord), so it is never configured and WPF's notice is the whole answer.</summary>
         internal void SL_Calibrate_Click()
-            => _ = Dialogs.MessageDialog.ShowAsync(this, "Calibrate wake word",
-                "The offline wake-word model isn't installed yet, so there's nothing to calibrate.");
+            => _ = Dialogs.MessageDialog.ShowAsync(this, Loc.Get("shelisten_calibrate_title"),
+                Loc.Get("shelisten_calibrate_body"));
     }
 }

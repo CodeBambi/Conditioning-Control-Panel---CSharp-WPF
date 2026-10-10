@@ -28,6 +28,7 @@ namespace ConditioningControlPanel.Avalonia
                 Programs = new ProgramService();
                 CoreQuests.TrackProgramVerifierProvider = (category, amount) => Programs?.TrackVerifier(category, amount);
                 if (Sessions is { } runner) Programs.AttachSessionRunner(runner);
+                Platform.ChasterHead.AttachPrograms(Programs);   // WPF ChasterHooks.Attach :68-72
             }
             catch (Exception ex)
             {

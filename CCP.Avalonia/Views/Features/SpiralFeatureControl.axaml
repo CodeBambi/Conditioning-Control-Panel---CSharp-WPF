@@ -134,16 +134,15 @@
 
                 <!-- Actions (kept above the library so they're reachable without scrolling) -->
                 <!-- THE LOOM: weave your own spiral (also craftable inside DtRH) -->
-                <!-- Hidden: the Loom host is not ported, so the button would do nothing. -->
-                <Button x:Name="BtnOpenLoom" IsVisible="False"
-                        Content="🌀 THE LOOM — weave your own spiral"
+                <Button x:Name="BtnOpenLoom"
+                        Content="🌀 THE LOOM - weave your own spiral"
                         Theme="{DynamicResource OutlineButton}" HorizontalAlignment="Stretch"
                         Padding="12,10"
                         Margin="0,0,0,10"/>
 
                 <!-- Standalone corner-GIF overlays (independent of sessions) -->
                 <Button x:Name="BtnCornerGifs"
-                        Content="🖼 CORNER GIFs — pin a GIF to a screen corner"
+                        Content="🖼 CORNER GIFs - pin a GIF to a screen corner"
                         Theme="{DynamicResource OutlineButton}" HorizontalAlignment="Stretch"
                         Padding="12,10"
                         Margin="0,0,0,10"/>
@@ -199,7 +198,7 @@
 
                             <TextBlock x:Name="SpiralEmptyState"
                                        IsVisible="False"
-                                       Text="No spirals in your folder yet — only the built-in spiral is available. Click &quot;Open folder&quot; to add your own."
+                                       Text="{loc:Str spiral_empty_state}"
                                        Foreground="{DynamicResource TextMutedBrush}"
                                        FontSize="11"
                                        TextWrapping="Wrap"

@@ -59,8 +59,8 @@ internal static class CompanionHead
         // MainWindow.OnCompanionLevelUp: tray toast (WPF copy verbatim) + sound on max / every 10th.
         try
         {
-            if (max) OsNotifications.Show("MAX LEVEL!", $"{name} has reached maximum level!");
-            else if (level % 10 == 0) OsNotifications.Show("Companion Level Up!", $"{name} reached Level {level}!");
+            if (max) OsNotifications.Show("MAX LEVEL", $"{name} has reached maximum level.");
+            else if (level % 10 == 0) OsNotifications.Show("Companion Level Up", $"{name} reached Level {level}.");
         }
         catch (Exception ex) { Log.Debug("companion level toast: {E}", ex.Message); }
         if (max || level % 10 == 0) ProgressionHead.PlayLevelUpSound();

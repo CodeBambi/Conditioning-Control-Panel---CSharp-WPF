@@ -71,6 +71,8 @@ namespace ConditioningControlPanel.Services
         internal bool AutoPoll = true;
 
         public bool IsActive { get; private set; }
+        /// <summary>When the last session ended (WPF LastEndedUtc): Circe keeps the remote cap for a short grace after.</summary>
+        public DateTime? LastEndedUtc { get; private set; }
         public string? SessionCode { get; private set; }
         public string? ConnectPin { get; private set; }
         public string? Tier { get; private set; }
@@ -233,6 +235,7 @@ namespace ConditioningControlPanel.Services
             _loop?.Cancel();
             _loop = null;
             (IsActive, SessionCode, ConnectPin, Tier, ControllerIdle, _idleSince, _autoDisconnected) = (false, null, null, null, false, null, false);
+            LastEndedUtc = DateTime.UtcNow;
             (_remoteSetStrictLock, _pollBackedOff, _lastControllerCommand) = (false, false, DateTime.MinValue);
             (_lastOptInTags, _lastOptInStatus) = (null, null);
             // StopAsync and the poll loop land here off the UI thread, and the stops close windows: run

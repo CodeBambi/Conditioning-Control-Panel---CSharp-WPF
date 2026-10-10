@@ -111,8 +111,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private void ShowRemoteControlOverlay()
         {
             var r = RemoteControlTabView.Relay.Value;
-            var text = string.IsNullOrEmpty(r.SessionCode) ? "" : $"Session: {string.Join(" ", r.SessionCode.ToCharArray())}";
-            if (!string.IsNullOrEmpty(r.ConnectPin)) text += $"  PIN: {r.ConnectPin}";
+            var text = string.IsNullOrEmpty(r.SessionCode) ? "" : Loc.GetF("remote_overlay_session", string.Join(" ", r.SessionCode.ToCharArray()));
+            if (!string.IsNullOrEmpty(r.ConnectPin)) text += "  " + Loc.GetF("remote_overlay_pin", r.ConnectPin);
             if (Named<TextBlock>("TxtOverlaySessionCode") is { } code) code.Text = text;
             // The big picker: the first three slots above End Session, the last two below (WPF LoadSettings).
             var presets = CoreSettings.Current.RemoteEmotePresets;

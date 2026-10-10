@@ -140,7 +140,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion.Runtime
                 ((TextBlock)openBtn.Content!).Text = invalid ? WarnGlyph : OpenGlyph;
                 openBtn.Foreground = invalid ? WarnBrush : UrlBrush;
                 // Hardcoded English in WPF too (MainWindow.xaml.cs AddVideoLinkRow); kept verbatim.
-                ToolTip.SetTip(openBtn, invalid ? "Not a valid http(s) link — this row won't be saved."
+                ToolTip.SetTip(openBtn, invalid ? "Not a valid http(s) link - this row won't be saved."
                                                 : Loc.Get("tooltip_preview_video_link"));
             }
             urlBox.TextChanged += (_, _) => UpdateValidity();

@@ -14,6 +14,7 @@ using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services.Chaos;
 using ConditioningControlPanel.Services.UI;
 using Serilog;
 
@@ -61,8 +62,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             SliderOpacity.ValueChanged += SliderOpacity_Changed;
             CmbMonitor.DropDownOpened += (_, _) => PopulateMonitors();
             CmbMonitor.SelectionChanged += CmbMonitor_Changed;
-            // BtnOpenLoom is hidden in the markup: the Loom host (WPF Services.Chaos.LoomHostService)
-            // and its live-save feed (DtrhLoomStore.Changed) are not ported.
+            BtnOpenLoom.Click += BtnOpenLoom_Click;
             BtnCornerGifs.Click += BtnCornerGifs_Click;
             BtnSelectGif.Click += BtnSelectGif_Click;
             BtnOpenSpiralFolder.Click += BtnOpenSpiralFolder_Click;
@@ -77,12 +77,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             base.OnAttachedToVisualTree(e);
             if (CoreSettings.Service is { } svc) svc.CurrentReplaced += RebindToCurrentSettings;
             RebindToCurrentSettings();
+            // WPF Loaded: Loom saves / deletes (the descent's pane or the Loom window) show up live.
+            DtrhLoomStore.Changed -= OnLoomStoreChanged;
+            DtrhLoomStore.Changed += OnLoomStoreChanged;
             RefreshLibrary();
         }
 
         protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
         {
             if (CoreSettings.Service is { } svc) svc.CurrentReplaced -= RebindToCurrentSettings;
+            DtrhLoomStore.Changed -= OnLoomStoreChanged;
             Unhook();
             base.OnDetachedFromVisualTree(e);
         }
@@ -437,6 +441,33 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             }
         }
 
+        /// <summary>Test seam: what the Loom button opens (the real window by default).</summary>
+        internal static Action OpenLoom = () => Games.GameWindow.Launch(Games.GameWindow.LoomId);
+
+        /// <summary>WPF BtnOpenLoom_Click: open THE LOOM (a second press focuses the live window).
+        /// Saves land in the Spirals folder; <see cref="DtrhLoomStore.Changed"/> refreshes the library.</summary>
+        private void BtnOpenLoom_Click(object? sender, RoutedEventArgs e)
+        {
+            try { OpenLoom(); }
+            catch (Exception ex) { Log.Warning(ex, "Spiral card: Loom launch failed"); }
+        }
+
+        /// <summary>WPF OnLoomStoreChanged: raised on the saver's thread, so marshal; the card may be gone.</summary>
+        private void OnLoomStoreChanged()
+        {
+            try { global::Avalonia.Threading.Dispatcher.UIThread.Post(RefreshLibrary); }
+            catch (Exception ex) { Log.Debug("Spiral card: loom refresh: {E}", ex.Message); }
+        }
+
+        /// <summary>The picker's filters: WPF's two image rows, plus the video spirals the library
+        /// lists and the overlay plays (same extension lists as the gallery).</summary>
+        internal static FilePickerFileType[] SpiralPickerTypes() => new[]
+        {
+            new FilePickerFileType("GIF Files") { Patterns = new[] { "*.gif" } },
+            new FilePickerFileType("All Image Files") { Patterns = new[] { "*.gif", "*.png", "*.jpg", "*.jpeg" } },
+            new FilePickerFileType("Video Files") { Patterns = SpiralVideoExts.Select(x => "*" + x).ToArray() },
+        };
+
         /// <summary>Opens the standalone corner-GIF overlay config window (two pinnable corners,
         /// independent of any running session).</summary>
         private void BtnCornerGifs_Click(object? sender, RoutedEventArgs e)
@@ -479,11 +510,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
                     Title = Loc.Get("title_select_spiral_gif"),
                     AllowMultiple = false,
                     SuggestedStartLocation = start,
-                    FileTypeFilter = new[]
-                    {
-                        new FilePickerFileType("GIF Files") { Patterns = new[] { "*.gif" } },
-                        new FilePickerFileType("All Image Files") { Patterns = new[] { "*.gif", "*.png", "*.jpg", "*.jpeg" } },
-                    },
+                    FileTypeFilter = SpiralPickerTypes(),
                 });
 
                 var file = picked.Count > 0 ? picked[0].TryGetLocalPath() : null;

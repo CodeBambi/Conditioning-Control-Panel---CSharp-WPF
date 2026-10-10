@@ -177,7 +177,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
                     "• " + (CoreSettings.Current.MercySystemEnabled   // #1145: names the picked threshold
                         ? global::ConditioningControlPanel.Localization.Loc.GetF("warning_strict_mercy_line", CoreSettings.Current.MercyAfterFails)
                         : global::ConditioningControlPanel.Localization.Loc.Get("warning_strict_mercy_off")) + "\n" +
-                    "• This can be very restrictive!");
+                    "• This can be very restrictive.");
 
                 if (!confirmed)
                 {

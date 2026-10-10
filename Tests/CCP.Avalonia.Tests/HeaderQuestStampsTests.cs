@@ -83,6 +83,26 @@ public sealed class HeaderQuestStampsTests
             Assert.Null(w.HoveredQuestStamp);
             Assert.Equal((1.0, MainShellWindow.QuestStampAngles[1]), w.QuestStampPose("d1"));
 
+            // The card leads with the quest's own art (the picture the Quests tab shows), and a finished
+            // quest wears the check over it.
+            var rush = QuestDefinition.DailyQuests.Find(d => d.Id == "flash_rush_d")!;
+            w.HoverQuestStampForTests("d1", true);
+            Assert.NotNull(w.QuestStampCardArt);
+            Assert.Same(ConditioningControlPanel.Avalonia.Views.Tabs.QuestsTabView.GetQuestArt(rush), w.QuestStampCardArt!.Source);
+            Assert.False(w.QuestStampCardDoneShown);
+            w.HoverQuestStampForTests("d1", false);
+            w.HoverQuestStampForTests("d0", true);
+            Assert.True(w.QuestStampCardDoneShown);
+
+            // A mod switch: the decoded art is dropped, the card closes, the stamps repaint (no pop).
+            w.DropArtCache();
+            Assert.Equal(1, w.QuestStampArtDrops);
+            Assert.Null(w.HoveredQuestStamp);
+            Assert.Equal(4, w.QuestStampCount);
+            Assert.Equal(1, w.QuestStampPops);
+            w.DropArtCache();                                         // the shell's re-skin may call it too
+            Assert.Equal(2, w.QuestStampArtDrops);
+
             // No service: the cluster collapses and hands its room back.
             AvApp.Quests = null;
             w.InitializeQuestStamps();

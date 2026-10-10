@@ -23,7 +23,8 @@ public sealed class GameWindowTests
         var missing = LauncherCards.All.Select(c => c.Id)
             .Where(id => id is not "intake" and not "race" && !GameWindow.Games.ContainsKey(id)).ToList();
         Assert.True(missing.Count == 0, "No game window for: " + string.Join(", ", missing));
-        foreach (var id in GameWindow.Games.Keys)
+        // For You, Just Drop and the Loom are panel doors (Premium shelf, Spiral card), never launcher tiles.
+        foreach (var id in GameWindow.Games.Keys.Where(k => k is not "fyp" and not "justdrop" and not "loom"))
             Assert.True(LauncherWindow.Destinations.ContainsKey(id), $"launcher has no destination for {id}");
     }
 

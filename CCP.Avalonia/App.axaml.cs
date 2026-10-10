@@ -319,10 +319,17 @@ namespace ConditioningControlPanel.Avalonia
         protected virtual string AchievementsPath => AchievementStore.DefaultPath;
 
         /// <summary>WPF App.Chaster?.Note(id), with its swallow: inert until the tab is on and priced.</summary>
-        internal static void ChasterNote(string id)
+        internal static void ChasterNote(string id, int units = 1)
         {
-            try { Platform.ChasterHead.Service?.Note(id); }
+            try { Platform.ChasterHead.Service?.Note(id, units); }
             catch (Exception ex) { Serilog.Log.Debug(ex, "[Chaster] {Id} hook", id); }
+        }
+
+        /// <summary>WPF AchievementService.TrackSessionComplete :999-1000, the two calls this head makes.</summary>
+        internal static void SessionCompleted()
+        {
+            try { Quests?.TrackSessionCompleted(); } catch (Exception ex) { Serilog.Log.Debug(ex, "session quest credit"); }
+            ChasterNote("session");
         }
 
         public override void Initialize()
@@ -392,7 +399,7 @@ namespace ConditioningControlPanel.Avalonia
             }
             var window = shell();
             window?.Show();
-            splash.SetProgress(1.0, "Ready!");
+            splash.SetProgress(1.0, "Ready");
             splash.FadeOutAndClose(() => { if (window is { IsVisible: true }) window.Activate(); });
         }
 
@@ -428,6 +435,8 @@ namespace ConditioningControlPanel.Avalonia
                 // Lock back from lockdown_recovery.json before anything reads them.
                 LockdownService.RecoverIfNeeded();
                 LockdownService.Current = new LockdownService();
+                Views.Windows.MainShellWindow.InstallLockdownDose(LockdownService.Current);   // WPF App.xaml.cs:2657 (the Dose)
+                Views.Windows.MainShellWindow.InstallPossession(LockdownService.Current);     // WPF App.Possession (the haunt)
                 // WPF App.xaml.cs:2662: a served Lockdown credits the Lockdown quests (progression#41).
                 var lockdown = LockdownService.Current;
                 lockdown.LockdownDeactivated += () => { try { Quests?.TrackLockdownCompleted(lockdown.LastActiveDuration); } catch (Exception ex) { Serilog.Log.Debug("lockdown quest credit: {E}", ex.Message); } };
@@ -757,7 +766,11 @@ namespace ConditioningControlPanel.Avalonia
                 CoreProgression.TrackBubbleCountCompletedProvider = () => Quests?.TrackBubbleCountCompleted();
                 // WPF MantraService's App.Quests / App.Chaster reads (seeded in WPF App.xaml.cs the same way).
                 CoreProgression.TrackMantraCompletedProvider = () => Quests?.TrackMantraCompleted();
-                CoreProgression.TrackSessionCompletedProvider = () => Quests?.TrackSessionCompleted();   // progression#41
+                // WPF AchievementService.TrackSessionComplete :999-1000: the quest credit, then Circe's "session"
+                // row (which also forgives misses and feeds the streak credit inside the Core service).
+                CoreProgression.TrackSessionCompletedProvider = SessionCompleted;   // progression#41
+                // WPF RemoteControlService.cs:1245 / :1358: what the controller sends lands on the wearer's tab.
+                RemoteCommands.ChasterNote = id => ChasterNote(id);
                 MantraService.ChasterNote = reps => { try { Platform.ChasterHead.Service?.Note("mantra", reps); } catch (Exception ex) { Serilog.Log.Debug(ex, "[Chaster] mantra hook"); } };
                 // WPF AchievementService.TrackVideoWatched -> App.Quests.TrackVideoMinutes.
                 CoreProgression.TrackVideoWatchedProvider = sec => Quests?.TrackVideoMinutes(Achievements?.TrackVideoWatched(sec) ?? sec / 60.0);
@@ -980,6 +993,7 @@ namespace ConditioningControlPanel.Avalonia
             Views.Overlays.SubliminalWhisperShow.StopAll();
             Views.Overlays.SubliminalOverlay.CloseAll();
             Views.Overlays.BouncingTextOverlay.Stop();
+            Views.Overlays.SpiralOverlay.ReleaseAllHolds();   // a held spiral (Deeper band, Back Room) never outlives a stop or a panic
             Views.Overlays.SpiralOverlay.CloseAll();   // WPF StopEngine -> App.Overlay.Stop(); panic and exit too
             Views.Overlays.BrainDrainOverlay.CloseAll();   // the Brain Drain haze (WPF StopBrainDrainBlur)
         }
@@ -1140,6 +1154,7 @@ namespace ConditioningControlPanel.Avalonia
         {
             if (Interlocked.Exchange(ref _exitHandled, 1) != 0) return;
             _exiting = true;
+            ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("appClosing");   // WPF App.xaml.cs:5644 (never speaks)
 
             // WPF App.OnExit:5965: haptics FIRST and synchronously (bounded ~2 s). A Lovense level has no
             // server-side watchdog, so a toy not countermanded here keeps running after the app is gone.

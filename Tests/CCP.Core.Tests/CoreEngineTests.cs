@@ -101,4 +101,34 @@ public sealed class CoreEngineTests
         }
         finally { CoreEngine.Stop(); }
     }
+
+    // WPF StartStop.cs:293: a system start (the Lockdown Dose keeper) is not a session the user chose,
+    // and EMI's engineStarted moment carries the real flag; a press counts and says so.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void A_system_start_is_not_counted_as_a_session_and_EMI_hears_the_real_flag(bool systemInitiated)
+    {
+        var s = CoreSettings.Current;
+        var sink = ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Sink;
+        var sessions = s.TotalSessions;
+        bool? heard = null;
+        ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Sink = (id, ctx) =>
+        {
+            if (id == "engineStarted") heard = (bool)ctx!.GetType().GetProperty("systemInitiated")!.GetValue(ctx)!;
+        };
+        try
+        {
+            CoreEngine.Start(systemInitiated);
+            Assert.True(CoreEngine.IsRunning);
+            Assert.Equal(sessions + (systemInitiated ? 0 : 1), s.TotalSessions);
+            Assert.Equal(systemInitiated, heard);
+        }
+        finally
+        {
+            CoreEngine.Stop();
+            ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Sink = sink;
+            s.TotalSessions = sessions;
+        }
+    }
 }

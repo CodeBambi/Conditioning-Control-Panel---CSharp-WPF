@@ -160,7 +160,7 @@
                                     <TextBlock Text="Trigger Bubbles" FontSize="13" FontWeight="SemiBold"
                                                Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
                                     <TextBlock x:Name="TxtTriggerEggHint"
-                                               Text="careful — Bambi loves these…"
+                                               Text=""
                                                Foreground="{DynamicResource PinkBrush}" FontSize="10.5" FontStyle="Italic"
                                                VerticalAlignment="Center" Margin="8,1,0,0"/>
                                 </StackPanel>

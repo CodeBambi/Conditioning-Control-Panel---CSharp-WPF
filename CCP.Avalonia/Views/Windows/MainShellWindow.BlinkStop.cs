@@ -98,9 +98,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     return;
                 }
 
-                if (!await Dialogs.MessageDialog.ConfirmAsync(this, "Recalibrate?",
-                        "You blinked to stop everything. Recalibrate webcam tracking now?",
-                        okText: "Yes", cancelText: "No"))
+                if (!await Dialogs.MessageDialog.ConfirmAsync(this,
+                        ConditioningControlPanel.Localization.Loc.Get("blink_stop_recal_title"),
+                        ConditioningControlPanel.Localization.Loc.Get("blink_stop_recal_body"),
+                        okText: ConditioningControlPanel.Localization.Loc.Get("btn_yes"),
+                        cancelText: ConditioningControlPanel.Localization.Loc.Get("btn_no")))
                     return;
                 await WebcamCalibrationWindow.ShowDialogWithRecalibrate(this);
             }

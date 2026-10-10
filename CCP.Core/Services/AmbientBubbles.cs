@@ -158,10 +158,35 @@ namespace ConditioningControlPanel.Services
             Math.Clamp(Fade, 0, 1) * _spiralFade * (IsDrain && !Popping ? Chaos.BrainDrainBubble.PulseAt(_timeAlive) : 1.0);
 
         /// <summary>Draw scale this step: the pop/breathe scale plus WPF's 0.06 x sin(7.5 t) wobble.</summary>
-        public double DrawScale => (Scale + 0.06 * Math.Sin(_timeAlive * 7.5 + _wobbleOffset)) * (1.0 + 0.25 * GazeDwell);
+        public double DrawScale => (Scale + 0.06 * Math.Sin(_timeAlive * 7.5 + _wobbleOffset)) * (1.0 + 0.25 * GazeDwell)
+            * (1.0 - Chaster.NatashasFavourite.HoldShrink * ResistProgress);
 
         /// <summary>Focus Gaze dwell fill, 0..1 (WPF Bubble.SetGazeDwellProgress: swells to 1.25x).</summary>
         public double GazeDwell;
+
+        // ---- Natasha's favourite (WPF Bubble.MarkNatasha / BeginResist / CompleteResist) ----
+
+        /// <summary>Dealt to Natasha at spawn: faint red, +5:00 when the player pops it, a credit when held.</summary>
+        public bool IsNatasha;
+        /// <summary>Who ended this red bubble. Programmatic until the player's own press or stare lands.</summary>
+        public Chaster.NatashasFavourite.PopCause NatashaCause = Chaster.NatashasFavourite.PopCause.Programmatic;
+        /// <summary>0..1, how full the mint ring is while a press is held on it.</summary>
+        public double ResistProgress;
+        /// <summary>Resisted: it shrinks away instead of bursting (WPF _isDeflating).</summary>
+        public bool Deflating { get; private set; }
+        /// <summary>Seconds alive, for the red blink (WPF _timeAlive).</summary>
+        public double AliveSec => _timeAlive;
+
+        /// <summary>WPF CompleteResist: the ring filled. No burst, no XP; the head books the credit.
+        /// False when it was already ending.</summary>
+        public bool Resist()
+        {
+            ResistProgress = 0;
+            if (Popping || !IsNatasha) return false;
+            Popping = Deflating = true;
+            NatashaCause = Chaster.NatashasFavourite.PopCause.Resisted;
+            return true;
+        }
 
         public double CenterX => X + Size / 2;
         public double CenterY => Y + Size / 2;
@@ -178,7 +203,7 @@ namespace ConditioningControlPanel.Services
             if (Popping)
             {
                 // Pop animation - expand and fade; lucky pops linger ~50% longer.
-                Scale += 0.04;
+                Scale = Deflating ? Math.Max(0.05, Scale - 0.06) : Scale + 0.04;
                 Fade -= Lucky ? 0.044 : 0.066;
                 Angle += 2;
                 return Fade <= 0 ? Result.Done : Result.Alive;

@@ -32,6 +32,28 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         private static DateTimeOffset _lastRing = DateTimeOffset.MinValue;
         private static DateTimeOffset _lastChime = DateTimeOffset.MinValue;
 
+        private static DateTimeOffset _lastToss = DateTimeOffset.MinValue;
+        private static DateTimeOffset _lastLand = DateTimeOffset.MinValue;
+
+        /// <summary>WPF EmiSfx.Lift / Bump / Thud: picked up, put down, thrown (0.10 / 0.14 / 0.17 of the master).</summary>
+        public static void Lift()
+        {
+            if (Throttle(ref _lastToss))
+                Play(new[] { "emi/lift.mp3", "chaos/ui_equip.mp3", "chaos/cards_in.mp3" }, 0.10f, "emi-sfx-toss");
+        }
+
+        public static void Bump()
+        {
+            if (Throttle(ref _lastLand))
+                Play(new[] { "emi/bump.mp3", "chaos/shield_thunk.mp3", "chaos/thud.mp3" }, 0.14f, "emi-sfx-toss");
+        }
+
+        public static void Thud()
+        {
+            if (Throttle(ref _lastLand))
+                Play(new[] { "emi/thud.mp3", "chaos/thud.mp3" }, 0.17f, "emi-sfx-toss");
+        }
+
         /// <summary>WPF EmiSfx.Chime: the pet streak's glee chime.</summary>
         public static void Chime()
         {

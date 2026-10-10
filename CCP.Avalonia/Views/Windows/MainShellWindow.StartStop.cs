@@ -68,14 +68,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (!CoreEngine.IsRunning) StartEngine();
         }
 
-        /// <summary>WPF StartEngine, through the portal wrapper so the panic key is bound first.</summary>
-        internal void StartEngine()
+        /// <summary>WPF StartEngine, through the portal wrapper so the panic key is bound first.
+        /// <paramref name="systemInitiated"/> = WPF StartStop.cs:293: the Lockdown Dose keeper started it, not a press
+        /// (no session count, EMI hears the real flag; this head has no Relapse check or video enhancement prompt to skip).</summary>
+        internal void StartEngine(bool systemInitiated = false)
         {
             var gen = ++_engineGen;
             StartEffect(() =>
             {
                 if (gen != _engineGen || CoreEngine.IsRunning) return;
-                CoreEngine.Start();
+                CoreEngine.Start(systemInitiated);
                 StartRampIfEnabled();              // WPF StartEngine :398
                 PinkRushHost.Start();              // WPF StartEngine :309 App.SkillTree?.Start()
                 PinkFilterOverlay.Refresh(this);   // WPF App.Overlay.Start()

@@ -168,11 +168,20 @@ public sealed partial class FriendsDrawer
             Background = Brushes.Transparent, Tag = "friends-feed-line:" + e.Key, Child = g,
         };
         if (isNew)
+        {
+            // WPF: the unread dot glows (FriendsLook.Glow(Pink, 6, 0.9)); a BoxShadow halo behind it, no Effect
+            g.Children.Add(new Border
+            {
+                Width = 6, Height = 6, CornerRadius = new CornerRadius(3), BoxShadow = CountGlow(PinkC, 6, 0.9),
+                HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Center,
+                IsHitTestVisible = false, Tag = "friends-feed-new-glow",
+            });
             g.Children.Add(new Ellipse
             {
                 Width = 6, Height = 6, Fill = Pink, HorizontalAlignment = HorizontalAlignment.Left,
                 VerticalAlignment = VerticalAlignment.Center, Tag = "friends-feed-new",
             });
+        }
         var text = new TextBlock
         {
             FontSize = 12, Foreground = isNew ? Text : Muted, TextWrapping = TextWrapping.NoWrap,

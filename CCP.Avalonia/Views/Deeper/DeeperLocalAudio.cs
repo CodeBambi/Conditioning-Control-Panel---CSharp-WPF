@@ -15,6 +15,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         double PositionSeconds { get; set; }
         void Play();
         void Pause();
+        /// <summary>0..1 (WPF EnhancementAudioPlayer.Volume). Per player, never the process-wide
+        /// LibVLC volume. A transport without a level ignores it.</summary>
+        double Volume { set { } }
         /// <summary>Raised off the UI thread once the clip has played to its end and rewound.</summary>
         event Action? Ended;
     }
@@ -59,6 +62,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             void Play();
             void SetPause(bool pause);
             void Stop();
+            /// <summary>LibVLC 0..100; only sticks once the output exists (playing).</summary>
+            int Volume { set { } }
         }
 
         private sealed class VlcEngine(MediaPlayer p) : IEngine
@@ -69,6 +74,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             public void Play() => p.Play();
             public void SetPause(bool pause) => p.SetPause(pause);
             public void Stop() => p.Stop();
+            public int Volume { set => p.Volume = value; }
         }
 
         /// <summary>Play/pause/seek/end over an <see cref="IEngine"/>. <see cref="OnPlaying"/> and
@@ -116,6 +122,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
                 }
             }
 
+            private int _vol = -1;   // -1 = never set: the player keeps its own level
+
+            public double Volume
+            {
+                set
+                {
+                    lock (Gate)
+                    {
+                        // Cubic like LibVlcAudio.PlayOneShot: WPF's level is linear sample gain.
+                        _vol = (int)Math.Round(Math.Cbrt(Math.Clamp(value, 0, 1)) * 100);
+                        if (!IsDisposed && Live) player.Volume = _vol;
+                    }
+                }
+            }
+
             public void Play()
             {
                 lock (Gate)
@@ -141,7 +162,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             {
                 lock (Gate)
                 {
-                    if (IsDisposed || _pendingMs <= 0) return;
+                    if (IsDisposed) return;
+                    if (_vol >= 0) player.Volume = _vol;   // the output only takes a level once it exists
+                    if (_pendingMs <= 0) return;
                     player.Time = _pendingMs;
                     _pendingMs = 0;
                 }

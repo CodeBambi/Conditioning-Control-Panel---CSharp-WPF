@@ -15,7 +15,7 @@
         xmlns:ctl="clr-namespace:ConditioningControlPanel.Avalonia.Controls"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="ConditioningControlPanel.Avalonia.Views.Dialogs.MicConsentDialog"
-        Title="Microphone — Privacy and Consent"
+        Title="Microphone - Privacy and Consent"
         Width="640" Height="620"
         WindowStartupLocation="CenterOwner"
         CanResize="False"
@@ -120,11 +120,11 @@
         <!-- ─── STEP 1 — What this enables ─── -->
         <ScrollViewer x:Name="PanelStep1" Grid.Row="1" VerticalScrollBarVisibility="Auto">
             <StackPanel>
-                <TextBlock Theme="{StaticResource DlgHeader}" Text="Voice — &quot;say it for me&quot;"/>
+                <TextBlock Theme="{StaticResource DlgHeader}" Text="Voice - &quot;say it for me&quot;"/>
                 <TextBlock Theme="{StaticResource DlgSub}" Text="Optional. Off by default. Lets her hear you say things back."/>
 
                 <TextBlock Theme="{StaticResource DlgBody}" Margin="0,24,0,0"
-                           Text="With this on, during Takeover she can ask you to repeat a phrase out loud — and actually listen for it. She knows the phrase already, so all the app checks is whether you said it, and loudly enough. Recognition runs entirely on your computer using a small offline model bundled with the app — no internet is used."/>
+                           Text="With this on, during Takeover she can ask you to repeat a phrase out loud - and actually listen for it. She knows the phrase already, so all the app checks is whether you said it, and loudly enough. Recognition runs entirely on your computer using a small offline model bundled with the app - no internet is used."/>
 
                 <TextBlock Theme="{StaticResource DlgBody}" Margin="0,16,0,0" FontWeight="SemiBold" Foreground="{StaticResource PinkBrush}"
                            Text="How the mic is used:"/>
@@ -138,11 +138,11 @@
                 <TextBlock Theme="{StaticResource DlgBody}" Margin="14,12,0,0">
                     <Run FontWeight="Bold">• Always-on wake word (separate opt-in)</Run>
                     <LineBreak/>
-                    <Run>A &quot;Hey Bambi&quot;-style trigger that keeps the mic open is available later as its own setting — it is NOT enabled by this consent.</Run>
+                    <Run>A &quot;Hey Bambi&quot;-style trigger that keeps the mic open is available later as its own setting - it is NOT enabled by this consent.</Run>
                 </TextBlock>
 
                 <TextBlock Theme="{StaticResource DlgBody}" Margin="0,28,0,0" Foreground="#9090A8" FontStyle="Italic"
-                           Text="The next screen explains exactly what happens to the audio — and what never does. Read it carefully."/>
+                           Text="The next screen explains exactly what happens to the audio - and what never does. Read it carefully."/>
             </StackPanel>
         </ScrollViewer>
 
@@ -158,7 +158,7 @@
                             <Run FontWeight="Bold" Foreground="{StaticResource PinkBrush}">• </Run>
                             <Run>Audio is </Run>
                             <Run FontWeight="Bold">never transmitted</Run>
-                            <Run> — not to our server, not to Patreon, not to any third party.</Run>
+                            <Run> - not to our server, not to Patreon, not to any third party.</Run>
                         </TextBlock>
                         <TextBlock Theme="{StaticResource DlgPromise}">
                             <Run FontWeight="Bold" Foreground="{StaticResource PinkBrush}">• </Run>
@@ -170,7 +170,7 @@
                             <Run FontWeight="Bold" Foreground="{StaticResource PinkBrush}">• </Run>
                             <Run>Only a </Run>
                             <Run FontWeight="Bold">match score </Run>
-                            <Run>(did you say the phrase, and how loud) is used — never the raw audio.</Run>
+                            <Run>(did you say the phrase, and how loud) is used - never the raw audio.</Run>
                         </TextBlock>
                         <TextBlock Theme="{StaticResource DlgPromise}">
                             <Run FontWeight="Bold" Foreground="{StaticResource PinkBrush}">• </Run>
@@ -183,7 +183,7 @@
                             <Run FontWeight="Bold" Foreground="{StaticResource PinkBrush}">• </Run>
                             <Run>By default the mic opens </Run>
                             <Run FontWeight="Bold">only during a prompt</Run>
-                            <Run>, for a few seconds — not continuously.</Run>
+                            <Run>, for a few seconds - not continuously.</Run>
                         </TextBlock>
                         <TextBlock Theme="{StaticResource DlgPromise}">
                             <Run FontWeight="Bold" Foreground="{StaticResource PinkBrush}">• </Run>

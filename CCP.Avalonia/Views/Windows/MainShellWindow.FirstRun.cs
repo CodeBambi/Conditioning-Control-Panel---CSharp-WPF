@@ -52,8 +52,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             try
             {
+                HookEmiKnock();   // before any stamp of LastSeenVersion (MainShellWindow.EmiKnock.cs)
                 if (FirstRunWizard.ShouldRunAndClaim())
                 {
+                    EmiFirstRunBegan();   // WPF :563 firstLaunchEver hold
                     Opened += OnFirstRunShellOpened;
                     // WPF MainWindow.xaml.cs:566: a fresh install never needs "What moved".
                     OfferWhatMovedIfNeeded(freshInstall: true);
@@ -82,17 +84,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// mid-wizard, or a WPF settings file in that state) is asked before anything else.
         /// "Yes" reads "OK" to match this head's buttons (docs/avalonia-decisions.md).
         /// </summary>
-        internal const string AgeGateBody =
-            "This application contains adult content intended for users aged 18 and older.\n\n" +
-            "By clicking \"OK\", you confirm that you are at least 18 years old and that viewing adult content is legal in your jurisdiction.\n\n" +
-            "Do you wish to continue?";
+        internal static string AgeGateBody => ConditioningControlPanel.Localization.Loc.Get("age_gate_body");
 
         private void OnAgeGateShellOpened(object? sender, EventArgs e)
         {
             Opened -= OnAgeGateShellOpened;
             Dispatcher.UIThread.Post(async () =>
             {
-                var ok = IsVisible && await Dialogs.MessageDialog.ConfirmAsync(this, "Age Verification", AgeGateBody, defaultToCancel: true);
+                var ok = IsVisible && await Dialogs.MessageDialog.ConfirmAsync(this, ConditioningControlPanel.Localization.Loc.Get("age_gate_title"), AgeGateBody, defaultToCancel: true);
                 if (!ok) { ExitWithoutBill(); return; }   // WPF App.xaml.cs:3835 Shutdown, no bill
                 CoreSettings.Current.HasAcceptedAgeVerification = true;
                 CoreSettings.Save();
@@ -126,6 +125,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     var notes = CoreReleaseContent.PatchNotes;
                     if (string.IsNullOrWhiteSpace(notes)) return;
                     Log.Information("Version changed from {Old} to {New}, showing What's New", last, current);
+                    ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("afterUpdate", new { target = current });   // WPF MainWindow.Marquee.cs:325, before the stamp
                     var title = $"What's New in v{current}";
                     if (WhatsNewPresenter != null) await WhatsNewPresenter(title, notes);
                     else if (IsVisible) await new Dialogs.WhatsNewDialog(title, notes).ShowDialogSafe(this);
@@ -166,6 +166,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 {
                     Log.Warning(ex, "[FirstRun] The first-run wizard failed to run");
                 }
+                finally { EmiFirstRunEnded(); }   // WPF :590-601 the hold comes off
             }, DispatcherPriority.Normal);
         }
     }

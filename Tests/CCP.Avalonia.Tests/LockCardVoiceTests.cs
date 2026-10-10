@@ -72,7 +72,7 @@ public sealed class LockCardVoiceTests
             CoreSpeech.IsAvailableProvider = () => false;
             CoreSpeech.ModelStatusProvider = () => CoreSpeechModelStatus.NoModelFound;
             var hint = ConditioningControlPanel.Avalonia.Views.Features.LockCardFeatureControl.VoiceHint(true);
-            Assert.Contains("not installed yet", hint);
+            Assert.Equal(ConditioningControlPanel.Localization.Loc.GetF("lockcard_voice_hint_not_installed", Path.Combine(CorePaths.UserData, "Models", "vosk")), hint);
             Assert.Contains(Path.Combine(CorePaths.UserData, "Models", "vosk"), hint);
         }
         finally { ResetSpeech(); }

@@ -46,6 +46,8 @@ namespace ConditioningControlPanel
             => running && enabled && !busy && !displaySettling;
 
         /// <summary>Arm the schedule. Idempotent.</summary>
+        private static DateTime _emiStartedUtc = DateTime.UtcNow;   // EMI desk: how long the flashes ran
+
         public static void Start()
         {
             lock (Gate)
@@ -57,6 +59,8 @@ namespace ConditioningControlPanel
                 _timer ??= new Timer(OnTick, null, Timeout.Infinite, Timeout.Infinite);
                 ArmLocked();
             }
+            _emiStartedUtc = DateTime.UtcNow;
+            ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("flashesStarted");   // WPF FlashService.cs:548
             // WPF FlashService.Start warms the online pool so the first tick has clips ready.
             try { RemoteFlashSource.EnsurePrefetch(); } catch (Exception ex) { Log.Debug("Flash: remote warm-up failed: {E}", ex.Message); }
             Log.Information("Flash schedule started");
@@ -71,6 +75,8 @@ namespace ConditioningControlPanel
                 _isRunning = false;
                 try { _timer?.Change(Timeout.Infinite, Timeout.Infinite); } catch { }
             }
+            int emiRunMinutes = Math.Max(0, (int)(DateTime.UtcNow - _emiStartedUtc).TotalMinutes);
+            ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("flashesStopped", new { minutes = emiRunMinutes });   // WPF FlashService.cs:583
             Log.Information("Flash schedule stopped");
         }
 

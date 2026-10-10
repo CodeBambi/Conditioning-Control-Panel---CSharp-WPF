@@ -33,6 +33,85 @@ namespace ConditioningControlPanel.Services.Deeper
 
         public static string DefaultFolder => Path.Combine(CorePaths.UserData, "enhancements");
 
+        /// <summary>WPF EnhancementLibrary.SuggestedFileName: the metadata name, made file-safe.</summary>
+        public static string SuggestedFileName(Enhancement enhancement)
+        {
+            var name = enhancement.Metadata?.Name;
+            if (string.IsNullOrWhiteSpace(name)) name = "Untitled";
+            foreach (var c in Path.GetInvalidFileNameChars())
+                name = name.Replace(c, '_');
+            return name + FileSuffix;
+        }
+
+        /// <summary>
+        /// WPF EnhancementLibrary.PromoteToLibrary: saves an in-memory enhancement into the library
+        /// folder under its suggested name, deduping with "(2)", "(3)" suffixes. Returns the path
+        /// saved to, or null on failure.
+        /// </summary>
+        public static string? PromoteToLibrary(Enhancement enhancement, string sourceTag, string? folder = null)
+        {
+            if (enhancement == null) return null;
+            try
+            {
+                var library = Path.GetFullPath(folder ?? DefaultFolder);
+                Directory.CreateDirectory(library);
+                var baseName = SuggestedFileName(enhancement);
+                var stem = baseName.EndsWith(FileSuffix, StringComparison.OrdinalIgnoreCase)
+                    ? baseName.Substring(0, baseName.Length - FileSuffix.Length)
+                    : baseName;
+                var target = Path.Combine(library, baseName);
+                int n = 2;
+                while (File.Exists(target))
+                {
+                    target = Path.Combine(library, $"{stem} ({n}){FileSuffix}");
+                    n++;
+                    if (n > 999) return null; // sanity cap
+                }
+                File.WriteAllText(target, EnhancementSerializer.Save(enhancement));
+                Serilog.Log.Information("EnhancementLibrary: promoted to library (from {Tag})", sourceTag);
+                return target;
+            }
+            catch (Exception ex)
+            {
+                Serilog.Log.Warning(ex, "EnhancementLibrary: PromoteToLibrary failed (tag={Tag})", sourceTag);
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// WPF EnhancementLibrary.FindDuplicateOf: the library path an import of
+        /// <paramref name="sourcePath"/> would duplicate: the file itself when it already lives in the
+        /// library folder, or a library file with identical (formatting-insensitive) content. Null
+        /// when it is new.
+        /// </summary>
+        public static string? FindDuplicateOf(string sourcePath, string? folder = null)
+        {
+            try
+            {
+                var library = Path.GetFullPath(folder ?? DefaultFolder);
+                if (string.IsNullOrEmpty(sourcePath) || !File.Exists(sourcePath)) return null;
+                if (EnhancementImportRules.IsInsideFolder(sourcePath, library))
+                    return Path.GetFullPath(sourcePath);
+                if (!Directory.Exists(library)) return null;
+
+                var wanted = EnhancementImportRules.NormalizedContentHash(File.ReadAllText(sourcePath));
+                foreach (var candidate in Directory.GetFiles(library, "*" + FileSuffix, SearchOption.TopDirectoryOnly))
+                {
+                    try
+                    {
+                        if (EnhancementImportRules.NormalizedContentHash(File.ReadAllText(candidate)) == wanted)
+                            return candidate;
+                    }
+                    catch (IOException) { } // an unreadable neighbour is not a duplicate
+                }
+            }
+            catch (Exception ex)
+            {
+                Serilog.Log.Debug("EnhancementLibrary.FindDuplicateOf error: {Error}", ex.Message);
+            }
+            return null;
+        }
+
         public static ScanResult Scan(string? folder = null)
         {
             var path = folder ?? DefaultFolder;

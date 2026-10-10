@@ -154,9 +154,8 @@
                  no face art may bury a skin; a held object is not face art and it is not a skin -
                  it is nearer the camera than she is. The chrome below still draws over it.
 
-                 WPF gave it a private PropTilt / PropRise transform pair. Dropped here with the
-                 layout code that drove them: LayoutProp lives in EmiDeskWindow.Props.cs, which is
-                 not part of this port. -->
+                 Its PropTilt / PropRise transform pair is built in EmiDeskWindow.Props.cs, which
+                 also owns the layout (LayoutProp), the rise in and the slide back out. -->
             <Image x:Name="PropImage"
                    HorizontalAlignment="Right" VerticalAlignment="Bottom"
                    Stretch="Fill"

@@ -9,7 +9,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:local="clr-namespace:ConditioningControlPanel.Avalonia.Views.Controls.Companion"
         mc:Ignorable="d"
-        Title="Her Room — preview harness"
+        Title="Her Room - preview harness"
         Width="1240" Height="1400"
         MinWidth="820" MinHeight="600"
         Background="#FF080711"

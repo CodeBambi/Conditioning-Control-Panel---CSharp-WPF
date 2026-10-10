@@ -20,10 +20,10 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
     /// <para>Started from OnOpened and stopped in OnClosed, never from the constructor: --render-all
     /// constructs ~180 windows in one process and never opens them, so no loop runs there.</para>
     ///
-    /// <para>ponytail: the bark engine (<c>BarkService.DispatchIdle</c> / <c>NotifyAppOpened</c>) is not
-    /// on this head; both fall back to WPF's own no-bark branch (preset phrase / text-only absence
-    /// greeting). The streak-milestone greeting (<c>CheckStreakMilestoneGreeting</c>) needs the bark
-    /// engine too. WPF's speech QUEUE (a trigger waits behind a line still speaking) has no twin; a
+    /// <para>The bark engine is Platform/BarkHead over Core BarkEngine: the idle beat asks
+    /// <c>CoreBark.TryDispatchIdle</c> first and the launch greeting <c>CoreBark.TryAppOpened</c>, each
+    /// falling back to WPF's own no-bark branch (preset phrase / text-only absence greeting) when no
+    /// rule speaks. The streak greeting is <c>CheckStreakMilestoneGreeting</c>. WPF's speech QUEUE (a trigger waits behind a line still speaking) has no twin; a
     /// beat that finds her busy skips, as WPF's IsSpeechReady does.</para>
     /// </summary>
     public partial class AvatarTubeWindow

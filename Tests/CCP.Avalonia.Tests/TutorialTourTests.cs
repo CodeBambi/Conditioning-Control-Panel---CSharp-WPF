@@ -302,11 +302,11 @@ public sealed class TutorialTourTests : IDisposable
             var panel = shell.GetLogicalDescendants().OfType<Control>().First(c => c.Name == "MainTutorialOverlay");
             string guide = Loc.Get("btn_start_guide");
             var rows = panel.GetLogicalDescendants().OfType<Button>().Where(b => (b.Content as string) == guide).ToList();
-            Assert.Equal(11, rows.Count);
+            Assert.Equal(10, rows.Count);   // the 6.8 upgrade row became the What moved card (WhatMovedCardTests)
 
             var expected = new[]
             {
-                TutorialType.UpgradeTour, TutorialType.GettingStarted, TutorialType.Settings, TutorialType.Presets,
+                TutorialType.GettingStarted, TutorialType.Settings, TutorialType.Presets,
                 TutorialType.Progression, TutorialType.Achievements, TutorialType.Companion, TutorialType.Patreon,
                 TutorialType.Awareness, TutorialType.Avatar,
             };

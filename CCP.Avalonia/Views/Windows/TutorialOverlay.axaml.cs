@@ -141,7 +141,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             {
                 Id = "welcome",
                 Icon = "~",
-                Title = "Welcome to Conditioning Control Panel!",
+                Title = "Welcome to Conditioning Control Panel",
                 Description = "Everything lives behind seven doors down the left. This quick tour opens each " +
                               "one so you know where things are.\n\n" +
                               "You can replay it any time from the ? button in the title bar.",

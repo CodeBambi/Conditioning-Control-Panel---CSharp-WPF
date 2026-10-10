@@ -46,6 +46,10 @@ public sealed class FriendsRailChip : Grid
         (_pillText.FontFamily, _pillText.FontWeight, _pillText.FontSize, _pillText.Foreground) = (FriendsDrawer.Display, FontWeight.SemiBold, 11, FriendsDrawer.MintInk);
         (_pill.Child, _pill.Background, _pill.CornerRadius, _pill.Padding, _pill.IsVisible, _pill.Tag) = (_pillText, FriendsDrawer.Mint, new CornerRadius(999), new Thickness(5, 0), false, "friends-chip-online");
         (_pill.HorizontalAlignment, _pill.VerticalAlignment, _pill.Margin) = (HorizontalAlignment.Right, VerticalAlignment.Top, new Thickness(0, -2, -4, 0));
+        // WPF FriendsLook.Glow(Mint / Pink, 8, 0.7) on the two counts: a BoxShadow here, never an Effect (the
+        // chip sits over the rail's looping layers). It lives on the pill, so it shows and hides with it.
+        _pill.BoxShadow = FriendsDrawer.CountGlow(FriendsDrawer.MintC);
+        _badge.BoxShadow = FriendsDrawer.CountGlow(FriendsDrawer.PinkC);
         _face.HorizontalAlignment = HorizontalAlignment.Center;
         _face.Child = _faceGrid;
         RefreshFace();

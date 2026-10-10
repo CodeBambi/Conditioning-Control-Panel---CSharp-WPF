@@ -191,7 +191,7 @@
             </RadialGradientBrush>
         </Border.Background>
     </Border>
-    <Border Opacity="0.22" Margin="-28" IsHitTestVisible="False">
+    <Border x:Name="PoolLayer" Opacity="0.22" Margin="-28" IsHitTestVisible="False">
         <Border.Background>
             <RadialGradientBrush GradientOrigin="16%,82%" Center="16%,82%" RadiusX="48%" RadiusY="46%">
                 <GradientStop Color="{DynamicResource FxParticleColor}" Offset="0"/>

@@ -29,7 +29,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // WPF GameSurfaces backroom/breakout/goon/piecebypiece/dtrh/arcademy: every web game window.
             new("games", _ => Games.GameWindow.CloseAllForPanic(), Games.GameWindow.IsAnyOpen),
             new("friends-landing", _ => Friends.FriendsLanding.CloseAllForPanic()),   // knock cards, corner notices, floating words: down at once, unanswered ones wait in the Inbox
-            new("voice-capture", sh => sh?.CancelVoicePrompt()),
+            new("voice-capture", sh => { sh?.CancelVoicePrompt(); sh?.DropVoiceHolds(); }),   // and a spoken spiral or tint
             new("ai-followups", _ => MainShellWindow.CancelPendingAi()),
             // WPF MainWindow.xaml.cs:1726: standalone Lab minigames first; the engine stop never reaches them.
             new("blink-trainer", _ => Overlays.BlinkTrainerSession.Stop()),
@@ -40,6 +40,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             new("haptics", _ => CoreHaptics.Service?.PanicStop()),
             new("remote-haptics", _ => RemoteCommands.StopHaptics()),   // decisions 2026-10-08
             new("remote-overlays", _ => RemoteCommands.PanicDropOverlays()),   // a controller-held pink filter, spiral or haze never outlives a panic
+            // Lockdown's haunt: every possessed control back at once, the edge pulse and its shake gone.
+            // The lockdown itself is LockdownPauseRule's business, never this line's.
+            new("possession", sh => MainShellWindow.StopPossessionForPanic(sh)),
             new("takeover", sh => sh?.StopAutonomyForPanic()),           // WPF KillAllAudio -> Autonomy.Stop
             // WPF RunPanicStopTail StopEngine/StopAdHocEffects: pauses a running session; OnEngineStopped
             // then ends Takeover pulses, desktop overlays (subliminal/whisper, mind wipe, spiral, video,
@@ -56,6 +59,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             new("lock-cards", _ => MainShellWindow.StopLockCards()),      // WPF LockCardService.Stop(dismissOpenCards: true)
             new("attention-test", _ => Overlays.AttentionTestTarget.CloseAll()),   // the style editor's Test target (P06; WPF left it up)
             new("deeper-editor-audio", _ => Deeper.DeeperEditorWindow.PauseAllForPanic()),   // P06; WPF left it playing
+            new("deeper-player", _ => Deeper.EnhancementPlayerWindow.StopAllForPanic()),    // media, engine and its effects
             new("camera", _ => MainShellWindow.StopCameraForPanic()),     // decision C: last, fire-and-forget
         };
 
@@ -78,6 +82,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         internal static void ArmSafetyHold()
         {
+            ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("panicPressed");   // WPF MainWindow.xaml.cs:1585: a hold with a five minute silence tail, armed first
             try { SafetyHold(); }
             catch (Exception ex) { Serilog.Log.Debug(ex, "Panic: Chaster safety hold failed"); }
         }
