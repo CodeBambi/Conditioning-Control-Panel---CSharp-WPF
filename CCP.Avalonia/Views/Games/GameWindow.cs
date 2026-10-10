@@ -54,7 +54,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                 () => TierGate.DemandLab(Loc.Get("launcher_game_dtrh_title"), "dtrh")),
             // WPF ArcademyHostService.cs:175 DemandLab.
             ["arcademy"] = new("arcademy", "launcher_game_arcademy_title", "arcademy/index.html",
-                () => TierGate.DemandLab(Loc.Get("launcher_game_arcademy_title"))),
+                () => TierGate.DemandLab(Loc.Get("launcher_game_arcademy_title")) && ArcademyLaunchAllowed()),
         };
 
         /// <summary>WPF LauncherCatalogue.NeedsAccount: a signed-out click is refused (the launcher

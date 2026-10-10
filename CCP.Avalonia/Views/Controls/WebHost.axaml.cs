@@ -37,6 +37,32 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
     /// </summary>
     public partial class WebHost : UserControl
     {
+        /// <summary>
+        /// True when pages in this process may start audio / video without a click. WPF passes
+        /// <c>--autoplay-policy=no-user-gesture-required</c> to every WebView2 it creates (ChaosWebViewHost,
+        /// BackRoomHostService, BrowserService); NativeWebView takes no browser arguments, so on Windows
+        /// the same flag goes through WebView2's own process-wide variable, set once before the first web
+        /// view exists (the string must stay constant per user-data folder). WebKitGTK has no such switch:
+        /// false there, and a page that asks (Arcademy <c>init.autoplayOk</c>) waits for its first click.
+        /// <c>CCP_WEBVIEW_AUTOPLAY=off</c> leaves the engine default.
+        /// </summary>
+        public static bool AutoplayWithoutGesture { get; } = ApplyAutoplayPolicy();
+
+        private static bool ApplyAutoplayPolicy()
+        {
+            const string Var = "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", Flag = "--autoplay-policy=no-user-gesture-required";
+            try
+            {
+                if (!OperatingSystem.IsWindows()) return false;
+                if (string.Equals(Environment.GetEnvironmentVariable("CCP_WEBVIEW_AUTOPLAY"), "off", StringComparison.OrdinalIgnoreCase)) return false;
+                var have = Environment.GetEnvironmentVariable(Var) ?? "";
+                if (!have.Contains(Flag, StringComparison.Ordinal))
+                    Environment.SetEnvironmentVariable(Var, (have + " " + Flag).Trim());
+                return true;
+            }
+            catch { return false; }
+        }
+
         /// <summary>Page to load. Mirrors <see cref="NativeWebView.SourceProperty"/>.</summary>
         public static readonly StyledProperty<Uri?> SourceProperty =
             AvaloniaProperty.Register<WebHost, Uri?>(nameof(Source));
@@ -161,6 +187,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
                 // promise the adapter builds. A throw here must show the panel, not kill the host.
                 try
                 {
+                    _ = AutoplayWithoutGesture;   // the browser flag is in place before the engine starts
                     _web = new NativeWebView();
                     // Subscribed once, here, rather than when a caller sets AllowNavigation: the
                     // gate has to be live for the FIRST navigation too, and a caller that assigns

@@ -101,10 +101,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion.Runtime
                 // Paint the midnight-glass row from the two facts that govern it: does the player own
                 // tube_midnight, and did they ask for it. Ownership failing to read answers "no",
                 // which greys the row - the honest state for a prize we cannot prove was sold.
-                // ponytail: needs ArcademyHostService.WalletOwnsSku (the Arcademy ticket wallet), still
-                // in the WPF head. Platform/PrizeOwnership holds the server's prize GRANTS only, and
-                // tube_midnight is a wallet SKU, not a grant, so it cannot answer this.
-                bool owned = false;
+                // WPF :32: the Arcademy ticket wallet (live when the Arcademy is open, the saved file otherwise; never throws).
+                bool owned = ConditioningControlPanel.Services.Arcademy.ArcademyHostService.WalletOwnsSku(ConditioningControlPanel.Services.Arcademy.ArcademyEconomy.SkuTubeMidnight);
                 ChkTubeMidnightGlass.IsEnabled = owned;
                 ChkTubeMidnightGlass.IsChecked = owned && s.TubeMidnightGlass;
             }

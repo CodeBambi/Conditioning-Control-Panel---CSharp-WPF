@@ -61,7 +61,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                 case "meta-command":
                     EnsureArcademy();
                     _arcMeta?.Handle(o);
-                    // SEAM(emi-desk): WPF pushes a lockerOutfit write to the desk mascot here (PushEmiOutfitToDesk).
+                    // WPF PushEmiOutfitToDesk: a Locker write reaches the desk mascot at once (she re-reads the gated outfit).
+                    if (string.Equals(((string?)o["key"] ?? "").Trim(), ArcademyHostService.EmiOutfitKey, StringComparison.Ordinal))
+                        ArcademyHostService.RaiseEmiOutfitChanged();
                     return true;
                 case "class-started":
                     _arcClassActive = true;
@@ -139,6 +141,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                 var unlocked = _arcMeta.UnlockedGameKeys();
                 if (unlocked.Count > 0)
                     Log.Information("[Game] arcademy: punch cards unlock {N} room(s): {Keys}", unlocked.Count, string.Join(", ", unlocked));
+                ArcademyHostService.LiveMeta = _arcMeta;   // the tube glass and the desk outfit read the live wallet
                 Closed += (_, _) => CloseArcademy();
             }
             if (_arcAttached) return;
@@ -165,6 +168,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                 try { ArcademySyncService.Detach(); } catch (Exception ex) { Log.Debug("[Game] arcademy sync detach: {E}", ex.Message); }
             }
             try { _arcMeta?.FlushSave(); } catch (Exception ex) { Log.Warning("[Game] arcademy meta flush: {E}", ex.Message); }
+            if (ReferenceEquals(ArcademyHostService.LiveMeta, _arcMeta)) ArcademyHostService.LiveMeta = null;
+            ArcademyHostService.RaiseEmiOutfitChanged();   // WPF DisposeAll backstop: she comes home in whatever the Locker put her in
             _arcMeta = null;
             _arcClassActive = false;
             ClearArcademyMedia();

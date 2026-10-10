@@ -46,14 +46,37 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
         // ---- open / close -----------------------------------------------------------------------
 
         /// <summary>Window opened: arm the boot deadline and the video watch (WPF Launch).</summary>
+        /// <summary>WPF Launch step 4 (owner ruling): an audio-only day SKIPS the Arcademy rather than substituting
+        /// classes. A toast, not a modal: the click was a launch. The attendance streak is frozen, not broken.
+        /// Runs after the tier gate, as WPF orders them.</summary>
+        internal static bool ArcademyLaunchAllowed()
+        {
+            if (CoreSettings.Current?.AudioOnlySession != true) return true;
+            Log.Information("[Game] arcademy: launch refused - AudioOnlySession is active");
+            try
+            {
+                Platform.OsNotifications.Show(ConditioningControlPanel.Services.Arcademy.ArcademyHostService.ProductName,
+                    "Audio-only session is running - the Arcademy stays shut until it ends. Your attendance streak is safe.");
+            }
+            catch (Exception ex) { Log.Debug("[Game] arcademy: audio-only refusal toast failed: {E}", ex.Message); }
+            return false;
+        }
+
         private void OpenArcademy()
         {
+            // WPF Launch: friends see "in the Arcademy" while the window is up.
+            try { Platform.FriendsHead.Service?.EnterActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Arcademy); }
+            catch (Exception ex) { Log.Debug("[Game] arcademy friends presence: {E}", ex.Message); }
+            // SEAM(emi-desk): WPF also tells the desk mascot (NoteOpen, FarewellForArcademy, Fire arcademyOpened / arcademyClosed);
+            // the port's desk has no event bus yet. SEAM(shell): WPF tucks the main window into the tray while the Arcademy is up.
             ArmArcademyBootDeadline();
             HookArcademyVideo(true);
         }
 
         private void CloseArcademySafety()
         {
+            try { Platform.FriendsHead.Service?.LeaveActivity(ConditioningControlPanel.Services.Friends.PresenceActivity.Arcademy); }
+            catch (Exception ex) { Log.Debug("[Game] arcademy friends presence: {E}", ex.Message); }
             CancelArcademyExitWatchdog();
             CancelArcademyBootDeadline();
             HookArcademyVideo(false);

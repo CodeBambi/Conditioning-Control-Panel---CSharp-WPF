@@ -115,6 +115,24 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
             }
         }
 
+        /// <summary>WPF RefreshOutfit (:915): re-read the Locker's outfit through the wallet gate. A no-op when unchanged.</summary>
+        public void RefreshOutfit()
+        {
+            try
+            {
+                if (!global::Avalonia.Threading.Dispatcher.UIThread.CheckAccess()) { global::Avalonia.Threading.Dispatcher.UIThread.Post(RefreshOutfit); return; }
+                SetOutfit(ConditioningControlPanel.Services.Arcademy.ArcademyHostService.EquippedEmiOutfit());
+            }
+            catch (Exception ex) { Log.Debug(ex, "[EmiDesk] RefreshOutfit failed"); }
+        }
+
+        private void HookArcademyOutfit()
+        {
+            RefreshOutfit();
+            ConditioningControlPanel.Services.Arcademy.ArcademyHostService.EmiOutfitChanged += RefreshOutfit;
+            Closed += (_, _) => ConditioningControlPanel.Services.Arcademy.ArcademyHostService.EmiOutfitChanged -= RefreshOutfit;
+        }
+
         private bool ArmOutfitOver(string outfit)
         {
             if (_overArmed.TryGetValue(outfit, out var armed)) return armed;

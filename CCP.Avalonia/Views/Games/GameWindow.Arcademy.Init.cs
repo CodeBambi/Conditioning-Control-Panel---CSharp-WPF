@@ -39,7 +39,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             {
                 type = "init",
                 protocol = 1,
-                platform = new { isTouch = false, hasHaptics = false, host = "desktop" },   // SEAM(haptics): WPF App.Haptics.IsConnected
+                platform = new { isTouch = false, hasHaptics = ArcademyHasHaptics(), host = "desktop" },
                 modId = CoreMods.ActiveModId ?? "builtin-bambisleep",
                 lexicon = MergeArcademyModTable(ArcademyLexicon.NeutralLexicon, "lexicon.json"),
                 palette = MergeArcademyModTable(ArcademyLexicon.NeutralPalette, "palette.json"),
@@ -48,9 +48,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                 effectIntensity = s?.ChaosEffectIntensity ?? 0.85,
                 audioLevels = BuildArcademyAudioLevels(s),
                 audioMute = s?.ArcademyAudioMute ?? false,
-                // WPF launches its view with --autoplay-policy=no-user-gesture-required and says so here.
-                // The port's WebHost takes no browser arguments, so the page waits for a click (its web behaviour).
-                autoplayOk = false,
+                // WPF launches its view with --autoplay-policy=no-user-gesture-required and says so here. The port sets
+                // the same flag for WebView2 (WebHost.AutoplayWithoutGesture); WebKitGTK has none, so the page waits for a click there.
+                autoplayOk = global::ConditioningControlPanel.Avalonia.Views.Controls.WebHost.AutoplayWithoutGesture,
                 sfxSamples = ArcademyStems("sfx"),
                 masterVolume = Math.Clamp((s?.MasterVolume ?? 32) / 100.0, 0.0, 1.0),
                 remoteMediaEnabled = ArcademyRemoteMediaEnabled(),
@@ -60,6 +60,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                 audioOnlySession = false,
                 protectBrowserVideo = s?.ProtectBrowserVideoPlayback ?? true,
                 motionLevel = ArcademyMotionLevel(),
+                // WPF: PerformanceProfile.CurrentTier != Quality. The port has no load-driven tier, so its tier IS the setting.
                 performanceMode = s?.PerformanceMode ?? false,
                 reducedMotion = ArcademyMotionLevel() != 2,
                 words = phrases,
@@ -95,6 +96,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                 if (CoreSettings.Current?.AudioOnlySession == true) Post(new { type = "suspend", on = true, reason = "audio-only" });
             }
             catch (Exception ex) { Log.Debug("[Game] arcademy seed: {E}", ex.Message); }
+        }
+
+        /// <summary>WPF SafeHasHaptics: a toy is connected right now.</summary>
+        private static bool ArcademyHasHaptics()
+        {
+            try { return CoreHaptics.Service?.IsConnected == true; }
+            catch { return false; }
         }
 
         private object BuildArcademyEconomy()
