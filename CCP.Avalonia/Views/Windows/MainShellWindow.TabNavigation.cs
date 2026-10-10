@@ -83,7 +83,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             ["presets"] = "PresetsTab",          ["quests"] = "QuestsTab",
             ["programs"] = "ProgramsTab",        ["enhancements"] = "EnhancementsTab",
             ["deeper"] = "DeeperTab",            ["achievements"] = "AchievementsTab",
-            ["companion"] = "CompanionTab",      ["play"] = "PlayTab",  ["lab"] = "PlayTab",
+            ["companion"] = "CompanionTab",      ["companionai"] = "CompanionAiTab", ["play"] = "PlayTab",  ["lab"] = "PlayTab",
             ["leaderboard"] = "LeaderboardTab",  ["assets"] = "AssetsTab",
             ["discord"] = "DiscordTab",          ["awareness"] = "AwarenessTab",
             ["remotecontrol"] = "RemoteControlTab", ["availablesubjects"] = "AvailableSubjectsTab",
@@ -206,6 +206,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                         if (zone != null) Named<Tabs.PlayTabView>("PlayTab")?.ScrollToZone(zone);
                         break;
                     case "awareness": MaybeShowFeatureIntro("awareness"); break;
+                    // WPF MainWindow.CompanionTabs.cs NavTabHost("companionai", OnShown): borrow the room's live zones.
+                    case "companionai":
+                        Named<Controls.Companion.Pages.AiPage>("CompanionAiTab")?.OnShown(Named<Tabs.CompanionTabView>("CompanionTab")?.Room);
+                        break;
                     case "lockdown": MaybeShowFeatureIntro("lockdown"); break;
                     case "blinktrainer": MaybeShowFeatureIntro("blinktrainer"); break;
                     // WPF :581 - only once the room shows the map (its IsVisible hook re-read the gates).

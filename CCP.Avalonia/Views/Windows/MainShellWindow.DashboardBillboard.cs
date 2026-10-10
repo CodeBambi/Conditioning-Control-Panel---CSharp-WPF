@@ -2,11 +2,13 @@
 // on Home). This file only hosts the deck: it makes the deck and the card host once, keeps the snoozes
 // in AppSettings and runs a card's button. The rules are Core DashboardBillboard/BillboardDeck, the
 // drawing is Controls/Billboard/BillboardCardHost. Providers so far: the house cards and the Prime
-// tips; Live/Waiting/Resume/Event/Board/Showcase are sync6-tonight-board-b.
+// tips, and Core's Waiting/Resume/Event adapters over this head's services.
+// ponytail: Live (no Lobby service on this head), Board and Showcase are sync6-tonight-board-c.
 
 using System;
 using System.Collections.Generic;
 using Avalonia.Controls;
+using Avalonia.Threading;
 using ConditioningControlPanel.Avalonia.Controls.Billboard;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Services;
@@ -50,7 +52,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             var snoozes = settings.BillboardSnoozedUntil ??= new Dictionary<string, DateTime>(StringComparer.Ordinal);
             if (DashboardBillboard.PruneSnoozes(snoozes, DateTime.UtcNow)) SaveBillboardSnoozes();
 
-            var providers = new IBillboardProvider[] { new HouseProvider(), new TipCardsProvider() };
+            var providers = BillboardProviders(weak);
+            // A set per shell (WPF has one per process): a closed shell unhooks its providers from the
+            // long-lived services, or every shell ever opened stays subscribed (P41).
+            Closed += (_, _) => { foreach (var p in providers) (p as BillboardProviderBase)?.Detach(); };
             var deck = new BillboardDeck(() => providers, BillboardContextNow, snoozes, SaveBillboardSnoozes);
             var cardHost = new BillboardCardHost(deck);
             cardHost.ActionRequested += RunBillboardAction;
@@ -58,6 +63,45 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             slot.Children.Add(cardHost);
             _billboardHost = cardHost;
             cardHost.Begin();
+        }
+
+        /// <summary>WPF BillboardWiring.Start + BillboardProviders.CreateAll, in deck order, over this
+        /// head's services: a service that is not up (null) leaves its provider silent. A provider's
+        /// Changed may come from any thread; the deck is marked dirty on the UI thread (WPF
+        /// MainWindow.DashboardBillboard ProvidersChanged). Everything holds the shell weakly.</summary>
+        private static IBillboardProvider[] BillboardProviders(WeakReference<MainShellWindow> weak)
+        {
+            MainShellWindow? Shell() => weak.TryGetTarget(out var s) ? s : null;
+            var head = new BillboardHead
+            {
+                Quests = () => App.Quests,
+                Programs = () => App.Programs,
+                SessionLog = () => App.Sessions?.SessionLog,
+                Chaster = () => Platform.ChasterHead.Service,
+                SessionRunning = () => App.Sessions?.IsRunning == true,
+                StartSession = id => Shell()?.StartSessionFromBillboard(id) == true,
+                PlayDeeper = path => Shell()?.PlayDeeperLibraryEntry(path),
+                ShowTab = tab => Shell()?.ShowTab(tab),
+                OpenInvites = () => Shell()?.OpenInvitesCard(),
+            };
+            var providers = new IBillboardProvider[]
+            {
+                new HouseProvider(), new WaitingProvider(head), new ResumeProvider(head), new EventProvider(head), new TipCardsProvider(),
+            };
+            foreach (var p in providers)
+                p.Changed += (_, _) => Dispatcher.UIThread.Post(() => Shell()?._billboardHost?.MarkDirty());
+            return providers;
+        }
+
+        /// <summary>WPF MainWindow.StartSessionFromCompanion: the Sessions page's own Start path (it
+        /// asks first). False while a session runs or when the session is gone.</summary>
+        internal bool StartSessionFromBillboard(string sessionId)
+        {
+            if (App.Sessions?.IsRunning == true) return false;
+            var session = Named<Tabs.PresetsTabView>("PresetsTab")?.RevealSession(sessionId);
+            if (session is not { IsAvailable: true }) return false;
+            BtnStartSession_Click(session);
+            return true;
         }
 
         /// <summary>The motion gate or the tab's visibility changed: the board re-reads its gates.</summary>
