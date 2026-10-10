@@ -888,9 +888,12 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
   a user (dismiss Free Feature card, tick the 18+ box, Enter x3) by clicks at DIP offsets x scale; Escape is not used
   because closing the wizard ungated shuts the app down. Then Ctrl+K palette ("one dialog") and "settings" + Return.
 - result.json: window/wizard/wizard_done/exit per resolution, missing libs from ldd of every bundled .so plus the system
-  secret/vlc/webkit/wpe libs the process mapped (lttng tracepoint provider excluded), unavailable packages, log
-  exception lines, screenshot stddev (non-blank > 0.02). run.sh fails only when no window appears at 1920x1080.
+  secret/vlc/webkit/wpe libs the process mapped (lttng tracepoint provider excluded) plus every `DllNotFoundException`
+  library in the log (libvlc passes ldd yet fails P/Invoke), unavailable packages, fatal log lines (Unhandled/Fatal only:
+  offline warnings appear in every run), screenshot stddev (non-blank > 0.02). run.sh exits 1 when no window appears at
+  1920x1080 and 2 on any install/harness failure.
 - `all.sh` runs the six images and writes summary.json + index.html; `all.sh --index` only assembles (CI's last job).
 - CI `.github/workflows/distro-check.yml` (build.yml untouched): tarball job, 6-way matrix, index job. Tumbleweed is
-  `expect_fail` (continue-on-error) while findings F1 (no fonts -> startup abort) stands.
+  `expect_fail` while finding F1 (no fonts -> startup abort) stands: that tolerates only run.sh exit 1 (no window), never
+  exit 2 (install/harness failure). The first CI run hid a Tumbleweed install failure behind continue-on-error.
 - Findings (not fixed here): ~/ccp-port/evidence/distro-check/findings.md F1-F6.

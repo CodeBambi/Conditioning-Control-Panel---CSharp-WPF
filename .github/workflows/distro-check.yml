@@ -60,8 +60,11 @@ jobs:
           name: distro-check-tarball
           path: tarball
       - name: Run ${{ matrix.image }}
-        continue-on-error: ${{ matrix.expect_fail == true }}
-        run: bash packaging/linux/distro-check/run.sh '${{ matrix.image }}' tarball/*.tar.gz out
+        # expect_fail tolerates only "app showed no window" (exit 1), never a broken install/harness (exit 2).
+        run: |
+          rc=0; bash packaging/linux/distro-check/run.sh '${{ matrix.image }}' tarball/*.tar.gz out || rc=$?
+          if [ $rc = 1 ] && [ '${{ matrix.expect_fail }}' = true ]; then echo "::warning::expected failure (findings F1)"; exit 0; fi
+          exit $rc
       - uses: actions/upload-artifact@v4
         if: always()
         with:

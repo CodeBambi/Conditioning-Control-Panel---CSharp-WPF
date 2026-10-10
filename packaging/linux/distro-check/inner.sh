@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Runs INSIDE a distro container (run.sh drives it). Never run on a host: it starts its own Xvfb.
-#   inner.sh install          -> installs packaging/linux/README-deps.md runtime deps + test tooling (network on)
+#   inner.sh install          -> installs docs/avalonia-linux-install.md runtime deps + test tooling (network on)
 #   inner.sh run /ccp.tar.gz /out   -> extracts the tarball, runs the app under Xvfb, writes /out (network off)
 set -uo pipefail
 . /etc/os-release
 fam=$ID; case " $ID ${ID_LIKE:-} " in *" debian "*|*" ubuntu "*) fam=debian;; *" fedora "*) fam=fedora;; *" arch "*) fam=arch;; *suse*) fam=suse;; esac
 
 install() {
-  # Runtime deps: exactly the README-deps.md row for this family. Fonts: none added (distro default only).
+  # Runtime deps: exactly the docs/avalonia-linux-install.md row for this family. Fonts: none added (distro default only).
   case $fam in
     debian) deps="libwebkit2gtk-4.1-0 libwpewebkit-2.0-1 libwpebackend-fdo-1.0-1 libwpe-1.0-1 libvlc5 vlc-plugin-base libsecret-1-0 libx11-6 libxi6"
             tools="xvfb openbox imagemagick xdotool x11-utils fontconfig procps"
@@ -22,7 +22,7 @@ install() {
             add() { pacman -S --noconfirm --needed "$1" >/dev/null 2>&1; } ;;
     suse)   deps="libwebkit2gtk-4_1-0 libWPEWebKit-2_0-1 libWPEBackend-fdo-1_0-1 libwpe-1_0-1 libvlc5 vlc-noX libsecret-1-0 libX11-6 libXi6"
             tools="xvfb-run xorg-x11-server-Xvfb openbox ImageMagick xdotool xwininfo fontconfig procps gzip tar gawk"
-            add() { zypper -n -q install --no-recommends "$1" >/dev/null 2>&1; } ;;
+            add() { zypper -n -q --gpg-auto-import-keys install --no-recommends "$1" >/dev/null 2>&1; } ;;
     *) echo "unknown distro $ID" >&2; exit 2 ;;
   esac
   : > /unavailable.txt
@@ -32,7 +32,9 @@ install() {
   command -v openbox >/dev/null || add fluxbox || true
   # The run phase uses the host uid; give it a passwd entry like any real user (openbox segfaults without one).
   getent passwd "$HOST_UID" >/dev/null || echo "user:x:$HOST_UID:$HOST_GID:user:/tmp:/bin/bash" >> /etc/passwd
-  command -v Xvfb >/dev/null && command -v import >/dev/null && command -v xdotool >/dev/null
+  cat /unavailable.txt >&2
+  local c rc=0; for c in Xvfb import xdotool xwininfo fc-match awk tar; do command -v $c >/dev/null || { echo "missing tool $c" >&2; rc=1; }; done
+  return $rc
 }
 
 shot() { import -window root "$out/$cfg-$1.png" 2>/dev/null
@@ -99,16 +101,19 @@ run() {
     for fam in Fredoka "Segoe UI" "Segoe UI Emoji" Consolas "Courier New" "Liberation Sans" sans-serif monospace emoji; do
       echo "$fam -> $(fc-match "$fam")"; done
     echo "== fc-list families"; fc-list : family | sort -u; } > "$out/fonts.txt"
-  local missing exc shots= s
+  local missing fatal shots= s
   # libcoreclrtraceptprovider's liblttng-ust is optional .NET tracing, absent on every stock distro: not a gap.
-  missing=$(awk '/^== /{n=split($2,a,"/"); f=a[n]} /not found/ && f !~ /traceptprovider/ {print f": "$1}' "$out/ldd.txt" | sort -u | jarr)
-  exc=$(grep -cE 'Exception|\[ERR\]|\[FTL\]' "$out/log.txt")
+  missing=$( (awk '/^== /{n=split($2,a,"/"); f=a[n]} /not found/ && f !~ /traceptprovider/ {print f": "$1}' "$out/ldd.txt"
+    # A lib can pass ldd yet fail P/Invoke (libvlc: libvlc.so.5 present, 'libvlc' -> libvlc.so absent), so the log counts too.
+    grep -oE "DllNotFoundException: Unable to load shared library '[^']+'" "$out/log.txt" | sed "s/.*library '\(.*\)'/P\/Invoke: \1/") | sort -u | jarr)
+  # Only crashes: offline/handled warnings ("Connection refused", pactl probe) are in every run and say nothing.
+  fatal=$(grep -cE 'Unhandled exception|\[FTL\]|\[Fatal\]' "$out/log.txt")
   for p in "$out"/*.png; do [ -e "$p" ] || continue
     s=$($(command -v magick || echo convert) "$p" -colorspace Gray -format '%[fx:standard_deviation]' info: 2>/dev/null || echo 0)
     shots+="\"$(basename "$p")\":{\"stddev\":$s,\"nonblank\":$(awk -v s="$s" 'BEGIN{print (s>0.02)?"true":"false"}')},"; done
   unav=$(jarr < /unavailable.txt)
-  printf '{"distro":"%s","runs":{%s},"missing_libs":[%s],"unavailable_packages":[%s],"log_exception_lines":%s,"screenshots":{%s}}\n' \
-    "$PRETTY_NAME" "${runs%,}" "$missing" "$unav" "$exc" "${shots%,}" > "$out/result.json"
+  printf '{"distro":"%s","runs":{%s},"missing_libs":[%s],"unavailable_packages":[%s],"fatal_log_lines":%s,"screenshots":{%s}}\n' \
+    "$PRETTY_NAME" "${runs%,}" "$missing" "$unav" "$fatal" "${shots%,}" > "$out/result.json"
   rm -rf "$tmp"
 }
 
