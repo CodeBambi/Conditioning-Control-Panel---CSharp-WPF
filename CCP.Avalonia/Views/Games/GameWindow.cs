@@ -55,6 +55,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             ["dtrh"] = new("dtrh", "launcher_game_dtrh_title", "dtrh/index.html",
                 () => TierGate.DemandLab(Loc.Get("launcher_game_dtrh_title"), "dtrh")),
             // WPF ArcademyHostService.cs:175 DemandLab.
+            // WPF OpenFypFeed: TierGate.DemandPremium("For You", "fyp") at the door (GameWindow.Fyp.cs).
+            [FypId] = new(FypId, "tab_fyp", "fyp/index.html", FypGate),
+            // WPF ShowTab("justdrop"): the server's door flag; the page is the live site (GameWindow.JustDrop.cs).
+            [JustDropId] = new(JustDropId, "jd_door_title", "", JustDropDoorOpen),
             ["arcademy"] = new("arcademy", "launcher_game_arcademy_title", "arcademy/index.html",
                 () => TierGate.DemandLab(Loc.Get("launcher_game_arcademy_title")) && ArcademyLaunchAllowed()),
         };
@@ -109,6 +113,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
 
         internal void Load(WebAssetServer server)
         {
+            if (Spec.Id == JustDropId) { LoadJustDrop(); return; }   // the live site, not a local page
             // WPF's https://ccp.game/<page> on WebView2; the loopback twin (token first) elsewhere.
             PageUrl = new Uri(server.Url(Spec.Page, Spec.Query));
             Web.Navigate(PageUrl);

@@ -62,7 +62,7 @@ namespace ConditioningControlPanel.Avalonia
             w.ShowTab("no-such-tab");
             Check(Vis("StudioTab"), "unknown key keeps the current tab, never a blank page");
 
-            w.ShowTab("fyp");
+            w.ShowTab("justdrop");   // a shut door: no window opens in a self-check ("fyp" opens the feed now)
             Check(Vis("StudioTab") && w.CurrentTab == "haptics", "a window key leaves the tab alone");
 
             // ---- Ctrl+1..7 and last-tab memory ----------------------------------------------

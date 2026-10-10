@@ -69,12 +69,12 @@ public sealed class ExclusivesVaultTests
                 Assert.True(rows.Single(r => r.Feature.Key == "haptics").HasArt);
                 Assert.True(view.FindControl<Border>("SpotVeil")!.IsVisible);
 
-                // No host on this head (For You): visible, inert, and it says so.
-                var tip = ConditioningControlPanel.Localization.Loc.Get("exclusives_not_on_this_build");
-                Assert.Equal(tip, rows.Single(r => r.Feature.Key == "fyp").UnavailableTip);
+                // Lane k9: For You has its window now, so its card is a live door like the rest.
+                Assert.Null(rows.Single(r => r.Feature.Key == "fyp").UnavailableTip);
+                Assert.True(rows.Single(r => r.Feature.Key == "fyp").IsAvailable);
                 Assert.Null(rows.Single(r => r.Feature.Key == "backroom").UnavailableTip);   // wave 3 r5: the games open
                 Assert.Null(rows.Single(r => r.Feature.Key == "haptics").UnavailableTip);
-                Assert.False(view.FindControl<Button>("BtnSpotOpen")!.IsEnabled);
+                Assert.True(view.FindControl<Button>("BtnSpotOpen")!.IsEnabled);   // the spotlight (For You) opens too
 
                 // A free account with its weekly pass unspent, and fyp rotated in as today's free one.
                 CoreEntitlement.IntakePassAvailableProvider = () => true;
