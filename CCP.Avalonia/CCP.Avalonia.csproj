@@ -123,6 +123,13 @@
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
     </Content>
+    <!-- One icon per launcher tile, beside the exe: a desktop shortcut cannot read an embedded resource
+         (WPF Resources\launcher-icons, Core LauncherShortcuts.IconFolder). -->
+    <Content Include="..\Assets\launcher-icons\*.ico" Link="Resources\launcher-icons\%(Filename)%(Extension)">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+    </Content>
     <Content Include="..\Assets\Audio\backroom\words\**\*" Link="Resources\Audio\backroom\words\%(RecursiveDir)%(Filename)%(Extension)" Exclude="..\Assets\Audio\**\README.md">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>

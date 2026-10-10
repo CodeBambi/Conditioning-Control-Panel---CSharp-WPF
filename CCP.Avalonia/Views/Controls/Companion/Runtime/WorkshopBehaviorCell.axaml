@@ -92,8 +92,8 @@
             <CheckBox x:Name="ChkMuteWhispersCompanion" Theme="{DynamicResource ToggleStyle}"
                       HorizontalAlignment="Right" VerticalAlignment="Center"/>
         </Grid>
-        <!-- Hidden: waits for a mute / suspend hook on the port's browser. -->
-        <Grid x:Name="RowPauseBrowser" IsVisible="False" Margin="0,0,0,6">
+        <!-- WorkshopAccordion sends this to MainShellWindow.SetBrowserPaused (page wave x1). -->
+        <Grid x:Name="RowPauseBrowser" Margin="0,0,0,6">
             <StackPanel Margin="0,0,44,0">
                 <TextBlock Text="{loc:Str label_pause_browser}" Theme="{StaticResource CmpCellLabelStyle}"/>
                 <TextBlock Text="{loc:Str label_pause_embedded_browser_audio}" Theme="{StaticResource CmpCellHintStyle}"/>

@@ -43,11 +43,9 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             Wire("MenuItemBambiTakeover", OnMenuTakeover);
             Wire("MenuItemMute", OnMenuMute);
             Wire("MenuItemMuteWhispers", OnMenuMuteWhispers);
-            // Pause browser: WPF mutes CoreWebView2 and pauses its media elements. This head's WebHost
-            // has no mute and no script channel (MainShellWindow.Browser.cs "REFUSED: the mute pair"),
-            // so the item is hidden instead of promising a pause it cannot give.
-            // SEAM(browser): WebHost needs IsAudioMuted + a script call; then show this item again.
-            if (QuickItem("MenuItemPauseBrowser") is { } pause) pause.IsVisible = false;
+            // Pause browser (WPF MenuItemPauseBrowser_Click :1383): mute + pause through the shell's
+            // one seam (MainShellWindow.SetBrowserPaused over Views/Controls/WebHostMedia.cs).
+            Wire("MenuItemPauseBrowser", OnMenuPauseBrowser);
             UpdateQuickMenuState();
         }
 
@@ -159,6 +157,13 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             UpdateQuickMenuState();
         }
 
+        /// <summary>WPF MenuItemPauseBrowser_Click: flip the pause, the header follows.</summary>
+        internal void OnMenuPauseBrowser()
+        {
+            if (QuickShell is { } shell) _ = shell.SetBrowserPaused(!shell.BrowserPaused);
+            UpdateQuickMenuState();
+        }
+
         /// <summary>WPF UpdateQuickMenuState: every item's header, colour and enabled state. Runs on
         /// the menu's Opened and after every click.</summary>
         internal void UpdateQuickMenuState()
@@ -211,6 +216,12 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
                 mute.Header = Loc.Get(muted ? "menu_mute_avatar_on" : "menu_mute_avatar_off");
                 mute.Foreground = remote ? MenuLocked : muted ? MenuRed : MenuWhite;
                 mute.IsEnabled = !remote;
+            }
+
+            if (QuickItem("MenuItemPauseBrowser") is { } pauseBrowser)
+            {
+                pauseBrowser.Header = Loc.Get(QuickShell?.BrowserPaused == true ? "menu_resume_browser" : "menu_pause_browser");
+                pauseBrowser.Foreground = MenuWhite;
             }
 
             if (QuickItem("MenuItemMuteWhispers") is { } whispers)

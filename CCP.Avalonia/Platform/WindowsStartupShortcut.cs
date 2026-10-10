@@ -101,8 +101,8 @@ namespace ConditioningControlPanel.Avalonia.Platform
             return File.Exists(candidate) ? candidate : processPath ?? "";
         }
 
-        private static void CreateShortcut(string shortcutPath, string targetPath, string workingDirectory,
-            string description, string arguments)
+        internal static void CreateShortcut(string shortcutPath, string targetPath, string workingDirectory,
+            string description, string arguments, string? iconPath = null)
         {
             if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException();
             var shellLink = (IShellLink)new ShellLink();
@@ -112,6 +112,7 @@ namespace ConditioningControlPanel.Avalonia.Platform
                 shellLink.SetWorkingDirectory(workingDirectory);
                 shellLink.SetDescription(description);
                 if (!string.IsNullOrEmpty(arguments)) shellLink.SetArguments(arguments);
+                if (!string.IsNullOrEmpty(iconPath)) shellLink.SetIconLocation(iconPath, 0);
                 ((IPersistFile)shellLink).Save(shortcutPath, false);
             }
             finally { Marshal.ReleaseComObject(shellLink); }

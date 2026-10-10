@@ -21,12 +21,11 @@
 //   2. (Resolved) the offline-block toast now shows through App.Notifications, as WPF
 //      NotifyBrowserBlockedOffline does (MainWindow.Browser.cs:489-494).
 //
-// REFUSED, not "not done yet": the mute pair. BtnMuteBrowser_Click flips
-// AppSettings.BrowserVideoMuted and applies it live through CoreWebView2.IsMuted;
-// SyncBrowserMuteIcon paints the glyph from the saved flag. WebHost has no mute, so restoring the
-// pair would move the glyph to "muted" over a web view still playing at full volume - a control
-// that lies about state, and the one control whose entire job is to say whether sound is coming
-// out. A stub until WebHost exposes IsAudioMuted.
+// THE MUTE PAIR (page wave x1, 10 Oct): WebHost has a script channel now (InvokeScriptAsync), so
+// BtnMuteBrowser_Click and SyncBrowserMuteIcon live on the card itself,
+// Views/Tabs/SettingsTabView.BrowserCard.cs, over Views/Controls/WebHostMedia.cs (mute and pause
+// scripts, re-applied after each navigation). There is still no ENGINE mute: a player inside a
+// cross-origin iframe is out of reach.
 //
 // CALLERS STILL MISSING, each one line in a file this layer does not own:
 //   * (Resolved) SettingsTabView forwards RbBambiCloud / RbHypnoTube / BtnReloadBrowser and the
@@ -82,6 +81,36 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// its controls reached with FindControl: this window loads with AvaloniaXamlLoader.Load,
         /// so its generated fields are never assigned (MainShellWindow.TabNavigation.cs).</summary>
         private Tabs.SettingsTabView? BrowserPage => Named<Tabs.SettingsTabView>("SettingsTab");
+
+        /// <summary>True while "Pause browser" holds the embedded browser (tube menu, Companion cell).</summary>
+        internal bool BrowserPaused { get; private set; }
+
+        /// <summary>Raised on the UI thread when <see cref="BrowserPaused"/> changes.</summary>
+        internal event Action<bool>? BrowserPausedChanged;
+
+        /// <summary>WPF MainWindow.Patreon.cs:2172 SetBrowserPaused: mute and pause every media element,
+        /// or unmute and play. One difference, on purpose: a resume goes back to the SAVED mute
+        /// preference (the card's speaker button), where WPF unmutes outright and leaves that glyph wrong.</summary>
+        internal async System.Threading.Tasks.Task SetBrowserPaused(bool paused)
+        {
+            try
+            {
+                BrowserPaused = paused;
+                BrowserPausedChanged?.Invoke(paused);
+                if (BrowserView is not { } web) return;
+                if (paused)
+                {
+                    await web.SetMutedAsync(true);
+                    await web.PauseMediaAsync();
+                }
+                else
+                {
+                    await web.SetMutedAsync(CoreSettings.Current.BrowserVideoMuted);
+                    await web.ResumeMediaAsync();
+                }
+            }
+            catch (Exception ex) { Log.Debug("Failed to toggle browser audio: {Error}", ex.Message); }
+        }
 
         private WebHost? BrowserView => BrowserPage?.FindControl<WebHost>("BrowserWebHost");
 

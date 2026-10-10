@@ -125,8 +125,13 @@ public sealed class CompanionDeadControlsTests
             var room = shell.GetLogicalDescendants().OfType<CompanionRoomView>().Single();
             var shelf = ((WorkshopRuntimeVm)room.FindControl<WorkshopAccordion>("WorkshopZone")!.DataContext!).Parts;
 
-            // Behaviour cell: no browser hook, no webcam hotkey. The chat shortcut stays.
-            Assert.False(shelf.Behavior.FindControl<Grid>("RowPauseBrowser")!.IsVisible);
+            // Behaviour cell: no webcam hotkey. Pause browser is live (page wave x1); the chat shortcut stays.
+            Assert.True(shelf.Behavior.FindControl<Grid>("RowPauseBrowser")!.IsVisible);
+            shelf.Behavior.SyncFromSettings();   // a cell on a folded shelf has not loaded yet
+            shelf.Behavior.FindControl<CheckBox>("ChkPauseBrowserCompanion")!.IsChecked = true;
+            Assert.True(shell.BrowserPaused);
+            shelf.Behavior.FindControl<CheckBox>("ChkPauseBrowserCompanion")!.IsChecked = false;
+            Assert.False(shell.BrowserPaused);
             Assert.False(shelf.Behavior.FindControl<Grid>("RowCameraShortcut")!.IsVisible);
             Assert.True(shelf.Behavior.FindControl<Button>("BtnChatShortcut")!.IsVisible);
 

@@ -166,6 +166,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 bool premium = CoreEntitlement.HasPremium;
                 PlayBadgeRemote.FreeToday = !premium && CoreEntitlement.IsFreeToday("remote");
                 PlayBadgeFyp.FreeToday = !premium && CoreEntitlement.IsFreeToday("fyp");
+                // The descent is a Prime feature, so it asks its own question (WPF :147).
+                PlayBadgeDtrh.FreeToday = !CoreEntitlement.HasLab && CoreEntitlement.IsFreeToday("dtrh");
 
                 RefreshPlayIntakeCard();
             }
@@ -256,7 +258,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private void BtnPlayBackRoom_Click(object? sender, RoutedEventArgs e) => LaunchGame("backroom");
         private void BtnPlayDtrh_Click(object? sender, RoutedEventArgs e) => LaunchGame("dtrh");
         private void BtnPlayArcademy_Click(object? sender, RoutedEventArgs e) => LaunchGame("arcademy");
-        private void BtnPlayRacingThoughts_Click(object? sender, RoutedEventArgs e) => LaunchGame("race");
+        private void BtnPlayRacingThoughts_Click(object? sender, RoutedEventArgs e) => LaunchRace();
         private void BtnPlayWebApp_Click(object? sender, RoutedEventArgs e) => Owner?.OpenPlayWebApp();
 
         /// <summary>WPF LaunchPlay* / LaunchExclusiveGame: the launcher's own entry answers, so its
@@ -271,6 +273,25 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             }
             catch (Exception ex) { Log.Warning(ex, "[Play] launch {Id} failed", id); }
         }
+
+        /// <summary>WPF LaunchPlayLauncherGame("race") -> LaunchExclusiveGame: signed out, the sign-in
+        /// dialog; else the race host itself (CaucusHostService.Launch), which refuses without a track.
+        /// The launcher's mystery card sends its Play to the Back Room counter; this card never does.</summary>
+        internal void LaunchRace()
+        {
+            if (Owner is not { } shell) { Log.Information("[Play] race: no shell"); return; }
+            try
+            {
+                if (RaceDoorOpen()) { shell.LaunchCardGame("race"); return; }
+                if (!CoreAccount.IsLoggedIn) { _ = shell.OpenUnifiedLoginDialog(); return; }
+                Games.RaceWindow.Launch();   // refuses and logs: no racing purchase
+            }
+            catch (Exception ex) { Log.Warning(ex, "[Play] launch race failed"); }
+        }
+
+        /// <summary>True when the launcher's own entry would open the race, not the counter.</summary>
+        internal static bool RaceDoorOpen(bool? signedIn = null, Func<string, bool>? owns = null) =>
+            (signedIn ?? CoreAccount.IsLoggedIn) && Games.RaceWindow.CanLaunch(owns);
 
         // ---- TOGETHER ----------------------------------------------------------------------
 
@@ -300,7 +321,44 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             new Lab.GazeMinigame.GazeMinigameWindow().Show(owner);
         }
 
-        private void ChkFocusGaze_Changed(object? sender, RoutedEventArgs e) { }
+        private bool _focusGazeSyncing;
+
+        /// <summary>WPF MainWindow.LabTab.cs:929 ChkFocusGaze_Changed, as far as this head goes. The
+        /// Prime gate answers first on the ON branch (revert, then tell), exactly as WPF. The engine
+        /// behind the switch (GazeFocusService: dwell on flashes, bubbles and floating video) is not on
+        /// this head, so an allowed ON reverts too and the status line says so. OFF is never gated.</summary>
+        private void ChkFocusGaze_Changed(object? sender, RoutedEventArgs e) => FocusGazeChanged();
+
+        /// <returns>What the ON press met: "off", "tier" or "build".</returns>
+        internal string FocusGazeChanged()
+        {
+            if (_focusGazeSyncing) return "sync";
+            if (ChkPlayFocusGaze.IsChecked != true)
+            {
+                SyncFocusGazeToggle(false);
+                TxtPlayFocusGazeStatus.Text = "";
+                return "off";
+            }
+            var verdict = TierGate.RequiresLab(Loc.Get("label_focus_gaze"));
+            SyncFocusGazeToggle(false);
+            if (!verdict.Allowed)
+            {
+                TierGate.ShowDenied(verdict);
+                return "tier";
+            }
+            TxtPlayFocusGazeStatus.Text = Loc.Get("exclusives_not_on_this_build");
+            return "build";
+        }
+
+        /// <summary>WPF SyncFocusGazeToggle: the setting is the intent, the box follows it silently.</summary>
+        private void SyncFocusGazeToggle(bool enabled)
+        {
+            CoreSettings.Current.FocusGazeEnabled = enabled;
+            if (ChkPlayFocusGaze.IsChecked == enabled) return;
+            _focusGazeSyncing = true;
+            try { ChkPlayFocusGaze.IsChecked = enabled; }
+            finally { _focusGazeSyncing = false; }
+        }
 
         private void BtnLabBlinkTrainerOpenNew_Click(object? sender, RoutedEventArgs e) => Owner?.ShowTab("blinktrainer");
 
