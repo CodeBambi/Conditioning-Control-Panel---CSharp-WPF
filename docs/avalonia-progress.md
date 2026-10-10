@@ -1749,3 +1749,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/sync6-home-layout: +797
 - Home: favorites drawer at the right edge, fold arrow pill (companion strip removed), one LVL chip, window opens at 1661 x 1002 and shrinks evenly (WindowFitRule moved to Core); 6 of 13 rows ported.
 - Still needs porting: hover bubbles, banner FX, marquee drum, rail icons/EMI label, Sparkle pill, animated logo.
+
+## avalonia-port/sync6-media-picker: +969
+- Assets tab: the remote media picker is ported (awaited consent, segmented source, flavour cards, Fine-tune list with niche rows, your own communities and a probed add). FlavourPresets and RemoteSubAddMessages moved to Core; 5 main-sync rows ticked.
+- Open gap: flash/video on this head do not use online media yet (only intake does).

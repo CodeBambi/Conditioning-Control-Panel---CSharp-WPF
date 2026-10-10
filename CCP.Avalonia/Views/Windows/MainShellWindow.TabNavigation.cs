@@ -256,7 +256,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>WPF MaybeShowFeatureIntro (MainWindow.TabNavigation.cs:1094): through the
         /// startup ladder, so a quiet window turns the card into an Inbox row. ponytail: no
         /// FirstShowService on this head, so WPF's first-show early return has nothing to read.</summary>
-        private void MaybeShowFeatureIntro(string key, string? doorTab = null)
+        internal void MaybeShowFeatureIntro(string key, string? doorTab = null)
         {
             try { FeatureIntroPopup.ShowWhenStartupSettles(key, this, NavDoorForTab(doorTab ?? key)); }
             catch (Exception ex) { Serilog.Log.Warning(ex, "Feature intro hook failed for {Key}", key); }
