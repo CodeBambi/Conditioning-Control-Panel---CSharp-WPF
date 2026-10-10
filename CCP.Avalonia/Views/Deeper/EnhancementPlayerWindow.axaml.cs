@@ -266,6 +266,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             _sliderVolume = this.FindControl<Slider>("SliderVolume")!;
             _eventScroll = this.FindControl<ScrollViewer>("EventScroll")!;
             _videoBrowser = this.FindControl<Controls.WebHost>("VideoBrowser")!;
+            // Page zoom, Ctrl+wheel and HTML5 fullscreen: DeeperPageBridge. Released with the window.
+            _pageBridge = new DeeperPageBridge(_videoBrowser, this);
+            _pageBridge.FullscreenChanged += _ => OnVideoFullscreenChanged();
+            Closed += (_, _) => _pageBridge.Dispose();
             _lstEvents = this.FindControl<ItemsControl>("LstEvents")!;
             _pillAll = this.FindControl<ToggleButton>("PillFilterAll")!;
             _pillActions = this.FindControl<ToggleButton>("PillFilterActions")!;
@@ -854,17 +858,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         /// confirmation, then the camera. The body is ToggleEyeTrackingAsync (Engine partial).</summary>
         private void BtnEyeTracking_Click() => _ = ToggleEyeTrackingAsync();
 
-        private void AdjustVideoZoom(double delta)
-        {
-            // ponytail: needs a browser zoom factor. NativeWebView genuinely has none — this is one
-            // of the three CoreWebView2 members with no counterpart (the others are
-            // AddScriptToExecuteOnDocumentCreatedAsync and ContainsFullScreenElementChanged), and
-            // it is NOT a missing script channel: InvokeScript works. CSS `zoom` through that
-            // channel was the obvious substitute and is not one — it is per-document, so it is lost
-            // on the next navigation, and it does not scale a fullscreened video at all. So the
-            // ±10% clamp to [0.25, 5.0] and the Ctrl+MouseWheel bridge stay lost here.
-            Log.Debug("EnhancementPlayer(Avalonia): browser zoom {Delta:+0.00;-0.00} is a stub", delta);
-        }
+        /// <summary>WPF AdjustVideoZoom (:832): +/-10 % clamped to [0.25, 5.0]. NativeWebView has no zoom factor, so the
+        /// bridge sets a CSS zoom on the document and puts it back after every navigation. A fullscreened video
+        /// is not scaled by it.</summary>
+        private void AdjustVideoZoom(double delta) => _pageBridge.Adjust(delta);
+
+        private readonly DeeperPageBridge _pageBridge;
+
+        /// <summary>Tests: the page bridge (zoom factor, fullscreen state).</summary>
+        internal DeeperPageBridge PageBridge => _pageBridge;
 
         /// <summary>
         /// Toggles the page's own picture-in-picture, the same way the WPF handler's injected JS
@@ -1162,13 +1164,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             _audioFileRow.IsVisible = !isVideo;
             _audioPane.IsVisible = !isVideo;
             _videoPane.IsVisible = isVideo;
-            // The WPF cluster bound its Visibility to VideoPane's. Pinned HIDDEN here, and not
-            // because of the mode: AdjustVideoZoom only logs, since NativeWebView has no zoom
-            // factor and CSS zoom through the script channel is not a substitute. Two enabled
-            // buttons that do nothing is a toolbar lying about what it offers. Put `isVideo` back
-            // the moment zoom is real. Same call and same reason in DeeperEditorWindow.axaml's
-            // PreviewZoomCluster.
-            _browserZoomCluster.IsVisible = false;
+            _browserZoomCluster.IsVisible = isVideo;   // WPF bound the cluster to VideoPane's visibility
             _volumePanel.IsVisible = !isVideo;
             _btnPictureInPicture.IsVisible = isVideo;
         }
@@ -1195,9 +1191,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         /// ShowInTaskbar = false — no Win32, no WindowInteropHelper, no Forms.Screen.FromHandle,
         /// and no OverlayService z-order re-assert (that service is the WPF head's).
         /// </summary>
+        /// Now: the page reports its own fullscreenchange through DeeperPageBridge and the bridge has already
+        /// put THIS window full screen (or back). No second window, no reparent: the page fills the video pane
+        /// of a full-screen player, not the bare monitor.
         private void OnVideoFullscreenChanged()
         {
-            Log.Debug("EnhancementPlayer(Avalonia): browser fullscreen is a stub");
+            Log.Debug("EnhancementPlayer: page fullscreen {On}", _pageBridge.PageFullscreen);
         }
 
         // ====================================================================================

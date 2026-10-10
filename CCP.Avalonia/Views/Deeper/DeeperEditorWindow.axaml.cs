@@ -254,6 +254,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             Closed += (_, _) => { try { (Owner as Window)?.Activate(); } catch { } };
             Opened += (_, _) => s_open.Add(this);
             Closed += (_, _) => s_open.Remove(this);
+            // Page zoom, Ctrl+wheel and HTML5 fullscreen on the browser preview: DeeperPageBridge.
+            _previewBridge = new DeeperPageBridge(BrowserPreview, this);
+            Closed += (_, _) => _previewBridge.Dispose();
 
             Loaded += DeeperEditorWindow_Loaded;
             KeyDown += DeeperEditorWindow_KeyDown;
@@ -1277,18 +1280,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         private void BtnPreviewZoomIn_Click(object? sender, RoutedEventArgs e) => AdjustPreviewZoom(+0.10);
         private void BtnPreviewZoomOut_Click(object? sender, RoutedEventArgs e) => AdjustPreviewZoom(-0.10);
 
-        /// <summary>
-        /// ponytail: NativeWebView genuinely has no zoom factor - one of the three CoreWebView2
-        /// members with no counterpart at all, and NOT a missing script channel, since
-        /// InvokeScriptAsync works and everything else in this region uses it. CSS <c>zoom</c>
-        /// through that channel is the obvious substitute and is not one: it is per-document, so it
-        /// is lost on the next navigation, and it does not scale a fullscreened video. So WPF's
-        /// +/-10% clamped to [0.25, 5.0] stays lost, and these two buttons only log.
-        /// </summary>
-        private void AdjustPreviewZoom(double delta)
-        {
-            Log.Debug("DeeperEditor: preview zoom {Delta:+0.00;-0.00} ignored; NativeWebView has no zoom", delta);
-        }
+        /// <summary>WPF AdjustPreviewZoom: +/-10 % clamped to [0.25, 5.0]. NativeWebView has no zoom factor, so
+        /// DeeperPageBridge sets a CSS zoom on the document and puts it back after every navigation.</summary>
+        private void AdjustPreviewZoom(double delta) => _previewBridge.Adjust(delta);
+
+        private readonly DeeperPageBridge _previewBridge;
+
+        /// <summary>Tests: the preview's page bridge (zoom factor, fullscreen state).</summary>
+        internal DeeperPageBridge PreviewBridge => _previewBridge;
 
         private void TimelineScroll_PointerWheelChanged(object? sender, PointerWheelEventArgs e)
         {
@@ -3242,6 +3241,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         /// it has no AddScriptToExecuteOnDocumentCreatedAsync to install the sender, and both of the
         /// three messages' destinations (the fullscreen exit, the page zoom) are themselves stubs -
         /// so a bridge would carry messages nobody could act on.</summary>
+        // Now real, in DeeperPageBridge: the sender is installed after NavigationCompleted, the zoom is a CSS
+        // zoom, and fullscreen is this window's own state (no reparent, so the four members below stay empty).
         private void OnPreviewWebMessageReceived(object? sender, EventArgs e) { }
 
         /// <summary>ponytail: needs ContainsFullScreenElementChanged, which NativeWebView does not
