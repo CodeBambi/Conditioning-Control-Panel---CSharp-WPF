@@ -173,10 +173,29 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             {
                 if (App.Programs is not { IsReadOnly: false } svc) return;
                 if (await ProgramRefusedByLockdown()) return;
+                // A new attempt is an enrollment in all but name: a lapsed run synced from Windows of a
+                // program this head cannot finish is refused like CanEnroll refuses it (Avalonia-only gate).
+                if (svc.ActiveProgram is { } program &&
+                    ProgramService.UnavailableReason(program, CoreProgram.IsTaskAvailable) is { } missing)
+                {
+                    await MessageDialog.ShowAsync(this, Loc.Get("programs_unavailable_title"), missing);
+                    return;
+                }
                 svc.RestartAfterLapse();
                 RefreshProgramsTab();
             }
             catch (Exception ex) { Serilog.Log.Warning(ex, "Program restart failed"); }
+        }
+
+        /// <summary>WPF BtnProgramOpenMantras_Click :2148 -> StartMantraSession; refused under Lockdown (P05, Avalonia-only).</summary>
+        internal async Task OpenProgramMantrasAsync(int reps)
+        {
+            try
+            {
+                if (await ProgramRefusedByLockdown()) return;
+                StartMantraSession(reps);
+            }
+            catch (Exception ex) { Serilog.Log.Warning(ex, "Program mantra launch failed"); }
         }
 
         /// <summary>WPF BtnProgramDismissGraduated_Click :2099. Starts and stops nothing, so no Lockdown gate.</summary>

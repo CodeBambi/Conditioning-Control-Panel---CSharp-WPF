@@ -835,6 +835,9 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
     refused (keyword engine). The ritual button is still gated on the flag.
   - Lockdown refuses Pause/Resume, Restart and the ritual picker (P05; WPF has no gate here, like 3a's Enroll/Withdraw/Start).
     Dismiss starts and stops nothing and stays open, as on WPF. Panic behaviour is 3a's (ends our session).
+  - Review fix: the mantra door also refuses under Lockdown (`OpenProgramMantrasAsync`). Restart of a lapsed run whose program
+    this head cannot finish (e.g. kept synced from Windows) greys with the reason and refuses, as CanEnroll does: a new attempt is
+    an enrollment in all but name. WPF never seeds the capability provider, so it is unaffected.
   - A loaded run this head cannot finish (rollover suppressed, 3a) now says so: `programs_run_unavailable_note` (x9) with the
     missing feature; Withdraw stays enabled.
 - Risks: roadmap.json still saves without temp+rename and a corrupt file falls back to defaults then overwrites (both heads; a

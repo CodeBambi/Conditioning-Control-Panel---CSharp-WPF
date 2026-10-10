@@ -140,16 +140,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         internal void BtnProgramSubmitRitual_Click(object? sender, RoutedEventArgs e) =>
             _ = Shell?.SubmitProgramRitualAsync((sender as Button)?.Tag as string);
 
-        /// <summary>WPF MainWindow.ProgramsTab.cs:2174 BtnProgramOpenMantras_Click.</summary>
-        internal void BtnProgramOpenMantras_Click(object? sender, RoutedEventArgs e)
-        {
-            try
-            {
-                if (sender is not Button btn) return;
-                (TopLevel.GetTopLevel(this) as MainShellWindow)?.StartMantraSession(btn.Tag is int n ? n : 1);
-            }
-            catch (Exception ex) { Serilog.Log.Warning(ex, "Program mantra launch failed"); }
-        }
+        /// <summary>WPF MainWindow.ProgramsTab.cs:2148 BtnProgramOpenMantras_Click.</summary>
+        internal void BtnProgramOpenMantras_Click(object? sender, RoutedEventArgs e) =>
+            _ = Shell?.OpenProgramMantrasAsync((sender as Button)?.Tag is int n ? n : 1);
         internal void BtnProgramRestart_Click(object? sender, RoutedEventArgs e) => _ = Shell?.RestartProgramAsync();
         internal void BtnProgramDismissGraduated_Click(object? sender, RoutedEventArgs e) => Shell?.DismissGraduatedProgram();
 

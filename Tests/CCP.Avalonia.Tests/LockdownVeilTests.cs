@@ -246,6 +246,9 @@ public sealed class LockdownVeilTests
                     () => !DialogTexts(shell).Contains(Loc.Get("msg_you_are_in_lockdown_mode_nthere_is_no_escape"))),
                 ("program ritual photo", () => _ = shell.SubmitProgramRitualAsync("d6_ritual_pink"),
                     () => !DialogTexts(shell).Contains(Loc.Get("msg_you_are_in_lockdown_mode_nthere_is_no_escape"))),
+                ("program mantra door", () => _ = shell.OpenProgramMantrasAsync(3),
+                    () => shell.OwnedWindows.OfType<MantraWindow>().Any()
+                          || !DialogTexts(shell).Contains(Loc.Get("msg_you_are_in_lockdown_mode_nthere_is_no_escape"))),
                 // WPF LauncherHost.cs:413 and the launcher Stop link
                 ("launcher close", launcher.RequestClose, () => !launcher.IsVisible),
                 ("launcher Stop link", () => Click(launcher.FindControl<Button>("StopLink")!), () => !CoreEngine.IsRunning),

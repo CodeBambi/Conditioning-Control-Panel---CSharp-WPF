@@ -135,7 +135,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 Find<Border>("RunReadOnlyNote").IsVisible = !browse && readOnly;
                 Find<Button>("BtnProgramWithdraw").IsEnabled = !readOnly;
                 Find<Button>("BtnProgramLapsedWithdraw").IsEnabled = !readOnly;
-                Find<Button>("BtnProgramRestart").IsEnabled = !readOnly;
+                // Restart greys (with the reason) for a program this head cannot finish, like CanEnroll.
+                var restartBlocked = lapsed ? ProgramService.UnavailableReason(program!, CoreProgram.IsTaskAvailable) : null;
+                Find<Button>("BtnProgramRestart").IsEnabled = !readOnly && restartBlocked == null;
+                ToolTip.SetTip(Find<Button>("BtnProgramRestart"), restartBlocked);
                 Find<Button>("BtnProgramDismissGraduated").IsEnabled = !readOnly;
             }
         }

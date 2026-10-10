@@ -63,7 +63,7 @@ public sealed class ProgramsRunControlsTests
         enrollment.GetOrCreateRecord(6, enrollment.CurrentDayDate);
         tab.RefreshPrograms();
         Dispatcher.UIThread.RunJobs();
-        Assert.NotEmpty(tab.GetVisualDescendants().OfType<Button>().Where(b => b.Tag is string)); // the task list is realised
+        Assert.Contains(tab.GetVisualDescendants().OfType<Button>(), b => b.Tag is string); // the task list is realised
         Assert.Null(RitualButton(tab));
         var photo = Path.Combine(Path.GetDirectoryName(path)!, "photo.png");
         File.WriteAllBytes(photo, new byte[] { 1 });
@@ -103,7 +103,7 @@ public sealed class ProgramsRunControlsTests
     });
 
     [Fact]
-    public Task LoadedRunThisHeadCannotFinishSaysSoAndOpensTheMantraDoor() => Run((shell, tab, svc, _) =>
+    public Task LoadedRunThisHeadCannotFinishSaysSoAndOpensTheMantraDoor() => Run(async (shell, tab, svc, _) =>
     {
         T F<T>(string n) where T : Control => tab.FindControl<T>(n)!;
         // A run synced from Windows: enrolled where every feature exists, then opened here.
@@ -128,8 +128,31 @@ public sealed class ProgramsRunControlsTests
             .Single(b => b.IsEffectivelyVisible && b.Tag is int && b.GetVisualDescendants().OfType<TextBlock>()
                 .Any(t => t.Text == Loc.Get("btn_program_open_mantras")));
         Assert.Equal(Math.Max(1, target), door.Tag);
-        return Task.CompletedTask;
+
+        // Restart is a new attempt: refused like CanEnroll for a program this head cannot finish.
+        enrollment.State = ProgramEnrollmentState.Lapsed;
+        tab.RefreshPrograms();
+        var reason = ProgramService.UnavailableReason(kept, ProgramCapabilities.IsAvailable);
+        Assert.False(F<Button>("BtnProgramRestart").IsEnabled);
+        Assert.Equal(reason, ToolTip.GetTip(F<Button>("BtnProgramRestart")));
+        var restart = shell.RestartProgramAsync();
+        var dialog = await Owned<MessageDialog>(shell);
+        Assert.Contains(dialog.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == reason);
+        dialog.Close();
+        await restart;
+        Assert.Equal(ProgramEnrollmentState.Lapsed, enrollment.State);
+        Assert.Equal(1, enrollment.AttemptNumber);
     });
+
+    private static async Task<T> Owned<T>(Window owner) where T : Window
+    {
+        for (var i = 0; i < 250 && !owner.OwnedWindows.OfType<T>().Any(); i++)
+        {
+            Dispatcher.UIThread.RunJobs();
+            await Task.Yield();
+        }
+        return Assert.Single(owner.OwnedWindows.OfType<T>());
+    }
 
     private static Button? RitualButton(ProgramsTabView tab) => tab.GetVisualDescendants().OfType<Button>()
         .FirstOrDefault(b => b.IsEffectivelyVisible && b.Tag as string == "d6_ritual_pink");
