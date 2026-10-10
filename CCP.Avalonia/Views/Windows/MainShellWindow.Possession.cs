@@ -39,6 +39,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 PossessionDirector.Current = new PossessionDirector(lockdown, PossessionHeadEffects(), PossessionHostFor(() => Current));
                 PossessionDirector.Current.Scenes.AddRange(PossessionHeadScenes());
                 InstallPossessionRemember(lockdown);
+                lockdown.LockdownActivated += () => Dispatcher.UIThread.Post(() => PostPossessionRulesIfFirstTime(() => Current));
             }
             catch (Exception ex) { Log.Warning(ex, "Possession: install failed"); }
         }
@@ -54,6 +55,41 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             new Services.Possession.Effects.RetitleEffect(),
             new Services.Possession.Effects.GlitchPortraitEffect(),
         };
+
+        internal const string PossessionRulesKey = "intro:possession";
+
+        /// <summary>WPF ShowPossessionRulesIfFirstTime (MainWindow.Lab.cs): the first lockdown that runs
+        /// with Possession on, the warden states the rules: a bark now, and the rules card. WPF opens
+        /// the card at once when the app is quiet; the card is a modal over the shell, which would sit
+        /// on the Emergency Exit as the lockdown starts, so this head always files it as an Inbox row
+        /// (the title and summary are WPF's own literals). The flag is spent when the card OPENS.</summary>
+        internal static void PostPossessionRulesIfFirstTime(Func<MainShellWindow?> shell)
+        {
+            try
+            {
+                var s = CoreSettings.Current;
+                if (s == null || !s.LockdownPossessionEnabled || s.LockdownPossessionIntroSeen) return;
+                Platform.StartupLadder.Inbox.File(new Services.Startup.InboxItem
+                {
+                    Key = PossessionRulesKey,
+                    Glyph = "\U0001F576",
+                    Title = "The warden's rules",
+                    Summary = "What possession does before the room starts moving.",
+                    Open = () =>
+                    {
+                        var live = CoreSettings.Current;
+                        if (live != null && !live.LockdownPossessionIntroSeen)
+                        {
+                            live.LockdownPossessionIntroSeen = true;
+                            CoreSettings.Save();
+                        }
+                        FeatureIntroPopup.ShowIfFirstTime("possession", shell());
+                    },
+                });
+                CoreBark.Raise(PossessionBarkTriggers.Rules, null);
+            }
+            catch (Exception ex) { Log.Warning(ex, "Possession: failed to post the first-run rules"); }
+        }
 
         /// <summary>WPF PossessionRemember.Install: arm on a Full Doki exit, and spend a charge armed by
         /// the last run once this launch's window has been up for twenty seconds.</summary>

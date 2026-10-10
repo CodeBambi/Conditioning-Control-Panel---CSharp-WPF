@@ -431,6 +431,46 @@ public sealed class PossessionEffectsTests
     });
 
     [Fact]
+    public void TheWardensRulesArePostedOnce_AsAnInboxRowNeverAModal_AndNotWithPossessionOff() => AvaloniaTestDispatcher.Run(() =>
+    {
+        EnsureApp();
+        var s = CoreSettings.Current;
+        var saved = (s.LockdownPossessionEnabled, s.LockdownPossessionIntroSeen);
+        var raise = CoreBark.RaiseProvider;
+        var barks = new List<string>();
+        CoreBark.RaiseProvider = (t, _, _) => { barks.Add(t); return true; };
+        var inbox = global::ConditioningControlPanel.Avalonia.Platform.StartupLadder.Inbox;
+        inbox.Remove(MainShellWindow.PossessionRulesKey);
+        try
+        {
+            (s.LockdownPossessionEnabled, s.LockdownPossessionIntroSeen) = (false, false);
+            MainShellWindow.PostPossessionRulesIfFirstTime(() => null);
+            Assert.False(inbox.Contains(MainShellWindow.PossessionRulesKey));     // the haunt is off: never met
+            Assert.Empty(barks);
+
+            s.LockdownPossessionEnabled = true;
+            MainShellWindow.PostPossessionRulesIfFirstTime(() => null);
+            Assert.True(inbox.Contains(MainShellWindow.PossessionRulesKey));
+            Assert.Equal(new[] { PossessionBarkTriggers.Rules }, barks);
+            Assert.False(s.LockdownPossessionIntroSeen);                          // spent when the card opens, not when posted
+            MainShellWindow.PostPossessionRulesIfFirstTime(() => null);
+            Assert.Single(inbox.Items, i => i.Key == MainShellWindow.PossessionRulesKey);   // one row per key
+
+            inbox.Remove(MainShellWindow.PossessionRulesKey);
+            s.LockdownPossessionIntroSeen = true;
+            MainShellWindow.PostPossessionRulesIfFirstTime(() => null);
+            Assert.False(inbox.Contains(MainShellWindow.PossessionRulesKey));
+        }
+        finally
+        {
+            inbox.Remove(MainShellWindow.PossessionRulesKey);
+            CoreBark.RaiseProvider = raise;
+            (s.LockdownPossessionEnabled, s.LockdownPossessionIntroSeen) = saved;
+            CoreSettings.SaveImmediate();
+        }
+    });
+
+    [Fact]
     public void PanicThroughTheDirector_BringsEveryHauntedControlBackAtOnce_AndSoDoesClosing() => AvaloniaTestDispatcher.Run(() =>
     {
         EnsureApp();
