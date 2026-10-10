@@ -278,19 +278,42 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// </summary>
         internal void OnTabShown() => Refresh();
 
-        /// <summary>WPF Wire: the fuse's phase and tick drive the fog. BlockChanged has no twin
-        /// (DescentService is WPF-only).</summary>
+        /// <summary>WPF Wire: the fuse's phase and tick drive the fog; BlockChanged (which carries the
+        /// withhold too) moves the room between Waiting and Spiral.</summary>
         private void Wire()
         {
+            if (_wiredDescent == null && App.Descent is { } descent)
+            {
+                _wiredDescent = descent;
+                descent.BlockChanged += OnBlockChanged;
+            }
             if (_wiredFuse != null || App.DescentCountdown is not { } fuse) return;
             _wiredFuse = fuse;
             fuse.PhaseChanged += OnPhaseChanged;
             fuse.Tick += OnFuseTick;
         }
 
+        private ConditioningControlPanel.Services.Descent.DescentService? _wiredDescent;
+
+        /// <summary>WPF OnBlockChanged: raised from the sync path, so marshal, then repaint.</summary>
+        private void OnBlockChanged(object? sender, EventArgs e)
+        {
+            if (!global::Avalonia.Threading.Dispatcher.UIThread.CheckAccess())
+            {
+                global::Avalonia.Threading.Dispatcher.UIThread.Post(() => OnBlockChanged(sender, e));
+                return;
+            }
+            if (IsVisible) Refresh();
+        }
+
         /// <summary>Unwire from the fuse that was wired, even if the static has been swapped since.</summary>
         private void Unwire()
         {
+            if (_wiredDescent is { } descent)
+            {
+                _wiredDescent = null;
+                descent.BlockChanged -= OnBlockChanged;
+            }
             if (_wiredFuse is not { } fuse) return;
             _wiredFuse = null;
             fuse.PhaseChanged -= OnPhaseChanged;
@@ -341,11 +364,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                     CoreSettings.Current,
                     fuse?.LastAnnouncedPhase ?? DescentFusePhase.Dark,
                     fuse?.IsArmed == true,
-                    // ponytail: DescentMigrationService.SpiralWithheld and DescentService.Current
-                    // (the block) are WPF-head network services, so this head can reach Fog and
-                    // Waiting but never Spiral; the embed seam below waits for them.
-                    spiralWithheld: false,
-                    hasBlock: false));
+                    // WPF App.DescentMigration?.SpiralWithheld and App.Descent?.Current, through the
+                    // same two readers the profile doors use (one rule for every spiral surface).
+                    spiralWithheld: Windows.MainShellWindow.SpiralWithheld(),
+                    hasBlock: Windows.MainShellWindow.SpiralBlock() is not null));
             }
             catch (Exception ex)
             {

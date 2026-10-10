@@ -30,7 +30,7 @@ public sealed class ModReskinTests
     private static readonly string[] Steps =
     {
         "palette", "logo", "tile art", "tile names", "door art", "quest stamps", "quests tab",
-        "achievement grid", "profile badges", "companion roster", "wall states",
+        "achievement grid", "profile badges", "companion roster", "wall states", "intake pass",
     };
 
     [Fact]

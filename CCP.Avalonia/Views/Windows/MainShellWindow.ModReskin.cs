@@ -84,6 +84,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             Step("profile badges", () => Named<Tabs.DiscordTabView>("DiscordTab")?.RefreshProfileStatBadges());
             Step("companion roster", RefreshCompanionRosterForMod);
             Step("wall states", RefreshWallActiveStates);
+            Step("intake pass", RefreshIntakePassTile);   // WPF :1435, the card art follows the mod's niche
         }
 
         private void Step(string name, Action body)
