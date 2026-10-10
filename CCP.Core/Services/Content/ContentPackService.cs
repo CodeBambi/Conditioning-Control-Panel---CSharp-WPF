@@ -383,6 +383,7 @@ namespace ConditioningControlPanel.Services
                 try { _save(); } catch (Exception ex) { Log.Warning(ex, "ContentPacks: settings save failed"); }
                 _store.Rescan();
                 Log.Information("Pack installed: {Name} ({Count} files encrypted)", pack.Name, manifest.Files.Count);
+                ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("contentPackInstalled", new { target = pack.Name?.ToLowerInvariant() });   // WPF ContentPackService.cs:588
             }
             finally
             {

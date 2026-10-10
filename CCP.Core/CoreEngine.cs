@@ -77,6 +77,7 @@ namespace ConditioningControlPanel
 
             _running = true;
             StartedUtc = DateTime.UtcNow;
+            ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("engineStarted", new { systemInitiated = false });   // WPF StartStop.cs:412
             ConditioningTime.OnEngineStarted(DateTime.Now);   // WPF StartStop.cs:423 StartConditioningTimeTracker
             Log.Information("Engine started - Flash: {Flash}, Subliminal: {Sub}, LockCard: {Lock}, BouncingText: {Bt}",
                 s.FlashEnabled, s.SubliminalEnabled, s.LockCardEnabled, s.BouncingTextEnabled);
@@ -108,7 +109,9 @@ namespace ConditioningControlPanel
                     try { AudioBedStop?.Invoke(); } catch (Exception ex) { Log.Warning(ex, "Audio-only bed failed to stop"); }
                 }
                 _running = false;
+                int emiRanMinutes = StartedUtc is { } emiStarted ? Math.Max(0, (int)(DateTime.UtcNow - emiStarted).TotalMinutes) : 0;
                 StartedUtc = null;
+                ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("engineStopped", new { minutes = emiRanMinutes });   // WPF StartStop.cs:554
                 ConditioningTime.OnEngineStopped(DateTime.Now);   // WPF StartStop.cs:540 StopConditioningTimeTracker
                 try { StoppedHook?.Invoke(); }
                 catch (Exception ex) { Log.Warning(ex, "Engine stop hook failed"); }

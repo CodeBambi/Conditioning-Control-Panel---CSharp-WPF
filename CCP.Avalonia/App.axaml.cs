@@ -1151,6 +1151,7 @@ namespace ConditioningControlPanel.Avalonia
         {
             if (Interlocked.Exchange(ref _exitHandled, 1) != 0) return;
             _exiting = true;
+            ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("appClosing");   // WPF App.xaml.cs:5644 (never speaks)
 
             // WPF App.OnExit:5965: haptics FIRST and synchronously (bounded ~2 s). A Lovense level has no
             // server-side watchdog, so a toy not countermanded here keeps running after the app is gone.

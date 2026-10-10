@@ -1046,6 +1046,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                 {
                     _dragMoved = true;
                     CloseRing();   // WPF Ring.cs OnRingWatchMove: a drag past the threshold folds the fan
+                    OnPickedUp();   // WPF xaml.cs:1536
                 }
                 if (!_dragMoved) return;
 
@@ -1078,6 +1079,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                     SavePlacement();
                     try { Moved?.Invoke(this, EventArgs.Empty); }
                     catch (Exception ex) { Log.Debug(ex, "[EmiDesk] Moved handler threw"); }
+                    OnPutDown();   // WPF xaml.cs:1566
                     return;
                 }
 
@@ -1808,6 +1810,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                 _wobbleLastX = x;
 
                 _wobbleVx = _wobbleVx * WobbleVelKeep + raw * (1.0 - WobbleVelKeep);
+                NoteTossFrame(dt, _wobbleVx);   // the fling window rides the wobble's own frame
 
                 // She TRAILS the hand: drag her right and her feet swing left, which about a
                 // head-high pivot is a positive (clockwise) angle in a y-down frame.
@@ -2393,11 +2396,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         // still reads as the same code and the later layers have the exact call sites to fill in.
         // React.cs and Fx.cs are no longer among them: both are real, above.
 
-        /// <summary>ponytail: EmiDeskWindow.Alive.cs - the 100 ms gaze/idle poll. Starts with her.</summary>
-        private void StartAlive() { }
-
-        /// <summary>ponytail: EmiDeskWindow.Alive.cs - stops the poll when she goes.</summary>
-        private void StopAlive() { }
+        // StartAlive / StopAlive: EmiDeskWindow.Alive.cs (the 100 ms gaze and idle poll).
 
         // The click pat + poke ladder: EmiDeskWindow.Poke.cs (E9).
 
@@ -2409,22 +2408,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         }
 
 
-        /// <summary>
-        /// ponytail: EmiDeskWindow.Props.cs, and the note this used to carry was wrong about where
-        /// the blocker is. <c>EmiProps</c> - the anchor, the three plates, their sizes, the hold and
-        /// the rise - is ALREADY IN CORE (CCP.Core/Services/EmiDesk/EmiProps.cs) and is pure, so
-        /// LayoutProp / ShowProp / HideProp / the rise port arithmetic for arithmetic. What stops
-        /// them is the ART: <c>EmiProps.Path</c> probes
-        /// <c>Resources/web/arcademy/art/emi/props/*.png</c> beside the exe, and CCP.Avalonia.csproj
-        /// links no <c>Assets/web/</c> tree at all, so every lookup returns null and the whole beat
-        /// is a silent no-op by the WPF original's own design. Take the csproj link and the port in
-        /// ONE layer, or the port draws nothing and says nothing about why. The beat that starts it
-        /// (RunPropBeat) additionally needs a chain, so it is two blockers, not one.
-        /// </summary>
-        private void LayoutProp() { }
-
-        /// <inheritdoc cref="LayoutProp"/>
-        private void HideProp() { }
+        // LayoutProp / ShowProp / HideProp: EmiDeskWindow.Props.cs (the thing she is holding).
 
         /// <summary>ponytail: EmiDeskWindow.Bubble.cs - drops the voice hooks.</summary>
         private void TearDownVox() { }
@@ -2439,8 +2423,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         /// <summary>ponytail: needs App.EmiDesk.ResetOnboarding() - the QA gesture replay.</summary>
         private void ResetOnboarding() { }
 
-        /// <summary>ponytail: needs App.EmiDesk.Fire(...) - her own event bus.</summary>
-        private void FireDeskEvent(string name) { }
+        /// <summary>WPF App.EmiDesk.Fire(...): her own event bus (EmiDeskService.Moments.cs).</summary>
+        private void FireDeskEvent(string name, object? ctx = null) => EmiDeskService.Instance.Fire(name, ctx);
 
         // ---------------------------------------------------------------- teardown
 
