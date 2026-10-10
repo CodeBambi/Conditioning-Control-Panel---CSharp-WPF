@@ -910,3 +910,4 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
   shortcut and a kc live run is a deliberate desktop session; no notify-send/xdg-open elsewhere.
 - Test: `OsNotificationsTests.Sandbox_never_reaches_the_session_bus` (fail-proven: guard removed -> red) and
   `RemoteControlShellTests` asserts the join raised exactly one notification via the Sink (fail-proven: call disabled -> red).
+  Log (run with DBUS_SESSION_BUS_ADDRESS=disabled:): ~/ccp-port/evidence/review-no-desktop-notify-in-tests/fail-proofs.log.

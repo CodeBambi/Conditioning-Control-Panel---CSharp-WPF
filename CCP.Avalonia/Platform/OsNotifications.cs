@@ -110,7 +110,6 @@ internal static class OsNotifications
     }
 
     /// <summary>Notify; returns the server's id (0 never comes back from a real server).
-
     /// A CCP_USERDATA_DIR sandbox (<see cref="SandboxNet.Active"/>: tests, kc, render-all) never reaches the user's
     /// desktop: it returns 0 (not delivered) unless <paramref name="live"/> - only `--notify-check`, the deliberate probe.</summary>
     internal static async Task<uint> NotifyAsync(string title, string body, bool clickable, bool live = false)
