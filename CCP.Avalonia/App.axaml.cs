@@ -991,6 +991,7 @@ namespace ConditioningControlPanel.Avalonia
             Views.Overlays.SubliminalWhisperShow.StopAll();
             Views.Overlays.SubliminalOverlay.CloseAll();
             Views.Overlays.BouncingTextOverlay.Stop();
+            Views.Overlays.SpiralOverlay.ReleaseAllHolds();   // a held spiral (Deeper band, Back Room) never outlives a stop or a panic
             Views.Overlays.SpiralOverlay.CloseAll();   // WPF StopEngine -> App.Overlay.Stop(); panic and exit too
             Views.Overlays.BrainDrainOverlay.CloseAll();   // the Brain Drain haze (WPF StopBrainDrainBlur)
         }
