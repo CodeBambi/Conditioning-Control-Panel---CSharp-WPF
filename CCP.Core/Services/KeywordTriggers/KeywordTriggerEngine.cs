@@ -15,7 +15,8 @@ namespace ConditioningControlPanel.Services.KeywordTriggers
     /// keyword and id, the de-duplicated union of every fired trigger's enabled actions) plus how many
     /// quest credits it earns (one per fired trigger, WPF :1364 / :1412).</summary>
     public sealed record KeywordFire(KeywordTrigger Trigger, IReadOnlyList<KeywordAction> Actions,
-        IReadOnlyList<KeywordTrigger> Fired, string Source);
+        IReadOnlyList<KeywordTrigger> Fired, string Source,
+        IReadOnlyList<OcrWordHit>? MatchedWords = null);
 
     /// <summary>
     /// The platform-free half of WPF <c>Services/KeywordTriggerService.cs</c> (7.1.5): the rolling typed
@@ -24,7 +25,7 @@ namespace ConditioningControlPanel.Services.KeywordTriggers
     /// ring buffer and the app-scope gate. Same numbers as WPF. A head feeds it characters (or text) and
     /// performs the actions on <see cref="Dispatch"/>; nothing here draws, plays or touches Win32.
     /// </summary>
-    public sealed class KeywordTriggerEngine
+    public sealed partial class KeywordTriggerEngine
     {
         public const int BufferCap = 200;
         public const int PulseBufferCapacity = 20;
@@ -316,6 +317,7 @@ namespace ConditioningControlPanel.Services.KeywordTriggers
             if (scope == AwarenessAppScope.Everywhere && !s.KeywordTriggerIgnoreOwnFocus) return true;
             var app = ForegroundResolver?.Invoke();
             if (app == null) return scope != AwarenessAppScope.OnlyListed;   // allow list fails closed
+            if (!app.IsOwnProcess) RememberSeenApp(app.ProcessName);
             if (app.IsOwnProcess && s.KeywordTriggerIgnoreOwnFocus) return false;
             return scope switch
             {
@@ -323,6 +325,35 @@ namespace ConditioningControlPanel.Services.KeywordTriggers
                 AwarenessAppScope.OnlyListed => MatchesAppList(s.KeywordTriggerApps, app.ProcessName),
                 _ => true,
             };
+        }
+
+        public const int SeenAppsCapacity = 8;
+        private readonly LinkedList<string> _seenApps = new();
+        private readonly object _seenAppsLock = new();
+
+        /// <summary>WPF GetRecentForegroundApps: distinct process names recently seen in the foreground,
+        /// newest first, never this app. In memory only, never persisted: a convenience for the app
+        /// list editor, not a history.</summary>
+        public IReadOnlyList<string> GetRecentForegroundApps()
+        {
+            lock (_seenAppsLock) return _seenApps.ToArray();
+        }
+
+        private void RememberSeenApp(string processName)
+        {
+            if (string.IsNullOrWhiteSpace(processName)) return;
+            lock (_seenAppsLock)
+            {
+                var existing = _seenApps.FirstOrDefault(a => string.Equals(a, processName, StringComparison.OrdinalIgnoreCase));
+                if (existing != null)
+                {
+                    _seenApps.Remove(existing);
+                    _seenApps.AddFirst(existing);
+                    return;
+                }
+                _seenApps.AddFirst(processName);
+                while (_seenApps.Count > SeenAppsCapacity) _seenApps.RemoveLast();
+            }
         }
 
         public static bool MatchesAppList(IEnumerable<string>? list, string processName)

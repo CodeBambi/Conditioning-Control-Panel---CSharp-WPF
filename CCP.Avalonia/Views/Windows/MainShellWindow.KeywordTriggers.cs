@@ -8,10 +8,11 @@
 //     gate on the OCR detail), add / import, RefreshKeywordTriggerList, CreateKeywordTriggerRow and
 //     all nine per-row editors: CCP.Avalonia/Views/Controls/Companion/KeywordTriggersPanel*.cs
 //
-// ponytail: still missing is the runtime the list feeds - ConditioningControlPanel/Services/
-// KeywordTriggerService.cs (keystroke buffer + matching + dispatch), ScreenOcrService and
-// KeywordHighlightService. WPF reads keystrokes through a global Win32 hook; there is no Linux
-// keystroke source yet (Wayland forbids global capture), so nothing fires these triggers here.
+// The runtime the list feeds (WPF Services/KeywordTriggerService.cs, ScreenOcrService,
+// KeywordHighlightService): Core Services/KeywordTriggers/KeywordTriggerEngine (+ .Ocr) for the rules,
+// Platform/KeywordTriggerHead, Platform/ScreenOcrService and Views/Overlays/KeywordHighlightOverlay for
+// the head. Typed keys: Windows through the panic key's hook, X11 through X11KeyListener; a native
+// Wayland window shows no client another client's keys, so nothing typed there is seen.
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {

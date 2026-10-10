@@ -1,45 +1,26 @@
-// PORTED-AS-A-STUB from ConditioningControlPanel/MainWindow/MainWindow.Awareness.cs (1200 lines).
+// ConditioningControlPanel/MainWindow/MainWindow.Awareness.cs (7.1.5, 1200 lines) on this head.
 //
-// ponytail: wholesale stub. Every member below reaches App.*, a service, a device, a
-// WebView2 or Win32 - none of which this head may touch (see the layer rules: "Do not
-// move services"). The file exists and each member is NAMED so nothing disappears
-// silently; the bodies come back when the services move to Core.
+// WPF's MainWindow owned these members because the Awareness markup was inline in MainWindow.xaml.
+// Here the controls moved to the tab, and so did the members - one restored HERE would be a second
+// copy no click can reach. Where each one lives (lane w2, 10 Oct 2026):
 //
-// The preset grid, new-preset tile and advanced link (10 members) live in
-// CCP.Avalonia/Views/Tabs/AwarenessTabView.Presets.cs.
-//
-// Members dropped (31):
-//   private bool _awarenessSubscribed
-//   private void SyncAwarenessTabUI(…)
-//   private bool _presetsChangedSubscribed
-//   private void OnPresetsChanged(…)
-//   private void OnAwarenessTriggerFired(…)
-//   private void RefreshAwarenessPulseFeed(…)
-//   private Border BuildPulseRow(…)
-//   private StackPanel BuildActionChipStrip(…)
-//   private static(…)
-//   private static string FormatTimeAgo(…)
-//   private void UpdateAwarenessStatusIndicator(…)
-//   internal void ChkAwarenessMaster_Changed(…)
-//   internal void ChkAwarenessOcr_Changed(…)
-//   internal void ChkAwarenessKeyboard_Changed(…)
-//   internal void ChkAwarenessIgnoreOwnUi_Changed(…)
-//   private void RefreshAwarenessAppScopeUi(…)
-//   private void RefreshAwarenessSeenAppChips(…)
-//   private void AwarenessSeenAppChip_Click(…)
-//   internal void CmbAwarenessAppScope_SelectionChanged(…)
-//   internal void TxtAwarenessAppList_KeyDown(…)
-//   internal void TxtAwarenessAppList_LostFocus(…)
-//   private void CommitAwarenessAppList(…)
-//   internal void ChkAwarenessIgnoreOwnFocus_Changed(…)
-//   internal void ChkAwarenessLoopProtection_Changed(…)
-//   internal void ChkAwarenessHighlight_Changed(…)
-//   internal void ChkAwarenessHighlightVisibleInCapture_Changed(…)
-//   internal void AwarenessHighlightSwatch_Click(…)
-//   internal void TxtAwarenessHighlightHex_LostFocus(…)
-//   internal void TxtAwarenessHighlightHex_KeyDown(…)
-//   private void ApplyAwarenessHighlightColor(…)
-//   private void SyncAwarenessHighlightSwatchUi(…)
+//   SyncAwarenessTabUI, the master / OCR / keyboard / own-UI / loop / highlight / capture switches,
+//   the app-scope combo + list, the highlight swatches and hex box:
+//       Views/Tabs/AwarenessTabView.axaml.cs
+//   OnAwarenessTriggerFired, RefreshAwarenessPulseFeed, BuildPulseRow, BuildActionChipStrip,
+//   GetActionChipDisplay, FormatTimeAgo, RefreshAwarenessSeenAppChips, AwarenessSeenAppChip_Click,
+//   the status dot's breath:
+//       Views/Tabs/AwarenessTabView.Live.cs
+//   The preset grid, new-preset tile, advanced link, OnPresetsChanged:
+//       Views/Tabs/AwarenessTabView.Presets.cs
+//   What the switches start and stop (WPF App.KeywordTriggers / App.ScreenOcr / _keyboardHook /
+//   App.KeywordHighlight):
+//       Platform/KeywordTriggerHead.cs   typed keys (Windows: the panic key's hook; X11: X11KeyListener),
+//                                        dispatch, SyncSources
+//       Platform/ScreenOcrService.cs     the screen reader's timer (Windows: WinRtScreenReader)
+//       Views/Overlays/KeywordHighlightOverlay.cs
+//   The shell's own hooks: RefreshEntitlementVeils calls KeywordTriggerHead.SyncSources (access moved),
+//   SetAwarenessStatusPulse (MainShellWindow.TabFxTakeoverLabStatus.cs).
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
 {
