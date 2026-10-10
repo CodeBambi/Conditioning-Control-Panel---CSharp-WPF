@@ -225,6 +225,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
 
         internal static void CloseAllForPanic()
         {
+            CancelRoomReturns();   // a race opened from the Back Room never brings the room back after a panic
             GameWindow[] all;
             lock (Open) all = Open.ToArray();
             foreach (var w in all)
