@@ -420,13 +420,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
             Log.Information("Awareness: page titles hidden again for every app");
         }
 
-        private static IReadOnlyList<string> Candidates(IEnumerable<string> listed)
+        internal static IReadOnlyList<string> Candidates(IEnumerable<string> listed)
         {
-            // WPF AwarenessAppCandidates.Gather source 1 (the window in front); the ledger and trigger
-            // ring sources do not exist on this head.
+            // WPF AwarenessPrivacyRuntimeVm: AwarenessAppCandidates.Gather(listed) - the window in front, this
+            // session's app switches, the persisted per-app counters, then the trigger ring (the seams are
+            // seeded in Platform/AwarenessHead). Before the head is wired the window in front still shows.
+            var exclude = listed as IReadOnlyCollection<string> ?? listed.ToList();
+            var gathered = AwarenessAppCandidates.Gather(exclude);
+            if (AwarenessHost.CurrentServiceName != null) return gathered;
             var current = AwarenessText.SanitizeRuleEntry(AvApp.WindowAwareness.CurrentServiceName);
-            return current == null || listed.Contains(current, StringComparer.OrdinalIgnoreCase)
-                ? Array.Empty<string>() : new[] { current };
+            if (current == null || exclude.Contains(current, StringComparer.OrdinalIgnoreCase)
+                || gathered.Contains(current, StringComparer.OrdinalIgnoreCase)) return gathered;
+            return new[] { current }.Concat(gathered).Take(AwarenessAppCandidates.MaxCandidates).ToList();
         }
 
         private async Task<List<string>?> PickAsync(AwarenessListKind kind, IReadOnlyList<string> listed)
