@@ -877,3 +877,20 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
 ## 2026-10-10: Vault gate card/PayPal checkout link (avalonia-port/sync6-gate-pay)
 - Mirrors WPF 750e76812 exactly (supervisor-approved, P44): same URL `https://app.cclabs.app/subscribe?plan={basic|prime}&from=panel`,
   same copy (`vaultgate_or_card`), opened only through ExternalOpener on a user click; tests use a fake launcher, never a real URL.
+## 2026-10-10: Clean-distro check of the linux-x64 tarball (avalonia-port/distro-check)
+- `packaging/linux/distro-check/run.sh <image> <tarball> <outdir>` checks one stock image in two containers: install
+  (network on) = only the docs/avalonia-linux-install.md dep row + test tooling (Xvfb, openbox, ImageMagick, xdotool,
+  xwininfo), one package at a time so a name the distro lacks is recorded, then `docker commit`; run = `--network none
+  --init`, host uid (given a passwd line: openbox segfaults without one), no devices, throwaway HOME/XDG_CONFIG_HOME/
+  CCP_USERDATA_DIR per resolution. No fonts are added: what the deps pull in is what a minimal install has.
+- Real X (Xvfb) at 1920x1080, 1366x768 and 1920x1080 with AVALONIA_GLOBAL_SCALE_FACTOR=2 (+GDK_SCALE=2). Avalonia sets
+  only _NET_WM_NAME, so windows are found with xdotool and their geometry recorded with xwininfo. The wizard is driven like
+  a user (dismiss Free Feature card, tick the 18+ box, Enter x3) by clicks at DIP offsets x scale; Escape is not used
+  because closing the wizard ungated shuts the app down. Then Ctrl+K palette ("one dialog") and "settings" + Return.
+- result.json: window/wizard/wizard_done/exit per resolution, missing libs from ldd of every bundled .so plus the system
+  secret/vlc/webkit/wpe libs the process mapped (lttng tracepoint provider excluded), unavailable packages, log
+  exception lines, screenshot stddev (non-blank > 0.02). run.sh fails only when no window appears at 1920x1080.
+- `all.sh` runs the six images and writes summary.json + index.html; `all.sh --index` only assembles (CI's last job).
+- CI `.github/workflows/distro-check.yml` (build.yml untouched): tarball job, 6-way matrix, index job. Tumbleweed is
+  `expect_fail` (continue-on-error) while findings F1 (no fonts -> startup abort) stands.
+- Findings (not fixed here): ~/ccp-port/evidence/distro-check/findings.md F1-F6.

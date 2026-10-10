@@ -18,6 +18,12 @@ libwebkit2gtk-4.1.so.0 + libjavascriptcoregtk-4.1 + libsoup-3.0/2.4); webkitgtk-
 | Sign-in token store | libsecret | libsecret-1-0 | libsecret |
 | Overlays, panic key (X11/XInput2) | libx11 libxi | libx11-6 libxi6 | libX11 libXi |
 .NET: publish self-contained, so no runtime dependency.
+openSUSE names (used by `packaging/linux/distro-check`): libwebkit2gtk-4_1-0, libWPEWebKit-2_0-1 libWPEBackend-fdo-1_0-1
+libwpe-1_0-1, libvlc5 vlc-noX, libsecret-1-0, libX11-6 libXi6.
+Measured 2026-10-10 on stock images (`distro-check`, ~/ccp-port/evidence/distro-check/findings.md): the WPE row is NOT
+installable on Ubuntu 24.04 (no WPE at all), Ubuntu 22.04 / Debian 12 (WebKit only as libwpewebkit-1.0-3 / -1.1-0) or
+Fedora 44 (none); Arch has wpewebkit but no longer wpebackend-fdo / libwpe. libvlc5 / vlc-libs ship only `libvlc.so.5`,
+which LibVLCSharp does not find (audio disabled). None of the rows pulls a font or an emoji font.
 
 ## Plan (channel order CONFIRMED by the user 2026-09-28: own Flatpak repo + AUR first; Flathub after a content-policy check)
 1. **Flatpak (primary, every distro, one click).** GNOME runtime already has WebKitGTK; bundle libVLC and the WPE libs (wpewebkit, wpebackend-fdo, libwpe) if the runtime lacks them; self-contained .NET.

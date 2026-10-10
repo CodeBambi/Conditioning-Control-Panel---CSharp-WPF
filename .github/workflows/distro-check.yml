@@ -1,0 +1,88 @@
+name: distro-check
+
+# Does the shipped linux-x64 tarball start and look right on stock distros? Each matrix job installs only the
+# documented runtime deps in a clean container, runs the app under Xvfb with networking off and uploads the
+# screenshots + logs. packaging/linux/distro-check/run.sh is the whole check; this file only fans it out.
+on:
+  workflow_dispatch:
+  push:
+    branches: ['avalonia-port/**']
+    paths:
+      - 'packaging/**'
+      - 'CCP.Avalonia/**'
+      - 'CCP.Core/**'
+      - '.github/workflows/distro-check.yml'
+      - '.github/scripts/fetch-vosk-model.sh'
+
+concurrency:
+  group: distro-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tarball:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            10.0.x
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ccp-test/vosk
+          key: vosk-model-small-en-us-0.15-30f26242c4eb449f948e42cb302dd7a686cb29a3423a8367f99ff41780942498
+      - run: bash packaging/linux/build-tarball.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: distro-check-tarball
+          path: packaging/linux/out/*.tar.gz
+          retention-days: 3
+
+  distro:
+    needs: tarball
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { image: 'ubuntu:24.04', name: ubuntu-24.04 }
+          - { image: 'ubuntu:22.04', name: ubuntu-22.04 }
+          - { image: 'debian:12', name: debian-12 }
+          - { image: 'fedora:latest', name: fedora }
+          - { image: 'archlinux:latest', name: archlinux }
+          # Known: aborts at startup with no fonts installed (evidence/distro-check/findings.md F1).
+          # The job still runs and uploads; drop expect_fail once the app ships or declares a font.
+          - { image: 'opensuse/tumbleweed', name: opensuse-tumbleweed, expect_fail: true }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: distro-check-tarball
+          path: tarball
+      - name: Run ${{ matrix.image }}
+        continue-on-error: ${{ matrix.expect_fail == true }}
+        run: bash packaging/linux/distro-check/run.sh '${{ matrix.image }}' tarball/*.tar.gz out
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: distro-check-${{ matrix.name }}
+          path: out/${{ matrix.name }}
+          retention-days: 14
+
+  index:
+    needs: distro
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: distro-check-*
+          path: out
+      - run: rm -rf out/distro-check-tarball && for d in out/distro-check-*; do mv "$d" "out/${d#out/distro-check-}"; done
+      - run: bash packaging/linux/distro-check/all.sh --index out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: distro-check-index
+          path: out
+          retention-days: 14
