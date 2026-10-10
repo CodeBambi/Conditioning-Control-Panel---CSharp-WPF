@@ -436,8 +436,12 @@ public sealed class LockdownVeilTests
         {
             shell.ShowTab("lockdown");
             Frame();
-            Assert.True(hint.IsVisible);    // 10 minutes, the default: under the quest minimum
-            combo.SelectedIndex = 3;        // 30 minutes
+            // 7.1.5 (#1388, WPF a40bf0b9b): 20 minutes is the default and counts for the quests.
+            Assert.Equal("20", (combo.SelectedItem as ComboBoxItem)?.Tag);
+            Assert.False(hint.IsVisible);
+            combo.SelectedIndex = 2;        // 15 minutes: under the quest minimum
+            Assert.True(hint.IsVisible);
+            combo.SelectedIndex = 4;        // 30 minutes
             Assert.False(hint.IsVisible);
             combo.SelectedIndex = 0;        // 5 minutes
             Assert.True(hint.IsVisible);
