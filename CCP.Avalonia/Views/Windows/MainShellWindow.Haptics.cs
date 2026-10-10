@@ -5,9 +5,8 @@
 // InitializeComponent, so its x:Name fields are real (CLAUDE.md trap 7); this partial only opens
 // the setup wizard for it.
 //
-// ponytail: still missing from the page (MainWindow.Haptics.cs): the provider chips, toy cards and
-// routing rows (Views/Controls/HapticUiModels.cs exposes System.Windows.Visibility, so the VMs
-// need a head twin), the live-status timer, DtRH/sync/Phase F/DSP editors, the pattern preview.
+// The provider chips, toy cards, routing rows, live status, DtRH / sync / Phase F / DSP editors and the
+// pattern lab are on the page too (HapticsTabView.Dials.cs, Core Views/Controls/HapticUiModels.cs).
 
 using System;
 using Serilog;

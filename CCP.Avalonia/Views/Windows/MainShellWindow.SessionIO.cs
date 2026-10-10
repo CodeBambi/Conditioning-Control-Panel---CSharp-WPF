@@ -145,8 +145,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     Named<Tabs.PresetsTabView>("PresetsTab")?.HandlePresetDrop(files[0]);
                     break;
                 case DropType.Enhancement:
-                    // WPF ImportEnhancementFiles with no App.EnhancementLibrary (DeeperTab.cs:819).
-                    App.Notifications.Show(Loc.Get("deeper_import_library_not_ready"), Helpers.NotificationType.Warning);
+                    // WPF ImportEnhancementFiles (DeeperTab.cs:819): copy into the library, then reload the hub.
+                    Views.Deeper.DeeperImport.ImportFiles(files);
+                    InitializeDeeperHub();
                     break;
                 case DropType.Mod:
                     await HandleModDropAsync(files[0]);

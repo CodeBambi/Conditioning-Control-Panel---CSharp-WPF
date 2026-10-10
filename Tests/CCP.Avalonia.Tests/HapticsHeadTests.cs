@@ -202,6 +202,47 @@ public sealed class HapticsHeadTests
         });
     }
 
+    /// <summary>A buzz the page starts (pattern Play on one toy) ends when the page hides, and a
+    /// per-toy test, which drives the provider around the mixer, ends on the panic stop.</summary>
+    [Fact]
+    public void PagePreviewStopsOnHideAndToyTestStopsOnPanic()
+    {
+        AvaloniaTestDispatcher.Run(() =>
+        {
+            if (Application.Current is null)
+                AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>()
+                    .UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                    .SetupWithoutStarting();
+            WithHaptics(premium: true, mock: true, (h, _) =>
+            {
+                h.Settings.Enabled = true;
+                Assert.True(h.ConnectAsync().Result);
+                var tab = new HapticsTabView();
+                var host = new Window { Content = tab };
+                host.Show();
+                try
+                {
+                    Assert.True(tab.CmbPatternToy.Items.Count > 1);
+                    tab.CmbPatternToy.SelectedIndex = 1;   // one toy: the around-the-mixer path
+                    Assert.False(tab.PreviewRunning);
+                    tab.BtnPatternPlay.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    Assert.True(tab.PreviewRunning);
+                    tab.IsVisible = false;
+                    Assert.False(tab.PreviewRunning);
+                    tab.IsVisible = true;
+
+                    var key = h.DeviceManager.Devices[0].DeviceKey;
+                    var test = System.Threading.Tasks.Task.Run(() => h.TestDeviceAsync(key, VibrationMode.Constant, 0.6, 8000));
+                    Thread.Sleep(300);
+                    Assert.False(test.IsCompleted);
+                    h.PanicStop();
+                    Assert.True(test.Wait(3000));
+                }
+                finally { host.Close(); }
+            });
+        });
+    }
+
     /// <summary>WPF HapticsSetupWindow.xaml.cs, from the Studio rack's "?" (MainWindow.Haptics.cs:668):
     /// pick Mock, Next commits the provider, Connect is refused without premium (gate_premium_locked),
     /// then with premium connects, lists the (virtual) toys, swaps Connect for Done, Test buzz reaches
