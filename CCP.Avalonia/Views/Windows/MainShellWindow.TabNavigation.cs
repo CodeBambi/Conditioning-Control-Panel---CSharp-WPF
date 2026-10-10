@@ -227,7 +227,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     case "exclusives": RefreshExclusivesTab(); break;
                     // WPF MainWindow.TabNavigation.cs:588-593 (AnimateTabIn is the header's ponytail).
                     case "chaster": Named<Tabs.ChasterTabView>("ChasterTab")?.OnTabShown(); break;
-                    // WPF MainWindow.TabNavigation.cs:433-438: rescan the library, re-sync presets (AssetsFx entrance: shell-assets-fx).
+                    // WPF MainWindow.TabNavigation.cs:433-438: rescan the library, re-sync presets, AssetsFx entrance.
                     case "assets": Named<Tabs.AssetsTabView>("AssetsTab")?.OnTabShown(); break;
                     // WPF AccountSettingsSection IsVisibleChanged: a login behind another door is never shown stale.
                     case "appsettings": AppSettingsPage?.RefreshSections(); break;

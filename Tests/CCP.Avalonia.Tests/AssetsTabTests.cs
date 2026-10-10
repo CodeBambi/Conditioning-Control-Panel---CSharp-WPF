@@ -22,7 +22,7 @@ using Xunit;
 
 namespace CCP.Avalonia.Tests;
 
-/// <summary>WPF MainWindow.Assets.cs (asset browser + presets) on the
+/// <summary>WPF MainWindow.Assets.cs (asset browser + presets) and MainWindow.AssetsFx.cs on the
 /// Avalonia Assets tab, entered through the shell's Library door like a user.</summary>
 public sealed class AssetsTabTests
 {
@@ -107,6 +107,75 @@ public sealed class AssetsTabTests
             Assert.Equal(s.AssetPresets.Single(p => p.IsDefault).Id, s.CurrentAssetPresetId);
         }
         finally { AssetPresetService.OnlineChannelsReset = oldReset; }
+    });
+
+    [Fact]
+    public Task HoveringATreeRowNudgesIt() => Run(async (shell, tab, s) =>
+    {
+        var cb = await Realized(shell, () => tab.AssetTreeView.GetVisualDescendants().OfType<CheckBox>().FirstOrDefault());
+        var row = (Control)cb.GetVisualParent()!;
+        var on = cb.TranslatePoint(new Point(cb.Bounds.Width / 2, cb.Bounds.Height / 2), shell)!.Value;
+        void Hover(Point p)
+        {
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();   // hit testing reads the last rendered frame
+            shell.MouseMove(p, RawInputModifiers.None);
+            Dispatcher.UIThread.RunJobs();
+        }
+
+        // Motion on: a 130 ms slide on X toward 3 px (WPF AssetTreeRowNudgeMs / Px).
+        Hover(on);
+        var slide = Assert.IsType<TranslateTransform>(row.RenderTransform);
+        var t = Assert.IsType<DoubleTransition>(Assert.Single(slide.Transitions!));
+        Assert.Equal(TranslateTransform.XProperty, t.Property);
+        Assert.Equal(TimeSpan.FromMilliseconds(130), t.Duration);
+        Assert.InRange(slide.X, 0.0001, 3.0);
+        Hover(new Point(1, 1));
+
+        // Motion off: the same nudge lands at once, and leaving puts it back.
+        var old = s.MotionLevel;
+        s.MotionLevel = MotionLevel.Off;
+        try
+        {
+            Hover(on);
+            Assert.Null(slide.Transitions);
+            Assert.Equal(3.0, slide.X);
+            Hover(new Point(1, 1));
+            Assert.Equal(0.0, slide.X);
+        }
+        finally { s.MotionLevel = old; }
+    });
+
+    [Fact]
+    public Task MediaLogPulsesOnEntryWhenTheLogGrewAndStopsWhenTheTabHides() => Run(async (shell, tab, s) =>
+    {
+        var old = global::ConditioningControlPanel.Avalonia.App.MediaHistory;
+        var dir = Directory.CreateTempSubdirectory("ccp-assets-log-").FullName;
+        var history = new MediaHistoryService(Path.Combine(dir, "media_history.json"));
+        global::ConditioningControlPanel.Avalonia.App.MediaHistory = history;
+        try
+        {
+            shell.ShowTab("settings");
+            shell.ShowTab("assets");
+            Assert.False(tab.MediaLogPulsing);                  // nothing logged since last opened
+
+            history.RecordImages(new[] { "/x/a.png" });
+            shell.ShowTab("settings");
+            shell.ShowTab("assets");
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(tab.MediaLogPulsing);
+
+            shell.ShowTab("settings");
+            Dispatcher.UIThread.RunJobs();
+            Assert.False(tab.MediaLogPulsing);
+            Assert.Equal(1.0, tab.BtnMediaLog.Opacity);
+        }
+        finally
+        {
+            global::ConditioningControlPanel.Avalonia.App.MediaHistory = old;
+            history.Dispose();
+            try { Directory.Delete(dir, true); } catch { }
+        }
+        await Task.CompletedTask;
     });
 
     [Fact]

@@ -541,7 +541,8 @@
                             </TreeView.Styles>
                             <TreeView.ItemTemplate>
                                 <TreeDataTemplate x:DataType="models:AssetTreeItem" ItemsSource="{Binding Children}">
-                                    <StackPanel Orientation="Horizontal" Margin="2">
+                                    <StackPanel Orientation="Horizontal" Margin="2" Background="Transparent"
+                                                PointerEntered="AssetTreeRow_PointerEntered" PointerExited="AssetTreeRow_PointerExited">
                                         <CheckBox IsChecked="{Binding IsChecked, Mode=TwoWay}"
                                                   IsThreeState="False" Click="FolderCheckBox_Click"
                                                   VerticalAlignment="Center" Margin="0,0,4,0"/>

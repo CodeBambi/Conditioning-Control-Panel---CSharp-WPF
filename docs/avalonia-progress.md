@@ -1734,3 +1734,6 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/sync6-nav-rail: +755
 - Section tab strip + breadcrumb from Core NavSections/NavStripTable (WPF NavStripRules delegates), zone keys, launchers, last-tab memory, Ctrl+K from every page; test SectionTabStripShellTests (fail-proven), Keincheck evidence/sync6-nav-rail.
 - 3 of 25 rows ported; 22 deferred to sync6-nav-rail-b (section rail, badges, glow, pin, help, wash, zone scroll, Monitors/Account & Plans).
+
+## avalonia-port/rows-assets-fx: +161
+- Assets FX: tree-row hover nudge (3 px / 130 ms, instant when motion is Off) and the Media Log pulse (stops on hide or open). Row stays stub (pack-card sheen).
