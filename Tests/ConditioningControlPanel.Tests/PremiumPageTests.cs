@@ -271,8 +271,12 @@ public class PremiumPageTests
         var prop = typeof(App).GetProperty(nameof(App.Patreon), BindingFlags.Static | BindingFlags.Public)!;
         var before = prop.GetValue(null);
         var svc = (PatreonService)RuntimeHelpers.GetUninitializedObject(typeof(PatreonService));
-        typeof(PatreonService).GetField("<CurrentTier>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic)!
-            .SetValue(svc, tier);
+        // The tier lives on the shared lifecycle in Core (ProviderSubscription) since the account move.
+        var coreField = typeof(PatreonService).GetField("_core", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var core = RuntimeHelpers.GetUninitializedObject(coreField.FieldType);
+        coreField.FieldType.GetField("<CurrentTier>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .SetValue(core, tier);
+        coreField.SetValue(svc, core);
         prop.SetValue(null, svc);
         try { body(); }
         finally { prop.SetValue(null, before); }

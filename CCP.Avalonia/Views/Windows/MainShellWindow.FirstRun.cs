@@ -52,10 +52,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             try
             {
-                if (FirstRunWizard.ShouldRunAndClaim()) Opened += OnFirstRunShellOpened;
+                if (FirstRunWizard.ShouldRunAndClaim())
+                {
+                    Opened += OnFirstRunShellOpened;
+                    // WPF MainWindow.xaml.cs:566: a fresh install never needs "What moved".
+                    OfferWhatMovedIfNeeded(freshInstall: true);
+                    return;
+                }
+                // WPF MainWindow.xaml.cs:618: the one-time "What moved" card, upgrades only.
+                if (CoreSettings.Service != null) Opened += OnWhatMovedShellOpened;
                 // WPF's else branch (MainWindow.xaml.cs:602-612) no longer opens a mod picker:
                 // mods are offered by the first-run wizard and the Mod Manager only.
-                else if (CoreSettings.Service != null && CoreSettings.Current.Welcomed
+                if (CoreSettings.Service != null && CoreSettings.Current.Welcomed
                          && !CoreSettings.Current.HasAcceptedAgeVerification)
                     Opened += OnAgeGateShellOpened;
                 // WPF's else branch: a returning user on a new version gets What's New, once.

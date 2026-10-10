@@ -678,10 +678,9 @@
                     </Border>
                     <!-- two stacked image layers (rounded image-brush borders) so frames can crossfade;
                          both share the breathing motion via the wrapping MenuArtMotion grid.
-                         ponytail: needs ChaosArt for the menu flipbook frames, wired when it moves
-                         to Core — both brushes have no Source on this head, so the gradient shows. -->
+                         ChaosHubWindow.Art.cs paints them (menu_1..6.png, else menu.png, else the banner). -->
                     <Grid x:Name="MenuArtMotion" RenderTransformOrigin="50%,50%">
-                        <Border CornerRadius="22">
+                        <Border x:Name="MenuArtBaseBox" CornerRadius="22">
                             <Border.Background><ImageBrush Stretch="UniformToFill"/></Border.Background>
                         </Border>
                         <Border x:Name="MenuArtTopBox" CornerRadius="22" Opacity="0">
@@ -831,7 +830,7 @@
                         <!-- card image (hidden when no screenshot present) -->
                         <Border x:Name="HowToImageBox" Grid.Row="0" Height="252" CornerRadius="16,16,0,0" ClipToBounds="True">
                             <Grid>
-                                <Border CornerRadius="16,16,0,0">
+                                <Border x:Name="HowToImageArt" CornerRadius="16,16,0,0">
                                     <Border.Background><ImageBrush Stretch="UniformToFill"/></Border.Background>
                                 </Border>
                                 <Border CornerRadius="16,16,0,0">

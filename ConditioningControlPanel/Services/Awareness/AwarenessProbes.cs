@@ -400,7 +400,7 @@ namespace ConditioningControlPanel.Services.Awareness
     /// CCP's own state, read off the <c>App</c> statics. Defensive throughout: every one of these is
     /// null during early startup and in tests.
     /// </summary>
-    public sealed class AppStateProbe : IAppStateProbe, IDisposable
+    public sealed class AppStateProbe : IAppStateProbe, IAttachableProbe, IDisposable
     {
         /// <summary>How long an unlocked achievement stays "recent" (doc 02 §2.3: "last 30 min").</summary>
         public const int RecentAchievementMinutes = 30;

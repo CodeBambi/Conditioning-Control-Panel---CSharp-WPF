@@ -31,7 +31,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// <para>Differences from 7.1.5, all because the port lacks the thing: snoozes live in board/snoozes.json (no
     /// AppSettings.BillboardSnoozedUntil yet); there is no Showcase (no clips),
     /// no program day (no ProgramService), and the Back Room house card waits for a Back Room
-    /// launcher destination. Live joins open the Lobby until chess and Goon are hosted here. The board stays silent, as 7.1.5 shipped it.</para>
+    /// launcher destination. Live joins sit at the table (JoinFromBoard); a card with no key opens the Lobby. The board stays silent, as 7.1.5 shipped it.</para>
     /// </summary>
     public partial class MainShellWindow
     {
@@ -160,13 +160,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private static MainShellWindow? BillboardShell() =>
             _billboardShell != null && _billboardShell.TryGetTarget(out var w) ? w : null;
 
-        private void ShowBillboardTab(string key)
+        // HA4: through ShowTab, which knows every door: the classic tab panels, the lane pages (friends,
+        // leash, permissions, personality, companionai, companionlinks) and the moved / redirect keys
+        // (exclusives, together, patreon). An unknown key logs there and keeps the current page.
+        internal void ShowBillboardTab(string key)
         {
-            if (string.IsNullOrEmpty(key) || !TabPanels.ContainsKey(key))
-            {
-                Log.Information("Billboard: no page {Key} on this head", key);
-                return;
-            }
+            if (string.IsNullOrWhiteSpace(key)) return;
             ShowTab(key);
         }
 

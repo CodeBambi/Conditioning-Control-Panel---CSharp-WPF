@@ -3,8 +3,8 @@
 // gated by Services/Safety/BlinkStopGate (hard rule 6: never more permissive than the panic key).
 // Ledger row platform#9 (6-blink stop gesture).
 //
-// Deviation, on purpose: the WPF leash step (LeashOnPanicPress) has no target here yet (no leash service
-// on this head, social#1). The stop pass is the panic registry minus the surfaces WPF's recal stop never
+// The leash step (WPF LeashOnPanicPress) is the 'leash-task' panic surface, prepended by Platform/LeashTaskHost.
+// Deviation, on purpose: the stop pass is the panic registry minus the surfaces WPF's recal stop never
 // touched (game windows, the intake, a Chaos descent) and minus the camera, which recalibration needs live.
 
 using System;
@@ -116,6 +116,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// One failing stop never skips the rest.</summary>
         internal static void StopAllForRecalibration(MainShellWindow? shell)
         {
+            PanicSurfaces.ArmSafetyHold();   // a panic press by another name: Circe's hold arms too
             foreach (var s in PanicSurfaces.All.Where(x => !BlinkStopSkips.Contains(x.Id)))
             {
                 try { s.Stop(shell); }

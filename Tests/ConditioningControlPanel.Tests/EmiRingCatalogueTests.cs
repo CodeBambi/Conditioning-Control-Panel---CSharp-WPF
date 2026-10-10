@@ -182,7 +182,7 @@ public class EmiRingCatalogueTests
     public void All_nine_language_files_parse_strictly_and_carry_every_new_key()
     {
         var files = Directory.GetFiles(LangDir(), "*.json");
-        Assert.Equal(9, files.Length);
+        Assert.Equal(10, files.Length);
 
         var needed = NewKeys().ToList();
         foreach (var f in files)
@@ -231,7 +231,7 @@ public class EmiRingCatalogueTests
         // line inside each of them is the whole of "an open is an open, wherever it came from".
         var expected = new (string File, string Id)[]
         {
-            (SourceRoots.FindProductFile("Services", "Arcademy", "ArcademyHostService.cs"), "arcademy"),
+            (SourceRoots.WpfHeadFile("Services", "Arcademy", "ArcademyHostService.cs"), "arcademy"),
             (SourceRoots.FindProductFile("Services", "Chaos", "DtrhHostService.cs"), "dtrh"),
             (SourceRoots.FindProductFile("Services", "Chaos", "LoomHostService.cs"), "loom"),
             (SourceRoots.FindProductFile("Services", "Fyp", "FypHostService.cs"), "fyp"),

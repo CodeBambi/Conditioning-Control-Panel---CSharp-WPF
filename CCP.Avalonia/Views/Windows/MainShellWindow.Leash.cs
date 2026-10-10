@@ -149,14 +149,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             HideLeashGate();
         }
 
-        private LeashGateInputs ReadLeashWorld(bool due) => new(
+        // WPF MainWindow.Leash.cs:173-179. Head differences: no startup modal ladder here (Platform/StartupLadder
+        // is the passive route only), so ModalUp reads the tour instead of IsModalUp; the launcher hold is the
+        // launcher window itself; a web game owns its own fullscreen, so FullscreenEffect is the video alone.
+        internal LeashGateInputs ReadLeashWorld(bool due) => new(
             Due: due,
-            SessionRunning: global::ConditioningControlPanel.CoreEngine.IsRunning,
-            GameUp: false,
-            LockCardOpen: LockCardWindow.IsAnyOpen(),
+            SessionRunning: App.Sessions?.IsRunning == true || global::ConditioningControlPanel.CoreEngine.IsRunning,
+            GameUp: PanicSurfaces.AnyOwnsTheScreen(),   // WPF ChaosWebViewHost.AnyGameActive: game windows, the intake, a descent, the gaze minigame
+            LockCardOpen: LockCardWindow.IsAnyOpen() || BubbleCountWindow.IsAnyOpen(),
             FullscreenEffect: global::ConditioningControlPanel.CoreEngine.Video?.IsPlaying == true,
-            ModalUp: LockdownActive || Named<Border>("RemoteControlOverlay")?.IsVisible == true,
-            PanelAway: !IsVisible || WindowState == WindowState.Minimized,
+            ModalUp: global::ConditioningControlPanel.CoreTutorial.IsActive
+                     || LockdownActive || Named<Border>("RemoteControlOverlay")?.IsVisible == true,
+            PanelAway: !IsVisible || WindowState == WindowState.Minimized || LauncherWindow.Instance?.IsVisible == true,
             Watching: _leashRunner?.IsRunning == true || DateTime.UtcNow < _leashSnoozeUntilUtc);
 
         private void ShowLeashGate(Punishment p, int pardons, bool unplayable = false) => _leashGate?.Present(p, pardons, unplayable);
@@ -269,6 +273,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _leashSnoozeUntilUtc = DateTime.UtcNow + LeashUiRules.PanicSnooze;
             try { _leashRunner?.Park(); } catch { }
             HideLeashGate();
+            PanicSurfaces.ArmSafetyHold();   // also when the key itself is switched off: the way out never costs
             HandlePanicKeyPress(DateTime.Now);
         }
 

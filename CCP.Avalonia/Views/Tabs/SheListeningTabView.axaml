@@ -130,6 +130,9 @@
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
                                     <Grid Grid.Column="0" Width="64" Height="64" VerticalAlignment="Center">
+                                        <!-- the breathing status glow: a sibling BoxShadow (MainShellWindow SetStatusPulse), never an Effect on the dot -->
+                                        <Border Tag="StatusGlow" Width="64" Height="64" CornerRadius="32"
+                                                Opacity="0" IsHitTestVisible="False"/>
                                         <Ellipse x:Name="SL_StatusDot" Width="64" Height="64" Fill="#3A3A52"
                                                  Stroke="{StaticResource SectionHueStudioBorderBrush}" StrokeThickness="2"/>
                                         <TextBlock Text="🎤" FontSize="24"

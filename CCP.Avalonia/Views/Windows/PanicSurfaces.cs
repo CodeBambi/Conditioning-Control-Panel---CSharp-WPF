@@ -70,10 +70,23 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             return false;
         }
 
+        /// <summary>WPF MainWindow.xaml.cs:1589 (App.Chaster?.NoteSafetyExit): the way out never costs. Every
+        /// panic route arms Circe's ten-minute hold: the key (first lines of the press, so a press a lock
+        /// card or the palette consumes arms it too), and through <see cref="StopAll"/> the tray, the safe
+        /// word and the leash gate's Panic; the 6-blink stop calls it itself. Never throws.</summary>
+        internal static Action SafetyHold { get; set; } = () => Platform.ChasterHead.Service?.NoteSafetyExit();   // tests swap it
+
+        internal static void ArmSafetyHold()
+        {
+            try { SafetyHold(); }
+            catch (Exception ex) { Serilog.Log.Debug(ex, "Panic: Chaster safety hold failed"); }
+        }
+
         /// <summary>Stops every surface in order. One failing stop never skips the rest. Never throws.</summary>
         internal static void StopAll(string reason, MainShellWindow? shell = null)
         {
             Serilog.Log.Information("Panic: stopping every surface ({Reason})", reason);
+            ArmSafetyHold();
             shell ??= MainShellWindow.Current;
             foreach (var s in All)
             {

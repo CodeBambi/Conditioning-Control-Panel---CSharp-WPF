@@ -51,6 +51,94 @@ namespace ConditioningControlPanel.Services
 
             // The Tonight Board picture: WPF imaging, any thread.
             BoardPicture.PngDecoder = DecodePng;
+
+            WireAwareness();
+        }
+
+        /// <summary>
+        /// Awareness (observer, ledger, routing, arbiter) lives once in Core. These are the probes,
+        /// the timer and the App statics the WPF 7.1.5 copies named directly; every lambda reads
+        /// its static lazily, since most are null until late in startup.
+        /// </summary>
+        private static void WireAwareness()
+        {
+            Awareness.AwarenessPlatform.ForegroundProbeFactory = () => new Awareness.Win32ForegroundProbe();
+            Awareness.AwarenessPlatform.InputProbeFactory = () => new Awareness.Win32InputProbe();
+            Awareness.AwarenessPlatform.MicrophoneProbeFactory = () => new Awareness.WasapiMicrophoneProbe();
+            Awareness.AwarenessPlatform.MediaWatcherFactory = () => new Awareness.SmtcMediaWatcher();
+            Awareness.AwarenessPlatform.AppStateProbeFactory = () => new Awareness.AppStateProbe();
+            Awareness.AwarenessPlatform.PollTimerFactory = (interval, tick) => new AwarenessPollTimer(interval, tick);
+
+            Awareness.AwarenessHost.Ai = () => App.Ai;
+            Awareness.AwarenessHost.CurrentServiceName = () => App.WindowAwareness?.CurrentServiceName;
+            Awareness.AwarenessHost.RecentForegroundApps = () => App.KeywordTriggers?.GetRecentForegroundApps();
+            Awareness.AwarenessHost.MuteKeywordEcho = (line, ms) => App.KeywordTriggers?.MuteKeywordEcho(line, ms);
+            Awareness.AwarenessHost.RaiseAwarenessBark = frame => App.Bark?.RaiseAwarenessBark(frame) ?? false;
+            Awareness.AwarenessHost.NotifyExternalLineSpoken = () => App.Bark?.NotifyExternalLineSpoken();
+            Awareness.AwarenessHost.HasAvatar = () => App.AvatarWindow != null;
+            Awareness.AwarenessHost.IsCompanionBusy = ms => App.AvatarWindow?.IsCompanionBusy(ms) ?? false;
+            Awareness.AwarenessHost.ForegroundTitle = ForegroundTitle;
+            Awareness.AwarenessHost.SpeakAwarenessLine = (line, doubleBounce) =>
+            {
+                // The WPF copy refused with no dispatcher or a closing one, then with no avatar.
+                var dispatcher = Application.Current?.Dispatcher;
+                if (dispatcher == null || dispatcher.HasShutdownStarted) return false;
+                var avatar = App.AvatarWindow;
+                if (avatar == null) return false;
+                avatar.SpeakAwarenessLine(line, doubleBounce);
+                return true;
+            };
+        }
+
+        private static string? ForegroundTitle()
+        {
+            var handle = GetForegroundWindow();
+            if (handle == IntPtr.Zero) return null;
+            var sb = new System.Text.StringBuilder(512);
+            return GetWindowText(handle, sb, sb.Capacity) <= 0 ? null : sb.ToString();
+        }
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern IntPtr GetForegroundWindow();
+
+        [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+        private static extern int GetWindowText(IntPtr hWnd, System.Text.StringBuilder text, int count);
+
+        /// <summary>The observer's poll: a DispatcherTimer at Normal priority, as the WPF copy
+        /// built it. With no dispatcher there is no polling (the ledger stays live), and a tick
+        /// that lands after the dispatcher began shutting down is dropped, as it was.</summary>
+        private sealed class AwarenessPollTimer : IDisposable
+        {
+            private readonly System.Windows.Threading.DispatcherTimer? _timer;
+            private readonly Action _tick;
+
+            public AwarenessPollTimer(TimeSpan interval, Action tick)
+            {
+                _tick = tick;
+                var dispatcher = Application.Current?.Dispatcher;
+                if (dispatcher == null)
+                {
+                    App.Logger?.Warning("AwarenessObserver: no dispatcher - ledger is live, polling is not");
+                    return;
+                }
+                _timer = new System.Windows.Threading.DispatcherTimer(System.Windows.Threading.DispatcherPriority.Normal, dispatcher) { Interval = interval };
+                _timer.Tick += OnTick;
+                _timer.Start();
+            }
+
+            private void OnTick(object? sender, EventArgs e)
+            {
+                var dispatcher = Application.Current?.Dispatcher;
+                if (dispatcher == null || dispatcher.HasShutdownStarted) return;
+                _tick();
+            }
+
+            public void Dispose()
+            {
+                if (_timer == null) return;
+                _timer.Stop();
+                _timer.Tick -= OnTick;
+            }
         }
 
         /// <summary>PNG bytes to straight Bgra32 pixels (0xAARRGGBB ints, row-major). The size

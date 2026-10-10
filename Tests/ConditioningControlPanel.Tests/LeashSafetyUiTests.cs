@@ -243,7 +243,7 @@ public class LeashSafetyUiTests
             "leash_self_watching", "leash_self_watch_busy", "leash_self_watch_cannot",
         };
         var files = System.IO.Directory.GetFiles(LangDir(), "*.json");
-        Assert.Equal(9, files.Length);
+        Assert.Equal(10, files.Length);
         foreach (var file in files)
         {
             var o = Newtonsoft.Json.Linq.JObject.Parse(System.IO.File.ReadAllText(file));

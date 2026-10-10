@@ -457,9 +457,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         ///
         /// <para><c>StartTutorial(TutorialType.ShortWalk)</c> becomes
         /// <c>CoreTutorial.Start("ShortWalk")</c> - the seam takes the head's tutorial-type name as
-        /// a string. This head seeds no <c>StartAction</c>, so that call is a silent no-op today
-        /// and the button starts no tour; it reaches the real seam, which is the same state every
-        /// other tour button on this head is in.</para>
+        /// a string. <c>Tours/TutorialHead.Seed</c> seeds <c>StartAction</c>, so the button starts the
+        /// tour, like every other tour button on this head.</para>
         /// </summary>
         public static async Task Run(MainShellWindow owner)
         {

@@ -41,7 +41,7 @@ Kind of limit:
 | Hiding overlays from screen capture | Not available. Windows only (`SetWindowDisplayAffinity`). | fundamental |
 | Camera shortcut from any app | Not available. Works only while the app has focus. | not built |
 | Icon glyphs (Segoe MDL2 Assets) | Missing. Nav pills and hover bubbles fall back (text only, or an emoji). Other glyph-only buttons draw an empty box or nothing. | not built |
-| Display face (Fredoka) | Not packed. Titles draw in Inter. **Same on Windows today** (Segoe UI there). | not built, both OSes |
+| Display face (Fredoka) | Packed (`Assets/fonts`, SIL OFL 1.1) and mapped by name on both OSes since 2026-10-10. Headless tests resolve it; no desk run yet. | built, needs a run |
 | Web pages (games, intake, Chaos) | WebKitGTK. No autoplay without a click, no background-timer switches, WebRTC often missing. | fundamental for the switches |
 | Goon video over 5 MB | Cannot be sent. **Same on Windows** in the port (the transcoder is WinRT in WPF, not ported). | not built, both OSes |
 | In-app updater | Opens the releases page. No download and install. | by design (packages update through their own channel) |
@@ -122,7 +122,7 @@ No font file is installed by the app. What the views name, and what Linux draws:
 | (nothing named: the Fluent theme) | most text | Inter (bundled, `Avalonia.Fonts.Inter`) | same |
 | `Consolas, Courier New` (+ `monospace`, `Cascadia Mono`) | about 130 | The desktop's default **proportional** sans: clocks, prices and counters lost their column alignment. `monospace` is a CSS word, not a family the font manager resolves. | **Noto Sans Mono** (bundled for the EMI ring cards, `Resources/emi/fonts`) through `FontFamilyMappings` |
 | `Segoe UI`, `Arial` | about 30 | The desktop's default sans (differs per distro) | **Inter** through `FontFamilyMappings` |
-| `Fredoka, Segoe UI` (page titles, display text) | about 85 | Default sans | Inter. Fredoka is **not packed on either OS** (Windows draws Segoe UI). WPF 7.1.5 packs `/Fonts/#Fredoka`. |
+| `Fredoka, Segoe UI` (page titles, display text) | about 85 | Default sans | **Fredoka**, packed at `Resources/fonts` and mapped through `FontFamilyMappings` on every OS (`Platform/AppFonts.cs`), as WPF 7.1.5 packs `/Fonts/#Fredoka`. |
 | `Segoe MDL2 Assets, Segoe UI Symbol, Segoe UI` (icon glyphs, private-use code points) | about 12 named sites + the nav pills and hover bubbles | No font has these code points. Pills show the label only and hover bubbles show their fallback emoji (both test for the glyph). The other sites (settings cog, launcher links, friend notice close marks, conversation page) draw an empty box or nothing. | same |
 | `Press Start 2P` | EMI ring cards | Bundled | same |
 | `Segoe UI Emoji`, `Segoe UI Symbol` (plain Unicode symbols and emoji) | a few | Whatever fontconfig finds: Noto Color Emoji and DejaVu / Noto Symbols on most desktops. A minimal install without an emoji font draws boxes. | same |
@@ -133,10 +133,9 @@ resolves, and the mapping is consulted only for a name that cannot be resolved).
 
 What bundling the missing two would take:
 
-- **Fredoka**: the file is in the tree (`ConditioningControlPanel/Fonts/Fredoka.ttf`, a variable font,
-  SIL OFL). Link it as an `AvaloniaResource` and add one mapping line (`Fredoka` -> the packed family).
-  It changes the look on Windows too (toward WPF), so it wants an eye on both OSes: Avalonia has to pick
-  the right weight out of one variable file. Not done blind.
+- **Fredoka**: DONE 2026-10-10 (`Assets/fonts/Fredoka.ttf` + `OFL-Fredoka.txt`, one mapping line,
+  `DisplayFontTests`). It is one variable file whose default instance is Light; Avalonia reports the
+  family as "Fredoka Light" and emboldens heavier weights, as WPF does. Wants an eye on both OSes.
 - **Icon glyphs**: Segoe MDL2 Assets is Microsoft's and cannot ship. It takes a small icon font built
   from a redistributable set (Fluent UI System Icons, MIT) with the roughly 60 glyphs the app uses
   remapped onto the MDL2 code points, packed, and one mapping line for `Segoe MDL2 Assets`. About half a

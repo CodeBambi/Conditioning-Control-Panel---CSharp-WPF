@@ -1,9 +1,9 @@
 // PORTED from ConditioningControlPanel/Controls/Friends/FriendsDrawer.Pickers.cs (+ FriendsDrawer.cs
 // BuildCard/ActionButton/ShowResult): the card's Invite / Poke / Send a watch buttons and the picker
 // each opens inline in the card, over IFriendsService.
-// ponytail: no Segoe MDL2 glyphs on the action buttons (no such font on Linux), a sent chip pops and throws sparks (.Juice.cs). The Goon
-// and chess tiles stay shut here: GoonHostService and PieceByPieceHostService are WPF-only, so this head
-// can neither open a room nor a board (FriendsInviteCodes is the seam that lights them when they move).
+// ponytail: no Segoe MDL2 glyphs on the action buttons (no such font on Linux), a sent chip pops and throws sparks (.Juice.cs).
+// The Goon and chess tiles open through FriendsInviteCodes (GameWindow.Goon.cs / GameWindow.Pbp.cs). The
+// catalogue watch list is empty as on WPF 7.1.5, where nothing fills CatalogueWatches.List either.
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;

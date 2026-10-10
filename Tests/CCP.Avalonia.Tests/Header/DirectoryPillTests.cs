@@ -1,4 +1,5 @@
 using ConditioningControlPanel.Avalonia.Views.Windows;
+using ConditioningControlPanel.Localization;
 using Xunit;
 
 namespace CCP.Avalonia.Tests.Header;
@@ -19,7 +20,7 @@ public sealed class DirectoryPillTests
     {
         var pill = MainShellWindow.DirectoryPillFor(active: true, optedIn: false, claimed: true);
         Assert.True(pill.Visible);
-        Assert.Equal("Private only", pill.Text);
+        Assert.Equal(Loc.Get("titlebar_directory_private"), pill.Text);
         Assert.Equal("#8A8AA0", pill.DotHex);
     }
 
@@ -27,9 +28,9 @@ public sealed class DirectoryPillTests
     public void AListedSessionSaysListedThenClaimed()
     {
         var listed = MainShellWindow.DirectoryPillFor(active: true, optedIn: true, claimed: false);
-        Assert.Equal(("Listed", "#B47BFF"), (listed.Text, listed.DotHex));
+        Assert.Equal((Loc.Get("titlebar_directory_listed"), "#B47BFF"), (listed.Text, listed.DotHex));
         var claimed = MainShellWindow.DirectoryPillFor(active: true, optedIn: true, claimed: true);
-        Assert.Equal(("Claimed", "#00FF88"), (claimed.Text, claimed.DotHex));
+        Assert.Equal((Loc.Get("titlebar_directory_claimed"), "#00FF88"), (claimed.Text, claimed.DotHex));
     }
 
     [Fact]

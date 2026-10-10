@@ -129,8 +129,12 @@
                                     ToolTip.Tip="Walk through the Awareness Engine — sources, cooldowns, presets, and the editor.">
                                 <TextBlock Text="🎓 Tutorial"/>
                             </Button>
-                            <Ellipse x:Name="AwarenessStatusDot" Width="8" Height="8"
-                                     Fill="#606060" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <!-- the breathing status glow: a sibling BoxShadow (MainShellWindow SetStatusPulse), never an Effect on the dot -->
+                            <Panel VerticalAlignment="Center" Margin="0,0,8,0">
+                                <Border Tag="StatusGlow" Width="8" Height="8" CornerRadius="4"
+                                        Opacity="0" IsHitTestVisible="False"/>
+                                <Ellipse x:Name="AwarenessStatusDot" Width="8" Height="8" Fill="#606060"/>
+                            </Panel>
                             <TextBlock x:Name="TxtAwarenessStatus" Text="Off"
                                        Foreground="{DynamicResource TextMutedBrush}"
                                        FontSize="12" VerticalAlignment="Center" Margin="0,0,12,0"/>

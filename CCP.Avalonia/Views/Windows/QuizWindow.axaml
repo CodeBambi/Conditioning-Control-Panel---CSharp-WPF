@@ -73,17 +73,8 @@
         Background="Black">
 
     <Window.Styles>
-        <!-- Glow pulse (infinite) — the WPF GlowPulseStoryboard, verbatim: 0.03 -> 0.08 over 2s,
-             autoreversed forever. The .pulse class is added in the Loaded handler, which is where
-             WPF called glowSb.Begin(). -->
-        <Style Selector="Border#GlowOverlay.pulse">
-            <Style.Animations>
-                <Animation Duration="0:0:2" IterationCount="INFINITE" PlaybackDirection="Alternate">
-                    <KeyFrame Cue="0%"><Setter Property="Opacity" Value="0.03"/></KeyFrame>
-                    <KeyFrame Cue="100%"><Setter Property="Opacity" Value="0.08"/></KeyFrame>
-                </Animation>
-            </Style.Animations>
-        </Style>
+        <!-- Glow pulse: the WPF GlowPulseStoryboard (0.03 -> 0.08 over 2s, autoreversed forever)
+             runs from the Loaded handler on the shared 30 fps beat. -->
 
         <!-- The two inline <Button.Style> blocks in the WPF title bar. -->
         <Style Selector="Button.titlebar">

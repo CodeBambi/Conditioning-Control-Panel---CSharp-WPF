@@ -7,10 +7,9 @@
 // UpdateLevelDisplay (MainShellWindow.HeroFx.cs, which UpdateQuickLoginUI runs on sign-in, restore
 // and logout) and on window activation (MainShellWindow.HudDepth.cs: Core has no tier event).
 //
-// ponytail: the bubble face paints initials only. The equipped preset bust (CosmeticsCatalog) and
-// the shared Discord photo (LoadProfileBubblePhotoAsync) need the cosmetics resolver and an
-// avatar url on Core's DiscordAccount; the XP pulse / level-up wobble / unlock shimmer need
-// XPChanged / AchievementUnlocked events Core does not raise yet.
+// The bubble face (MainShellWindow.ProfileBubble.cs) follows WPF's order: the shared Discord photo
+// beats the equipped preset bust, which beats initials; XP pulses, a level-up bounces, an unlock
+// flashes gold, a flash wobbles and a subliminal shimmers.
 
 using System;
 using Avalonia.Controls;

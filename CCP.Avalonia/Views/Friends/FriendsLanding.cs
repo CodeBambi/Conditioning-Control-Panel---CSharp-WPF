@@ -53,9 +53,8 @@ internal static class FriendsLanding
     /// PieceByPieceHostService.JoinFriendChallenge, FriendsLanding.cs:539).</summary>
     internal static Action<string> JoinChess { get; set; } = id => Games.GameWindow.PbpJoinFriendChallenge(id);
 
-    // SEAM(g3): the Goon host lane sets GoonJoin to its launch door (WPF GoonGame.GoonHostService.Launch(true,
-    // joinCode): the game opens straight on the join screen with the code, null = no code came with it) and
-    // GoonIsActive to its IsActive probe. Until then a Goon invite's Join says "the Goon Game did not open".
+    // The Goon door (WPF GoonGame.GoonHostService.Launch(true, joinCode)): the game opens straight on the join
+    // screen with the code, null = no code came with it. GoonIsActive is the host's IsActive probe.
     internal static Action<string?>? GoonJoin { get; set; } = code => global::ConditioningControlPanel.Avalonia.Views.Games.GameWindow.LaunchGoon(code);
     internal static Func<bool> GoonIsActive { get; set; } = () => global::ConditioningControlPanel.Services.GoonGame.GoonHostService.IsActive;
 

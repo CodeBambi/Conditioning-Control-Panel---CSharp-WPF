@@ -1,7 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- <Version> lives in ..\Version.props, shared with Core and the Avalonia head. -->
-  <Import Project="..\Version.props" />
+  <!-- <Version> lives in ..\Version.Wpf.props: the WPF head keeps its own number, the released
+       7.1.5 line. ..\Version.props (7.2.0 "parity") is the Avalonia head and Core. -->
+  <Import Project="..\Version.Wpf.props" />
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -29,7 +30,7 @@
          properties and crash dumps. Properties/AssemblyInfo.cs now declares only what the SDK
          does not generate (Trademark, Culture, ComVisible, ThemeInfo, InternalsVisibleTo);
          re-adding Title/Description/Configuration/Company/Product/Copyright/Version there is a
-         CS0579 duplicate-attribute error. <Version> (Version.props) stays the single place the number lives. -->
+         CS0579 duplicate-attribute error. <Version> (Version.Wpf.props) stays the single place the number lives. -->
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
     <!-- The SDK would otherwise derive this from <AssemblyName> ("ConditioningControlPanel");
          keep the spaced display title the hand-written attribute used. -->

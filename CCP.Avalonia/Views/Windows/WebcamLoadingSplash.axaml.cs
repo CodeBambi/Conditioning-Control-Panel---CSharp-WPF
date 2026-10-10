@@ -128,11 +128,24 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         // Gentle breathing pulse on the fill so the long phases (camera warmup,
         // ONNX session construction) don't look frozen between the discrete
         // progress jumps.
-        private void StartPulse() => _progressFill.Classes.Add("pulse");
+        private void StartPulse()
+        {
+            _pulsing = true;
+            // A loading signal, not decoration: the motion level does not silence it.
+            _pulseBeat ??= Helpers.VisibleBeat.Attach(_progressFill,
+                t => _progressFill.Opacity = 1.0 - (0.45 * Helpers.BeatLoop.Breath(t, 0.9)),
+                () => _progressFill.Opacity = 1.0,
+                () => _pulsing, decoration: false);
+            _pulseBeat.Refresh();
+        }
+
+        private Helpers.VisibleBeat? _pulseBeat;
+        private bool _pulsing;
 
         private void StopPulse()
         {
-            _progressFill.Classes.Remove("pulse");
+            _pulsing = false;
+            _pulseBeat?.Refresh();
             _progressFill.Opacity = 1.0;
         }
     }

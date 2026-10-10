@@ -48,32 +48,8 @@
   </UserControl.Resources>
 
   <UserControl.Styles>
-    <!-- The eye-logo blink, ported from the WPF Storyboard: 4s loop, open 0-3.6s (90%),
-         closed 3.6-4.0s. WPF animated Visibility with DiscreteObjectKeyFrames; Avalonia
-         keyframes animate properties, so this drives Opacity on a hard cut (the paired 0/1
-         frames leave no visible tween) - same look, and both canvases stay measured. -->
-    <Style Selector="Canvas#EyeLogoOpen">
-      <Style.Animations>
-        <Animation Duration="0:0:4" IterationCount="INFINITE">
-          <KeyFrame Cue="0%"><Setter Property="Opacity" Value="1"/></KeyFrame>
-          <KeyFrame Cue="89%"><Setter Property="Opacity" Value="1"/></KeyFrame>
-          <KeyFrame Cue="90%"><Setter Property="Opacity" Value="0"/></KeyFrame>
-          <KeyFrame Cue="99%"><Setter Property="Opacity" Value="0"/></KeyFrame>
-          <KeyFrame Cue="100%"><Setter Property="Opacity" Value="1"/></KeyFrame>
-        </Animation>
-      </Style.Animations>
-    </Style>
-    <Style Selector="Canvas#EyeLogoClosed">
-      <Style.Animations>
-        <Animation Duration="0:0:4" IterationCount="INFINITE">
-          <KeyFrame Cue="0%"><Setter Property="Opacity" Value="0"/></KeyFrame>
-          <KeyFrame Cue="89%"><Setter Property="Opacity" Value="0"/></KeyFrame>
-          <KeyFrame Cue="90%"><Setter Property="Opacity" Value="1"/></KeyFrame>
-          <KeyFrame Cue="99%"><Setter Property="Opacity" Value="1"/></KeyFrame>
-          <KeyFrame Cue="100%"><Setter Property="Opacity" Value="0"/></KeyFrame>
-        </Animation>
-      </Style.Animations>
-    </Style>
+    <!-- The eye-logo blink (WPF Storyboard: 4s loop, open 0-3.6s, closed 3.6-4.0s, a hard cut)
+         runs from the code-behind on the shared 30 fps beat. -->
   </UserControl.Styles>
 
   <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
@@ -209,10 +185,14 @@
                   <ColumnDefinition Width="*"/>
                   <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <Ellipse Grid.Column="0" x:Name="BlinkTrainerStatusDot"
-                         Width="10" Height="10"
-                         Fill="{DynamicResource PinkBrush}" Margin="0,0,9,0"
-                         VerticalAlignment="Center"/>
+                <!-- the breathing status glow: a sibling BoxShadow (MainShellWindow SetStatusPulse), never an Effect on the dot -->
+                <Panel Grid.Column="0" Margin="0,0,9,0" VerticalAlignment="Center">
+                  <Border Tag="StatusGlow" Width="10" Height="10" CornerRadius="5"
+                          Opacity="0" IsHitTestVisible="False"/>
+                  <Ellipse x:Name="BlinkTrainerStatusDot"
+                           Width="10" Height="10"
+                           Fill="{DynamicResource PinkBrush}"/>
+                </Panel>
                 <TextBlock Grid.Column="1" x:Name="BlinkTrainerStatusText"
                            Text="{loc:Str blink_trainer_status_ready}"
                            Foreground="{DynamicResource TextMutedBrush}"
