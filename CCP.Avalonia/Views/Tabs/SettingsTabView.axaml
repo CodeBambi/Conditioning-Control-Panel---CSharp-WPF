@@ -280,19 +280,67 @@
         <Setter Property="Background" Value="{DynamicResource AccentTintedBgBrush}"/>
       </Style>
     </ControlTheme>
+
+    <!-- The browser fold arrow pill (WPF inline Button.Template on BtnFoldBrowser). -->
+    <ControlTheme x:Key="FoldArrowButton" TargetType="Button">
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <ControlTemplate TargetType="Button">
+          <Border Name="FoldPlate" Background="{TemplateBinding Background}"
+                  BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
+                  CornerRadius="13" Padding="{TemplateBinding Padding}">
+            <ContentPresenter Content="{TemplateBinding Content}"
+                              HorizontalAlignment="Center" VerticalAlignment="Center"/>
+          </Border>
+        </ControlTemplate>
+      </Setter>
+      <Style Selector="^:pointerover /template/ Border#FoldPlate">
+        <Setter Property="Background" Value="{Binding $parent[Button].Tag}"/>
+      </Style>
+      <Style Selector="^:focus-visible /template/ Border#FoldPlate">
+        <Setter Property="BorderBrush" Value="White"/>
+      </Style>
+    </ControlTheme>
+
+    <!-- The favorites drawer handle (WPF inline Button.Style on FavoritesDrawerHandle). The
+         FavHandle* brushes live on the drawer Grid and are repainted from the mod colour. -->
+    <ControlTheme x:Key="FavoritesDrawerHandleStyle" TargetType="Button">
+      <Setter Property="Foreground" Value="{DynamicResource FavHandleText}"/>
+      <Setter Property="Template">
+        <ControlTemplate TargetType="Button">
+          <Border Name="hb" CornerRadius="9" BorderThickness="1.5"
+                  Background="{DynamicResource FavHandleFill}" BorderBrush="{DynamicResource FavHandleBorder}">
+            <ContentPresenter Content="{TemplateBinding Content}"
+                              HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
+          </Border>
+        </ControlTemplate>
+      </Setter>
+      <Style Selector="^:pointerover">
+        <Setter Property="Foreground" Value="{DynamicResource FavHandleTextHover}"/>
+      </Style>
+      <Style Selector="^:pointerover /template/ Border#hb">
+        <Setter Property="Background" Value="{DynamicResource FavHandleFillHover}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource FavHandleBorderHover}"/>
+      </Style>
+      <Style Selector="^:focus-visible /template/ Border#hb">
+        <Setter Property="BorderBrush" Value="{DynamicResource FavHandleBorderHover}"/>
+      </Style>
+      <Style Selector="^:pressed /template/ Border#hb">
+        <Setter Property="Opacity" Value="0.82"/>
+      </Style>
+    </ControlTheme>
   </UserControl.Resources>
 
   <Grid>
     <Grid.ColumnDefinitions>
-      <!-- #860: 84 of rail + 8 reserved for the rail's scrollbar. The chips used to be laid out
-           against the full 84 and then squeezed the moment the ScrollViewer decided it needed a
-           bar, cropping the chip art and wrapping the captions. The gutter is reserved here and
-           the chip stack is pinned to its old width, so a scrollbar costs the chips nothing.
-           Keep in sync with the FavoritesRail stack: 92 - 5 rail margin - 2 border - 8 scrollbar
-           - 8 stack margin = 69. -->
-      <ColumnDefinition Width="92"/>
+      <!-- WPF nav polish wave 3 (11552cadf): column 0 held FAVORITES + RECENT at 92 px; it is 0
+           now and kept so every Grid.Column index stays put. The column lives in the FAVORITES
+           DRAWER at the right edge (column 3, Auto): a 22 px handle plus a body that opens to
+           the same 92 px and PUSHES the browser column; the 640 mosaic never moves. -->
+      <ColumnDefinition Width="0"/>
       <ColumnDefinition Width="640"/>
       <ColumnDefinition Width="*"/>
+      <ColumnDefinition Width="Auto"/>
     </Grid.ColumnDefinitions>
     <Grid.RowDefinitions>
       <RowDefinition Height="Auto"/>   <!-- Training Programs "Today" card -->
@@ -308,7 +356,7 @@
     <!-- it opens the Programs tab.                                    -->
     <!-- ============================================================ -->
     <Button x:Name="ProgramTodayCard"
-            Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3"
+            Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="4"
             Theme="{StaticResource ProgramTodayCardStyle}"
             Margin="5,5,5,0" IsVisible="False" Cursor="Hand"
             HorizontalContentAlignment="Stretch"
@@ -376,8 +424,45 @@
     <!-- the user goes. Chips are built in code (MainShellWindow.FavoritesRail.cs) from the  -->
     <!-- Ctrl+K palette rows, wearing the feature's own picture (Core FavoritesRailArt).     -->
     <!-- ============================================================ -->
-    <Border x:Name="FavoritesRail" Grid.Column="0" Grid.Row="1" Margin="5,5,0,5"
-            Background="{DynamicResource ElevatedSurfaceBrush}" BorderBrush="{DynamicResource GlassBorderBrush}"
+    <!-- THE FAVORITES DRAWER (WPF SettingsTabView.xaml FavoritesDrawer). The handle is always
+         there; the body's Width is the only thing that moves (0 closed, 92 open, 200 ms, instant
+         under Motion Off). FavHandle* brushes are defaults; PaintFavoritesDrawer repaints them
+         from the mod's glow colour. Code: SettingsTabView.FavoritesDrawer.cs. -->
+    <Grid x:Name="FavoritesDrawer" Grid.Column="3" Grid.Row="1" ColumnDefinitions="22,Auto">
+      <Grid.Resources>
+        <SolidColorBrush x:Key="FavHandleFill" Color="#1FB79CFF"/>
+        <SolidColorBrush x:Key="FavHandleBorder" Color="#66B79CFF"/>
+        <SolidColorBrush x:Key="FavHandleFillHover" Color="#40B79CFF"/>
+        <SolidColorBrush x:Key="FavHandleBorderHover" Color="#FFB79CFF"/>
+        <SolidColorBrush x:Key="FavHandleText" Color="#FFB79CFF"/>
+        <SolidColorBrush x:Key="FavHandleTextHover" Color="#FFE4DAFF"/>
+      </Grid.Resources>
+      <Button x:Name="FavoritesDrawerHandle" Grid.Column="0" Margin="2,5,2,5" Cursor="Hand"
+              HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+              Theme="{StaticResource FavoritesDrawerHandleStyle}"
+              AutomationProperties.Name="{loc:Str rail_favorites_drawer}"
+              AutomationProperties.HelpText="{loc:Str tooltip_rail_favorites_drawer}"
+              ToolTip.Tip="{loc:Str tooltip_rail_favorites_drawer}">
+        <Grid RowDefinitions="Auto,*,Auto">
+          <TextBlock x:Name="FavoritesDrawerStar" Grid.Row="0" Text="&#x2605;" FontSize="13" Margin="0,9,0,0"
+                     HorizontalAlignment="Center" RenderTransformOrigin="50%,50%"
+                     Foreground="{Binding $parent[Button].Foreground}">
+            <TextBlock.RenderTransform><ScaleTransform/></TextBlock.RenderTransform>
+          </TextBlock>
+          <LayoutTransformControl Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center">
+            <LayoutTransformControl.LayoutTransform><RotateTransform Angle="-90"/></LayoutTransformControl.LayoutTransform>
+            <TextBlock Text="{loc:Str rail_favorites_drawer}" FontSize="12" FontWeight="SemiBold"
+                       TextTrimming="CharacterEllipsis" Foreground="{Binding $parent[Button].Foreground}"/>
+          </LayoutTransformControl>
+          <TextBlock x:Name="FavoritesDrawerChevron" Grid.Row="2" Text="&#x2039;" FontSize="16" FontWeight="Bold"
+                     Margin="0,0,0,7" HorizontalAlignment="Center" Foreground="{Binding $parent[Button].Foreground}"/>
+        </Grid>
+      </Button>
+      <!-- THE BODY: 92 open = the old column 0, so the chip sum is unchanged (92 - 5 - 2 - 8 - 8
+           = 69). The rail is pinned at 87 and right-aligned so it slides in from the edge. -->
+      <Grid x:Name="FavoritesDrawerBody" Grid.Column="1" Width="0" ClipToBounds="True">
+    <Border x:Name="FavoritesRail" Width="87" HorizontalAlignment="Right" Margin="0,5,5,5"
+            Background="{DynamicResource ElevatedSurfaceBrush}" BorderBrush="{DynamicResource FavHandleBorder}"
             BorderThickness="1" CornerRadius="12">
       <Border.Resources>
         <LinearGradientBrush x:Key="RailChipScrim" StartPoint="0%,0%" EndPoint="0%,100%">
@@ -444,6 +529,13 @@
              see the shell-favorites-rail row. -->
       </Grid>
     </Border>
+      </Grid>
+      <!-- THE MOTES: embers + dust in the mod's particle colour and the burst a click or a new
+           pin fires at the handle. Over the handle, hit-test off, 36 px wider to the left;
+           registered against the dashboard tab beside MosaicFx so ShowTab parks it. -->
+      <fx:AmbientFxCanvas x:Name="FavoritesDrawerFx" Grid.Column="0" Grid.ColumnSpan="2"
+                          Margin="-36,0,0,0" IsHitTestVisible="False"/>
+    </Grid>
 
     <!-- ============================================================ -->
     <!-- VELVET MOSAIC DASHBOARD - 4x4 hybrid wall (col 1)             -->
@@ -913,7 +1005,6 @@
         <RowDefinition Height="*"/>
         <RowDefinition Height="0"/>
         <RowDefinition Height="Auto"/>
-        <RowDefinition Height="Auto"/>
       </Grid.RowDefinitions>
 
       <!-- Browser Section -->
@@ -955,7 +1046,6 @@
               <ColumnDefinition Width="Auto"/>
               <ColumnDefinition Width="Auto"/>
               <ColumnDefinition Width="Auto"/>
-              <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
               <TextBlock Theme="{StaticResource SectionHeader}" Text="{loc:Str section_browser}" Margin="0"/>
@@ -985,6 +1075,27 @@
                     ToolTip.Tip="{loc:Str tooltip_reload_browser}"
                     FontSize="11" Padding="6,3" Margin="8,0,0,0">
               <TextBlock Text="🔄"/>
+            </Button>
+            <!-- The fold arrow (WPF 210e0e262: "an unmissable dropdown arrow"): a wide pill in the
+                 header's empty star column, clear of the reload button. Hue, label, tooltip and
+                 the breathing glow while folded are painted by SettingsTabView.PaintFoldArrow from
+                 MainShellWindow.DashboardFold.cs; these values are only the first paint (Home's
+                 lilac at 24% fill, a 70% border, 40% on hover - Tag carries the hover brush). -->
+            <Button Grid.Column="2" x:Name="BtnFoldBrowser" Theme="{StaticResource FoldArrowButton}"
+                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                    MinWidth="120" Height="26" Padding="12,0" Margin="48,0,8,0"
+                    Background="#3DB79CFF" BorderBrush="#B3B79CFF" BorderThickness="1.5"
+                    ToolTip.Tip="{loc:Str tooltip_browser_unfold}"
+                    AutomationProperties.Name="{loc:Str btn_browser_fold_show}">
+              <Button.Tag><SolidColorBrush Color="#66B79CFF"/></Button.Tag>
+              <StackPanel Orientation="Horizontal">
+                <!-- Core's chevrons are Segoe MDL2 code points; no such font on Linux, so this
+                     head draws the plain arrows (DashboardFold.cs sets them). -->
+                <TextBlock x:Name="TxtFoldBrowser" Text="&#x25B4;" FontSize="16"
+                           Foreground="White" VerticalAlignment="Center" Margin="0,1,8,0"/>
+                <TextBlock x:Name="TxtFoldBrowserLabel" Text="{loc:Str btn_browser_fold_show}"
+                           FontSize="12" FontWeight="SemiBold" Foreground="White" VerticalAlignment="Center"/>
+              </StackPanel>
             </Button>
             <!-- Status indicator -->
             <TextBlock Grid.Column="3" x:Name="TxtBrowserStatus" Text="{loc:Str label_loading}"
@@ -1027,12 +1138,6 @@
                     ToolTip.Tip="{loc:Str tooltip_pop_out_browser_to_resizable_window}"
                     FontSize="9" Padding="6,3" VerticalAlignment="Center">
               <TextBlock Text="{loc:Str btn_pop_out}"/>
-            </Button>
-            <!-- The fold chevron (WPF :1308): glyph and tooltip come from BrowserFoldRule. -->
-            <Button Grid.Column="7" x:Name="BtnFoldBrowser" Theme="{StaticResource BrowserMuteButton}"
-                    Padding="6,2" Margin="6,0,0,0" VerticalAlignment="Center">
-              <TextBlock x:Name="TxtFoldBrowser" Text="&#x25B4;" FontSize="13"
-                         Foreground="{DynamicResource TextMutedBrush}"/>
             </Button>
           </Grid>
 
@@ -1375,35 +1480,6 @@
         </Grid>
       </Border>
 
-      <Border x:Name="CompanionStrip" Grid.Row="2"
-              CornerRadius="12" Padding="10,7" Margin="0,0,0,5"
-              Background="{DynamicResource ElevatedSurfaceBrush}"
-              BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1"
-              Cursor="Hand"
-              ToolTip.Tip="{loc:Str tooltip_companion_settings}">
-        <Grid>
-          <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="Auto"/>
-            <ColumnDefinition Width="*"/>
-            <ColumnDefinition Width="Auto"/>
-          </Grid.ColumnDefinitions>
-          <!-- Same glyph as the sidebar's Companion door, so the two read as one place. -->
-          <TextBlock Grid.Column="0" Text="🤖" FontSize="14" VerticalAlignment="Center" Margin="0,0,9,0"/>
-          <StackPanel Grid.Column="1" VerticalAlignment="Center">
-            <TextBlock Text="{loc:Str nav_door_companion}"
-                       Foreground="{DynamicResource PinkBrush}"
-                       FontSize="12" FontWeight="Bold"
-                       TextTrimming="CharacterEllipsis"/>
-            <TextBlock Text="{loc:Str hm3_companion_strip_sub}"
-                       Foreground="{DynamicResource TextMutedBrush}"
-                       FontSize="11" Margin="0,1,0,0"
-                       TextTrimming="CharacterEllipsis"/>
-          </StackPanel>
-          <TextBlock Grid.Column="2" Text="›" VerticalAlignment="Center" Margin="12,0,2,0"
-                     Foreground="{DynamicResource TextMutedBrush}" FontSize="18"/>
-        </Grid>
-      </Border>
-
       <!-- ============================================================ -->
       <!-- ACCOUNT STRIP (Phase 3) - the old "Quick Links" card,         -->
       <!-- compressed from a four-row tile into one line.                -->
@@ -1413,7 +1489,7 @@
       <!-- TxtLoggedInName, ChkQuickDiscordRichPresence,                  -->
       <!-- HelpBtnQuickLinks) and none may be dropped.                    -->
       <!-- ============================================================ -->
-      <Border Grid.Row="3" CornerRadius="12" Padding="9,7"
+      <Border Grid.Row="2" CornerRadius="12" Padding="9,7"
               Background="{DynamicResource ElevatedSurfaceBrush}"
               BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
         <Grid>
@@ -1528,7 +1604,7 @@
     <!-- grows comes off the mosaic's star row (layout clips           -->
     <!-- silently - #860).                                             -->
     <!-- ============================================================ -->
-    <Grid Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" x:Name="VelvetHelperButtonRow"
+    <Grid Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="4" x:Name="VelvetHelperButtonRow"
           Height="30" Margin="5,4,5,0">
       <Grid.ColumnDefinitions>
         <ColumnDefinition Width="*"/>
@@ -1614,7 +1690,7 @@
     </Grid>
 
     <!-- Scrolling Marquee Banner - row 3, spans all columns -->
-    <Border x:Name="MarqueeBanner" Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="3"
+    <Border x:Name="MarqueeBanner" Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="4"
             Background="#1A0A1A" BorderBrush="{DynamicResource DarkPinkBrush}" BorderThickness="2"
             CornerRadius="8" Height="48" Margin="5,5,5,0" ClipToBounds="True">
       <Border.Effect>

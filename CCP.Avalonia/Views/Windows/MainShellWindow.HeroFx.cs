@@ -67,7 +67,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 var level = s.PlayerLevel;
                 var xp = s.PlayerXP;
                 var needed = XpCurve.GetXPForLevel(level, XpCurve.EpochOf(s));
-                if (Named<TextBlock>("TxtLevel") is { } chip) chip.Text = $"Lvl {level}";
                 if (Named<TextBlock>("TxtLevelLabel") is { } label) label.Text = $"LVL {level}";
                 if (Named<TextBlock>("TxtXP") is { } txt) txt.Text = $"{(int)xp} / {(int)needed} XP";
                 _xpFraction = Math.Min(1.0, needed > 0 ? xp / needed : 0);

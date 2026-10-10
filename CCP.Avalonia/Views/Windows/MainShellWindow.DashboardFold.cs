@@ -154,15 +154,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             column.RowDefinitions[1].Height = BrowserFoldRule.FoldRowIsStar(collapsed) ? GridLength.Star : new GridLength(0);
             body.IsVisible = BrowserFoldRule.BodyShown(collapsed);
 
-            // Since 7.1 (main 210e0e262) Core's chevrons are Segoe MDL2 code points; no such font on
-            // Linux, so this head draws the plain arrows WPF used before (sync6-home-layout ports the pill).
-            if (dash!.FindControl<TextBlock>("TxtFoldBrowser") is { } glyph) glyph.Text = collapsed ? "▾" : "▴";
-            if (dash.FindControl<Button>("BtnFoldBrowser") is { } btn)
-            {
-                // Bound, not assigned: the tooltip follows a language switch (P09).
-                btn.Bind(ToolTip.TipProperty, new global::Avalonia.Data.Binding($"[{BrowserFoldRule.TooltipKey(collapsed)}]")
-                    { Source = LocalizationManager.Instance, Mode = global::Avalonia.Data.BindingMode.OneWay });
-            }
+            // The arrow pill: glyph, label, tooltip, hue and the breathing glow while shut (210e0e262).
+            dash!.PaintFoldArrow(collapsed);
 
             ApplyBillboard(BrowserFoldRule.BillboardShown(collapsed));
         }

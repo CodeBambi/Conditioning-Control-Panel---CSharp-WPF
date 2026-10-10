@@ -110,8 +110,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 var pos = Position;
                 var w = Math.Max(1, (int)Math.Round(Width * scale));
                 var h = Math.Max(1, (int)Math.Round(Height * scale));
-                var newW = Math.Min(w, wa.Width);
-                var newH = Math.Min(h, wa.Height);
+                // Uniform like WPF (MainWindow.WorkAreaFit.cs, 30f656f78): the canvas is one
+                // stretched picture, so both axes shrink by one factor (WindowFitRule in Core).
+                var (newW, newH) = global::ConditioningControlPanel.Services.UI.WindowFitRule.FitPx(w, h, wa.Width, wa.Height);
                 var newL = pos.X;
                 var newT = pos.Y;
                 if (newL + newW > wa.Right) newL = wa.Right - newW;
