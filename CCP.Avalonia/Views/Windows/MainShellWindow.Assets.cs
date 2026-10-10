@@ -2,23 +2,10 @@
 // Sorted member by member against the fifteen Core seams. Only the tab's own entry point is real;
 // everything else is held back, and the two reasons below are different in kind.
 //
-// A REFUSAL, NOT A WAIT - the remote-media picker (InitializeRemoteMediaPicker,
-// BuildRemoteSourceChips, BuildRemoteNicheChips, RefreshRemoteMediaPicker, RemoteSourceChip_Changed,
-// RemoteNicheChip_Changed, AskRemoteMediaConsent, SliderRemoteRatio_Changed, AddRemoteCustomSub,
-// RemoveRemoteCustomSub, ToggleRemoteSubSelection, PersistRemoteChannelChange,
-// RebuildRemoteCustomSubChips, RebuildRemoteNicheSubs, BuildRemoteChip, MutedRemoteNote,
-// EndRemoteSubProbe, ShowRemoteSubError, TxtRemoteCustomSub_KeyDown, BtnRemoteAddSub_Click and the
-// MediaSrc* / RemoteCustomSubCap constants). Two things make a partial port worse than the stub:
-//   1. AskRemoteMediaConsent is a SYNCHRONOUS gate. RemoteSourceChip_Changed writes
-//      settings.MediaSource only if MessageBox.Show came back Yes (MainWindow.Assets.cs:2353-2360).
-//      This head's MessageDialog.ShowDialog<T> is async, so a straight transcription flips the chip
-//      and returns before the answer lands - a consent gate that is SKIPPED rather than degraded,
-//      on the one switch that starts fetching third-party adult content.
-//   2. Even with the ask solved, the switch calls FypOnlineCoordinator.ResetAllChannels()
-//      (ConditioningControlPanel/Services/Fyp/Online/FypOnlineCoordinator.cs) and
-//      InvalidateAssetPoolsAfterSelectionChange(). Without both, the media services keep serving
-//      pools built for the OLD source while the picker says the new one is live.
-// The picker comes back with the coordinator and an async consent gate, together, or not at all.
+// The remote-media picker is PORTED (sync6-media-picker) in CCP.Avalonia/Views/Tabs/AssetsTabView.MediaPicker.cs,
+// with the consent ask awaited before MediaSource is written and ResetAllChannels on every change.
+// InvalidateAssetPoolsAfterSelectionChange has no target yet: no flash/video service on this head
+// consumes online media (open gap, parity row views-tab-assets).
 //
 // A WAIT - the asset tree, and worth being exact because one dependency has already moved.
 // AssetTreeItem IS in Core (CCP.Core/Models/AssetTreeItem.cs), CorePaths.EffectiveAssets is the

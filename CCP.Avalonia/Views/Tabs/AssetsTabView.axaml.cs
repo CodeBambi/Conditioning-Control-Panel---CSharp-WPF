@@ -24,8 +24,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     /// to is two Directory.CreateDirectory calls and a shell open, and CorePaths.EffectiveAssets is
     /// the path.
     ///
-    /// ponytail: the rest needs MainWindow (asset scan, pack install, preset CRUD, remote media
-    /// picker), wired when they move to Core. The wiring points, all named in the XAML:
+    /// The remote media picker is ported in AssetsTabView.MediaPicker.cs.
+    ///
+    /// ponytail: the rest needs MainWindow (asset scan, pack install, preset CRUD), wired when
+    /// they move to Core. The wiring points, all named in the XAML:
     ///   BtnRefreshAssets / BtnRefreshPacks / BtnGetPacks /
     ///   BtnDeleteDownloadedPacks /
     ///   BtnSelectAllAssets / BtnDeselectAllAssets / BtnSaveAssetPreset / BtnUpdateAssetPreset /
@@ -45,6 +47,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             // sender, and this is the ctor a reader will copy.
             InitializeComponent();
             DataContext = new AssetsTabViewModel();
+            InitializeRemoteMediaPicker();   // AssetsTabView.MediaPicker.cs; re-syncs on every show
         }
 
         /// <summary>
