@@ -492,7 +492,7 @@ public sealed class LockdownVeilTests
         Assert.Equal("ff8b0000", Hex(titleBar.Background));
         Assert.Equal("ff100505", Hex(shell.Background));
         Assert.Equal("ffdc143c", Hex(card.BorderBrush));
-        Assert.Equal("ffdc143c", Hex(shell.Named<TextBlock>("TxtHeaderVersion")!.Foreground));
+        Assert.Equal("ffdc143c", Hex(shell.Named<TextBlock>("TxtPlayerTitle")!.Foreground));
 
         var flash = shell.LockdownFlash!;
         Assert.Same(root, flash.Parent);

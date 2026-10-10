@@ -35,6 +35,13 @@ public sealed partial class FriendsDrawer : Border
     internal static readonly FontFamily Display = new("Fredoka, Segoe UI"), Mono = new("Consolas, Courier New");
     private static IBrush Rgb(byte r, byte g, byte b) => new SolidColorBrush(Color.FromRgb(r, g, b));
     public const double DrawerWidth = 300, DrawerMaxHeight = 548;
+    /// <summary>The page body's widest: a list wider than this reads as a table, not a list (WPF PageMaxWidth).</summary>
+    public const double PageMaxWidth = 620;
+
+    /// <summary>True when this drawer is the body of the Social > Friends PAGE rather than the rail
+    /// chip's popup: it fills its column, leaves the leash to the Leash page, and never claims
+    /// Escape (on a page Escape belongs to the panic key, nothing to fold). WPF feda9c907.</summary>
+    internal bool AsPage { get; }
 
     internal static Cursor? Hand() { try { return new Cursor(StandardCursorType.Hand); } catch { return null; } }
     private readonly Func<IFriendsService?> _resolve;
@@ -58,12 +65,14 @@ public sealed partial class FriendsDrawer : Border
     internal Func<bool> OffersInviteLink { get; set; } = () => ConditioningControlPanel.Services.Invites.InviteTicketRule.OffersInviteLink(
         CoreAccount.HasPremiumAccess, ConditioningControlPanel.Services.ProviderSubscription.IsInviteWeekOnly(AccountSeed.Patreon, AccountSeed.SubscribeStar, CoreSettings.Current));
     public FriendsDrawer() : this(null) { }
-    internal FriendsDrawer(IFriendsService? service)
+    internal FriendsDrawer(IFriendsService? service, bool asPage = false)
     {
+        AsPage = asPage;
         _resolve = service != null ? () => service : () => FriendsHead.Service;
         _svc = _resolve();
         OwnerWindow = () => TopLevel.GetTopLevel(this) as Window;
-        (Width, MaxHeight, CornerRadius) = (DrawerWidth, DrawerMaxHeight, new CornerRadius(16));
+        if (asPage) (MaxWidth, CornerRadius) = (PageMaxWidth, new CornerRadius(16));
+        else (Width, MaxHeight, CornerRadius) = (DrawerWidth, DrawerMaxHeight, new CornerRadius(16));
         Background = new LinearGradientBrush
         {
             StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative), EndPoint = new RelativePoint(0, 1, RelativeUnit.Relative),
@@ -111,10 +120,10 @@ public sealed partial class FriendsDrawer : Border
         _inviteLine = new WrapPanel { Margin = new Thickness(2, 6, 0, 0), Tag = "friends-invite-line",
             Children = { Label(Loc.Get("friends_invite_line") + " ", 11.5, Muted, Display), inviteLink } };
         _addBox.Child = new StackPanel { Children = { addRow, _addResult, _inviteLine } };
-        // Esc closes the add box, then the drawer (WPF OnKey).
+        // Esc closes the add box, then the drawer (WPF OnKey). A page never claims it.
         KeyDown += (_, e) =>
         {
-            if (e.Key != Key.Escape) return;
+            if (e.Key != Key.Escape || AsPage) return;
             if (_addBox.IsVisible && _codeBox.IsFocused) _addBox.IsVisible = false;
             else if (_picker != null) { _picker = null; Render(); }
             else CloseRequested?.Invoke();
@@ -244,7 +253,7 @@ public sealed partial class FriendsDrawer : Border
             Section("friends_section_offline", offline.Count);
             foreach (var f in offline) _list.Children.Add(FriendRow(f));
         }
-        if (online.Count + offline.Count + req == 0 && !_showBlocked) _list.Children.Add(EmptyLine(Loc.Get("friends_empty")));
+        if (online.Count + offline.Count + req == 0 && !_showBlocked) _list.Children.Add(AsPage ? PageEmptyBlock() : EmptyLine(Loc.Get("friends_empty")));
         if (!_showBlocked) return;
         var blocked = snap.Blocked ?? Array.Empty<BlockedFriend>();
         Section("friends_section_blocked", blocked.Count);
@@ -536,11 +545,7 @@ public sealed partial class FriendsDrawer : Border
         var add = Pill("+ " + Loc.Get("friends_add_title"), Brushes.Transparent, Muted, "friends-add-open");
         add.HorizontalAlignment = HorizontalAlignment.Right;
         add.IsEnabled = _svc?.Available == true;
-        add.Click += (_, _) =>
-        {
-            _addBox.IsVisible = !_addBox.IsVisible;
-            if (_addBox.IsVisible) { _addResult.Text = ""; _inviteLine.IsVisible = OffersInviteLink(); _codeBox.Focus(); }
-        };
+        add.Click += (_, _) => ToggleAddBox(!_addBox.IsVisible);
         Grid.SetColumn(add, 1);
         var buttons = new Grid
         {
@@ -608,6 +613,28 @@ public sealed partial class FriendsDrawer : Border
     };
     private static TextBlock Wrap(TextBlock t) { t.TextWrapping = TextWrapping.Wrap; t.TextTrimming = TextTrimming.None; return t; }
     private static T Tagged<T>(T c, string tag) where T : Control { c.Tag = tag; return c; }
+    /// <summary>Opens (or folds) the add-by-code box under the list. The foot's Add friend and the
+    /// page's empty state both come here (WPF ToggleAddBox).</summary>
+    internal void ToggleAddBox(bool show)
+    {
+        _addBox.IsVisible = show;
+        if (show) { _addResult.Text = ""; _inviteLine.IsVisible = OffersInviteLink(); _codeBox.Focus(); }
+    }
+
+    internal bool AddBoxOpen => _addBox.IsVisible;
+
+    /// <summary>The page's empty state: one line and one button ("No friends yet. Add one").</summary>
+    private Control PageEmptyBlock()
+    {
+        var line = EmptyLine(Loc.Get("social_friends_empty"));
+        line.Margin = new Thickness(0, 0, 0, 12);
+        var btn = Pill(Loc.Get("social_friends_empty_add"), Mint, MintInk, "friends-page-empty-add", Mint);
+        (btn.Padding, btn.CornerRadius, btn.HorizontalAlignment) = (new Thickness(16, 6, 16, 6), new CornerRadius(10), HorizontalAlignment.Center);
+        if (btn.Content is TextBlock t) t.FontSize = 13;
+        btn.Click += (_, _) => ToggleAddBox(true);
+        return new StackPanel { HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(18, 28, 18, 28), Tag = "friends-page-empty", Children = { line, btn } };
+    }
+
     private static TextBlock EmptyLine(string text)
     {
         var t = Wrap(Label(text, 12.5, Muted));

@@ -58,7 +58,7 @@
         x:Class="ConditioningControlPanel.Avalonia.Views.Windows.MainShellWindow"
         x:CompileBindings="False"
         Title="Conditioning Control Panel"
-        Height="943" Width="1563"
+        Height="1002" Width="1661"
         MinHeight="620" MinWidth="1131"
         Background="{DynamicResource DarkerBgBrush}"
         WindowStartupLocation="Manual"
@@ -1202,6 +1202,22 @@
                                         <TextBlock Text="{loc:Str tab_leaderboard}" VerticalAlignment="Center"/>
                                     </StackPanel>
                                 </Button>
+                                <!-- Social > Friends / Social > Leash (WPF ca2997d30): temporary home under You;
+                                     sync6-nav-rail moves them to the Social door. -->
+                                <Button x:Name="BtnNavFriends" Tag="Friends" Theme="{StaticResource NavEntryButton}"
+                                        Click="BtnNavFriends_Click" ToolTip.Tip="{loc:Str nav_tab_friends}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Tag="navrailstatic" Text="💞" FontSize="14" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                        <TextBlock Text="{loc:Str nav_tab_friends}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                                <Button x:Name="BtnNavLeash" Tag="Leash" Theme="{StaticResource NavEntryButton}"
+                                        Click="BtnNavLeash_Click" ToolTip.Tip="{loc:Str nav_tab_leash}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Tag="navrailstatic" Text="🔗" FontSize="14" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                        <TextBlock Text="{loc:Str nav_tab_leash}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
                             </StackPanel>
                         </Border>
 
@@ -1494,10 +1510,11 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*" MaxWidth="200"/>
+                        <!-- 2: streak pill. The "Lvl N" pill and the version tag were cut in WPF nav
+                             polish wave 4 (eac44ef9f): the level sits on the XP bar, the version in
+                             the title bar. -->
                         <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="Auto"/>
-                        <!-- 5: support banner. Star, so it is the FIRST thing to give width
+                        <!-- 3: support banner. Star, so it is the FIRST thing to give width
                              back; the right-hand chrome (language pill, update button) lives in
                              an Auto column of the outer grid and can never be pushed out.
                              2*, not *, because column 1 is capped at 200 anyway: the weight is
@@ -1712,14 +1729,9 @@
                             </TextBlock.Effect>
                         </TextBlock>
                     </Viewbox>
-                    <Border Grid.Column="2" Background="{DynamicResource PinkBrush}" CornerRadius="12" Padding="10,4" Margin="0,0,20,0">
-                        <TextBlock x:Name="TxtLevel" Foreground="White" FontWeight="Bold" FontSize="12"/>
-                    </Border>
-                    <TextBlock Grid.Column="3" x:Name="TxtHeaderVersion" Text="" Foreground="{DynamicResource PinkBrush}" FontSize="10" FontWeight="Normal"
-                               VerticalAlignment="Bottom" Margin="4,0,0,3"/>
                     <!-- Streak Fire Icon (unlocked by Good Girl Streak skill) -->
-                    <Border Grid.Column="4" x:Name="StreakFirePill" VerticalAlignment="Center"
-                            Margin="10,0,0,0" IsVisible="False" CornerRadius="11" Padding="7,4"
+                    <Border Grid.Column="2" x:Name="StreakFirePill" VerticalAlignment="Center"
+                            Margin="0,0,0,0" IsVisible="False" CornerRadius="11" Padding="7,4"
                             Background="#1E1232" BorderBrush="#5C3D6E" BorderThickness="1"
                             ToolTip.Tip="{loc:Str tooltip_daily_login_streak_good_girl_streak_skill}">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
@@ -1752,7 +1764,7 @@
                          nothing else. The third beat (the Platinum Puppets thanks hyperlink) was
                          retired with the row - see MainWindow.Marquee.cs, where the rotation is
                          now a two-beat crossfade. -->
-                    <Border Grid.Column="5" x:Name="HeaderBannerHost"
+                    <Border Grid.Column="3" x:Name="HeaderBannerHost"
                             Background="{DynamicResource SurfaceBgBrush}"
                             BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
                             CornerRadius="13" Padding="12,0" Height="26" MaxWidth="620"
@@ -2378,17 +2390,25 @@
                           PointerExited="QuestStamps_MouseLeave"/>
                     <!-- Velvet Kit 2 (FX lane B): the LVL chip owns a scale+rotate rig so a level-up
                          can pop it. Named transforms, animated from MainWindow.HeroFx.cs via
-                         BeginAnimation - nothing else drives this TextBlock's RenderTransform. -->
-                    <TextBlock x:Name="TxtLevelLabel" Grid.Column="1" Foreground="{DynamicResource PinkBrush}"
-                               FontWeight="Bold" FontSize="12" VerticalAlignment="Center" Margin="0,0,10,0"
-                               RenderTransformOrigin="0.5,0.5">
-                        <TextBlock.RenderTransform>
+                         BeginAnimation - nothing else drives this chip's RenderTransform.
+                         WPF nav polish wave 4 (eac44ef9f): the ONE level readout, a filled pill
+                         (white ExtraBold 14, soft glow, Height 24); accent and Lockdown paint its
+                         Background through PaintLevelChip. -->
+                    <Border x:Name="LevelChip" Grid.Column="1" Background="{DynamicResource PinkBrush}"
+                            CornerRadius="12" Padding="10,2" Height="24" Margin="0,0,10,0"
+                            VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
+                        <Border.Effect>
+                            <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="12" OffsetX="0" OffsetY="0" Opacity="0.45"/>
+                        </Border.Effect>
+                        <Border.RenderTransform>
                             <TransformGroup>
                                 <ScaleTransform/>
                                 <RotateTransform/>
                             </TransformGroup>
-                        </TextBlock.RenderTransform>
-                    </TextBlock>
+                        </Border.RenderTransform>
+                        <TextBlock x:Name="TxtLevelLabel" Foreground="White"
+                                   FontWeight="ExtraBold" FontSize="14" VerticalAlignment="Center"/>
+                    </Border>
                     <!-- x:Name is for the PR-5 level-up burst: the TRACK is where the bar's cap
                          sits, and after a level-up the fill has already wrapped back to a sliver. -->
                     <!-- ToolTip is a live readout of the ambient-bubble daily XP budget (#1019/#1026);
@@ -2586,6 +2606,10 @@
 
                 <!-- Leaderboard Tab -->
                 <views:LeaderboardTabView x:Name="LeaderboardTab" Margin="10,5,10,10" IsVisible="False" />
+
+                <!-- Social > Friends and Social > Leash pages (WPF ca2997d30) -->
+                <views:FriendsTabView x:Name="FriendsTab" IsVisible="False" />
+                <views:LeashTabView x:Name="LeashTab" IsVisible="False" />
 
                 <!-- Assets & Packs Tab -->
                 <views:AssetsTabView x:Name="AssetsTab" Margin="10,5,10,10" IsVisible="False" />

@@ -36,9 +36,10 @@ public sealed class FriendsRailChip : Grid
         // The name column is 0 px wide while the rail is shut, so nothing in it may wrap.
         _name = FriendsDrawer.Label(Drawer.MeName(), 14, FriendsDrawer.Text, FriendsDrawer.Display, FontWeight.SemiBold);
         _name.Margin = new Thickness(0, 0, 10, 0);
+        // WPF e9242c3d0: the name already sits in a star column and Label trims with an ellipsis; the tooltip carries it whole.
         Grid.SetColumn(_name, 1);
         Children.AddRange(new Control[] { _face, _name });
-        ToolTip.SetTip(this, Loc.Get("friends_chip_tooltip"));
+        ToolTip.SetTip(this, Tip(_name.Text));
         _popup = new Popup
         {
             Child = Drawer, Placement = PlacementMode.Top, PlacementTarget = this, HorizontalOffset = 4, VerticalOffset = -6,
@@ -58,12 +59,19 @@ public sealed class FriendsRailChip : Grid
             if (e.Source is Visual s && (ReferenceEquals(s, Drawer) || Drawer.IsVisualAncestorOf(s))) return;
             if (e.InitialPressMouseButton == MouseButton.Left) { Toggle(); e.Handled = true; }
         };
-        AttachedToVisualTree += (_, _) => Rebind();
-        DetachedFromVisualTree += (_, _) => { _popup.IsOpen = false; Unwire(); Drawer.Unsubscribe(); };
+        AttachedToVisualTree += (_, _) => { Rebind(); LocalizationManager.Instance.LanguageChanged += OnLanguage; };
+        DetachedFromVisualTree += (_, _) => { _popup.IsOpen = false; Unwire(); Drawer.Unsubscribe(); LocalizationManager.Instance.LanguageChanged -= OnLanguage; };
         Rebind();
     }
     internal FriendsDrawer Drawer { get; }
     internal bool IsOpen => _popup.IsOpen;
+
+    /// <summary>The rail trims the name, so the tooltip leads with it in full (WPF UpdateTooltip).</summary>
+    /// <summary>WPF UpdateTooltip runs on a language switch too: the tooltip is code-set, so rebuild it.</summary>
+    private void OnLanguage(object? sender, EventArgs e) => ToolTip.SetTip(this, Tip(_name.Text));
+
+    internal static string Tip(string? name) =>
+        (string.IsNullOrWhiteSpace(name) ? "" : name + "\n") + Loc.Get("friends_chip_tooltip");
 
     internal int PillCount => _pill.IsVisible && int.TryParse(_pillText.Text, out var n) ? n : 0;
     internal void Toggle()
