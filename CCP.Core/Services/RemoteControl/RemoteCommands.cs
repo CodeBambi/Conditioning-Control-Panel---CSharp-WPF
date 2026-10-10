@@ -39,6 +39,9 @@ namespace ConditioningControlPanel.Services
             string? Session(string verb, JObject? p);
             /// <summary>WPF IsSessionRemoteStarted: the run on screen is the one a controller started.</summary>
             bool SessionIsRemoteStarted { get; }
+            /// <summary>WPF RestoreFromTrayForRemote + ShowAvatarTube: after a remote stop the panel comes
+            /// back from the tray. Default: nothing (a head without a tray).</summary>
+            void RestoreWindow() { }
         }
 
         public static volatile IRemoteHead? Head;
@@ -356,6 +359,8 @@ namespace ConditioningControlPanel.Services
                 SyncPanicUi();
             }
             else if (overlays) CoreSettings.Save();
+            // WPF, both stop paths: "restore window visibility" (RestoreFromTrayForRemote + ShowAvatarTube).
+            try { head?.RestoreWindow(); } catch (Exception ex) { Serilog.Log.Warning(ex, "[RemoteControl] window restore failed"); }
         }
 
         private static void SyncPanicUi() { try { LockdownService.PanicKeyUiSync?.Invoke(); } catch { } }

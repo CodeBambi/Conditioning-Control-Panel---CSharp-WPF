@@ -41,6 +41,14 @@ public sealed class RemoteHudTests
         }
     }
 
+    private sealed class SteppedClock : TimeProvider
+    {
+        public long Now = 1_000_000;
+        public override long GetTimestamp() => Now;
+        public override long TimestampFrequency => TimeSpan.TicksPerSecond;
+        public void Step(TimeSpan t) => Now += t.Ticks;
+    }
+
     private static void EnsureApp()
     {
         if (Application.Current is null)
@@ -181,6 +189,11 @@ public sealed class RemoteHudTests
         var f = new FakeRelay();
         var relay = new RemoteRelay(() => "tok", () => "uid-1", "9.9.9", (_, _) => null, _ => { }, f) { AutoPoll = false };
         RemoteControlTabView.Relay = new Lazy<RemoteRelay>(() => relay);
+        var (oldTime, oldFlash) = (MainShellWindow.RemoteOverlayTime, ConditioningControlPanel.Avalonia.Platform.TaskbarFlash.Override);
+        var clock = new SteppedClock();
+        MainShellWindow.RemoteOverlayTime = clock;
+        var flashes = 0;
+        ConditioningControlPanel.Avalonia.Platform.TaskbarFlash.Override = _ => { flashes++; return true; };
         MainShellWindow? shell = null;
         try
         {
@@ -196,10 +209,34 @@ public sealed class RemoteHudTests
             var hud = shell.RemoteHud!;
             Assert.True(hud.IsUp);
             Assert.Null(hud.Owner);                    // unowned: showing it never lifts the panel
+            Assert.Equal(0, flashes);                  // the panel is on screen: no taskbar flash
+
+            // The browser blindfold (WPF :903): hidden under the card, back for the controller's own video.
+            var browser = shell.Named<SettingsTabView>("SettingsTab")!.BrowserContainer!;
+            Assert.False(browser.IsVisible);
+            Assert.True(shell.RemoteBrowserBlindfolded);
+            shell.RevealBrowserForRemoteVideo(true);
+            Assert.True(browser.IsVisible);
+            shell.OnRemoteControllerChanged();         // a reconnect mid-video does not blindfold it again
+            Assert.True(browser.IsVisible);
+            shell.RevealBrowserForRemoteVideo(false);
+            Assert.False(browser.IsVisible);
+
+            // A second join while the panel is minimised flashes the taskbar and restores nothing.
+            shell.WindowState = WindowState.Minimized;
+            shell.OnRemoteControllerChanged();
+            Assert.Equal(1, flashes);
+            Assert.Equal(WindowState.Minimized, shell.WindowState);
+            // A remote stop brings a minimised panel back (WPF RestoreFromTrayForRemote).
+            ((RemoteCommands.IRemoteHead)shell).RestoreWindow();
+            Assert.Equal(WindowState.Normal, shell.WindowState);
 
             await relay.StopAsync();
             Dispatcher.UIThread.RunJobs();
             Assert.False(hud.IsUp);
+            clock.Step(MainShellWindow.RemoteOverlayFadeOut);
+            shell.RemoteOverlayTick();
+            Assert.True(browser.IsVisible);            // the overlay is gone: the browser is back
 
             shell.Close();
             Dispatcher.UIThread.RunJobs();
@@ -212,6 +249,7 @@ public sealed class RemoteHudTests
             shell?.Close();
             relay.Dispose();
             (RemoteControlTabView.Relay, CoreSettings.ServiceProvider, RemoteHudWindow.Level) = (oldRelay, oldProvider, oldLevel);
+            (MainShellWindow.RemoteOverlayTime, ConditioningControlPanel.Avalonia.Platform.TaskbarFlash.Override) = (oldTime, oldFlash);
         }
     });
 }
