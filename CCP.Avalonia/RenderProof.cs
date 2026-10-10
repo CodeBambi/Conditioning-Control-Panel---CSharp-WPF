@@ -118,7 +118,7 @@ namespace ConditioningControlPanel.Avalonia
                 Dispatcher.UIThread.RunJobs();
                 Dispatcher.UIThread.RunJobs();
 
-                using var frame = window.CaptureRenderedFrame();
+                using var frame = Scale == 1 ? window.CaptureRenderedFrame() : RenderScaled(window, Scale);
                 if (frame is null)
                 {
                     Console.Error.WriteLine("render produced no frame");
@@ -147,6 +147,17 @@ namespace ConditioningControlPanel.Avalonia
                 // view would otherwise stay in the headless platform's window list.
                 try { window?.Close(); } catch { /* already closed or never shown */ }
             }
+        }
+
+        /// <summary>--scale N: render at N x DPI (HiDPI proof of icons and text). 1 = the live frame.</summary>
+        public static double Scale { get; set; } = 1;
+
+        private static global::Avalonia.Media.Imaging.Bitmap RenderScaled(Window window, double scale)
+        {
+            var size = new PixelSize((int)Math.Ceiling(window.Bounds.Width * scale), (int)Math.Ceiling(window.Bounds.Height * scale));
+            var rtb = new global::Avalonia.Media.Imaging.RenderTargetBitmap(size, new Vector(96 * scale, 96 * scale));
+            rtb.Render(window);
+            return rtb;
         }
 
         /// <summary>Render one view, found by simple or full type name.</summary>

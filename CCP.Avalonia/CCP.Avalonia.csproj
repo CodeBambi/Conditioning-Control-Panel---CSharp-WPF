@@ -41,6 +41,11 @@
          12.1.2 as Avalonia itself - a control package built against a different Avalonia minor
          throws at attach, which no compiler catches. -->
     <PackageReference Include="Avalonia.Controls.ColorPicker" Version="12.1.2" />
+    <!-- Fluent UI System Icons (docs/avalonia-decisions.md, 2026-10-10). Only Controls/Icons/* may
+         name FluentIcons.*: every view draws icons through fx:IconGlyph. Built against Avalonia 12.0;
+         IconGlyphRenderTests proves it draws on 12.1.2 headless. MIT: ThirdPartyNotices/FluentIcons.txt. -->
+    <PackageReference Include="FluentIcons.Avalonia" Version="2.1.343" />
+    <Content Include="ThirdPartyNotices\FluentIcons.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <!-- Audio (and later video) on both OSes; see docs/avalonia-decisions.md. Linux loads the
          system libvlc (libvlc.so.5); only Windows needs the bundled natives. -->
     <PackageReference Include="LibVLCSharp" Version="3.10.1" />
@@ -154,9 +159,9 @@
       Scoped to what the views actually name, measured from the 113 pack:// URIs in the WPF
       source; about 104 MB with achievements/ and exclusives/ (du -cb over the Include globs below). Deliberately NOT the whole 1.3 GB Resources tree:
 
-        - Twemoji (4,009 files, 19 MB) is not needed at all. Avalonia renders COLR/CPAL colour
-          emoji natively, which is why the ported views draw a plain TextBlock where WPF needed
-          an SVG. Packaging it would ship a fallback nothing reaches for.
+        - Twemoji (4,009 files, 19 MB) is not shipped. Icons are Fluent UI System Icons drawn
+          through fx:IconGlyph (Controls/Icons); emoji stay only in content (chat, user data).
+          Do not add emoji TextBlocks as icons.
         - skills/ (27 files, 4 MB) is globbed: every tree node draws its art. achievements/
           (70 files, 38 MB) is globbed: AchievementPopup can show any of them.
         - Audio, video, models and mod assets are Content in the WPF head - loaded off disk at

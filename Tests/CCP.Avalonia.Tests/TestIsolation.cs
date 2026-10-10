@@ -52,7 +52,14 @@ internal sealed class IsolateProcessStateAttribute : BeforeAfterTestAttribute
     // On the shared Avalonia UI thread: reading a head static can create Dispatcher.UIThread, which
     // must be the thread the tests' headless platform lives on, and settings change handlers are UI code.
     public override void Before(MethodInfo methodUnderTest, IXunitTest test) =>
-        CCP.Avalonia.Testing.AvaloniaTestDispatcher.Run(() => { Current = ProcessStateSnapshot.Take(); OpenWindows.Mark(); });
+        CCP.Avalonia.Testing.AvaloniaTestDispatcher.Run(() =>
+        {
+            Current = ProcessStateSnapshot.Take();
+            OpenWindows.Mark();
+            // A real ShowcaseProvider fetches its manifest and clips; a late Changed would put a card in
+            // another test's deck (P02/P56). Every shell gets a silent one; the snapshot restores it.
+            ConditioningControlPanel.Avalonia.Views.Windows.MainShellWindow.MakeShowcase = () => SilentShowcase.Instance;
+        });
     public override void After(MethodInfo methodUnderTest, IXunitTest test) =>
         CCP.Avalonia.Testing.AvaloniaTestDispatcher.Run(() =>
         {
@@ -206,4 +213,15 @@ internal sealed class ProcessStateSnapshot
     }
 
     private static string SourceDir([CallerFilePath] string here = "") => Path.GetDirectoryName(here)!;
+}
+
+/// <summary>A showcase with nothing to show: no fetch, no card, never Changed.</summary>
+internal sealed class SilentShowcase : ConditioningControlPanel.Services.Billboard.IBillboardProvider
+{
+    internal static readonly SilentShowcase Instance = new();
+    public string Id => "showcase";
+    public IEnumerable<ConditioningControlPanel.Services.Billboard.BillboardCardSpec> Current(ConditioningControlPanel.Services.Billboard.BillboardContext context) =>
+        Array.Empty<ConditioningControlPanel.Services.Billboard.BillboardCardSpec>();
+    public void Invoke(string actionTarget) { }
+    public event EventHandler? Changed { add { } remove { } }
 }

@@ -245,6 +245,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         /// <inheritdoc/>
         public void RevealWorkshop(string? cellTitle = null) => WorkshopZone.ExpandAndReveal(cellTitle);
 
+        /// <summary>The Companion > Personality / Permissions zone pills (shell TabPanels): scroll
+        /// the room to the zone WPF's page hosts. Laid out first: the tab was hidden a moment ago.</summary>
+        internal void RevealPersonality() => RevealZone(PersonalityZone);
+        internal void RevealPermissions() => RevealZone(PermissionsZone);
+
+        private static void RevealZone(Control zone) => Dispatcher.UIThread.Post(() =>
+        {
+            try { zone.UpdateLayout(); zone.BringIntoView(); }
+            catch (InvalidOperationException) { /* torn down mid-scroll */ }
+        }, DispatcherPriority.Normal);
+
         /// <inheritdoc/>
         /// <remarks>Scroll first, focus second, both deferred one turn at Normal priority — Loaded
         /// priority is starved in this app, and the card may not have been arranged yet.</remarks>

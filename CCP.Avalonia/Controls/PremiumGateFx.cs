@@ -23,8 +23,8 @@ namespace ConditioningControlPanel.Avalonia.Controls
     /// <para>House rules kept: one cached attachment per gate (safe from every refresh); every
     /// clock gated on AllowAmbientLoops plus the gate actually being visible; colour re-read on
     /// ModChanged; every entry point wrapped - a decoration may never be why a gate fails.</para>
-    /// <para>Avalonia: this head draws the padlock as an emoji TextBlock (Avalonia renders colour
-    /// emoji natively), so the padlock is the first Image OR the first "🔒" TextBlock.</para>
+    /// <para>Avalonia: the padlock is the first Image, "🔒" TextBlock or (Fluent icons, 2026-10-10)
+    /// IconGlyph with Kind LockClosed - see <see cref="IsPadlock"/>.</para>
     /// </summary>
     internal sealed class PremiumGateFx(Border gate, AmbientFxCanvas fog, Control? padlock, Button? cta)
     {
@@ -73,7 +73,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
 
                 var cta = Find<Button>(content, _ => true);
                 var fx = new PremiumGateFx(gate, fog,
-                    Find<Control>(content, c => c is Image || (c is TextBlock t && t.Text == "🔒")), cta);
+                    Find<Control>(content, IsPadlock), cta);
                 Attached.Add(gate, fx);
                 // The CTA is unmeasured when the gate flips visible (WPF queued a retry); its first
                 // arrange re-runs the attach instead.
@@ -194,6 +194,11 @@ namespace ConditioningControlPanel.Avalonia.Controls
             if (cta != null && _ctaSheen == null && _running && cta.IsEffectivelyVisible && cta.Bounds.Width > 1)
                 _ctaSheen = CardSheenAdorner.Attach(cta, CtaCornerRadius);
         }
+
+        /// <summary>The gate's padlock: its art Image, a 🔒 TextBlock, or (Fluent icons) an
+        /// IconGlyph LockClosed - a converted gate must keep its glow.</summary>
+        internal static bool IsPadlock(Control c) =>
+            c is Image || (c is TextBlock t && t.Text == "🔒") || (c is IconGlyph g && g.Kind == IconKind.LockClosed);
 
         /// <summary>First matching descendant in the LOGICAL tree (populated before first render).</summary>
         private static T? Find<T>(Control root, Func<T, bool> match) where T : class

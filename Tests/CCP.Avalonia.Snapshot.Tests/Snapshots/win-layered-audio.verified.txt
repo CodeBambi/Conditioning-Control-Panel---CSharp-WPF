@@ -1,0 +1,213 @@
+﻿{
+  Type: LayeredAudioWindow,
+  WindowState: Normal,
+  Title: Audio Layers,
+  WindowStartupLocation: CenterOwner,
+  CanResize: true,
+  Content: {
+    Type: Grid,
+    Margin: 18,
+    Children: [
+      {
+        Type: TextBlock,
+        FontSize: 20.0,
+        FontWeight: DemiBold,
+        Foreground: {
+          Type: SolidColorBrush,
+          Color: {
+            A: 255,
+            R: 255,
+            G: 105,
+            B: 180
+          }
+        },
+        Text: 🎧 Audio Layers
+      },
+      {
+        Type: TextBlock,
+        FontSize: 12.0,
+        Foreground: #ffa0a0b0,
+        Text: Build your own looping soundscape — add several audio files and they all play together, each on its own volume. Everything mixes through one output so it stays light. Turn the master on to hear it now; it also plays automatically for audio-only sessions.,
+        TextWrapping: Wrap,
+        Margin: 0,6,0,14
+      },
+      {
+        Type: Border,
+        Background: #ff1a1a2e,
+        BorderBrush: #ff3d3d60,
+        BorderThickness: 1,
+        CornerRadius: 10,10,10,10,
+        Child: {
+          Type: StackPanel,
+          Children: [
+            {
+              Type: Grid,
+              Children: [
+                {
+                  Type: TextBlock,
+                  FontSize: 14.0,
+                  FontWeight: DemiBold,
+                  Foreground: White,
+                  Text: Play layered audio,
+                  VerticalAlignment: Center
+                },
+                {
+                  Type: CheckBox,
+                  IsChecked: false,
+                  VerticalAlignment: Center,
+                  Name: ChkMasterEnable,
+                  Theme: {
+                    Type: ControlTheme
+                  }
+                }
+              ]
+            },
+            {
+              Type: Grid,
+              Margin: 0,10,0,0,
+              Children: [
+                {
+                  Type: TextBlock,
+                  FontSize: 12.0,
+                  Foreground: #ffb0b0c0,
+                  Text: Master,
+                  Margin: 0,0,8,0,
+                  VerticalAlignment: Center
+                },
+                {
+                  Type: Slider,
+                  Minimum: 0.0,
+                  Maximum: 100.0,
+                  Value: 70.0,
+                  VerticalAlignment: Center,
+                  Name: SliderMaster
+                },
+                {
+                  Type: TextBlock,
+                  FontSize: 12.0,
+                  FontWeight: DemiBold,
+                  Foreground: {
+                    Type: SolidColorBrush,
+                    Color: {
+                      A: 255,
+                      R: 255,
+                      G: 105,
+                      B: 180
+                    }
+                  },
+                  Text: 70%,
+                  TextAlignment: Right,
+                  Width: 40.0,
+                  VerticalAlignment: Center,
+                  Name: TxtMaster
+                }
+              ]
+            },
+            {
+              Type: Border,
+              Background: #ff12121f,
+              BorderBrush: #ff2e2e4a,
+              BorderThickness: 1,
+              CornerRadius: 8,8,8,8,
+              Child: {
+                Type: StackPanel,
+                Children: [
+                  {
+                    Type: Grid,
+                    Children: [
+                      {
+                        Type: TextBlock,
+                        FontSize: 13.0,
+                        FontWeight: DemiBold,
+                        Foreground: White,
+                        Text: Audio-only session,
+                        VerticalAlignment: Center
+                      },
+                      {
+                        Type: CheckBox,
+                        IsChecked: false,
+                        VerticalAlignment: Center,
+                        Name: ChkAudioOnly,
+                        Theme: {
+                          Type: ControlTheme
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    Type: TextBlock,
+                    FontSize: 11.0,
+                    Foreground: #ff8a8a9a,
+                    Text: When on, starting a session hides the visuals (flashes, spiral, video, mini-games) and plays only this layered audio.,
+                    TextWrapping: Wrap,
+                    Margin: 0,6,0,0
+                  }
+                ]
+              },
+              Padding: 10,8,10,8,
+              Margin: 0,12,0,0
+            }
+          ]
+        },
+        Padding: 14,12,14,12,
+        Margin: 0,0,0,10
+      },
+      {
+        Type: Button,
+        Content: ➕  Add audio file…,
+        Padding: 12,8,12,8,
+        Margin: 0,0,0,10,
+        HorizontalAlignment: Left,
+        Name: BtnAddTrack,
+        Theme: {
+          Type: ControlTheme
+        }
+      },
+      {
+        Type: ScrollViewer,
+        VerticalScrollBarVisibility: Auto,
+        Content: {
+          Type: StackPanel,
+          Name: SlotsPanel,
+          Children: [
+            {
+              Type: TextBlock,
+              FontSize: 12.0,
+              Foreground: {
+                Type: SolidColorBrush,
+                Color: {
+                  A: 255,
+                  R: 128,
+                  G: 128,
+                  B: 144
+                },
+                Opacity: 1.0
+              },
+              Text: No tracks yet. Add an audio file to get started.,
+              TextWrapping: Wrap,
+              Margin: 2,4,0,0
+            }
+          ]
+        }
+      },
+      {
+        Type: Button,
+        Content: Done,
+        Padding: 16,8,16,8,
+        Margin: 0,14,0,0,
+        HorizontalAlignment: Right,
+        Name: BtnClose,
+        Theme: {
+          Type: ControlTheme
+        }
+      }
+    ]
+  },
+  Background: #ff0f0f1e,
+  Foreground: #ffe0e0e0,
+  Width: 480.0,
+  Height: 660.0,
+  MinWidth: 420.0,
+  MinHeight: 480.0,
+  IsVisible: true
+}

@@ -156,6 +156,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
             {
                 try
                 {
+                    // Lay the just-expanded body out in the page first: without it the cell sits at the
+                    // drawer top and the scroll lands on the drawer, not the cell (CompanionZonePillsTests).
+                    TopLevel.GetTopLevel(this)?.UpdateLayout();
                     var target = FindCellContainer(cellTitle);
                     if (target != null) target.BringIntoView();
                     else this.BringIntoView();

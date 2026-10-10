@@ -59,6 +59,8 @@ public sealed class HoverBubbleBarTests
                 Assert.Same(bar, B("BtnDiscord").Parent);
                 Assert.DoesNotContain(B("BtnDiscord"), bar.Bubbles);
                 Assert.Null(dash.FindControl<Grid>("VelvetHelperButtonRow"));   // the row went back to the mosaic
+                // Fluent icons: every bubble draws a mapped IconGlyph, none falls back to emoji text.
+                Assert.All(bar.Bubbles, b => Assert.False(bar.GlyphOf(b)!.IsFallback, b.Name));
 
                 // Labels come from Loc with the leading emoji stripped; two keys join with " + ".
                 string Strip(string k) => HoverBubbleBar.StripLeadingGlyph(Loc.Get(k));
@@ -107,6 +109,7 @@ public sealed class HoverBubbleBarTests
                 Assert.False(bar.IsLit(rp));
                 rp.IsChecked = true;
                 Assert.True(bar.IsLit(rp));
+                Assert.Equal(FluentIcons.Common.IconVariant.Filled, bar.GlyphOf(rp)!.Variant);   // lit = Filled
                 rp.IsChecked = false;
             }
             finally

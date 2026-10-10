@@ -22,5 +22,7 @@
   </Application.Resources>
   <Application.Styles>
     <FluentTheme />
+    <!-- Icon size ramp + semantic icon brushes (Controls/Icons, fluent icons 2026-10-10). -->
+    <StyleInclude Source="avares://CCP.Avalonia/Theme/Icons.axaml"/>
   </Application.Styles>
 </Application>
