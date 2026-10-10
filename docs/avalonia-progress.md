@@ -1793,3 +1793,22 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/sync6-nav-rail-b: +857
 - Section rail replaces the flyout (Social door with Friends/Leash pills, lit row, last tab, Ctrl+1..7, fixed Back row); pills pin on right-click; Play zone pills scroll.
 - Ctrl+K held toggles once; 7 rows ported/n/a, 15 left needs-port for sync6-nav-rail-c.
+
+## avalonia-port/sync6-gate-pay: +74
+- Vault gate: card/PayPal checkout link under every pay button (main 750e76812), via ExternalOpener; fake-launcher test, fail-proven.
+
+## avalonia-port/sync6-tube-avatar: +369
+- Tube cel title plate (floating plate, raised coin arrows) and Embers motes in the glass (AmbientFxCanvas Embers/Retint/RunWhileInactive); sync6 rows 2889ddb23, bd95424c8 ported.
+- TubeMotesTests (fail-proven x3); render evidence only, no live check.
+
+## avalonia-port/sync6-premium-page-b: +830
+- Header Premium spark ported (rows 97/99): PremiumSparkRules/Field moved to Core, Avalonia `PremiumSpark` draws it, clock gated by visibility/motion and stopped on detach; `PremiumSparkTests` fail-proven, live Free check.
+- Row 100 (vault flair, no header row on Premium, Home ring) left needs-port for sync6-premium-page-c.
+
+## avalonia-port/sync6-launcher-badges: +106
+- Launcher whole-card launch + once-per-window grow to seat every tile row (WPF 7.1.5 d0001dd5e); 2 fail-proven tests.
+- Badge hue/seen-dim folded to shell-nav-rail and win-launcher Lobby fold (no surface yet).
+
+## avalonia-port/sync6-companion-pages: +134
+- Companion Personality/Permissions/Links pills open the Companion tab scrolled to their zone (zone pills until the v2 page lands; decision B+C).
+- Rows 5681c132a/f3a00a9dc stay needs-port, folded into views-companion-v2-conversation; CompanionZonePillsTests fail-proven.

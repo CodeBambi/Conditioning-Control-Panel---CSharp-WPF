@@ -27,7 +27,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
         SheenSweep = 1 << 3,
         /// <summary>A pre-baked glow breathing 0.6 to 1.0 opacity.</summary>
         GlowBreath = 1 << 4,
-        /// <summary>Warm sparks rising from the bottom edge with a sideways sway (WPF Embers).</summary>
+        /// <summary>Warm motes rising from the bottom edge on a slow sine sway, budgeted by the tier.</summary>
         Embers = 1 << 5,
     }
 
@@ -72,6 +72,13 @@ namespace ConditioningControlPanel.Avalonia.Controls
         /// panel is already painted in.
         /// </summary>
         public Color? Tint { get; set; }
+
+        /// <summary>
+        /// Keep ticking while the host window is NOT the active window (WPF polish wave 13). Only for
+        /// the companion tube, which is almost never the active window. Minimised, hidden, Motion and
+        /// the tier budget still stop it. Never set it on a surface inside the shell.
+        /// </summary>
+        public bool RunWhileInactive { get; set; }
     }
 
     /// <summary>
@@ -178,14 +185,14 @@ namespace ConditioningControlPanel.Avalonia.Controls
         private Dust[] _dust = Array.Empty<Dust>();
         private int _dustN;
 
-        /// <summary>WPF AmbientFxCanvas embers: a pool capped at 40, spending a 0.66 share of the
-        /// live particle budget (dust keeps its own).</summary>
+        // Embers: PORTED from the WPF twin's Ember layer (EmberMax / EmberBudgetShare / quarter-second refill).
         private const int EmberMax = 40;
         private const float EmberBudgetShare = 0.66f;
         private struct Ember { public float X0, Y, VY, Amp, Phase, PhaseSpd, Life, Max, Size; }
         private Ember[] _embers = Array.Empty<Ember>();
         private int _emberN;
         private float _emberT;
+        /// <summary>Live ember count. Tests read it.</summary>
         internal int EmberCount => _emberN;
 
         private struct Spark { public float X, Y, VX, VY, Life, Max, Size; }
@@ -325,7 +332,39 @@ namespace ConditioningControlPanel.Avalonia.Controls
             _burst = null;
             _burstN = 0;
             _dustN = 0;
+            _emberN = 0;
             InvalidateVisual();
+        }
+
+        /// <summary>
+        /// Swap the tint override without reseeding: live particles take the new colour on the next
+        /// frame. WPF's Retint; the tube calls it when the glass flips between pink and midnight.
+        /// </summary>
+        public void Retint(Color tint)
+        {
+            try
+            {
+                // Only the accent dots, like WPF's ApplyAccent: no ReadEnvironment, so the governor
+                // and the clock keep their state.
+                _config.Tint = tint;
+                ApplyAccent(tint, tint);
+                InvalidateVisual();
+            }
+            catch (Exception ex) { Log.Debug("AmbientFxCanvas.Retint: {E}", ex.Message); }
+        }
+
+        /// <summary>Rebuild the particle, glow and ember dots. Shared by ReadEnvironment and Retint.</summary>
+        private void ApplyAccent(Color particle, Color glow)
+        {
+            _particleDot = MakeDot(particle, 0f);
+            _glowDot = MakeDot(glow, 0f);
+            // The tighter-cored radial the glow-breath layer wants; the WPF twin baked a second
+            // 160px sprite with a 0.28 core stop for exactly this.
+            _glowSoft = MakeDot(glow, 0.28f);
+            // Embers sit halfway between the particle colour and a candle gold, so they read
+            // warm on every palette without leaving the theme (WPF ApplyAccent).
+            _emberDot = MakeDot(Color.FromRgb((byte)((particle.R + 255) / 2), (byte)((particle.G + 196) / 2),
+                                              (byte)((particle.B + 110) / 2)), 0f);
         }
 
         /// <summary>
@@ -557,15 +596,8 @@ namespace ConditioningControlPanel.Avalonia.Controls
                 }
 
                 _mistDot = MakeDot(mist, 0f);
-                _particleDot = MakeDot(particle, 0f);
-                _glowDot = MakeDot(glow, 0f);
                 _flashDot = MakeDot(flash, 0f);
-                // The tighter-cored radial the glow-breath layer wants; the WPF twin baked a second
-                // 160px sprite with a 0.28 core stop for exactly this.
-                _glowSoft = MakeDot(glow, 0.28f);
-                // Embers sit halfway between the particle colour and a candle gold (WPF), so they
-                // read warm on every palette without leaving the theme.
-                _emberDot = MakeDot(Color.FromRgb((byte)((particle.R + 255) / 2), (byte)((particle.G + 196) / 2), (byte)((particle.B + 110) / 2)), 0f);
+                ApplyAccent(particle, glow);
 
                 _liveBudget = _particleBudget;
                 _fogOnly = false;
@@ -716,7 +748,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
             if (w != null)
             {
                 if (w.WindowState == WindowState.Minimized) return false;
-                if (!w.IsActive && !oneShotLive) return false;
+                if (!w.IsActive && !oneShotLive && !_config.RunWhileInactive) return false;
             }
             return true;
         }
@@ -837,6 +869,51 @@ namespace ConditioningControlPanel.Avalonia.Controls
                     VY = -0.010f - (float)_rng.NextDouble() * 0.016f,
                     Life = life, Max = life,
                     Size = 0.0035f + (float)_rng.NextDouble() * 0.0055f,
+                };
+            }
+        }
+
+        /// <summary>How many embers the governor currently allows: a share of the live budget.</summary>
+        private int EmberTarget() =>
+            _fogOnly ? 0 : Math.Min(_embers.Length, (int)Math.Round(_liveBudget * EmberBudgetShare));
+
+        internal void StepEmbers(float dt)
+        {
+            if (_embers.Length == 0) return;
+            for (int i = _emberN - 1; i >= 0; i--)
+            {
+                var m = _embers[i];
+                m.Y += m.VY * dt;
+                m.Phase += m.PhaseSpd * dt;
+                m.Life -= dt;
+                if (m.Life <= 0f || m.Y < -0.06f)
+                    _embers[i] = _embers[--_emberN];
+                else
+                    _embers[i] = m;
+            }
+
+            if ((_config.Layers & AmbientFxLayers.Embers) == 0 || _fogOnly) return;
+
+            int target = EmberTarget();
+            if (_emberN > target) _emberN = Math.Max(0, target);
+
+            // One every quarter second at most, so the field fills over ten seconds rather than
+            // appearing as a curtain.
+            _emberT += dt;
+            while (_emberN < target && _emberT > 0.25f)
+            {
+                _emberT -= 0.25f;
+                float life = 10f + (float)_rng.NextDouble() * 8f;
+                _embers[_emberN++] = new Ember
+                {
+                    X0 = (float)_rng.NextDouble(),
+                    Y = 1.02f + (float)_rng.NextDouble() * 0.05f,
+                    VY = -(0.035f + (float)_rng.NextDouble() * 0.030f),
+                    Amp = 0.010f + (float)_rng.NextDouble() * 0.022f,
+                    Phase = (float)(_rng.NextDouble() * Math.PI * 2),
+                    PhaseSpd = 0.8f + (float)_rng.NextDouble() * 1.2f,
+                    Life = life, Max = life,
+                    Size = 0.0040f + (float)_rng.NextDouble() * 0.0045f,
                 };
             }
         }
@@ -1018,51 +1095,13 @@ namespace ConditioningControlPanel.Avalonia.Controls
             }
         }
 
-        /// <summary>WPF StepEmbers: rise, sway, expire; refill one every quarter second at most so
-        /// the field fills over ten seconds rather than appearing as a curtain.</summary>
-        internal void StepEmbers(float dt)
-        {
-            if (_embers.Length == 0) return;
-            for (int i = _emberN - 1; i >= 0; i--)
-            {
-                var m = _embers[i];
-                m.Y += m.VY * dt;
-                m.Phase += m.PhaseSpd * dt;
-                m.Life -= dt;
-                if (m.Life <= 0f || m.Y < -0.06f) _embers[i] = _embers[--_emberN];
-                else _embers[i] = m;
-            }
-
-            if ((_config.Layers & AmbientFxLayers.Embers) == 0 || _fogOnly) return;
-
-            int target = Math.Min(_embers.Length, (int)Math.Round(_liveBudget * EmberBudgetShare));
-            if (_emberN > target) _emberN = Math.Max(0, target);
-
-            _emberT += dt;
-            while (_emberN < target && _emberT > 0.25f)
-            {
-                _emberT -= 0.25f;
-                float life = 10f + (float)_rng.NextDouble() * 8f;
-                _embers[_emberN++] = new Ember
-                {
-                    X0 = (float)_rng.NextDouble(),
-                    Y = 1.02f + (float)_rng.NextDouble() * 0.05f,
-                    VY = -(0.035f + (float)_rng.NextDouble() * 0.030f),
-                    Amp = 0.010f + (float)_rng.NextDouble() * 0.022f,
-                    Phase = (float)(_rng.NextDouble() * Math.PI * 2),
-                    PhaseSpd = 0.8f + (float)_rng.NextDouble() * 1.2f,
-                    Life = life, Max = life,
-                    Size = 0.0040f + (float)_rng.NextDouble() * 0.0045f,
-                };
-            }
-        }
-
         private void DrawEmbers(DrawingContext ctx, float w, float h, float min, float intensity)
         {
             for (int i = 0; i < _emberN; i++)
             {
                 var m = _embers[i];
-                // Fade in over the first stretch of the climb, out toward the top, with a flicker.
+                // Fade in over the first stretch of the climb, out toward the top edge, and flicker
+                // a little on the way like a spark that is still deciding.
                 float rise = Math.Clamp((1.02f - m.Y) / 0.08f, 0f, 1f);
                 float high = Math.Clamp(m.Y / 0.30f, 0f, 1f);
                 float flicker = 0.78f + 0.22f * (float)Math.Sin(m.Phase * 2.7f);

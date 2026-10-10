@@ -15,6 +15,7 @@ using Avalonia.Media;
 using Avalonia.Media.Immutable;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
+using ConditioningControlPanel.Avalonia.Controls;
 using ConditioningControlPanel.Avalonia.Helpers;
 using ConditioningControlPanel.Avalonia.Platform;
 using ConditioningControlPanel.Localization;
@@ -943,9 +944,67 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
                 var art = ModArt.TryLoad(name);
                 if (art != null) _imgTubeFrame.Source = art;
                 Log.Information("Tube style changed to: {Style}", name);
+                // No midnight glass on this head (see above), so the motes are always the pink tint.
+                ApplyTubeMotes(useAlternative, midnight: false);
             }
             catch (Exception ex) { Log.Warning(ex, "Failed to change tube style"); }
         });
+
+        // ---- the motes in the glass. PORTED from WPF AvatarTubeWindow.Windowing.cs (polish wave 13) ----
+
+        /// <summary>The chamber's inside on the 2048 px tube art, attached (tube.png) and detached (tube2.png).</summary>
+        internal static readonly Rect TubeChamberArt = new(717, 1057, 1047 - 717, 1764 - 1057);
+        internal static readonly Rect Tube2ChamberArt = new(320, 1025, 657 - 320, 1734 - 1025);
+
+        /// <summary>A chamber box in the 780x1080 design canvas: the art is a square drawn Uniform
+        /// (780 px) and centred, so it sits 150 px down.</summary>
+        internal static Rect TubeMotesBox(bool detached)
+        {
+            const double s = 780.0 / 2048.0, top = (1080 - 780) / 2.0;
+            var r = detached ? Tube2ChamberArt : TubeChamberArt;
+            return new Rect(r.X * s, top + r.Y * s, r.Width * s, r.Height * s);
+        }
+
+        /// <summary>The motes' colour: the house pink, or the midnight glass's indigo.</summary>
+        internal static Color TubeMotesTint(bool midnight) =>
+            midnight ? Color.FromRgb(0x9A, 0x8C, 0xFF) : Color.FromRgb(0xFF, 0x86, 0xCC);
+
+        private bool _tubeMotesStarted;
+
+        /// <summary>Motes rising inside the glass, over OUR tube art only: a mod that paints its own
+        /// tube has its own chamber. Embers at a light intensity, RunWhileInactive because the tube is
+        /// almost never the active window.</summary>
+        private void ApplyTubeMotes(bool detached, bool midnight)
+        {
+            try
+            {
+                var motes = this.FindControl<AmbientFxCanvas>("TubeMotes");
+                if (motes == null) return;
+                if (CoreModArt.HasOverride("tube.png") || CoreModArt.HasOverride("tube2.png"))
+                {
+                    motes.Stop();
+                    motes.IsVisible = false;
+                    _tubeMotesStarted = false;
+                    return;
+                }
+                var box = TubeMotesBox(detached);
+                motes.Margin = new Thickness(box.X, box.Y, 0, 0);
+                motes.Width = box.Width;
+                motes.Height = box.Height;
+                motes.IsVisible = true;
+                var tint = TubeMotesTint(midnight);
+                if (_tubeMotesStarted) { motes.Retint(tint); return; }
+                motes.StartLayers(new AmbientFxConfig
+                {
+                    Layers = AmbientFxLayers.Embers,
+                    Intensity = 0.85,
+                    Tint = tint,
+                    RunWhileInactive = true,
+                });
+                _tubeMotesStarted = true;
+            }
+            catch (Exception ex) { Log.Debug("ApplyTubeMotes: {E}", ex.Message); }
+        }
 
         /// <summary>Repaint the glass in place, without touching attach state - WPF's
         /// RefreshTubeGlass, which the Companion workshop cell calls after a settings flip.</summary>
