@@ -162,10 +162,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
                     var ocr = (int)e.NewValue * 1000;
                     if (s.ScreenOcrIntervalMs == ocr) return;
                     s.ScreenOcrIntervalMs = ocr;
-                    // ponytail: WPF also pushes the new interval into the running scanner
-                    // (App.ScreenOcr.UpdateInterval). No OCR service and no Core seam for one on
-                    // this head, so there is nothing running to re-time - the stored value is the
-                    // whole effect here, which is why this is a restore and not a half-port.
+                    // WPF MainWindow.KeywordTriggers.cs:119: re-time the running scanner.
+                    Platform.ScreenOcrService.UpdateInterval(ocr);
                     break;
                 case "SliderKeywordHighlightDuration":
                     var ms = (int)(e.NewValue * 1000);

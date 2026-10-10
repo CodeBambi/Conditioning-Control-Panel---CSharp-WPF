@@ -15,7 +15,8 @@ namespace ConditioningControlPanel.Services.KeywordTriggers
     /// keyword and id, the de-duplicated union of every fired trigger's enabled actions) plus how many
     /// quest credits it earns (one per fired trigger, WPF :1364 / :1412).</summary>
     public sealed record KeywordFire(KeywordTrigger Trigger, IReadOnlyList<KeywordAction> Actions,
-        IReadOnlyList<KeywordTrigger> Fired, string Source);
+        IReadOnlyList<KeywordTrigger> Fired, string Source,
+        IReadOnlyList<OcrWordHit>? MatchedWords = null);
 
     /// <summary>
     /// The platform-free half of WPF <c>Services/KeywordTriggerService.cs</c> (7.1.5): the rolling typed
@@ -24,7 +25,7 @@ namespace ConditioningControlPanel.Services.KeywordTriggers
     /// ring buffer and the app-scope gate. Same numbers as WPF. A head feeds it characters (or text) and
     /// performs the actions on <see cref="Dispatch"/>; nothing here draws, plays or touches Win32.
     /// </summary>
-    public sealed class KeywordTriggerEngine
+    public sealed partial class KeywordTriggerEngine
     {
         public const int BufferCap = 200;
         public const int PulseBufferCapacity = 20;

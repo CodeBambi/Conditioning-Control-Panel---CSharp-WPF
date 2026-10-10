@@ -159,11 +159,16 @@ public sealed class CompanionDeadControlsTests
             var view = new AwarenessTabView();
             var note = ConditioningControlPanel.Localization.Loc.Get("exclusives_not_on_this_build");
             Assert.Equal(4, view.ScreenReadOnlyToggles.Length);
+            // Lane w2: where the platform reads the screen (Windows, Windows.Media.Ocr) the four rows
+            // are live and carry no note; elsewhere they stay greyed and say so.
+            var live = ConditioningControlPanel.Avalonia.Platform.ScreenOcrService.ReasonUnavailable is null;
+            Assert.Equal(System.OperatingSystem.IsWindowsVersionAtLeast(10, 0, 19041), live);
             foreach (var box in view.ScreenReadOnlyToggles)
             {
-                Assert.False(box.IsEnabled, box.Name);
+                Assert.Equal(live, box.IsEnabled);
                 var row = Assert.IsType<Grid>(box.Parent);
-                Assert.Contains(row.Children.OfType<TextBlock>(), t => t.Text == note);
+                if (live) Assert.DoesNotContain(row.Children.OfType<TextBlock>(), t => t.Text == note);
+                else Assert.Contains(row.Children.OfType<TextBlock>(), t => t.Text == note);
             }
             // Typed keywords work on this head: the master and the keyboard switch stay live.
             Assert.True(view.FindControl<CheckBox>("ChkAwarenessMaster")!.IsEnabled);

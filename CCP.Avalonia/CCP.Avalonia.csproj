@@ -67,6 +67,25 @@
     <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.13.0.20260627" />
   </ItemGroup>
 
+  <!-- WinRT for the Awareness lane (Windows.Media.Ocr screen reads, Windows.Media.Control now-playing).
+       The head stays net10.0: the Windows SDK projection is referenced as two plain assemblies (the same
+       pack and version the WPF head's net8.0-windows10.0.19041.0 target pulls in), only on a Windows
+       build, and every use sits in a file compiled under CCP_WINRT behind an OperatingSystem.IsWindows
+       guard. A Linux build compiles none of it and ships neither dll. -->
+  <PropertyGroup Condition="$(RuntimeIdentifier.StartsWith('win')) Or ('$(RuntimeIdentifier)' == '' And $([MSBuild]::IsOSPlatform('Windows')))">
+    <DefineConstants>$(DefineConstants);CCP_WINRT</DefineConstants>
+    <CcpWinSdkRef>$(NuGetPackageRoot)microsoft.windows.sdk.net.ref\10.0.19041.57\lib\net8.0\</CcpWinSdkRef>
+  </PropertyGroup>
+  <ItemGroup Condition="$(RuntimeIdentifier.StartsWith('win')) Or ('$(RuntimeIdentifier)' == '' And $([MSBuild]::IsOSPlatform('Windows')))">
+    <PackageDownload Include="Microsoft.Windows.SDK.NET.Ref" Version="[10.0.19041.57]" />
+    <Reference Include="Microsoft.Windows.SDK.NET">
+      <HintPath>$(CcpWinSdkRef)Microsoft.Windows.SDK.NET.dll</HintPath>
+    </Reference>
+    <Reference Include="WinRT.Runtime">
+      <HintPath>$(CcpWinSdkRef)WinRT.Runtime.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
   <ItemGroup Condition="$(RuntimeIdentifier.StartsWith('linux')) Or ('$(RuntimeIdentifier)' == '' And $([MSBuild]::IsOSPlatform('Linux')))">
     <PackageReference Include="OpenCvSharp4.official.runtime.linux-x64" Version="4.13.0.20260627" />
     <!-- OnnxRuntime's props copy the win-x64 onnxruntime.dll to the root on any AnyCPU build (11 MB of

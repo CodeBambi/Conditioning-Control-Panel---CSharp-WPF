@@ -51,6 +51,56 @@ internal static class KeywordTriggerHead
             Engine.ForegroundResolver = ResolveForegroundWindows;
             Win32PanicKey.KeyDown += OnHookKeyDown;
         }
+        else if (OperatingSystem.IsLinux())
+        {
+            Engine.ForegroundResolver = ResolveForegroundX11;
+        }
+        SyncSources();
+    }
+
+    /// <summary>Start or stop the sources that own a thread or a timer (the screen reader, the Linux
+    /// key listener) to match the switches. Call after the master, the screen-read switch or access
+    /// moves. With every switch off nothing here runs.</summary>
+    internal static void SyncSources()
+    {
+        try { ScreenOcrService.Sync(); } catch (Exception ex) { Log.Debug(ex, "Screen OCR sync failed"); }
+        try { X11KeyListener.Sync(CoreSettings.Current?.KeywordTriggersEnabled == true && Engine.HasAccess(), OnX11Key); }
+        catch (Exception ex) { Log.Debug(ex, "X11 key listener sync failed"); }
+    }
+
+    /// <summary>On the X11 listener thread: post, nothing else. Typed text is matched in memory only.</summary>
+    private static void OnX11Key(X11KeyListener.Key key, char ch)
+    {
+        if (!Engine.IsActive || CoreSettings.Current?.KeywordTriggersEnabled != true) return;
+        Dispatcher.UIThread.Post(() =>
+        {
+            try
+            {
+                switch (key)
+                {
+                    case X11KeyListener.Key.Clear: Engine.OnKey(KeywordBufferKey.Clear); break;
+                    case X11KeyListener.Key.Backspace: Engine.OnKey(KeywordBufferKey.Backspace); break;
+                    case X11KeyListener.Key.Space: Engine.OnKey(KeywordBufferKey.Space); break;
+                    default: Engine.OnChar(ch); break;
+                }
+            }
+            catch (Exception ex) { Log.Debug(ex, "Keyword trigger key failed"); }
+        });
+    }
+
+    /// <summary>The app-scope gate's foreground app on X11 (EWMH _NET_ACTIVE_WINDOW + _NET_WM_PID). A
+    /// Wayland-native window reads as unknown: "only listed apps" then fails closed, as on Windows.</summary>
+    private static ForegroundApp? ResolveForegroundX11()
+    {
+        try
+        {
+            var name = X11Windows.ForegroundProcess();
+            if (string.IsNullOrEmpty(name)) return null;
+            string self;
+            using (var p = Process.GetCurrentProcess()) self = ConditioningControlPanel.Services.UI.DndProcessList.Normalize(p.ProcessName);
+            return new ForegroundApp(name, string.Equals(name, self, StringComparison.OrdinalIgnoreCase));
+        }
+        catch { return null; }
     }
 
     // ------------------------------------------------------------------ input (hook thread)
@@ -153,7 +203,7 @@ internal static class KeywordTriggerHead
         {
             foreach (var action in fire.Actions)
             {
-                var dur = await RunAsync(action, fire.Trigger);
+                var dur = await RunAsync(action, fire.Trigger, fire.MatchedWords);
                 if (dur > maxAudio) maxAudio = dur;
             }
         }
@@ -163,7 +213,8 @@ internal static class KeywordTriggerHead
         CoreAudio.Unduck(duckGen);
     }
 
-    private static async Task<double> RunAsync(KeywordAction action, KeywordTrigger trigger)
+    private static async Task<double> RunAsync(KeywordAction action, KeywordTrigger trigger,
+        System.Collections.Generic.IReadOnlyList<OcrWordHit>? matchedWords = null)
     {
         switch (action)
         {
@@ -173,7 +224,9 @@ internal static class KeywordTriggerHead
                 await Dispatcher.UIThread.InvokeAsync(() => FireVisualEffect(visual.Effect, trigger));
                 return 0;
             case HighlightAction:
-                // Needs OCR word boxes (WPF passes matchedWords only from a screen read); a typed match has none.
+                // WPF :1534: only a screen read carries word boxes; a typed match has none.
+                if (matchedWords is { Count: > 0 } && CoreSettings.Current?.KeywordHighlightEnabled == true)
+                    await Dispatcher.UIThread.InvokeAsync(() => { if (Host is { } h) KeywordHighlightOverlay.Show(h, matchedWords); });
                 return 0;
             case HapticAction haptic:
                 _ = CoreHaptics.Service?.TriggerKeywordPatternAsync(trigger.Keyword, haptic.Intensity);

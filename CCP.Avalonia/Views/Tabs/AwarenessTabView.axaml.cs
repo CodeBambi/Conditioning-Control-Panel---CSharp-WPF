@@ -65,6 +65,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         private void MarkScreenReadRows()
         {
+            // Windows reads the screen (Platform/ScreenOcrService over Windows.Media.Ocr): the rows are
+            // live. Linux has no reader in the tree, so they stay greyed with the reason.
+            if (Platform.ScreenOcrService.ReasonUnavailable is null) return;
             foreach (var box in ScreenReadOnlyToggles)
             {
                 box.IsEnabled = false;
@@ -236,8 +239,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
                 CoreSettings.Current.KeywordTriggersEnabled = on;
 
-                // Nothing to start or stop: Platform/KeywordTriggerHead rides the panic key's hook
-                // and reads this flag on every key (Windows). Screen OCR is not on this head.
+                // WPF :416-427: the master starts and stops the sources. Typed keys ride the panic
+                // key's hook on Windows (it reads this flag on every key); the screen reader's timer
+                // and the X11 key listener exist only while it is on.
+                Platform.KeywordTriggerHead.SyncSources();
 
                 _isLoading = true;
                 try { if ((ChkAwarenessKeyboard.IsChecked ?? false) != on) ChkAwarenessKeyboard.IsChecked = on; }
@@ -281,8 +286,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                     ConditioningControlPanel.Localization.Loc.Get("msg_screen_ocr_patreon_only"));
                 return;
             }
-            // ponytail: WPF starts/stops App.ScreenOcr here; no OCR engine on this head.
             WriteFlag(v => CoreSettings.Current.ScreenOcrEnabled = v, ChkAwarenessOcr, "ScreenOcrEnabled");
+            // WPF :462-468: start when on (and the master is on), stop when off.
+            if (!_isLoading) Platform.ScreenOcrService.Sync();
             if (!_isLoading) KeywordPanel?.SyncFromSettings();   // WPF :475 SyncKeywordRescuePanelUi
         }
 
@@ -308,9 +314,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         private void ChkAwarenessHighlightVisibleInCapture_Changed(object? sender, RoutedEventArgs e)
         {
-            // ponytail: WPF then flips display affinity on the live overlay windows
-            // (App.KeywordHighlight.RefreshCaptureVisibility) - WDA_EXCLUDEFROMCAPTURE, Win32,
-            // head-side. The setting is stored either way, so a later head reads the right value.
+            // WPF then flips display affinity on its live overlay windows (RefreshCaptureVisibility).
+            // The port's highlight windows live for one fire (Overlays/KeywordHighlightOverlay), so the
+            // next fire reads the new value: nothing to refresh.
             WriteFlag(v => CoreSettings.Current.OcrHighlightVisibleInCapture = v,
                       ChkAwarenessHighlightVisibleInCapture, "OcrHighlightVisibleInCapture");
         }
