@@ -1,10 +1,7 @@
 using Serilog;
 using System;
-using System.Runtime.InteropServices;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Windows;
 using ConditioningControlPanel.Services.Companion.Brain;
 
 namespace ConditioningControlPanel.Services.Awareness

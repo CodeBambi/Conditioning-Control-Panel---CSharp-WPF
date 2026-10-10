@@ -743,6 +743,7 @@ namespace ConditioningControlPanel.Avalonia
                 StartPrograms();   // progression#1: WPF App.xaml.cs:2165, after Quests (verifier seam)
                 Platform.CompanionHead.Start();   // ai#5 + progression#47: companion switch, XP, drain, level-up
                 Platform.BarkHead.Start();        // ai#1: the bark engine, its seams and sources
+                Platform.AwarenessHead.Wire();    // WPF App.xaml.cs:2238: Awareness v2 (built idle; WindowAwareness.Start runs it)
 
                 // CoreProgram: the pack-video provider is seeded by StartContentPacks; the roadmap one
                 // stays unseeded - this head has no RoadmapService, so it answers "no roadmap".
@@ -1125,6 +1126,7 @@ namespace ConditioningControlPanel.Avalonia
             // WPF AchievementService.Dispose saves synchronously; only when dirty here, so an idle exit
             // never rewrites the file (or rotates its .bak) - it may be shared with the WPF head.
             try { if (Achievements is { IsDirty: true } a) a.Save(); } catch { /* the store logs write failures */ }
+            try { Platform.AwarenessHead.Shutdown(); } catch { /* WPF App.OnExit:5779; flushes the ledger */ }
             try { Quests?.Dispose(); } catch { /* WPF App.OnExit:6104; saves only when dirty */ }
             try { Programs?.Dispose(); } catch { /* WPF App.OnExit:6309; idempotent after StopPrograms */ }
             try { MediaHistory?.Dispose(); } catch { /* WPF App.OnExit:6231; flushes the final entries */ }

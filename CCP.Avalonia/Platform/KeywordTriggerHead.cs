@@ -400,6 +400,15 @@ internal static class KeywordTriggerHead
             return;
         }
         tube.RunOnAvatar(() => tube.GigglePriority(line, playSound: true, aiGenerated: aiGenerated));
+        // One mouth (WPF KeywordTriggerService.cs:1792): a keyword comment lands in the arbiter's
+        // cooldown ledger, only while v2 is active.
+        try
+        {
+            if (ConditioningControlPanel.Services.Awareness.AwarenessV2Routing.IsActive)
+                ConditioningControlPanel.Services.Awareness.AwarenessV2Routing.Arbiter?.RecordExternalLine(
+                    ConditioningControlPanel.Services.Awareness.ReactionSource.Keyword);
+        }
+        catch (Exception ex) { Log.Debug("Keyword comment: arbiter report failed: {Error}", ex.Message); }
     });
 
     // ------------------------------------------------------------------ Chaster
