@@ -1046,6 +1046,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                 {
                     _dragMoved = true;
                     CloseRing();   // WPF Ring.cs OnRingWatchMove: a drag past the threshold folds the fan
+                    OnPickedUp();   // WPF xaml.cs:1536
                 }
                 if (!_dragMoved) return;
 
@@ -1078,6 +1079,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                     SavePlacement();
                     try { Moved?.Invoke(this, EventArgs.Empty); }
                     catch (Exception ex) { Log.Debug(ex, "[EmiDesk] Moved handler threw"); }
+                    OnPutDown();   // WPF xaml.cs:1566
                     return;
                 }
 
@@ -1808,6 +1810,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                 _wobbleLastX = x;
 
                 _wobbleVx = _wobbleVx * WobbleVelKeep + raw * (1.0 - WobbleVelKeep);
+                NoteTossFrame(dt, _wobbleVx);   // the fling window rides the wobble's own frame
 
                 // She TRAILS the hand: drag her right and her feet swing left, which about a
                 // head-high pivot is a positive (clockwise) angle in a y-down frame.

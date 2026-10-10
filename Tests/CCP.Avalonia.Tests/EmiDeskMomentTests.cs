@@ -200,6 +200,53 @@ public sealed class EmiDeskMomentTests
             EmiKnockWorld.WindowUsableProbe = prev;
         }
     });
+    [Fact]
+    public Task AFastReleaseIsAFling_ASlowOneIsAPutDown_AndTheLandingEndsAtRest() => AvaloniaTestDispatcher.RunAsync(async () =>
+    {
+        EnsureApp();
+        var oldSettings = CoreSettings.ServiceProvider;
+        var service = new SettingsService();
+        CoreSettings.ServiceProvider = () => service;
+        var w = new EmiDeskWindow();
+        try
+        {
+            CoreSettings.Current.MasterVolume = 0;        // no sound leaves a test
+            w.Show();
+            Dispatcher.UIThread.RunJobs();
+            w.CancelChain();
+
+            var t0 = DateTime.UtcNow;
+            double y = 0;
+            for (int i = 0; i < 6; i++) w.NoteTossFrame(0.016, 0, t0.AddMilliseconds(16 * i), y += 2);   // a carry
+            w.OnPutDown(t0.AddMilliseconds(100));
+            Assert.Equal("dropped", w.LastLanding);
+            w.CancelChain();
+
+            int before = EmiState.Current.FlingsTotal;
+            var t1 = t0.AddSeconds(2);
+            for (int i = 0; i < 14; i++) w.NoteTossFrame(0.016, 0, t1.AddMilliseconds(16 * i), y += 200);   // a throw
+            w.OnPutDown(t1.AddMilliseconds(16 * 14));     // released inside the 150 ms grace
+            Assert.Equal("flung", w.LastLanding);
+            Assert.Equal(before + 1, EmiState.Current.FlingsTotal);
+
+            for (int i = 0; i < 14; i++) w.NoteTossFrame(0.016, 0, t1.AddSeconds(5).AddMilliseconds(16 * i), y += 200);
+            w.OnPutDown(t1.AddSeconds(9));                // she slowed to a stop first: not a fling
+            Assert.Equal("dropped", w.LastLanding);
+
+            Assert.Equal((1d, 1d), EmiDeskWindow.LandingScale(thrown: true, 1));
+            Assert.Equal((1d, 1d), EmiDeskWindow.LandingScale(thrown: false, 1));
+            Assert.True(EmiDeskWindow.LandingScale(thrown: true, 0.55).Y < 0.9);
+            Assert.Equal("top", EmiTossRules.ZoneRow(10, 0, 900));
+            Assert.Equal("mid", EmiTossRules.ZoneRow(450, 0, 900));
+            Assert.Equal("bottom", EmiTossRules.ZoneRow(700, 0, 900));
+            await Pump(500);                              // the squash runs out on its own
+        }
+        finally
+        {
+            w.ShutDown();
+            CoreSettings.ServiceProvider = oldSettings;
+        }
+    });
 }
 
 /// <summary>HC8, the nudges: a track outside the lines file's vocabulary falls back to its fixed line,
