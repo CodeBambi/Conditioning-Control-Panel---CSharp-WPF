@@ -773,7 +773,7 @@ namespace ConditioningControlPanel
 
         // ============================== nav rail: sections ==============================
         // Nav rework (2026-10-06): the six doors + accordion are gone; the rail is seven labelled
-        // sections + the Settings gear (MainWindow.NavRail.cs), and Services.UI.NavSections is the
+        // sections + the Settings gear (MainWindow.NavRail.cs), and NavSections is the
         // one table. These helpers keep the names other files call (ChromeFx, EventFx, BankFx,
         // the first-visit pulses, the tutorial overlay, feature intros), answering with the
         // SECTION ROW now. A row's Tag is its section key; the gear's is "appsettings".
@@ -792,7 +792,7 @@ namespace ConditioningControlPanel
         private static string? NavDoorForTab(string? tabKey)
         {
             if (string.IsNullOrEmpty(tabKey)) return null;
-            var section = Services.UI.NavSections.SectionForTab(CanonicalTabKey(tabKey!));
+            var section = NavSections.SectionForTab(CanonicalTabKey(tabKey!));
             return section == null ? null : Controls.NavRail.NavRailRules.DoorTagForSection(section);
         }
 

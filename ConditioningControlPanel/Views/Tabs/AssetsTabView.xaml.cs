@@ -42,7 +42,7 @@ namespace ConditioningControlPanel.Views.Tabs
                 {
                     ZoneFolders.BringIntoView();
                     App.Logger?.Debug("Assets ScrollToZone(folders)");
-                    var sage = global::ConditioningControlPanel.Controls.NavRail.NavStripRules.Accent(global::ConditioningControlPanel.Services.UI.NavSections.Library);
+                    var sage = global::ConditioningControlPanel.Controls.NavRail.NavStripRules.Accent(global::ConditioningControlPanel.Nav.NavSections.Library);
                     global::ConditioningControlPanel.Controls.NavRail.NavGlow.Once(ZoneFolders, sage, why: "library.folders");
                     global::ConditioningControlPanel.Controls.NavRail.NavGlow.Once(CmbAssetPresets, sage, why: "library.presets");
                 }

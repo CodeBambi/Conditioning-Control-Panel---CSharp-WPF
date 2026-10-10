@@ -1,14 +1,5 @@
-// Global using directives
-global using System;
-global using System.Collections.Generic;
-global using System.Linq;
-global using System.Threading.Tasks;
-global using System.Windows;
-
-// Rules that live once in CCP.Core and are shared with the Avalonia head. Core keeps them in
-// ConditioningControlPanel.Nav / .Services.Billboard; these per-type aliases let the WPF files
-// keep their short names without importing the whole Core namespace (which would collide with
-// WPF's own Controls.NavRail.NavStripRules / NavRailRules and Services.UI.NavBadges).
+// Core keeps the nav table in ConditioningControlPanel.Nav; the WPF suite names these types bare,
+// as the WPF app does (ConditioningControlPanel/GlobalUsings.cs).
 global using NavTabKind = ConditioningControlPanel.Nav.NavTabKind;
 global using NavTab = ConditioningControlPanel.Nav.NavTab;
 global using NavSection = ConditioningControlPanel.Nav.NavSection;

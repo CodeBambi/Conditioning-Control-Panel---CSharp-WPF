@@ -55,7 +55,7 @@ public class PaletteDoorParityTests
     {
         // Nav rework (2026-10-06): the rail is the section table. A row opens its section's
         // default tab (or the remembered last tab, which the palette does not model).
-        var doors = ConditioningControlPanel.Services.UI.NavSections.Order
+        var doors = ConditioningControlPanel.Nav.NavSections.Order
             .Select(s => (ConditioningControlPanel.Controls.NavRail.NavRailRules.DoorTagForSection(s.Key), s.DefaultTab))
             .ToList();
 

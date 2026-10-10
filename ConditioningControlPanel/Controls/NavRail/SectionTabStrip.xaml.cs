@@ -12,6 +12,8 @@ using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
 using ConditioningControlPanel.Services.UI;
+using NavStripTable = ConditioningControlPanel.Nav.NavStripRules;
+using StripKey = ConditioningControlPanel.Nav.StripKey;
 
 namespace ConditioningControlPanel.Controls.NavRail
 {
@@ -62,7 +64,14 @@ namespace ConditioningControlPanel.Controls.NavRail
         public static string? PageLabelKey(string? tab) => NavStripTable.PageLabelKey(tab);
 
         /// <summary>Keyboard move inside the strip: Left/Right wrap, Home/End jump. -1 = not a strip key.</summary>
-        public static int MoveIndex(int current, int count, Key key) => NavStripTable.MoveIndex(current, count, key.ToString());
+        public static int MoveIndex(int current, int count, Key key) => NavStripTable.MoveIndex(current, count, key switch
+        {
+            Key.Left => StripKey.Left,
+            Key.Right => StripKey.Right,
+            Key.Home => StripKey.Home,
+            Key.End => StripKey.End,
+            _ => StripKey.Other,
+        });
 
         // Section hues (polish wave 2, owner 2026-10-06: one hue PER SECTION so a page, its pills
         // and its rail medallion read as one place). Static (commerce-neutral) tokens, never gold
@@ -76,7 +85,7 @@ namespace ConditioningControlPanel.Controls.NavRail
         public static readonly Color Coral = FromRgb(NavStripTable.Coral);       // You
         public static readonly Color Sage = FromRgb(NavStripTable.Sage);         // Library
 
-        public static Color Accent(string? section) => FromRgb(NavStripTable.AccentRgb(section));
+        public static Color Accent(string? section) => FromRgb(NavStripTable.Accent(section));
 
         private static Color FromRgb(uint rgb) => Color.FromRgb((byte)(rgb >> 16), (byte)(rgb >> 8), (byte)rgb);
 
