@@ -1820,3 +1820,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/snapshot-lock: +197
 - Verify.Avalonia SSIM (0.995) snapshots lock the 2 verified parity rows in their own testhost (RenderProof setup + pinned Noto Emoji fallback). They pass on Arch and on ubuntu-latest (run 38055802311).
 - `ledger-snapshot-check.sh` fails any verified/improved row without a baseline. The parity doc now has a "Locking a row" rule.
+
+## avalonia-port/icons-infra: +1000
+- Fluent UI System Icons infrastructure (L0a): fx:IconGlyph/IconLabel/IconMap/IconText, {loc:StrBare}, Theme/Icons.axaml brushes and ramp; PremiumGateFx and HoverBubbleBar now go through IconGlyph.
+- Tests: render (non-blank, not .notdef, inherited Foreground, Regular != Filled), map/split, contrast; 16 fail-proofs; --scale 2 renders.
