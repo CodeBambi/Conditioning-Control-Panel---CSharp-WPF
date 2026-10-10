@@ -349,7 +349,7 @@ public sealed class BugReportWorkflowTests
         {
             EnsureAvalonia();
             var settings = new SettingsService();
-            settings.RestoreFrom(new AppSettings { Welcomed = true, Language = "en" });
+            settings.RestoreFrom(new AppSettings { Welcomed = true, Language = "en", WhatMovedCardShown = 1 });   // P52: no upgrade-only What moved card over the shell
             var oldSettings = CoreSettings.ServiceProvider;
             CoreSettings.ServiceProvider = () => settings;
             var shell = new MainShellWindow();

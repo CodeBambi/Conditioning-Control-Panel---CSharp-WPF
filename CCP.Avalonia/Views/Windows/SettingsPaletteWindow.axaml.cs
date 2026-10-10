@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
@@ -11,6 +12,7 @@ using Avalonia.Styling;
 using ConditioningControlPanel.Avalonia.Controls;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Services;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
@@ -52,6 +54,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private readonly TextBlock _txtPlaceholder;
         private readonly TextBlock _txtEmpty;
         private readonly ListBox _listResults;
+        private readonly Control _panelEmpty;
+        private readonly Button _btnTry;
+        private readonly TextBlock _txtTry;
 
         private bool _closing;
         private bool _wasActivated;
@@ -64,6 +69,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _txtPlaceholder = this.FindControl<TextBlock>("TxtPlaceholder")!;
             _txtEmpty = this.FindControl<TextBlock>("TxtEmpty")!;
             _listResults = this.FindControl<ListBox>("ListResults")!;
+            _panelEmpty = this.FindControl<Control>("PanelEmpty")!;
+            _btnTry = this.FindControl<Button>("BtnTry")!;
+            _txtTry = this.FindControl<TextBlock>("TxtTry")!;
+            _btnTry.Click += (_, _) => { if (_tryEntry != null) Activate(_tryEntry); };
+            this.FindControl<Button>("BtnAll")!.Click += (_, _) => { _showAll = true; Refresh(); _txtQuery.Focus(); };
 
             // Handlers live here rather than in markup, per the porting convention.
             _txtQuery.TextChanged += (_, _) => TxtQuery_TextChanged();
@@ -173,11 +183,38 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _txtQuery.Focus();
         }
 
+        /// <summary>True while a row's pin menu is up: its popup takes the pointer, and that
+        /// must not read as a click-away.</summary>
+        private bool _pinMenuOpen;
+
         private void Window_Deactivated()
         {
+            if (!_wasActivated || _pinMenuOpen) return;
             // Click-away dismiss. Deliberately NOT an Escape close: it must not arm the panic
             // hand-off, because no Escape press happened.
-            if (_wasActivated) ClosePalette(fromEscape: false);
+            ClosePalette(fromEscape: false);
+            // A click on the panel closed us: make sure the panel is the one left in front
+            // (WPF 7fbdbe019). Closing an owned window can hand activation to whatever was active
+            // before. Only when the panel already holds focus: a click into another app keeps it.
+            try
+            {
+                // WPF ForegroundIsOurs: asked after the close settles, because when Deactivated
+                // fires the window that took the click has not reported Activated yet.
+                if (Owner is Window owner)
+                    Dispatcher.UIThread.Post(() => { try { if (OurWindowIsActive()) owner.Activate(); } catch { } });
+            }
+            catch { }
+        }
+
+        /// <summary>WPF ForegroundIsOurs: some window of this app holds activation. Tracked by
+        /// class handler, so it also holds for headless hosts that have no desktop lifetime.</summary>
+        private static bool OurWindowIsActive() => OpenWindows.Any(w => w.IsActive);
+        private static readonly HashSet<Window> OpenWindows = new();
+
+        static SettingsPaletteWindow()
+        {
+            WindowOpenedEvent.AddClassHandler<Window>((w, _) => OpenWindows.Add(w));
+            WindowClosedEvent.AddClassHandler<Window>((w, _) => OpenWindows.Remove(w));
         }
 
         // =====================================================================================
@@ -187,7 +224,26 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private void TxtQuery_TextChanged()
         {
             _txtPlaceholder.IsVisible = string.IsNullOrEmpty(_txtQuery.Text);
+            // Typing again leaves the "every page" list: the box is a search box first.
+            _showAll = false;
             Refresh();
+        }
+
+        /// <summary>True while the "Show all pages" list is up (until the next keystroke).</summary>
+        private bool _showAll;
+
+        /// <summary>The nearest row offered by the empty state's "Try:" button.</summary>
+        private SettingsPaletteEntry? _tryEntry;
+
+        /// <summary>No hits: say what was typed, offer the nearest caption, offer every page.</summary>
+        private void ShowNoResults(string query)
+        {
+            var q = query.Trim();
+            _txtEmpty.Text = Loc.GetF("nav_search_none", q);
+            var nearest = SettingsPaletteIndex.Nearest(q);
+            _tryEntry = nearest?.Entry;
+            _btnTry.IsVisible = nearest != null;
+            if (nearest != null) _txtTry.Text = Loc.GetF("nav_search_try", nearest.Value.Entry.Label);
         }
 
         /// <summary>Rows are rebuilt from loc keys on every keystroke, so a language change always
@@ -196,15 +252,34 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             try
             {
-                var rows = SettingsPaletteIndex.Search(_txtQuery.Text)
-                                               .Select(entry => new PaletteRow(entry))
-                                               .ToList();
+                var query = _txtQuery.Text ?? string.Empty;
+                List<PaletteRow> rows;
+                if (_showAll)
+                {
+                    rows = SettingsPaletteIndex.AllPages().Select(e => new PaletteRow(e, null)).ToList();
+                }
+                else if (query.Trim().Length == 0)
+                {
+                    // Empty box: the last few places first, then the authored opening list.
+                    var recents = SettingsPaletteIndex.Recents(CoreSettings.Current.NavSearchRecents);
+                    var seen = new HashSet<string>(recents.Select(e => e.Id), StringComparer.Ordinal);
+                    rows = recents.Select(e => new PaletteRow(e, null))
+                                  .Concat(SettingsPaletteIndex.Search(query)
+                                                              .Where(e => !seen.Contains(e.Id))
+                                                              .Select(e => new PaletteRow(e, null)))
+                                  .ToList();
+                }
+                else
+                {
+                    rows = SettingsPaletteIndex.Search(query).Select(e => new PaletteRow(e, query)).ToList();
+                }
 
                 _listResults.ItemsSource = rows;
                 if (rows.Count > 0) _listResults.SelectedIndex = 0;
 
                 _listResults.IsVisible = rows.Count > 0;
-                _txtEmpty.IsVisible = rows.Count == 0;
+                _panelEmpty.IsVisible = rows.Count == 0;
+                if (rows.Count == 0) ShowNoResults(query);
             }
             catch (Exception ex)
             {
@@ -226,7 +301,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     break;
 
                 case Key.Enter:
-                    ActivateSelected();
+                    // Nothing listed but a nearest guess on screen: Enter takes the guess.
+                    if (_listResults.ItemCount == 0 && _tryEntry != null && _btnTry.IsVisible)
+                        Activate(_tryEntry);
+                    else
+                        ActivateSelected();
                     e.Handled = true;
                     break;
 
@@ -263,11 +342,27 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// owner needs focus back before anything navigates.</summary>
         private void ActivateSelected()
         {
-            if (_listResults.SelectedItem is not PaletteRow row) return;
+            if (_listResults.SelectedItem is PaletteRow row) Activate(row.Entry);
+        }
+
+        private void Activate(SettingsPaletteEntry entry)
+        {
             var owner = Owner as MainShellWindow;
+            RememberRecent(entry);
             ClosePalette(fromEscape: false);
             if (owner == null) return;
-            Dispatcher.UIThread.Post(() => Navigate(owner, row.Entry));
+            Dispatcher.UIThread.Post(() => Navigate(owner, entry));
+        }
+
+        private static void RememberRecent(SettingsPaletteEntry entry)
+        {
+            try
+            {
+                var s = CoreSettings.Current;
+                s.NavSearchRecents = SettingsPaletteIndex.PushRecent(s.NavSearchRecents, entry.Id);
+                CoreSettings.Save();
+            }
+            catch (Exception ex) { Serilog.Log.Debug("Palette recents not saved: {E}", ex.Message); }
         }
 
         // =====================================================================================
@@ -285,8 +380,29 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             try
             {
+                // A Studio module: the rack's own door (selects the module, then shows the Studio).
+                if (!string.IsNullOrWhiteSpace(entry.RackKey)) { shell.OpenStudioModule(entry.RackKey!); return; }
+
+                // A game: started the way the launcher tile starts it (account ask included).
+                if (!string.IsNullOrWhiteSpace(entry.GameId)) { LauncherWindow.LaunchGame(shell, entry.GameId!); return; }
+
+                // The CC Labs row: the launcher itself, the title-bar button's own verb.
+                if (entry.OpensLauncher) { LauncherWindow.BackToLauncher(shell); return; }
+
+                // A Library launcher: the dialog or window itself, as its strip pill opens it.
+                if (!string.IsNullOrWhiteSpace(entry.LauncherKey) && shell.OpenLibraryLauncher(entry.LauncherKey!)) return;
+
                 if (!string.IsNullOrWhiteSpace(entry.TabKey)) shell.ShowTab(entry.TabKey);
-                if (!string.IsNullOrWhiteSpace(entry.SectionKey)) shell.AppSettingsPage?.FocusSection(entry.SectionKey);
+                // ponytail: WPF then scrolls the Play wall to entry.PlayZone (PlayTab.ScrollToZone);
+                // this head's Play tab has no zones yet, so the Games row lands at the top.
+
+                if (!string.IsNullOrWhiteSpace(entry.SectionKey))
+                {
+                    shell.AppSettingsPage?.FocusSection(entry.SectionKey);
+                    // The section pill rings once, as Show me rings it (WPF 7fbdbe019).
+                    var sectionKey = entry.SectionKey!;
+                    Dispatcher.UIThread.Post(() => shell.GlowNavKey(sectionKey));
+                }
                 if (entry.ElementNames.Length == 0) return;
 
                 // One more hop so the section scroll has settled before the lookup.
@@ -354,12 +470,48 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private void Item_Click(object? sender, PointerReleasedEventArgs e)
         {
-            if (e.InitialPressMouseButton != MouseButton.Left) return;
+            if (e.InitialPressMouseButton is not (MouseButton.Left or MouseButton.Right)) return;
             if ((e.Source as Control)?.DataContext is not PaletteRow row) return;
 
+            e.Handled = true;
+            if (e.InitialPressMouseButton == MouseButton.Right) { ShowPinMenu(row, (Control)e.Source!); return; }
             _listResults.SelectedItem = row;
             ActivateSelected();
-            e.Handled = true;
+        }
+
+        /// <summary>Right-click pins or unpins the row to the dashboard's Favourites (WPF
+        /// Item_RightClick, f6534c3c4): the only pin door for games and rack modules.</summary>
+        /// <summary>The pin menu last opened (tests read it; the menu has no name scope).</summary>
+        internal ContextMenu? PinMenu { get; private set; }
+
+        internal ContextMenu? ShowPinMenu(PaletteRow row, Control anchor)
+        {
+            var id = row.Entry.Id;
+            if (!FavoritesRailRule.IsDestination(id) || Owner is not MainShellWindow owner) return null;
+            var favs = CoreSettings.Current.RailFavorites;
+            bool pinned = FavoritesRailRule.IsPinned(favs, id);
+            bool full = !pinned && FavoritesRailRule.IsFull(favs);
+            var item = new MenuItem
+            {
+                Header = pinned ? Loc.Get("rail_unpin") : full ? Loc.Get("rail_favorites_full") : Loc.Get("rail_pin"),
+                IsEnabled = !full,
+            };
+            item.Click += (_, _) =>
+            {
+                try { owner.TogglePinned(id); }
+                catch (Exception ex) { Serilog.Log.Debug("Palette pin {Id}: {E}", id, ex.Message); }
+            };
+            var menu = new ContextMenu { Items = { item } };
+            menu.Closed += (_, _) =>
+            {
+                _pinMenuOpen = false;
+                // Focus back to the search box so typing and Enter keep working.
+                try { if (IsVisible) { Activate(); _txtQuery.Focus(); } } catch { }
+            };
+            _pinMenuOpen = true;
+            PinMenu = menu;
+            menu.Open(anchor);
+            return menu;
         }
     }
 
@@ -370,13 +522,23 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// </summary>
     public sealed class PaletteRow
     {
-        public PaletteRow(SettingsPaletteEntry entry)
+        public PaletteRow(SettingsPaletteEntry entry, string? query)
         {
             Entry = entry;
             Glyph = entry.Glyph;
             Label = entry.Label;
             Context = entry.Context;
+            var was = SettingsPaletteIndex.WasHint(entry, query);
+            WasHint = was == null ? string.Empty : "  " + Loc.GetF("nav_was_hint", was);
         }
+
+        /// <summary>The retired name the row was found under ("(was Premium)"), or empty.</summary>
+        public string WasHint { get; }
+
+        /// <summary>Caption, then its breadcrumb: what a screen reader announces for the row.</summary>
+        public string AutomationName => string.IsNullOrEmpty(Context) ? Label : Label + ", " + Context;
+
+        public override string ToString() => AutomationName;
 
         public SettingsPaletteEntry Entry { get; }
         public string Glyph { get; }

@@ -52,7 +52,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             try
             {
-                if (FirstRunWizard.ShouldRunAndClaim()) Opened += OnFirstRunShellOpened;
+                bool fresh = FirstRunWizard.ShouldRunAndClaim();
+                // Nav rework (WPF MainWindow.xaml.cs:537/589): the one-time What moved card, upgrades only.
+                OfferWhatMovedIfNeeded(freshInstall: fresh);
+                if (fresh) Opened += OnFirstRunShellOpened;
                 // WPF's else branch (MainWindow.xaml.cs:602-612) no longer opens a mod picker:
                 // mods are offered by the first-run wizard and the Mod Manager only.
                 else if (CoreSettings.Service != null && CoreSettings.Current.Welcomed
