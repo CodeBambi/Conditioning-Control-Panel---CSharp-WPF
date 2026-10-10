@@ -37,6 +37,8 @@ public sealed class RemoteVerbsTests
         public void CancelAutonomyPulses(bool restart) => Calls.Add("pulses:" + restart);
         public string? Session(string verb, JObject? p) { Calls.Add(verb); return null; }
         public bool SessionIsRemoteStarted => RemoteRun;
+        public string? WallpaperRefusal;
+        public string? Wallpaper(bool on) { Calls.Add("wallpaper:" + on); return on ? WallpaperRefusal : null; }
     }
 
     private sealed class Saved : IDisposable
@@ -67,12 +69,33 @@ public sealed class RemoteVerbsTests
         using var _ = new Saved();
         RemoteCommands.Head = null;
         foreach (var verb in new[] { "show_pink_filter", "show_spiral", "set_pink_opacity", "start_brain_drain",
-                     "trigger_lock_card", "start_autonomy", "start_session", "stop_session" })
+                     "trigger_lock_card", "start_autonomy", "start_session", "stop_session", "trigger_wallpaper", "stop_wallpaper" })
             Assert.Equal(RemoteCommands.NotOnThisBuild, RemoteCommands.Execute(verb, new JObject()));
-        // Still refused on every head, each for its reason (see RemoteCommands).
-        foreach (var verb in new[] { "play_hypnotube", "trigger_wallpaper", "stop_wallpaper" })
-            Assert.Equal(RemoteCommands.NotOnThisBuild, RemoteCommands.Execute(verb, null));
+        // Still refused on every head (the controller supplies a url: owner call).
+        Assert.Equal(RemoteCommands.NotOnThisBuild, RemoteCommands.Execute("play_hypnotube", null));
         Assert.False(RemoteCommands.OverlayHold);
+    }
+
+    [Fact]
+    public void The_wallpaper_verbs_reach_the_head_and_every_stop_path_puts_the_desktop_back()
+    {
+        using var _ = new Saved();
+        var head = new FakeHead();
+        RemoteCommands.Head = head;
+        Assert.Null(RemoteCommands.Execute("trigger_wallpaper", null));
+        Assert.Null(RemoteCommands.Execute("stop_wallpaper", null));
+        Assert.Equal(new[] { "wallpaper:True", "wallpaper:False" }, head.Calls);
+        // A system that cannot change the wallpaper says so to the controller.
+        head.WallpaperRefusal = "no wallpaper control on this system";
+        Assert.Equal("no wallpaper control on this system", RemoteCommands.Execute("trigger_wallpaper", null));
+
+        head.Calls.Clear();
+        RemoteCommands.StopEffects(force: false);   // the controller's stop, session end, the controller leaving
+        Assert.Contains("wallpaper:False", head.Calls);
+        head.Calls.Clear();
+        RemoteCommands.StopEffects(force: true);    // panic
+        Assert.Contains("wallpaper:False", head.Calls);
+        Assert.DoesNotContain("wallpaper:True", head.Calls);
     }
 
     [Fact]

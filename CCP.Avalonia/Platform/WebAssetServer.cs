@@ -18,12 +18,21 @@ namespace ConditioningControlPanel.Avalonia.Platform;
 
 /// <summary>
 /// Serves Resources/web to this head's web views, standing in for WPF's WebView2
-/// SetVirtualHostNameToFolderMapping("ccp.game", Resources\web). Avalonia.Controls.WebView 12.1 cannot
-/// answer a custom scheme on WebKitGTK and file:// breaks module/fetch loads, so: plain HTTP on 127.0.0.1
-/// only, a random port, and a per-run token. The first URL carries ?ccp_t=token; the answer sets an
-/// HttpOnly SameSite=Strict cookie so the page's own relative and root-relative loads keep working.
-/// Anything without the token, with a foreign Host header (DNS rebinding), or resolving outside the
-/// root is refused.
+/// SetVirtualHostNameToFolderMapping("ccp.game", Resources\web). ONE resolver (<see cref="ResolveFile"/>)
+/// decides what a page may load; two transports carry it, and which one a page gets decides its ORIGIN
+/// (and so whether its localStorage / IndexedDB survives a restart):
+///   - <see cref="VirtualHosts"/> (Windows, WebView2): the pages load <c>https://ccp.game/</c>,
+///     <c>https://ccp.assets/</c>, ... exactly as under WPF (Platform/WebView2Hosts answers every
+///     <c>https://ccp.*</c> request on the web view from <see cref="ResolveVirtual"/>). Same origin as WPF.
+///   - loopback (Linux, and Windows if the hosts cannot be installed): Avalonia.Controls.WebView 12.1
+///     cannot answer a custom scheme on WebKitGTK (and a custom scheme could not be https anyway) and
+///     file:// breaks module/fetch loads, so plain HTTP on 127.0.0.1 only, with a per-run token. The
+///     port is STABLE: chosen once per user-data folder and remembered (<see cref="StablePort"/>), so
+///     the origin <c>http://127.0.0.1:&lt;port&gt;</c> is the same every run; only when another program
+///     holds the port does one run fall back to a random one. The first URL carries ?ccp_t=token; the
+///     answer sets an HttpOnly SameSite=Strict cookie so the page's own relative and root-relative
+///     loads keep working. Anything without the token, with a foreign Host header (DNS rebinding), or
+///     resolving outside the root is refused.
 /// </summary>
 public sealed class WebAssetServer : IDisposable
 {
@@ -36,7 +45,8 @@ public sealed class WebAssetServer : IDisposable
         get
         {
             lock (_sharedLock)
-                return _shared ??= new WebAssetServer(Path.Combine(AppContext.BaseDirectory, "Resources", "web"))
+                return _shared ??= new WebAssetServer(Path.Combine(AppContext.BaseDirectory, "Resources", "web"),
+                        StablePort.For(CorePaths.UserData), WantsVirtualHosts())
                     { AssetsRoot = () => CorePaths.EffectiveAssets, CacheRoot = () => Services.Transfer.TransferCacheStore.Instance.Root };
         }
     }
@@ -55,28 +65,207 @@ public sealed class WebAssetServer : IDisposable
         [".woff2"] = "font/woff2", [".ttf"] = "font/ttf", [".wasm"] = "application/wasm",
     };
 
-    readonly HttpListener _listener = new();
+    readonly HttpListener _listener;
     readonly string _root;
 
     public int Port { get; }
     public string Token { get; } = Convert.ToHexString(RandomNumberGenerator.GetBytes(16));
 
-    public WebAssetServer(string root)
+    /// <summary>True when the loopback port is the remembered one (the page origin is the same as last run).</summary>
+    public bool PortIsStable { get; }
+
+    /// <param name="root">The page root (WPF's ccp.game folder).</param>
+    /// <param name="preferredPort">The remembered loopback port (0 = any free one). Taken if free;
+    /// when another program holds it this run gets a random port and <see cref="PortIsStable"/> is false.</param>
+    /// <param name="virtualHosts">Hand out <c>https://ccp.*</c> urls (a WebView2 with WebView2Hosts installed).</param>
+    public WebAssetServer(string root, int preferredPort = 0, bool virtualHosts = false)
     {
         _root = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
-        // ponytail: probe-then-bind can lose the port to another process in between; retry if that ever shows up.
-        var probe = new TcpListener(IPAddress.Loopback, 0);
-        probe.Start();
-        Port = ((IPEndPoint)probe.LocalEndpoint).Port;
-        probe.Stop();
-        _listener.Prefixes.Add($"http://127.0.0.1:{Port}/");
-        _listener.Start();
+        VirtualHosts = virtualHosts;
+        if (preferredPort > 0 && TryListen(preferredPort, out var stable))
+        {
+            _listener = stable!;
+            Port = preferredPort;
+            PortIsStable = true;
+        }
+        else
+        {
+            if (preferredPort > 0) Log.Warning("WebAssetServer: port {Port} is taken; this run's pages get a temporary origin (their saved state is untouched and back next run)", preferredPort);
+            // ponytail: probe-then-bind can lose the port to another process in between; retry if that ever shows up.
+            var probe = new TcpListener(IPAddress.Loopback, 0);
+            probe.Start();
+            Port = ((IPEndPoint)probe.LocalEndpoint).Port;
+            probe.Stop();
+            _listener = new HttpListener();
+            _listener.Prefixes.Add($"http://127.0.0.1:{Port}/");
+            _listener.Start();
+        }
         _ = Task.Run(Loop);
     }
 
-    /// <summary>The URL a web view navigates to for a page under the root, e.g. "intake/index.html".</summary>
-    public string Url(string relativePath) =>
-        $"http://127.0.0.1:{Port}/{relativePath.TrimStart('/')}?ccp_t={Token}";
+    static bool TryListen(int port, out HttpListener? listener)
+    {
+        listener = new HttpListener();
+        try
+        {
+            listener.Prefixes.Add($"http://127.0.0.1:{port}/");
+            listener.Start();
+            return true;
+        }
+        catch (Exception)
+        {
+            try { listener.Close(); } catch { }
+            listener = null;
+            return false;
+        }
+    }
+
+    // ---- the page origin ---------------------------------------------------------------------
+
+    /// <summary>WPF's page host: <c>https://ccp.game/</c> is the page root.</summary>
+    public const string GameHost = "ccp.game";
+
+    /// <summary>
+    /// True while this server hands out WPF's <c>https://ccp.*</c> urls. Only a web view with
+    /// WebView2Hosts installed can load them; <c>WebHost</c> installs them, and calls
+    /// <see cref="DemoteToLoopback"/> the first time that fails, after which every url is loopback.
+    /// </summary>
+    public bool VirtualHosts { get; private set; }
+
+    /// <summary>Set once by Program.Main before the app starts. Off everywhere else (headless checks,
+    /// tests), where no web view exists to carry the hosts and urls stay loopback.</summary>
+    public static bool VirtualHostsEnabled { get; set; }
+
+    /// <summary>The virtual hosts cannot be installed on this machine: loopback urls from here on.</summary>
+    internal void DemoteToLoopback() => VirtualHosts = false;
+
+    /// <summary>What <see cref="Shared"/> starts with: WebView2 on Windows, unless CCP_WEB_ORIGIN=loopback.
+    /// Decided without building a web view; a failed install demotes it later.</summary>
+    static bool WantsVirtualHosts()
+    {
+        if (!VirtualHostsEnabled || !OperatingSystem.IsWindows()) return false;
+        try
+        {
+            if (string.Equals(Environment.GetEnvironmentVariable("CCP_WEB_ORIGIN")?.Trim(), "loopback", StringComparison.OrdinalIgnoreCase)) return false;
+            var info = global::Avalonia.Platform.WebViewAdapterInfo.GetAdapterInfo(global::Avalonia.Platform.WebViewAdapterType.WebView2);
+            return info.IsSupported && info.IsInstalled;
+        }
+        catch (Exception) { return false; }
+    }
+
+    /// <summary>The base url of a host: <c>https://ccp.assets/</c>, or its loopback route.</summary>
+    string Base(string host) => VirtualHosts
+        ? $"https://{host}/"
+        : host == GameHost ? $"http://127.0.0.1:{Port}/" : $"http://127.0.0.1:{Port}/{host}/";
+
+    /// <summary>The URL a web view navigates to for a page under the root, e.g. "intake/index.html".
+    /// <paramref name="query"/> ("a=1&amp;b=2", no leading mark) rides along; on loopback the token leads.</summary>
+    public string Url(string relativePath, string? query = null)
+    {
+        var page = Base(GameHost) + relativePath.TrimStart('/');
+        if (VirtualHosts) return string.IsNullOrEmpty(query) ? page : page + "?" + query;
+        return page + "?ccp_t=" + Token + (string.IsNullOrEmpty(query) ? "" : "&" + query);
+    }
+
+    /// <summary>True for a url on one of this server's virtual hosts (<c>https://ccp.game/...</c>).</summary>
+    public bool IsVirtual(Uri? uri) =>
+        uri is { IsAbsoluteUri: true } && uri.Scheme == Uri.UriSchemeHttps && uri.IsDefaultPort && IsHostName(uri.Host);
+
+    bool IsHostName(string host) =>
+        host is GameHost or "ccp.assets" or "ccp.cache" or "ccp.mod" || Hosts.ContainsKey(host);
+
+    /// <summary>True for a url on this server's loopback listener.</summary>
+    public bool IsLoopback(Uri? uri) =>
+        uri is { IsAbsoluteUri: true } && uri.Scheme == Uri.UriSchemeHttp && uri.Host == "127.0.0.1" && uri.Port == Port;
+
+    /// <summary>A virtual url as the loopback listener serves it (token added); anything else unchanged.</summary>
+    public Uri ToLoopback(Uri uri)
+    {
+        if (!IsVirtual(uri)) return uri;
+        var prefix = uri.Host == GameHost ? "" : uri.Host + "/";
+        var query = uri.Query.Length > 1 ? "&" + uri.Query[1..] : "";
+        return new Uri($"http://127.0.0.1:{Port}/{prefix}{uri.AbsolutePath.TrimStart('/')}?ccp_t={Token}{query}{uri.Fragment}");
+    }
+
+    /// <summary>The reverse of <see cref="ToLoopback"/> (token dropped); anything else unchanged.</summary>
+    public Uri ToVirtual(Uri uri)
+    {
+        if (!IsLoopback(uri)) return uri;
+        var path = uri.AbsolutePath.TrimStart('/');
+        var host = GameHost;
+        int cut = path.IndexOf('/');
+        if (cut > 0 && path[..cut] != GameHost && IsHostName(path[..cut])) { host = path[..cut]; path = path[(cut + 1)..]; }
+        var query = uri.Query.Length > 1
+            ? string.Join('&', uri.Query[1..].Split('&').Where(p => !p.StartsWith("ccp_t=", StringComparison.Ordinal)))
+            : "";
+        return new Uri($"https://{host}/{path}{(query.Length > 0 ? "?" + query : "")}{uri.Fragment}");
+    }
+
+    /// <summary>
+    /// The file a virtual-host request names, or null when it must be refused: the SAME rules as the
+    /// loopback listener, because it is the same resolver. <paramref name="cors"/> is WPF's access
+    /// kind (the media hosts are Allow, the page root is Deny).
+    /// </summary>
+    internal string? ResolveVirtual(Uri uri, out string host, out bool cors)
+    {
+        host = ""; cors = false;
+        if (!IsVirtual(uri)) return null;
+        host = uri.Host;
+        cors = host != GameHost;
+        var path = uri.AbsolutePath;
+        if (host != GameHost) return ResolveFile("/" + host + path);
+        // The page root never doubles as a second door to another host's route.
+        var first = Uri.UnescapeDataString(path).TrimStart('/');
+        int cut = first.IndexOf('/');
+        if (cut > 0 && IsHostName(first[..cut])) return null;
+        return ResolveFile(path);
+    }
+
+    /// <summary>The Content-Type a served file gets.</summary>
+    internal static string ContentType(string path) => Types.GetValueOrDefault(Path.GetExtension(path), "application/octet-stream");
+
+    /// <summary>
+    /// The remembered loopback port of a user-data folder (<c>web-origin.port</c>): chosen once, outside
+    /// the ranges the OS hands out for outgoing connections, so the loopback page origin is the same
+    /// every run. Never rewritten once it exists: changing it would orphan every page's saved state.
+    /// </summary>
+    internal static class StablePort
+    {
+        internal const string FileName = "web-origin.port";
+        internal const int Low = 20000, High = 32000;   // below Linux 32768 and Windows 49152 ephemeral ranges
+
+        internal static int For(string userData)
+        {
+            try
+            {
+                var file = Path.Combine(userData, FileName);
+                if (File.Exists(file) && int.TryParse(File.ReadAllText(file).Trim(), out var saved) && saved is >= 1024 and <= 65535)
+                    return saved;
+                for (int i = 0; i < 40; i++)
+                {
+                    int port = RandomNumberGenerator.GetInt32(Low, High);
+                    if (!IsFree(port)) continue;
+                    Directory.CreateDirectory(userData);
+                    File.WriteAllText(file, port.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                    return port;
+                }
+            }
+            catch (Exception ex) { Log.Warning("WebAssetServer: no stable port ({Error}); pages get a temporary origin this run", ex.Message); }
+            return 0;
+        }
+
+        static bool IsFree(int port)
+        {
+            try
+            {
+                var probe = new TcpListener(IPAddress.Loopback, port);
+                probe.Start();
+                probe.Stop();
+                return true;
+            }
+            catch (SocketException) { return false; }
+        }
+    }
 
     /// <summary>Per-port so two runs on 127.0.0.1 (cookies ignore the port) never overwrite each other.</summary>
     string CookieName => $"ccp_t_{Port}";
@@ -128,7 +317,7 @@ public sealed class WebAssetServer : IDisposable
 
         if (queryToken)
             res.Headers.Add("Set-Cookie", $"{CookieName}={Token}; Path=/; HttpOnly; SameSite=Strict");
-        res.ContentType = Types.GetValueOrDefault(Path.GetExtension(path), "application/octet-stream");
+        res.ContentType = ContentType(path);
         res.Headers.Add("Cache-Control", "no-cache");
         res.Headers.Add("X-Content-Type-Options", "nosniff");
         res.Headers.Add("Referrer-Policy", "no-referrer");
@@ -148,7 +337,7 @@ public sealed class WebAssetServer : IDisposable
     /// <summary>The URL a page loads a library file by (WPF DtrhAssetManifest.AssetUrl's https://ccp.assets/&lt;rel&gt;):
     /// same origin as the page, so the token cookie covers it; each path segment escaped.</summary>
     public string AssetUrl(string rel) =>
-        $"http://127.0.0.1:{Port}/{AssetsPrefix}" + string.Join('/', rel.Replace(Path.DirectorySeparatorChar, '/').Split('/').Select(Uri.EscapeDataString));
+        Base(AssetsPrefix.TrimEnd('/')) + string.Join('/', rel.Replace(Path.DirectorySeparatorChar, '/').Split('/').Select(Uri.EscapeDataString));
 
     /// <summary>Root behind <see cref="AssetsPrefix"/>, read per request (the user can move the library);
     /// null = the prefix is not served.</summary>
@@ -159,7 +348,7 @@ public sealed class WebAssetServer : IDisposable
     public System.Collections.Concurrent.ConcurrentDictionary<string, Func<string?>> Hosts { get; } = new(StringComparer.Ordinal);
 
     /// <summary>The URL of one file on a <see cref="Hosts"/> prefix (same origin as the page, so the token cookie covers it).</summary>
-    public string HostUrl(string host, string fileName) => $"http://127.0.0.1:{Port}/{host}/" + Uri.EscapeDataString(fileName);
+    public string HostUrl(string host, string fileName) => Base(host) + Uri.EscapeDataString(fileName);
 
     static string? ResolveHosted(string? folder, string name)
     {
@@ -211,7 +400,7 @@ public sealed class WebAssetServer : IDisposable
     public Func<string?>? ModRoot { get; set; }
 
     /// <summary>The page-side base for mod files (WPF "https://ccp.mod/").</summary>
-    public string ModUrlBase => $"http://127.0.0.1:{Port}/{ModPrefix}";
+    public string ModUrlBase => Base(ModPrefix.TrimEnd('/'));
 
     static readonly HashSet<string> ModExtensions = new(StringComparer.OrdinalIgnoreCase)
         { ".mp3", ".ogg", ".wav", ".png", ".jpg", ".jpeg", ".webp", ".gif", ".mp4", ".webm", ".m4v" };
@@ -235,7 +424,7 @@ public sealed class WebAssetServer : IDisposable
     public Func<string?>? CacheRoot { get; init; }
 
     /// <summary>The page-side base for cache files (WPF "https://ccp.cache/").</summary>
-    public string CacheUrlBase => $"http://127.0.0.1:{Port}/{CachePrefix}";
+    public string CacheUrlBase => Base(CachePrefix.TrimEnd('/'));
 
     /// <summary>Exactly <c>art|prv|recv / &lt;64 hex&gt;.&lt;ext&gt;</c> and nothing else: never the index files,
     /// never a nested path, never the .tmp sibling (it is outside the root), never a link out.</summary>

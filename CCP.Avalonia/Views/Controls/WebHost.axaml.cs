@@ -101,6 +101,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
         internal void OnNavigationCompleted(Uri? url)
         {
             if (url is null) return;
+            url = FromEngine(url);
             CurrentUrl = url;
             NavigationCompleted?.Invoke(url);
         }
@@ -222,6 +223,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
                 {
                     _web = new NativeWebView();
                     _web.EnvironmentRequested += OnEnvironmentRequested;
+                    _web.AdapterCreated += (_, e) => OnAdapterCreated(CoreWebView2Of(e));
+                    _web.AdapterDestroyed += (_, _) => OnAdapterDestroyed();
                     // Subscribed once, here, rather than when a caller sets AllowNavigation: the
                     // gate has to be live for the FIRST navigation too, and a caller that assigns
                     // the predicate and the Source in that order would otherwise race the engine.
@@ -258,11 +261,129 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
             ApplySource();
         }
 
+        // ---- the app's own pages: WPF's https://ccp.* origins ---------------------------------
+
+        /// <summary>Where this view stands with the app's virtual hosts (Platform/WebView2Hosts).</summary>
+        internal enum AppHostState
+        {
+            /// <summary>No engine yet: an app page is held until the adapter exists.</summary>
+            Waiting,
+            /// <summary>The hosts are on this web view: <c>https://ccp.game</c> loads as under WPF.</summary>
+            Installed,
+            /// <summary>No virtual hosts here (WebKitGTK, or the install failed): app pages load from
+            /// the loopback server, and callers still see the url they asked for.</summary>
+            Loopback,
+        }
+
+        internal AppHostState AppHosts { get; private set; } = AppHostState.Waiting;
+
+        /// <summary>The server whose pages this view carries; null = <see cref="Platform.WebAssetServer.Shared"/>
+        /// (looked up only when a url looks like an app page, so a plain browser never starts it).</summary>
+        internal Platform.WebAssetServer? AppServer { get; set; }
+
+        /// <summary>Test seam: puts the hosts on a live ICoreWebView2 (null = it cannot be done).</summary>
+        internal Func<IntPtr, Platform.WebAssetServer, IDisposable?> InstallHosts { get; set; } =
+            (core, server) => Platform.WebView2Hosts.TryInstall(core, server);
+
+        private IDisposable? _hosts;
+        private Uri? _held;
+
+        private static IntPtr CoreWebView2Of(WebViewAdapterEventArgs e)
+        {
+            try { return e.TryGetPlatformHandle() is IWindowsWebView2PlatformHandle win ? win.CoreWebView2 : IntPtr.Zero; }
+            catch (Exception ex) { Log.Debug("WebHost: no platform handle: {Error}", ex.Message); return IntPtr.Zero; }
+        }
+
+        private Platform.WebAssetServer? ServerFor(Uri? url)
+        {
+            if (url is not { IsAbsoluteUri: true } || url.Scheme != Uri.UriSchemeHttps
+                || !url.Host.StartsWith("ccp.", StringComparison.Ordinal)) return null;
+            var server = AppServer ?? Platform.WebAssetServer.Shared;
+            return server.IsVirtual(url) ? server : null;
+        }
+
+        /// <summary>
+        /// The engine exists. A WebView2 gets the virtual hosts when the server wants them; if that
+        /// fails the server is demoted (every later url is loopback) and this view translates. Then
+        /// the page that was waiting loads. <paramref name="coreWebView2"/> is zero off WebView2.
+        /// </summary>
+        internal void OnAdapterCreated(IntPtr coreWebView2)
+        {
+            var server = AppServer ?? (Platform.WebAssetServer.VirtualHostsEnabled ? Platform.WebAssetServer.Shared : null);
+            if (server is { VirtualHosts: true })
+            {
+                try { _hosts = coreWebView2 == IntPtr.Zero ? null : InstallHosts(coreWebView2, server); }
+                catch (Exception ex) { _hosts = null; Log.Warning("WebHost: virtual hosts failed: {Error}", ex.Message); }
+                if (_hosts is null) server.DemoteToLoopback();
+            }
+            AppHosts = _hosts is null ? AppHostState.Loopback : AppHostState.Installed;
+            var held = _held;
+            _held = null;
+            if (held is not null) ToEngine(held, explicitNavigate: true);
+        }
+
+        private void OnAdapterDestroyed()
+        {
+            try { _hosts?.Dispose(); } catch (Exception ex) { Log.Debug("WebHost: hosts dispose: {Error}", ex.Message); }
+            _hosts = null;
+            AppHosts = AppHostState.Waiting;
+        }
+
+        /// <summary>
+        /// What the engine is given for a url a caller asked for: the url itself, an app page's
+        /// loopback twin when this view has no virtual hosts, or null while the engine does not exist
+        /// yet (an app page must not start loading before its hosts are in place, or
+        /// <c>https://ccp.game</c> would be asked of the real network).
+        /// </summary>
+        internal Uri? EngineUrl(Uri url)
+        {
+            var server = ServerFor(url);
+            if (server is null) return url;
+            switch (AppHosts)
+            {
+                case AppHostState.Installed: return url;
+                case AppHostState.Loopback: _translated = true; return server.ToLoopback(url);
+                default: return null;
+            }
+        }
+
+        /// <summary>The url a caller sees for one the engine reports: a translated app page reads as
+        /// the <c>https://ccp.*</c> url the caller asked for, so its same-origin guard holds on both transports.</summary>
+        internal Uri FromEngine(Uri url)
+        {
+            if (AppHosts != AppHostState.Loopback || !_translated) return url;
+            var server = AppServer ?? Platform.WebAssetServer.Shared;
+            return server.IsLoopback(url) ? server.ToVirtual(url) : url;
+        }
+
+        private bool _translated;
+
+        /// <summary>May the engine load this? A sandbox loads no real site; an app page is no site
+        /// (it never leaves the machine) but only where the hosts stand in front of it.</summary>
+        private bool Permitted(Uri? url) =>
+            ServerFor(url) is not null ? AppHosts == AppHostState.Installed : ConditioningControlPanel.Services.SandboxNet.Allows(url);
+
+        private void ToEngine(Uri url, bool explicitNavigate)
+        {
+            if (_web is null) return;
+            var engine = EngineUrl(url);
+            if (engine is null) { _held = url; return; }
+            if (!Permitted(engine)) { if (!explicitNavigate) _web.Source = null!; return; }
+            try
+            {
+                if (explicitNavigate) _web.Navigate(engine);
+                else _web.Source = engine;
+            }
+            catch (Exception ex) { Log.Debug("WebHost: Navigate failed: {Error}", ex.Message); }
+        }
+
         private void OnNavigationStarted(object? sender, WebViewNavigationStartingEventArgs e)
         {
             var target = e.Request;
-            // A CCP_USERDATA_DIR sandbox never loads a real site, whatever the caller's gate says.
-            if (!ConditioningControlPanel.Services.SandboxNet.Allows(target)) { e.Cancel = true; return; }
+            // A CCP_USERDATA_DIR sandbox never loads a real site, whatever the caller's gate says; and
+            // an app url never reaches a web view whose hosts are not installed.
+            if (!Permitted(target)) { e.Cancel = true; return; }
+            if (target is not null) target = FromEngine(target);
             var gate = AllowNavigation;
             if (gate is null) return;
             // No URL to judge: refuse. A navigation the gate cannot see is exactly the one a
@@ -285,10 +406,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
             try { Source = url; } finally { _explicitNavigate = false; }
             NavigationRequests++;
             // A sandbox never loads a real site (as ApplySource): the panel may name it, the engine never gets it.
-            if (!ConditioningControlPanel.Services.SandboxNet.Allows(url)) { RefusedNavigations++; return; }
-            if (_web is null) return;
-            try { _web.Navigate(url); }
-            catch (Exception ex) { Log.Debug("WebHost: Navigate failed: {Error}", ex.Message); }
+            // An app page is not a site: it is served from this machine on either transport.
+            if (ServerFor(url) is null && !ConditioningControlPanel.Services.SandboxNet.Allows(url)) { RefusedNavigations++; return; }
+            ToEngine(url, explicitNavigate: true);
         }
 
         /// <summary>The URL as the fallback panel names it: WebAssetServer's ccp_t token never reaches the screen.</summary>
@@ -322,7 +442,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
             // A sandbox never loads a real site (see OnNavigationStarted); the panel may still name it.
             if (_web is not null)
             {
-                if (!_explicitNavigate) _web.Source = ConditioningControlPanel.Services.SandboxNet.Allows(src) ? src! : null!;
+                if (_explicitNavigate) return;
+                _held = null;
+                if (src is null) _web.Source = null!;
+                else ToEngine(src, explicitNavigate: false);
                 return;
             }
             // No engine: the panel at least names the page that was meant to load.

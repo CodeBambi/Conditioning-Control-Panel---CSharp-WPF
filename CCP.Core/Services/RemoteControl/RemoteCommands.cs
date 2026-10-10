@@ -11,8 +11,7 @@ namespace ConditioningControlPanel.Services
     /// Verbs that need a window (pink filter, spiral, the Melt haze, a lock card now, Takeover, the session
     /// verbs) go through <see cref="Head"/>; with no head they refuse. No tier or waiver check here: WPF
     /// has none on the receiving side either (the relay only hands a session the verbs of its tier).
-    /// ponytail: play_hypnotube (the controller supplies a url: owner call) and wallpaper (no service on
-    /// this head yet) still refuse.
+    /// ponytail: play_hypnotube (the controller supplies a url: owner call) still refuses.
     /// </summary>
     public static class RemoteCommands
     {
@@ -42,6 +41,10 @@ namespace ConditioningControlPanel.Services
             /// <summary>WPF RestoreFromTrayForRemote + ShowAvatarTube: after a remote stop the panel comes
             /// back from the tray. Default: nothing (a head without a tray).</summary>
             void RestoreWindow() { }
+            /// <summary>trigger_wallpaper (true: a picture from the SUBJECT's own wallpaper folder; the
+            /// controller never supplies one) / stop_wallpaper and every stop path (false: the desktop the
+            /// subject had comes back). A reason when this system cannot change the wallpaper.</summary>
+            string? Wallpaper(bool on) => NotOnThisBuild;
         }
 
         public static volatile IRemoteHead? Head;
@@ -314,6 +317,9 @@ namespace ConditioningControlPanel.Services
                 case "disable_strict_lock": s.StrictLockEnabled = false; CoreSettings.Save(); return null;
                 case "enable_panic": s.PanicKeyEnabled = true; CoreSettings.Save(); SyncPanicUi(); return null;
                 case "trigger_panic": StopEffects(force: true); return null;
+                // WPF: App.Wallpaper Shuffle / Activate, and Deactivate.
+                case "trigger_wallpaper": return Head is { } hw ? hw.Wallpaper(true) : NotOnThisBuild;
+                case "stop_wallpaper": return Head is { } hx ? hx.Wallpaper(false) : NotOnThisBuild;
                 default: return NotOnThisBuild;
             }
         }
@@ -341,6 +347,8 @@ namespace ConditioningControlPanel.Services
                 CoreEngine.Video?.Stop(); CoreEngine.BubbleCount?.Stop(); LockCardScheduler.Instance.Stop();
             }
             try { head?.CloseCards(); } catch (Exception ex) { Serilog.Log.Warning(ex, "[RemoteControl] card close failed"); }
+            // WPF App.Wallpaper?.Deactivate() on both stop paths: the subject's own desktop comes back.
+            try { head?.Wallpaper(false); } catch (Exception ex) { Serilog.Log.Warning(ex, "[RemoteControl] wallpaper restore failed"); }
             // As WPF, Lockdown or not: this only reduces restraint, and LockdownService.Deactivate restores
             // the pre-lockdown values when the timer ends.
             var s = CoreSettings.Current;

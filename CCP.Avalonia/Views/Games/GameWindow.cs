@@ -109,9 +109,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
 
         internal void Load(WebAssetServer server)
         {
-            var url = server.Url(Spec.Page);
-            if (!string.IsNullOrEmpty(Spec.Query)) url += "&" + Spec.Query;
-            PageUrl = new Uri(url);
+            // WPF's https://ccp.game/<page> on WebView2; the loopback twin (token first) elsewhere.
+            PageUrl = new Uri(server.Url(Spec.Page, Spec.Query));
             Web.Navigate(PageUrl);
         }
 
