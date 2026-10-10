@@ -491,6 +491,39 @@ internal sealed class CrackEffect : PossessionEffectBase
     }
 }
 
+/// <summary>R4, Full Doki only: the companion portrait tears into three ember bands for 200 ms and
+/// snaps back (the tube draws it on its own glitch layer, never on the real portrait). It is a flicker:
+/// skipped entirely when photosafe.</summary>
+internal sealed class GlitchPortraitEffect : PossessionEffectBase
+{
+    internal const int GlitchMs = 200;
+    /// <summary>The tube to tear (the live one; tests hand their own or none).</summary>
+    internal Func<global::ConditioningControlPanel.Avalonia.Views.AvatarTube.AvatarTubeWindow?> Tube =
+        () => global::ConditioningControlPanel.Avalonia.Views.AvatarTube.AvatarTubeWindow.Live;
+
+    public override string Id => "glitchportrait";
+    public override PossessionRung MinRung => PossessionRung.ItKnows;
+    public override PossessionIntensity MinIntensity => PossessionIntensity.FullDoki;
+    public override bool IsBig => false;
+    public override bool UsesFlicker => true;
+    public override double Weight => 2;
+    public override TimeSpan HoldFor => TimeSpan.FromMilliseconds(250);
+
+    protected override bool CanApplyCore(PossessionContext ctx, PossessionTarget? target)
+    {
+        if (ctx.Photosafe) return false;   // belt: the deck already filters UsesFlicker
+        return Tube() is { IsVisible: true } tube && tube.Bounds.Width > 8 && tube.Bounds.Height > 8;
+    }
+
+    protected override void ApplyCore(PossessionContext ctx, PossessionTarget? target)
+    {
+        if (ctx.Photosafe) return;
+        Tube()?.GlitchPortrait(GlitchMs);
+    }
+
+    protected override void RestoreCore() => Tube()?.ClearGlitchPortrait();
+}
+
 /// <summary>R3, Full Doki only, big. The title says something else until the lockdown ends. The
 /// lines are the warden's own voice and are not loc keys in WPF either.</summary>
 internal sealed class RetitleEffect : PossessionEffectBase

@@ -8,8 +8,7 @@
 // guard, UndoAll (sync, never throws), PulseEdges for the Dose keeper, the barks.
 // Scenes (one pick in three from Melt) are elected here and played by the head (IPossessionScene).
 // Not on this director (each logged once when it would have run):
-// the warden verbs (knock, stare, leave, return), the proximity pick (no pointer reading), the reactive
-// layer (RequestReactive / PossessionEvents) and the ember charge / outline around a victim.
+// the warden verbs (knock, stare, leave, return), the proximity pick (no pointer reading) and the ember charge / outline around a victim.
 
 using System;
 using System.Collections.Generic;
@@ -44,12 +43,14 @@ public sealed class PossessionDirector : IDisposable
     private string? _lastTargetKey;
     private DateTime _lastTripwireAt = DateTime.MinValue;
     private DateTime _lastRestartAt = DateTime.MinValue;
+    private DateTime _lastReactiveAt = DateTime.MinValue;
     private bool _picking;
     private bool _disposed;
     private int _generation;
 
     private static readonly TimeSpan TripwireThrottle = TimeSpan.FromSeconds(1.5);
     private static readonly TimeSpan RestartQuiet = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan ReactiveThrottle = TimeSpan.FromSeconds(6);
     private const int SceneEveryNthPick = 3;
 
     /// <summary>The director's clock (tests step it).</summary>
@@ -93,13 +94,88 @@ public sealed class PossessionDirector : IDisposable
         catch (Exception ex) { Log.Warning("Possession UndoAll failed: {Error}", ex.Message); }
     }
 
+    /// <summary>WPF RequestReactive: the room answers something the user just did (a press on a card
+    /// breathes it). Only while a LOCAL lockdown is already haunting; one answer every six seconds;
+    /// same rung, intensity, photosafe, cooldown, booking and concurrency rules as a dealt haunt. It
+    /// can never start the haunt and never raises the rung. Safe from any thread.</summary>
+    public void RequestReactive(string effectId, PossessionTarget? target, PossessionRung minRung = PossessionRung.Settle)
+    {
+        if (_disposed || !IsHaunting || string.IsNullOrEmpty(effectId)) return;
+        OnUi(() => RequestReactiveCore(effectId, target, minRung), "reactive");
+    }
+
+    private void RequestReactiveCore(string effectId, PossessionTarget? target, PossessionRung minRung)
+    {
+        // Re-checked on the UI thread: a queued request can land after the lockdown has ended.
+        if (_disposed || !IsHaunting) return;
+        var rung = CurrentRung;
+        if (rung < minRung) return;
+
+        var now = Now();
+        if (now - _lastReactiveAt < ReactiveThrottle) return;
+        if (now < _quietUntil) return;                       // a panic press keeps the room quiet
+        if (!PossessionDeck.FitsConcurrency(LiveSlots, 1, rung)) return;
+        if (!SafeIsUsable()) return;
+
+        var effect = _effects.FirstOrDefault(e => string.Equals(e.Id, effectId, StringComparison.OrdinalIgnoreCase));
+        if (effect == null || effect.IsLive) return;
+        if (rung < effect.MinRung) return;
+        if ((int)effect.MinIntensity > (int)_intensity) return;
+        if (_photosafe && effect.UsesFlicker) return;
+
+        if (target != null)
+        {
+            if (target.IsLive || _liveKeys.Contains(target.Key)) return;
+            if (target.CooldownUntil > now) return;
+            if (_cooldowns.TryGetValue(target.Key, out var until) && until > now) return;
+        }
+
+        var ctx = BuildContext(rung, _lockdown.Remaining, _lockdown.ElapsedFraction, effect);
+        if (!effect.CanApply(ctx, target)) return;
+
+        _lastReactiveAt = now;
+        if (target != null)
+        {
+            target.IsLive = true;
+            _liveKeys.Add(target.Key);
+            _lastTargetKey = target.Key;
+        }
+        var cts = new CancellationTokenSource();
+        var ghost = new LiveGhost(effect, target, cts);
+        _live.Add(ghost);
+        Log.Information("Possession reactive: {Effect} on {Target} at rung {Rung}", effect.Id, target?.Key ?? "(window)", rung);
+        try { EffectStarted?.Invoke(effect.Id, target?.Key, effect.IsBig); } catch (Exception ex) { Diag.Swallowed(ex); }
+        FireAndForget(RunReactiveAsync(ghost, ctx, effect, target, cts), "reactive");
+    }
+
+    private async Task RunReactiveAsync(LiveGhost ghost, PossessionContext ctx, IPossessionEffect effect,
+                                        PossessionTarget? target, CancellationTokenSource cts)
+    {
+        try { await effect.ApplyAsync(ctx, target, cts.Token).ConfigureAwait(true); }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            Log.Warning("Possession reactive {Effect} failed: {Error}", effect.Id, ex.Message);
+            await UndoGhostAsync(ghost, TimeSpan.Zero).ConfigureAwait(true);
+            return;
+        }
+        if (effect.HoldFor > TimeSpan.Zero && !ghost.Released)
+            FireAndForget(HoldThenUndoAsync(ghost, effect.HoldFor), "hold");
+    }
+
+    private DateTime _quietUntil = DateTime.MinValue;
+
     /// <summary>Panic: everything comes back at once and the room holds a full FirstDelay of quiet, so
     /// nothing twitches again under the press. The lockdown itself is LockdownService's business.</summary>
     public void PanicStop()
     {
         UndoAll();
         _picking = false;
-        if (IsHaunting) _nextDue = Now() + PossessionDeck.FirstDelay(CurrentRung, _intensity, _rng);
+        if (IsHaunting)
+        {
+            _nextDue = Now() + PossessionDeck.FirstDelay(CurrentRung, _intensity, _rng);
+            _quietUntil = _nextDue;   // the reactive layer holds the same quiet
+        }
     }
 
     // ---- Lockdown lifecycle ----------------------------------------------------------------------
@@ -126,6 +202,8 @@ public sealed class PossessionDirector : IDisposable
         _lastTargetKey = null;
         _lastTripwireAt = DateTime.MinValue;
         _lastRestartAt = DateTime.MinValue;
+        _lastReactiveAt = DateTime.MinValue;
+        _quietUntil = DateTime.MinValue;
         _picking = false;
         CurrentRung = PossessionRung.Settle;
         IsHaunting = true;

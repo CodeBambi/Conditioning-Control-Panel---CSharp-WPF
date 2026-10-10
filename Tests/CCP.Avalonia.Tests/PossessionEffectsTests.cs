@@ -92,8 +92,16 @@ public sealed class PossessionEffectsTests
             // The law is asked again at each effect's door: a hand-built target cannot get past it.
             var host = new PossessionHost();
             var effects = MainShellWindow.PossessionHeadEffects();
-            Assert.Equal(new[] { "nudge", "typo", "breathe", "drift", "rewrite", "melt", "glyphrot", "crack", "retitle" }, effects.Select(e => e.Id).ToArray());
-            Assert.DoesNotContain(effects, e => e.UsesFlicker);
+            Assert.Equal(new[] { "nudge", "typo", "breathe", "drift", "rewrite", "melt", "glyphrot", "crack", "retitle", "glitchportrait" }, effects.Select(e => e.Id).ToArray());
+            // Photosafe: the one flicker in the deck says so (the deck skips it) and refuses by itself too.
+            var flicker = Assert.Single(effects, e => e.UsesFlicker);
+            Assert.Equal("glitchportrait", flicker.Id);
+            Assert.False(flicker.CanApply(Ctx(host, photosafe: true), null));
+            Assert.Equal(PossessionIntensity.FullDoki, flicker.MinIntensity);
+            var noTube = new GlitchPortraitEffect { Tube = () => null };
+            Assert.False(noTube.CanApply(Ctx(host), null));
+            noTube.ApplyAsync(Ctx(host, photosafe: true), null, default).GetAwaiter().GetResult();
+            Assert.True(noTube.UndoAsync(TimeSpan.Zero).IsCompletedSuccessfully);
             foreach (var e in effects.OfType<PossessionEffectBase>().Where(e => e.Roles.Count > 0))
             {
                 foreach (var c in new Control[] { button, toggle, holder, face, reserved, excluded, phrase })
@@ -353,6 +361,71 @@ public sealed class PossessionEffectsTests
             host.Targets().First(t => t.Key == "CardPips").IsLive = false;
         }
         finally { win.Close(); }
+    });
+
+    [Fact]
+    public void APressOnAHauntedCardMakesItBreathe_OnlyWhileTheLocalLockdownHaunts_AndPanicTakesItBack() => AvaloniaTestDispatcher.Run(() =>
+    {
+        EnsureApp();
+        var s = CoreSettings.Current;
+        var saved = (s.LockdownPossessionEnabled, s.LockdownPossessionIntensity, s.LockdownPhotosafe, s.LockdownTripwiresEnabled,
+            s.LockdownForceStrictLock, s.LockdownDisablePanicKey, s.StrictLockEnabled, s.PanicKeyEnabled, s.LockdownDoseKeeperEnabled);
+        var savedMic = s.MicConsentGiven;
+        s.MicConsentGiven = false;
+        (s.LockdownPossessionEnabled, s.LockdownPossessionIntensity, s.LockdownPhotosafe) = (true, (int)PossessionIntensity.Eerie, false);
+        s.LockdownForceStrictLock = s.LockdownDisablePanicKey = s.LockdownDoseKeeperEnabled = false;
+        var prevDirector = PossessionDirector.Current;
+        var prevLockdown = LockdownService.Current;
+        var shell = new MainShellWindow();
+        shell.Show();
+        Dispatcher.UIThread.RunJobs();
+        var clock = new DateTime(2026, 10, 10, 12, 0, 0);
+        var ld = LockdownService.Current = new LockdownService { UtcNow = () => clock.ToUniversalTime() };
+        var breathe = new PossessionBreathe();
+        var director = PossessionDirector.Current = new PossessionDirector(ld, new IPossessionEffect[] { breathe },
+            MainShellWindow.PossessionHostFor(() => shell), new Random(7)) { Now = () => clock };
+        // A display control of the shell stands in for a card (the only real one lives on the Lockdown tab).
+        var card = shell.PossessionTargets().First(t => t.Key == "TxtTitleBarVersion");
+        var control = (Control)card.Element;
+        var role = Possession.GetRole(control);
+        Possession.SetRole(control, PossessionRole.Card);
+        try
+        {
+            var prior = control.RenderTransform;
+            shell.PossessionReactToPress(control);               // no lockdown: a press is just a press
+            Assert.False(breathe.IsLive);
+
+            ld.Activate(TimeSpan.FromMinutes(20));
+            Assert.True(director.IsHaunting);
+            shell.PossessionReactToPress(shell);                 // not on a card: nothing
+            Assert.False(breathe.IsLive);
+            shell.PossessionReactToPress(control);
+            Assert.True(breathe.IsLive);
+            Assert.IsType<ScaleTransform>(control.RenderTransform);
+            Assert.Equal(1, director.LiveEffectCount);
+            Assert.Equal(PossessionRung.Settle, director.CurrentRung);
+
+            MainShellWindow.StopPossessionForPanic(shell);
+            Assert.False(breathe.IsLive);
+            Assert.Same(prior, control.RenderTransform);
+            clock = clock.AddSeconds(8);
+            shell.PossessionReactToPress(control);               // quiet after the panic press
+            Assert.False(breathe.IsLive);
+        }
+        finally
+        {
+            Possession.SetRole(control, role);
+            if (ld.IsActive) ld.Deactivate();
+            director.Dispose();
+            ld.Dispose();
+            PossessionDirector.Current = prevDirector;
+            LockdownService.Current = prevLockdown;
+            (s.LockdownPossessionEnabled, s.LockdownPossessionIntensity, s.LockdownPhotosafe, s.LockdownTripwiresEnabled,
+                s.LockdownForceStrictLock, s.LockdownDisablePanicKey, s.StrictLockEnabled, s.PanicKeyEnabled, s.LockdownDoseKeeperEnabled) = saved;
+            s.MicConsentGiven = savedMic;
+            CoreSettings.SaveImmediate();
+            shell.RequestExit();
+        }
     });
 
     [Fact]

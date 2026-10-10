@@ -51,6 +51,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             new Services.Possession.Effects.MeltEffect(), new Services.Possession.Effects.GlyphRotEffect(),
             new Services.Possession.Effects.CrackEffect(),
             new Services.Possession.Effects.RetitleEffect(),
+            new Services.Possession.Effects.GlitchPortraitEffect(),
         };
 
         /// <summary>WPF PossessionSceneCatalog, minus the rail sweep (its victims are the rail doors,
@@ -88,7 +89,47 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// visual tree that a view tagged with poss:Possession.Role (WPF EnumerateTagged), minus all
         /// that PossessionTree refuses (anything pressed, typed in, excluded or reserved by name).
         /// Targets are cached by key so a cooldown or a live booking survives the next read.</summary>
-        internal IReadOnlyList<PossessionTarget> PossessionTargets() => PossessionTree.Collect(this, _possessionTargets);
+        internal IReadOnlyList<PossessionTarget> PossessionTargets()
+        {
+            HookPossessionPress();
+            return PossessionTree.Collect(this, _possessionTargets);
+        }
+
+        // ---- the reactive layer (WPF PossessionEvents, the card half) -----------------------------
+        // A press on a haunted room's card makes that card breathe. The press is only WATCHED: it is
+        // never handled, so whatever was pressed still gets it. Not here, on purpose: a pressed rail
+        // door dropping (a button), Start / Stop dodging the pointer (a stop control may never get
+        // harder to hit), and the typo that answers a changed setting (a setting can be changed by a
+        // remote controller, and no remote path may feed the haunt).
+        private bool _possessionPressHooked;
+
+        private void HookPossessionPress()
+        {
+            if (_possessionPressHooked) return;
+            _possessionPressHooked = true;
+            AddHandler(PointerPressedEvent, (_, e) =>
+            {
+                try { PossessionReactToPress(e.Source as Visual); }
+                catch (Exception ex) { Log.Debug("Possession: reactive press failed: {E}", ex.Message); }
+            }, global::Avalonia.Interactivity.RoutingStrategies.Tunnel, handledEventsToo: true);
+        }
+
+        /// <summary>The card (if any) the pressed visual sits in asks the director for a breath.</summary>
+        internal void PossessionReactToPress(Visual? source)
+        {
+            if (PossessionDirector.Current is not { IsHaunting: true } director) return;
+            for (var v = source; v != null; v = global::Avalonia.VisualTree.VisualExtensions.GetVisualParent(v))
+            {
+                if (v is not Control c || Services.Possession.Possession.GetRole(c) != PossessionRole.Card) continue;
+                foreach (var t in PossessionTargets())
+                {
+                    if (!ReferenceEquals(t.Element, c)) continue;
+                    director.RequestReactive("breathe", t);
+                    return;
+                }
+                return;
+            }
+        }
 
         // ---- the edge pulse (WPF EmberAttribution.EdgePulse) --------------------------------------
         // An ember frame around the whole window: in over 120 ms, out over the rest of 700 ms. Photosafe

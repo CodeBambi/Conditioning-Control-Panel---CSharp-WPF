@@ -87,6 +87,34 @@ public sealed class PossessionDirectorTests
         Assert.Equal(0, r.Director.LiveEffectCount);
     }
 
+    [Fact]
+    public void AReactiveAnswerNeedsARunningHaunt_IsThrottled_AndStaysQuietAfterAPanic()
+    {
+        using var r = new Rig();
+        r.Director.RequestReactive("breathe", r.Card);          // no lockdown: nothing
+        Assert.Equal(0, r.Effect.Applied);
+
+        r.Lockdown.Activate(TimeSpan.FromMinutes(20));
+        r.Director.RequestReactive("nosuch", r.Card);
+        r.Director.RequestReactive("breathe", r.Card, PossessionRung.Collapse);   // the rung is not there yet
+        Assert.Equal(0, r.Effect.Applied);
+
+        r.Director.RequestReactive("breathe", r.Card);
+        Assert.Equal(1, r.Effect.Applied);
+        Assert.True(r.Card.IsLive);
+        Assert.Equal(PossessionRung.Settle, r.Director.CurrentRung);              // an answer never climbs the ladder
+
+        r.Director.PanicStop();
+        Assert.False(r.Card.IsLive);
+        r.Clock = r.Clock.AddSeconds(7);                        // past the throttle, inside the panic quiet
+        r.Director.RequestReactive("breathe", r.Card);
+        Assert.Equal(1, r.Effect.Applied);
+
+        r.Lockdown.Deactivate();
+        r.Director.RequestReactive("breathe", r.Card);          // the lockdown is over
+        Assert.Equal(1, r.Effect.Applied);
+    }
+
     private sealed class Rig : IDisposable
     {
         public readonly LockdownService Lockdown = new();
