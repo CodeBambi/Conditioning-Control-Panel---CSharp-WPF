@@ -80,6 +80,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 PinkRushHost.Start();              // WPF StartEngine :309 App.SkillTree?.Start()
                 PinkFilterOverlay.Refresh(this);   // WPF App.Overlay.Start()
                 SpiralOverlay.Refresh(this);
+                BrainDrainOverlay.Refresh(this);   // the haze follows the engine (WPF App.Overlay.Start / Stop)
                 UpdateStartButton();
             });
         }

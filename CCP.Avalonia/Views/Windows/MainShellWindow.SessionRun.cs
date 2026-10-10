@@ -59,6 +59,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     PinkRushHost.Start();          // WPF: a session starts through StartEngine -> SkillTree.Start()
                     PinkFilterOverlay.Refresh(this);
                     SpiralOverlay.Refresh(this);
+                    BrainDrainOverlay.Refresh(this);   // the haze follows the engine (WPF App.Overlay.Start / Stop)
                     Log.Information("Started session: {Name} ({Difficulty}, +{XP} XP)", session.Name, session.Difficulty, session.BonusXP);
                 }
                 catch (Exception ex)
@@ -112,6 +113,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     r.Resume();
                     PinkFilterOverlay.Refresh(this);
                     SpiralOverlay.Refresh(this);
+                    BrainDrainOverlay.Refresh(this);   // the haze follows the engine (WPF App.Overlay.Start / Stop)
                     SetPauseButton(false);
                     OnSessionTick();
                 });
@@ -124,6 +126,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             runner.Pause();
             PinkFilterOverlay.Refresh(this);   // WPF App.Overlay.Stop()
             SpiralOverlay.Refresh(this);
+            BrainDrainOverlay.Refresh(this);   // the haze follows the engine (WPF App.Overlay.Start / Stop)
             SetPauseButton(true);
         }
 

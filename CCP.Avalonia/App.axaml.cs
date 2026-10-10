@@ -928,6 +928,7 @@ namespace ConditioningControlPanel.Avalonia
             Views.Overlays.SubliminalOverlay.CloseAll();
             Views.Overlays.BouncingTextOverlay.Stop();
             Views.Overlays.SpiralOverlay.CloseAll();   // WPF StopEngine -> App.Overlay.Stop(); panic and exit too
+            Views.Overlays.BrainDrainOverlay.CloseAll();   // the Brain Drain haze (WPF StopBrainDrainBlur)
         }
 
         /// <summary>WPF App.OnAchievementUnlocked (App.xaml.cs:3815): one popup per unlock, shown at once.
