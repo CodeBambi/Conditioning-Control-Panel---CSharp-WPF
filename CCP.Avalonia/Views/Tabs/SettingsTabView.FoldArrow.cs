@@ -51,7 +51,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             _foldGlow ??= new DropShadowEffect { BlurRadius = 16, OffsetX = 0, OffsetY = 0 };
             _foldGlow.Color = HomeHue;
             btn.Effect = _foldGlow;
-            if (!AmbientFxCanvas.Env.AllowAmbientLoops || !IsVisible || VisualRoot == null) { _foldGlow.Opacity = BrowserFoldRule.GlowStatic; return; }
+            if (!AmbientFxCanvas.Env.AllowAmbientLoops || !IsVisible || VisualRoot == null || !_hostShown) { _foldGlow.Opacity = BrowserFoldRule.GlowStatic; return; }
             _foldGlow.Opacity = BrowserFoldRule.GlowLow;
             _foldBreathStart = FxAdorner.Time.GetTimestamp();
             // A sine breath, low -> high -> low over GlowBreathMs, at 24 fps like WPF's SetDesiredFrameRate.
@@ -73,7 +73,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// <summary>Visibility hook: the breath runs only while Home is on screen (P01).</summary>
         private void SyncFoldArrowBreath()
         {
-            if (!IsVisible) _foldBreath?.Stop();
+            if (!IsVisible || !_hostShown) _foldBreath?.Stop();
             else if (_foldPainted is { } c) PaintFoldArrow(c);
         }
 

@@ -33,6 +33,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private bool _drawerOpen, _drawerPeeking, _drawerModHooked;
 
         internal bool FavoritesDrawerIsOpen => _drawerOpen;
+        internal bool FavoritesDrawerBreathing => _drawerBreath?.IsEnabled == true;
+
+        /// <summary>False while the window is minimised: the shell's ApplyDashboardFxLoops funnel
+        /// sets it, and every Home loop parks.</summary>
+        private bool _hostShown = true;
+
+        internal void ApplyHostShown(bool shown)
+        {
+            _hostShown = shown;
+            SyncFavoritesDrawerFx();
+            SyncFoldArrowBreath();
+        }
         internal bool FavoritesDrawerIsPeeking => _drawerPeeking;
 
         /// <summary>Constructor hook (WPF ctor :59-70).</summary>
@@ -165,7 +177,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// <summary>Motes, glow breath and twinkle run only while Home is attached AND visible (P01).</summary>
         private void SyncFavoritesDrawerFx()
         {
-            if (!IsVisible || VisualRoot == null) { StopFavoritesDrawerFx(); return; }
+            if (!IsVisible || VisualRoot == null || !_hostShown) { StopFavoritesDrawerFx(); return; }
             try
             {
                 if (FavoritesDrawerFx.IsRunning) FavoritesDrawerFx.Resume();

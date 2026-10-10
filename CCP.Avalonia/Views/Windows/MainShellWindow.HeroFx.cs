@@ -4,7 +4,7 @@
 // (MainWindow.xaml.cs:712,774) and the level-up flash (CelebrateLevelUp, MainWindow.EventFx.cs:249;
 // FlashOverlay, MainWindow.Companion.cs:115).
 //
-// LIVE: the header chip (TxtLevel), the LVL label, the "xp / needed XP" readout and the XP bar
+// LIVE: the LVL chip (LevelChip/TxtLevelLabel, the one level readout since eac44ef9f), the "xp / needed XP" readout and the XP bar
 // read CoreSettings.PlayerLevel/PlayerXP against Core's XpCurve and repaint on ProgressionBank's
 // Awarded and LevelUp. The bar tweens to its new width (0.6s QuadraticEaseOut, MotionFx.BarFill)
 // and a level-up flashes XPBarFlashOverlay (250ms up, auto-reversed), both off at MotionLevel Off.

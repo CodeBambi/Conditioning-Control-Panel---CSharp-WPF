@@ -168,6 +168,73 @@ public sealed class HomeLayoutSync6Tests
     }
 
     [Fact]
+    public async Task DrawerJuiceRunsOnlyWhileHomeIsShownAtFullMotion()
+    {
+        await AvaloniaTestDispatcher.RunAsync(() =>
+        {
+            EnsureApp();
+            var s = CoreSettings.Current;
+            var motionBefore = s.MotionLevel;
+            bool perfBefore = s.PerformanceMode, foldBefore = s.DashboardBrowserCollapsed;
+            MainShellWindow? w = null;
+            try
+            {
+                s.MotionLevel = MotionLevel.Full;
+                s.PerformanceMode = false;
+                s.DashboardBrowserCollapsed = true;
+                w = new MainShellWindow();
+                w.Show();
+                Dispatcher.UIThread.RunJobs();
+                var dash = w.Named<SettingsTabView>("SettingsTab")!;
+                var handle = dash.FindControl<Button>("FavoritesDrawerHandle")!;
+
+                // e2c475a8a: the handle wears the mod's glow colour and a breathing glow.
+                Assert.IsType<DropShadowEffect>(handle.Effect);
+                var glow = ConditioningControlPanel.Avalonia.Controls.AmbientFxCanvas.Env.GlowColor;
+                var border = Assert.IsType<SolidColorBrush>(dash.FindControl<Grid>("FavoritesDrawer")!.Resources["FavHandleBorder"]);
+                Assert.Equal(Color.FromArgb(0x80, glow.R, glow.G, glow.B), border.Color);
+                Assert.True(dash.FavoritesDrawerBreathing);
+                Assert.True(dash.FoldArrowBreathing);
+
+                // Home hidden: both breaths park (P01); back on Home they run again.
+                w.ShowTab("haptics");
+                Dispatcher.UIThread.RunJobs();
+                Assert.False(dash.FavoritesDrawerBreathing);
+                Assert.False(dash.FoldArrowBreathing);
+                w.ShowTab("settings");
+                Dispatcher.UIThread.RunJobs();
+                Assert.True(dash.FavoritesDrawerBreathing);
+
+                // Minimised: the ApplyDashboardFxLoops funnel parks them too.
+                w.WindowState = WindowState.Minimized;
+                Dispatcher.UIThread.RunJobs();
+                Assert.False(dash.FavoritesDrawerBreathing);
+                Assert.False(dash.FoldArrowBreathing);
+                w.WindowState = WindowState.Normal;
+                Dispatcher.UIThread.RunJobs();
+                Assert.True(dash.FavoritesDrawerBreathing);
+                Assert.True(dash.FoldArrowBreathing);
+
+                // Motion Off: no glow at all.
+                s.MotionLevel = MotionLevel.Off;
+                ConditioningControlPanel.Avalonia.Controls.AmbientFxCanvas.Env.RaiseMotionGateChanged();
+                Dispatcher.UIThread.RunJobs();
+                Assert.Null(handle.Effect);
+                Assert.False(dash.FavoritesDrawerBreathing);
+            }
+            finally
+            {
+                w?.Close();
+                Dispatcher.UIThread.RunJobs();
+                s.MotionLevel = motionBefore;
+                s.PerformanceMode = perfBefore;
+                s.DashboardBrowserCollapsed = foldBefore;
+            }
+            return Task.CompletedTask;
+        });
+    }
+
+    [Fact]
     public async Task WindowOpensAtTheWpfDefaultAndFitsUniformly()
     {
         // ce1159e23: 1661 x 1002 DIP; 30f656f78: a 1080p-tall work area shrinks both axes.

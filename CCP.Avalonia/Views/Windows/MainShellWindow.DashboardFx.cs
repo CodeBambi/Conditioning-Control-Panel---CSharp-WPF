@@ -89,6 +89,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 foreach (var card in tab.GetLogicalDescendants().OfType<FeatureCard>()) card.RefreshFx();
                 foreach (var combo in tab.GetLogicalDescendants().OfType<SplitFeatureCard>()) combo.RefreshFx();
                 ApplyVaultCtaBreath();
+                tab.ApplyHostShown(WindowState != WindowState.Minimized);   // drawer + fold breaths
             }
             catch (Exception ex) { Log.Debug("ApplyDashboardFxLoops: {E}", ex.Message); }
         }
