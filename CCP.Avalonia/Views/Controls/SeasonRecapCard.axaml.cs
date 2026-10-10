@@ -36,8 +36,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
     {
         private SeasonRecapCardViewModel? _vm;
         private DispatcherTimer? _countTimer;
-        private CancellationTokenSource? _ambient;
-        private DispatcherTimer? _foilTimer;
+        private Helpers.BeatLoop? _ambientLoop;
         private DateTimeOffset _foilStart;
         private bool _loaded, _modHooked;
         private readonly GradientStop _foil1, _foil2;
@@ -136,36 +135,28 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
         private void StartAmbientLoops()
         {
             StopAmbientLoops();
-            _ambient = new CancellationTokenSource();
-            var token = _ambient.Token;
 
-            // Spiral: full rotation every 26s, forever.
-            var spin = new Animation { Duration = TimeSpan.FromSeconds(26), IterationCount = IterationCount.Infinite };
-            spin.Children.Add(Frame(0d, new Setter(RotateTransform.AngleProperty, 0d)));
-            spin.Children.Add(Frame(1d, new Setter(RotateTransform.AngleProperty, 360d)));
-            _ = spin.RunAsync(_spiralCanvas, token);
-
-            // Holo sweep: diagonal translate, autoreverse, 6s.
-            var sweep = new Animation
-            {
-                Duration = TimeSpan.FromSeconds(6),
-                IterationCount = IterationCount.Infinite,
-                PlaybackDirection = PlaybackDirection.Alternate,
-                Easing = new SineEaseInOut(),
-            };
-            sweep.Children.Add(Frame(0d, new Setter(TranslateTransform.XProperty, -200d), new Setter(TranslateTransform.YProperty, -200d)));
-            sweep.Children.Add(Frame(1d, new Setter(TranslateTransform.XProperty, 200d), new Setter(TranslateTransform.YProperty, 200d)));
-            _ = sweep.RunAsync(_holo, token);
-
-            // Foil shimmer: two middle stops drift, autoreverse, 7s (GradientStop is not
-            // Animatable here, so a frame timer drives them).
+            // One loop on the shared beat for all three (two infinite Animations and a 16 ms timer
+            // kept the window composing at 60 Hz).
+            //   Spiral: a full turn every 26 s.
+            //   Holo sweep: diagonal translate -200 -> 200, sine, 6 s each way.
+            //   Foil shimmer: two middle stops drift, 7 s each way (TickFoil).
+            var spin = (RotateTransform)_spiralCanvas.RenderTransform!;
+            if (_holo.RenderTransform is not TranslateTransform) _holo.RenderTransform = new TranslateTransform();
+            var sweep = (TranslateTransform)_holo.RenderTransform!;
             _foilStart = Clock.GetUtcNow();
-            _foilTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
-            _foilTimer.Tick += (_, _) => TickFoil();
-            _foilTimer.Start();
+            _ambientLoop ??= new Helpers.BeatLoop(this, t =>
+            {
+                spin.Angle = 360 * Helpers.BeatLoop.Saw(t, 26);
+                double at = -200 + (400 * Helpers.BeatLoop.Breath(t, 6));
+                sweep.X = at;
+                sweep.Y = at;
+                TickFoil();
+            });
+            _ambientLoop.Start();
         }
 
-        /// <summary>WPF's AddOffset(Foil1, 0.20, 0.50, 7) / AddOffset(Foil2, 0.55, 0.85, 7):
+                /// <summary>WPF's AddOffset(Foil1, 0.20, 0.50, 7) / AddOffset(Foil2, 0.55, 0.85, 7):
         /// SineEase EaseInOut, AutoReverse, Forever.</summary>
         internal void TickFoil()
         {
@@ -176,7 +167,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
             _foil2.Offset = 0.55 + 0.30 * eased;
         }
 
-        internal bool FoilRunning => _foilTimer?.IsEnabled == true;
+        internal bool FoilRunning => _ambientLoop?.IsRunning == true;
 
         protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
         {
@@ -222,11 +213,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
 
         private void StopAmbientLoops()
         {
-            _foilTimer?.Stop();
-            _foilTimer = null;
-            _ambient?.Cancel();
-            _ambient?.Dispose();
-            _ambient = null;
+            _ambientLoop?.Stop();
         }
 
         private static KeyFrame Frame(double cue, params Setter[] setters)

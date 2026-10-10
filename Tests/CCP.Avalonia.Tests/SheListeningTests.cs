@@ -58,7 +58,7 @@ public sealed class SheListeningTests
                 // WPF UpdateMicPill / SetSheListeningStatusPulse: the pill lights and the disc breathes.
                 var pill = shell.FindControl<Border>("MicActivePill")!;
                 Assert.True(pill.IsVisible);
-                Assert.IsType<global::Avalonia.Media.DropShadowEffect>(tab.SL_StatusDot.Effect);
+                Assert.True(ConditioningControlPanel.Avalonia.Views.Windows.MainShellWindow.StatusGlowLayer(tab.SL_StatusDot) is { Opacity: > 0 }, "the mic disc glow layer is dark");
                 Assert.False(tab.BtnSL_OpenModels.IsVisible);
 
                 // The pill is the privacy stop, by mouse and by keyboard (P17).

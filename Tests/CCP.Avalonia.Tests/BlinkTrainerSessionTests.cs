@@ -378,6 +378,8 @@ public sealed class BlinkTrainerSessionTests
         });
     }
 
+    private static bool Lit(Control dot) => ConditioningControlPanel.Avalonia.Views.Windows.MainShellWindow.StatusGlowLayer(dot) is { Opacity: > 0 } glow && glow.BoxShadow.Count > 0;
+
     /// <summary>The countdown ticks only while the page shows (P01), and the shell's status dot
     /// breathes only while a session runs (WPF SetBlinkTrainerStatusPulse).</summary>
     [Fact]
@@ -395,26 +397,26 @@ public sealed class BlinkTrainerSessionTests
                 Dispatcher.UIThread.RunJobs();
                 Assert.True(tab.IsVisible);
                 var dot = tab.FindControl<Control>("BlinkTrainerStatusDot")!;
-                Assert.Null(dot.Effect);
+                Assert.Null(dot.Effect); Assert.False(Lit(dot));
 
                 Assert.True(WebcamTracker.Instance.Start());
                 Assert.True(BlinkTrainerSession.Start(shell));
                 Dispatcher.UIThread.RunJobs();
-                Assert.IsType<global::Avalonia.Media.DropShadowEffect>(dot.Effect);
+                Assert.True(Lit(dot), "the sibling glow layer is dark");
                 Assert.True(tab.CountdownTicking);
 
                 shell.ShowTab("settings");
                 Dispatcher.UIThread.RunJobs();
                 Assert.False(tab.CountdownTicking);
-                Assert.Null(dot.Effect);   // a hidden tab's dot does not breathe (IsEffectivelyVisible)
+                Assert.Null(dot.Effect); Assert.False(Lit(dot));   // a hidden tab's dot does not breathe (IsEffectivelyVisible)
                 shell.ShowTab("blinktrainer");
                 Dispatcher.UIThread.RunJobs();
                 Assert.True(tab.CountdownTicking);
-                Assert.IsType<global::Avalonia.Media.DropShadowEffect>(dot.Effect);
+                Assert.True(Lit(dot), "the sibling glow layer is dark");
 
                 BlinkTrainerSession.Stop();
                 Dispatcher.UIThread.RunJobs();
-                Assert.Null(dot.Effect);
+                Assert.Null(dot.Effect); Assert.False(Lit(dot));
                 Assert.False(tab.CountdownTicking);
             }
             finally { shell.Close(); }

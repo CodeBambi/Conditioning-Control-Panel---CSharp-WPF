@@ -366,23 +366,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
 
         private BreathClock? _breathClock;
 
-        private static Animation Breathe(Animatable target, double min, double max)
-        {
-            var prop = target is Visual ? Visual.OpacityProperty : DropShadowEffect.OpacityProperty;
-            return new Animation
-            {
-                Duration = TimeSpan.FromSeconds(ActiveBreathSeconds),
-                IterationCount = IterationCount.Infinite,
-                PlaybackDirection = PlaybackDirection.Alternate,
-                Easing = new SineEaseInOut(),
-                Children =
-                {
-                    new KeyFrame { Cue = new Cue(0d), Setters = { new Setter(prop, min) } },
-                    new KeyFrame { Cue = new Cue(1d), Setters = { new Setter(prop, max) } },
-                },
-            };
-        }
-
         /// <summary>Rounded clip matching RootBorder's inner arc: a Border never clips its
         /// CHILDREN to its CornerRadius, so the full-bleed art would poke square corners past the frame.</summary>
         private void UpdateRoundedClip()
