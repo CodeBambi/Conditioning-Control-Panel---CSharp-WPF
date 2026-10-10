@@ -167,13 +167,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         }
 
         /// <summary>The surface the drain bubble's haze is asked through (tests swap it).</summary>
-        internal static Func<int, bool, int, bool> ShowTimedDrain = (strength, melt, ms) =>
-            Windows.Count > 0 && BrainDrainOverlay.ShowTimed(Windows[0], strength, melt, ms);
+        internal static Func<Visual?, int, bool, int, bool> ShowTimedDrain = (host, strength, melt, ms) =>
+            (host ?? (Windows.Count > 0 ? Windows[0] : null)) is { } h && BrainDrainOverlay.ShowTimed(h, strength, melt, ms);
 
         /// <summary>WPF BrainDrainMeltPayload.Fire: the pop drains the screen for ten seconds on the
         /// user's own blur dial. One drain at a time: the user's own loop wins outright, a dial at 0
-        /// means no picture, and either way the pop has already paid.</summary>
-        internal static bool FireDrain()
+        /// means no picture, and either way the pop has already paid. Also the keyword trigger's
+        /// "Brain Drain (10 s melt)" effect, which passes its own <paramref name="host"/>.</summary>
+        internal static bool FireDrain(Visual? host = null)
         {
             var s = CoreSettings.Current;
             bool userDrainUp = CoreBrainDrain.IsRunning || BrainDrainOverlay.IsShowing;
@@ -190,7 +191,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             }
             var melt = ConditioningControlPanel.Services.Chaos.BrainDrainBubble.OverlayKindFor(s.MotionLevel)
                        == ConditioningControlPanel.Services.Chaos.BrainDrainBubble.MeltKind;
-            return ShowTimedDrain(strength, melt, ConditioningControlPanel.Services.Chaos.BrainDrainBubble.OverlayMs);
+            return ShowTimedDrain(host, strength, melt, ConditioningControlPanel.Services.Chaos.BrainDrainBubble.OverlayMs);
         }
 
         /// <summary>WPF StartAnimationDriver/StopAnimationTimerIfIdle: one chain, parked while empty.</summary>

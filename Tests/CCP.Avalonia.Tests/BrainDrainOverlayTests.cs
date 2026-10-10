@@ -310,3 +310,63 @@ public sealed class BrainDrainLiveVolumeTests
         }
     }
 }
+
+/// <summary>The timed drain (WPF ShowOverlayTimed braindrain / braindrain_melt): a bubble pop or a
+/// keyword trigger holds the haze for its duration, then it lifts unless the user's own drain is up.</summary>
+[Collection(RunsAloneCollection.Name)]
+public sealed class BrainDrainTimedTests
+{
+    [Fact]
+    public async Task A_timed_drain_shows_with_the_feature_off_and_lifts_by_itself()
+    {
+        await AvaloniaTestDispatcher.RunAsync(() =>
+        {
+            if (Application.Current is null)
+                AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>().UseSkia()
+                    .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false }).SetupWithoutStarting();
+            var s = CoreSettings.Current;
+            var (enabled, strength) = (s.BrainDrainEnabled, s.BrainDrainBlurStrength);
+            var oldGrab = BrainDrainCapturePump.GrabFactory;
+            var oldRunning = CoreSession.IsEngineRunningProvider;
+            BrainDrainCapturePump.GrabFactory = (_, _, _) => null;      // no desktop in a test: the windows still open
+            CoreSession.IsEngineRunningProvider = () => false;          // engine off: an ad-hoc effect still shows
+            BrainDrainOverlay.SkipPlatformChecksForTest = true;
+            var host = new Window { Width = 300, Height = 200 };
+            try
+            {
+                host.Show();
+                if (host.Screens.All.Count == 0) return Task.CompletedTask;
+                s.BrainDrainEnabled = false;
+                s.BrainDrainBlurStrength = 55;
+
+                Assert.False(BrainDrainOverlay.ShowTimed(host, 0, melt: true, 10000));   // 0 = no picture
+                Assert.False(BrainDrainOverlay.TimedActive);
+
+                Assert.True(BrainDrainOverlay.ShowTimed(host, 55, melt: true, 10000));
+                Assert.True(BrainDrainOverlay.IsShowing);
+                Assert.True(BrainDrainOverlay.TimedActive);
+                Assert.Equal(55, BrainDrainOverlay.CurrentIntensity);
+
+                BrainDrainOverlay.EndTimed();                                            // the ten seconds are up
+                Assert.False(BrainDrainOverlay.TimedActive);
+                Assert.False(BrainDrainOverlay.IsShowing);
+
+                Assert.True(BrainDrainOverlay.ShowTimed(host, 55, melt: false, 10000));
+                global::ConditioningControlPanel.Avalonia.Views.Windows.MainShellWindow.StopEngine();   // panic's engine stop
+                Assert.False(BrainDrainOverlay.IsShowing);
+                Assert.False(BrainDrainOverlay.TimedActive);
+            }
+            finally
+            {
+                BrainDrainOverlay.CloseAll();
+                BrainDrainOverlay.SkipPlatformChecksForTest = false;
+                BrainDrainCapturePump.GrabFactory = oldGrab;
+                CoreSession.IsEngineRunningProvider = oldRunning;
+                s.BrainDrainEnabled = enabled; s.BrainDrainBlurStrength = strength;
+                CoreSettings.SaveImmediate();
+                host.Close();
+            }
+            return Task.CompletedTask;
+        });
+    }
+}

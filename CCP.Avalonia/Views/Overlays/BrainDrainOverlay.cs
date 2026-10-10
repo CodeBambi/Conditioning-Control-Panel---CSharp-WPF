@@ -105,7 +105,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             Follow(s);
 
             var baseWants = BrainDrainVisualPolicy.WantsBlur(s.BrainDrainEnabled, s.BrainDrainBlurStrength);
-            if ((!IsSupported && !SkipPlatformChecksForTest) || _refused || (!baseWants && _timed is null) || !ShouldShow())
+            // The base haze follows the engine. A timed drain (a keyword trigger, a bubble pop) is an
+            // ad-hoc effect like a keyword flash: it shows with the engine off too, never while paused.
+            var engineUp = ShouldShow();
+            if (!engineUp) baseWants = false;
+            var timedOk = _timed is not null && App.Sessions?.IsPaused != true;
+            if ((!IsSupported && !SkipPlatformChecksForTest) || _refused || (!baseWants && !timedOk))
             {
                 CloseWindows();
                 return;

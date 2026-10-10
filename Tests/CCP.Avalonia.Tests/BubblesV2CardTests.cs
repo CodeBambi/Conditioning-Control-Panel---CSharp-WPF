@@ -155,7 +155,7 @@ public sealed class BubblesV2CardTests
             var (strength, level) = (s.BrainDrainBlurStrength, s.MotionLevel);
             var oldShow = BubbleOverlay.ShowTimedDrain;
             (int Strength, bool Melt, int Ms)? asked = null;
-            BubbleOverlay.ShowTimedDrain = (st, melt, ms) => { asked = (st, melt, ms); return true; };
+            BubbleOverlay.ShowTimedDrain = (_, st, melt, ms) => { asked = (st, melt, ms); return true; };
             try
             {
                 s.BrainDrainBlurStrength = 60;
