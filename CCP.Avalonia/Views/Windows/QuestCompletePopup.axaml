@@ -19,7 +19,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="ConditioningControlPanel.Avalonia.Views.Windows.QuestCompletePopup"
-        Title="Quest Complete!"
+        Title="Quest Complete"
         Width="350" Height="130"
         SystemDecorations="None"
         TransparencyLevelHint="Transparent"
@@ -66,7 +66,7 @@
 
             <!-- Text Content -->
             <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                <TextBlock Text="QUEST COMPLETE!" Foreground="#00E676"
+                <TextBlock Text="QUEST COMPLETE" Foreground="#00E676"
                            FontWeight="Bold" FontSize="16" Margin="0,0,0,4"/>
                 <TextBlock x:Name="TxtQuestName" Text="Quest Name"
                            Foreground="White" FontSize="14" FontWeight="SemiBold"

@@ -224,7 +224,7 @@
                             </Grid>
 
                             <!-- Solid mode: shared-host renderer, mirrors the Bubble Pop toggle -->
-                            <Grid Height="34" Background="Transparent" ToolTip.Tip="Draws flashes on one shared overlay instead of a new window per image, so fullscreen games stop reacting to the window churn. Flashes become click-through (no mouse pop or hydra clicks) — gaze pop and stare-to-keep still work. Applies to the next flash.">
+                            <Grid Height="34" Background="Transparent" ToolTip.Tip="Draws flashes on one shared overlay instead of a new window per image, so fullscreen games stop reacting to the window churn. Flashes become click-through (no mouse pop or hydra clicks) - gaze pop and stare-to-keep still work. Applies to the next flash.">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>

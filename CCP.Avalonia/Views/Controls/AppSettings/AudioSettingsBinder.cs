@@ -33,7 +33,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
 
         internal static Func<IReadOnlyList<LibVlcAudio.OutputDevice>> Enumerate = () => LibVlcAudio.EnumerateOutputDevices();
         internal static Func<Window?, string, Task> ShowDiagnostics = (owner, text) =>
-            owner is null ? Task.CompletedTask : Dialogs.MessageDialog.ShowAsync(owner, "Audio Diagnostics", text);
+            owner is null ? Task.CompletedTask : Dialogs.MessageDialog.ShowAsync(owner, ConditioningControlPanel.Localization.Loc.Get("audio_diagnostics_title"), text);
 
         private static IReadOnlyList<LibVlcAudio.OutputDevice>? _devices;
         private static bool _testingAudio; // WPF: a second click while the probe runs is ignored

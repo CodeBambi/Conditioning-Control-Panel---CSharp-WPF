@@ -682,7 +682,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             (_swatchSurface, _txtSurfaceHex) = CreateColorRow(stack, "Surface Color", "#1E1E3A");
 
             stack.Children.Add(CreateSubHeader("Ambient FX Palette"));
-            stack.Children.Add(CreateSectionDescription("Optional. Colors for the drifting fog, particle bursts, glow breathing and one-shot flashes. Leave these on the defaults and the FX follow your Filter Color, then your Accent Color — only set them when you want the atmosphere a different color from the UI."));
+            stack.Children.Add(CreateSectionDescription("Optional. Colors for the drifting fog, particle bursts, glow breathing and one-shot flashes. Leave these on the defaults and the FX follow your Filter Color, then your Accent Color - only set them when you want the atmosphere a different color from the UI."));
             (_swatchMist, _txtMistHex) = CreateColorRow(stack, "Mist Color", FxRowDefault);
             (_swatchParticle, _txtParticleHex) = CreateColorRow(stack, "Particle Color", FxRowDefault);
             (_swatchGlow, _txtGlowHex) = CreateColorRow(stack, "Glow Color", FxRowDefault);

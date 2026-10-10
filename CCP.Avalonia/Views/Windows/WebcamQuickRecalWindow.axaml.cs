@@ -79,7 +79,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             }
             if (Tracker.Calibration == null)
             {
-                ShowError("No calibration loaded. Run the full Calibrate (16-point) flow first — quick recal only nudges an existing calibration.");
+                ShowError("No calibration loaded. Run the full Calibrate (16-point) flow first - quick recal only nudges an existing calibration.");
                 return;
             }
             // Sample the raw projection: park the old offset, restore it unless we finish.

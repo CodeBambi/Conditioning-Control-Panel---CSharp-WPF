@@ -206,7 +206,7 @@
                                        HorizontalAlignment="Center"/>
                             <TextBlock TextWrapping="Wrap" TextAlignment="Center" MaxWidth="560" Margin="0,6,0,10"
                                        Foreground="#888888" FontSize="12"
-                                       Text="Make at least two folders of images (or videos) — one to focus on, one or more to ignore — inside your assets folder, then Rescan. You can also use “+ Add folder” to point anywhere."/>
+                                       Text="Make at least two folders of images (or videos) - one to focus on, one or more to ignore - inside your assets folder, then Rescan. You can also use “+ Add folder” to point anywhere."/>
                             <Button x:Name="BtnOpenAssets" Content="Open assets folder"
                                     Theme="{StaticResource ToolBtn}" Margin="0"
                                     HorizontalAlignment="Center"/>
@@ -382,7 +382,7 @@
                                               HorizontalAlignment="Stretch">
                                         <ComboBoxItem Content="None" Tag="None"/>
                                         <ComboBoxItem Content="Flashes (small burst)" Tag="Flashes"/>
-                                        <ComboBoxItem Content="Bubbles (4–5)" Tag="Bubbles"/>
+                                        <ComboBoxItem Content="Bubbles (4-5)" Tag="Bubbles"/>
                                         <ComboBoxItem Content="Audio clip" Tag="Audio"/>
                                         <ComboBoxItem Content="Mind wipe" Tag="MindWipe"/>
                                         <ComboBoxItem Content="Overlay pulse" Tag="OverlayPulse"/>
@@ -505,7 +505,7 @@
                            Foreground="White" FontSize="32" FontWeight="Bold"
                            HorizontalAlignment="Center"/>
                 <TextBlock Grid.Row="1" x:Name="TxtResultsHeadline"
-                           Text="—"
+                           Text="-"
                            Foreground="#FF69B4" FontSize="22" FontWeight="SemiBold"
                            Margin="0,12,0,16" HorizontalAlignment="Center"/>
 

@@ -201,7 +201,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
                 });
                 body.Children.Add(new TextBlock
                 {
-                    Text = "Empty slot — start fresh",
+                    Text = "Empty slot - start fresh",
                     FontSize = 11.5,
                     Foreground = TextMut,
                     HorizontalAlignment = HorizontalAlignment.Center,

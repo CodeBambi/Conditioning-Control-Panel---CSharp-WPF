@@ -406,12 +406,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
         public string SessionsSubline => Loc.GetF("recap_sessions_subline", _s.SessionCount);
 
         // ---------- stats ----------
-        public string PeakRankText => _s.PeakRank > 0 ? $"#{_s.PeakRank}" : "—";
+        public string PeakRankText => _s.PeakRank > 0 ? $"#{_s.PeakRank}" : "-";
         public int PeakRankTarget => _s.PeakRank;
         public string PeakRankOfText => _s.PeakRank > 0 && _s.PeakRankTotal > 0
             ? Loc.GetF("recap_rank_of", _s.PeakRankTotal.ToString("N0"))
             : "";
-        public string PercentileText => _s.Percentile > 0 ? Loc.GetF("recap_top_percent", _s.Percentile) : "—";
+        public string PercentileText => _s.Percentile > 0 ? Loc.GetF("recap_top_percent", _s.Percentile) : "-";
         public string DaysActiveText => _s.DaysActive.ToString();
         public string DaysActiveOfText => _s.SeasonLengthDays > 0 ? $"/ {_s.SeasonLengthDays}" : "";
         public string LongestStreakText => _s.LongestStreak.ToString();

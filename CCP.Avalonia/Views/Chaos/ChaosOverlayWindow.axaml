@@ -167,7 +167,7 @@
                         <!-- straight to run setup: tweak the fall without hunting through the hub -->
                         <Button x:Name="BtnAdjust" IsVisible="False"
                                 Padding="18,10" Margin="12,0,0,0" Background="#33FFFFFF" Foreground="White" BorderThickness="0"
-                                ToolTip.Tip="open run setup — difficulty, length, the whole outfit">
+                                ToolTip.Tip="open run setup - difficulty, length, the whole outfit">
                             <TextBlock x:Name="BtnAdjustText" Text="adjust the fall"/>
                         </Button>
                     </StackPanel>

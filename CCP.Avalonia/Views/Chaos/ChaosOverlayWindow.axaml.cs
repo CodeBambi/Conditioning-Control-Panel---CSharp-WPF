@@ -817,7 +817,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
                 string line = goal.Affordable
                     ? $"{ChaosGlyphs.Drops} ready: {goal.Name.ToUpperInvariant()} waits in the toybox"
                     : goal.LessonId != null && ChaosLessons.ById(goal.LessonId) is { } lesson
-                        ? $"next: {goal.Name.ToUpperInvariant()} — {lesson.Text} ({ChaosLessons.Progress(goal.LessonId)}/{lesson.Target})"
+                        ? $"next: {goal.Name.ToUpperInvariant()} - {lesson.Text} ({ChaosLessons.Progress(goal.LessonId)}/{lesson.Target})"
                         : $"{ChaosGlyphs.Drops} {goal.Cost - ChaosMeta.State.Sparks:N0} more until {goal.Name.ToUpperInvariant()}";
                 AddResultLine(line, 11, goal.Affordable ? gold : dim, FontWeight.Normal);
             }

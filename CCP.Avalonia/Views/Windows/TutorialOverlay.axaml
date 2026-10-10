@@ -217,7 +217,7 @@
                 <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,12">
                     <TextBlock x:Name="TxtIcon" Text="~" FontSize="24" Foreground="{DynamicResource PinkBrush}" FontWeight="Bold" Margin="0,0,10,0" VerticalAlignment="Center"/>
                     <TextBlock x:Name="TxtTitle"
-                               Text="Welcome!"
+                               Text="Welcome"
                                Foreground="{DynamicResource PinkBrush}"
                                FontSize="18"
                                FontWeight="Bold"

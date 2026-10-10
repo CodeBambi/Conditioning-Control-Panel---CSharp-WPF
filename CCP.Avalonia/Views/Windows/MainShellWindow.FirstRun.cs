@@ -82,17 +82,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// mid-wizard, or a WPF settings file in that state) is asked before anything else.
         /// "Yes" reads "OK" to match this head's buttons (docs/avalonia-decisions.md).
         /// </summary>
-        internal const string AgeGateBody =
-            "This application contains adult content intended for users aged 18 and older.\n\n" +
-            "By clicking \"OK\", you confirm that you are at least 18 years old and that viewing adult content is legal in your jurisdiction.\n\n" +
-            "Do you wish to continue?";
+        internal static string AgeGateBody => ConditioningControlPanel.Localization.Loc.Get("age_gate_body");
 
         private void OnAgeGateShellOpened(object? sender, EventArgs e)
         {
             Opened -= OnAgeGateShellOpened;
             Dispatcher.UIThread.Post(async () =>
             {
-                var ok = IsVisible && await Dialogs.MessageDialog.ConfirmAsync(this, "Age Verification", AgeGateBody, defaultToCancel: true);
+                var ok = IsVisible && await Dialogs.MessageDialog.ConfirmAsync(this, ConditioningControlPanel.Localization.Loc.Get("age_gate_title"), AgeGateBody, defaultToCancel: true);
                 if (!ok) { ExitWithoutBill(); return; }   // WPF App.xaml.cs:3835 Shutdown, no bill
                 CoreSettings.Current.HasAcceptedAgeVerification = true;
                 CoreSettings.Save();

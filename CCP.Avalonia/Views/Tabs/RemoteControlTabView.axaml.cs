@@ -86,28 +86,29 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         internal static string Waiver(string tier)
         {
             var a = new System.Text.StringBuilder();
-            a.AppendLine("  - Trigger flash images (from YOUR image folder)");
-            a.AppendLine("  - Trigger subliminal messages (from YOUR subliminal pool)");
-            a.AppendLine("  - Toggle overlays (pink filter, spiral)");
-            a.AppendLine("  - Start/stop bubbles");
+            void Line(string key) => a.AppendLine("  - " + Loc.Get(key));
+            Line("remote_waiver_flash");
+            Line("remote_waiver_subliminal");
+            Line("remote_waiver_overlays");
+            Line("remote_waiver_bubbles");
             if (tier is "standard" or "full")
             {
-                a.AppendLine("  - Trigger mandatory videos (from YOUR video folder)");
-                a.AppendLine("  - Trigger haptic device patterns");
-                a.AppendLine("  - Duck/unduck audio");
+                Line("remote_waiver_videos");
+                Line("remote_waiver_haptics");
+                Line("remote_waiver_audio");
             }
             if (tier == "full")
             {
-                a.AppendLine("  - Start/stop autonomy mode");
-                a.AppendLine("  - Start/pause/stop sessions");
+                Line("remote_waiver_autonomy");
+                Line("remote_waiver_sessions");
             }
-            return "You are about to allow another person to remotely control parts of your app.\n\n" +
-                   $"The Controller will be able to:\n{a}\n" +
-                   "Your panic key always works. A controller cannot switch it off or turn Strict Lock on.\n" +
-                   "All media content shown comes from YOUR local files and settings.\n" +
-                   "You assume full responsibility for this interaction.\n" +
-                   "You can stop the session at ANY time by clicking \"Stop Session\" or closing the app.\n" +
-                   "The session stays active as long as the app is running. If the app closes without stopping the session, it expires within 4 hours.";
+            return Loc.Get("remote_waiver_intro") + "\n\n" +
+                   $"{Loc.Get("remote_waiver_can")}\n{a}\n" +
+                   Loc.Get("remote_waiver_panic") + "\n" +
+                   Loc.Get("remote_waiver_media") + "\n" +
+                   Loc.Get("remote_waiver_responsibility") + "\n" +
+                   Loc.Get("remote_waiver_stop") + "\n" +
+                   Loc.Get("remote_waiver_expiry");
         }
 
         /// <summary>WPF MainWindow.RemoteControl.cs:35: premium gate, then login, then the double waiver, then start.
@@ -127,7 +128,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 return;
             }
             var tier = SelectedTier;
-            if (!await WarningDialog.ShowDoubleWarningAsync(owner, "Remote Control", Waiver(tier))) { SetChecked(false); return; }
+            if (!await WarningDialog.ShowDoubleWarningAsync(owner, Loc.Get("tab_remote_control"), Waiver(tier))) { SetChecked(false); return; }
             await StartAsync(owner, tier);
         }
 

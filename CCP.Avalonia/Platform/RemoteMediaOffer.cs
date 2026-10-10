@@ -48,8 +48,8 @@ internal static class RemoteMediaOffer
             {
                 Key = "intro:remote-media",
                 Glyph = "🌐",
-                Title = "Media without the download",
-                Summary = "Your folders are empty - she can stream from the online pool instead.",
+                Title = ConditioningControlPanel.Localization.Loc.Get("remote_media_inbox_title"),
+                Summary = ConditioningControlPanel.Localization.Loc.Get("remote_media_inbox_summary"),
                 Open = () =>
                 {
                     if (Interlocked.CompareExchange(ref _claimed, 1, 0) != 0) return;

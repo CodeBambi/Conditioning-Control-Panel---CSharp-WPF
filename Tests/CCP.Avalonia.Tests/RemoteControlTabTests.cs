@@ -50,9 +50,9 @@ public sealed class RemoteControlTabTests
                 Assert.Equal(1, refusals);
                 Assert.False(RemoteControlTabView.Relay.Value.IsActive);
 
-                Assert.DoesNotContain("panic", RemoteControlTabView.Waiver("full").Split("Your panic key always works. A controller cannot switch it off or turn Strict Lock on.")[0], System.StringComparison.OrdinalIgnoreCase);
+                Assert.DoesNotContain("panic", RemoteControlTabView.Waiver("full").Split(ConditioningControlPanel.Localization.Loc.Get("remote_waiver_panic"))[0], System.StringComparison.OrdinalIgnoreCase);
                 Assert.DoesNotContain("Enable strict lock", RemoteControlTabView.Waiver("full"));   // WPF 7.1.5: no tier can
-                Assert.Contains("Your panic key always works. A controller cannot switch it off or turn Strict Lock on.", RemoteControlTabView.Waiver("light"));
+                Assert.Contains(ConditioningControlPanel.Localization.Loc.Get("remote_waiver_panic"), RemoteControlTabView.Waiver("light"));
                 Assert.DoesNotContain("videos", RemoteControlTabView.Waiver("light"));
 
                 var qr = RemoteControlTabView.QrCode(RemoteRelay.PairingUrl("ABC123", "0420"));

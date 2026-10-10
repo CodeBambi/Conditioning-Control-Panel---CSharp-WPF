@@ -267,7 +267,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             CmbWebcamMonitor.IsEnabled = has;
             ChkWebcamDebugCursor.IsEnabled = has;
             if (!has)
-                AppendWebcamDebugLog("No webcam tracking engine on this build — camera controls are unavailable.");
+                AppendWebcamDebugLog("No webcam tracking engine on this build - camera controls are unavailable.");
             RefreshWebcamStartLabel();
         }
 
@@ -284,7 +284,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
                 CmbWebcamDevice.Items.Clear();
                 if (devices.Count == 0)
                 {
-                    CmbWebcamDevice.Items.Add(new ComboBoxItem { Content = "(no cameras detected)", Tag = -1, IsEnabled = false });
+                    CmbWebcamDevice.Items.Add(new ComboBoxItem { Content = Loc.Get("webcam_no_cameras"), Tag = -1, IsEnabled = false });
                     CmbWebcamDevice.SelectedIndex = 0;
                     return 0;
                 }
@@ -352,7 +352,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
                 if (!Services.Webcam.WebcamConsent.IsCurrent(CoreSettings.Current))
                 {
                     if (TopLevel.GetTopLevel(this) is not Window owner) return;
-                    AppendWebcamDebugLog("Consent not given — opening consent dialog…");
+                    AppendWebcamDebugLog("Consent not given - opening consent dialog…");
                     await new WebcamConsentDialog().ShowDialogSafe(owner);
                     if (!Services.Webcam.WebcamConsent.IsCurrent(CoreSettings.Current)) { AppendWebcamDebugLog("Consent declined or dialog cancelled."); return; }
                     AppendWebcamDebugLog("Consent granted.");
@@ -362,7 +362,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
                 bool started = await tracker.StartAsync();
                 BtnWebcamDebugStart.IsEnabled = true;
                 RefreshWebcamStartLabel();
-                AppendWebcamDebugLog(started ? "Start() returned true — capture thread launching." : $"Start() returned false. {tracker.LastError}");
+                AppendWebcamDebugLog(started ? "Start() returned true - capture thread launching." : $"Start() returned false. {tracker.LastError}");
             }
             catch (Exception ex) { Log.Warning(ex, "Webcam debug start failed"); }
         }
@@ -372,7 +372,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
         {
             try
             {
-                await RunGazeWindowAsync(new WebcamGazeTrackerWindow(), "No calibration loaded — run Calibrate (16-point) first.",
+                await RunGazeWindowAsync(new WebcamGazeTrackerWindow(), "No calibration loaded - run Calibrate (16-point) first.",
                     "Opening tracker test window…", _ => "Tracker test closed.");
             }
             catch (Exception ex) { Log.Warning(ex, "Webcam tracker test failed"); }
@@ -388,7 +388,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
                 var tracker = Platform.WebcamTracker.Instance;
                 if (!Services.Webcam.WebcamConsent.IsCurrent(CoreSettings.Current))
                 {
-                    AppendWebcamDebugLog("Consent not given — opening consent dialog…");
+                    AppendWebcamDebugLog("Consent not given - opening consent dialog…");
                     await new WebcamConsentDialog().ShowDialogSafe(owner);
                     if (!Services.Webcam.WebcamConsent.IsCurrent(CoreSettings.Current)) { AppendWebcamDebugLog("Consent declined."); return; }
                 }
@@ -410,7 +410,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             try
             {
                 await RunGazeWindowAsync(new WebcamQuickRecalWindow(),
-                    "No calibration loaded — run Calibrate (16-point) first. Quick Recal only nudges an existing calibration.",
+                    "No calibration loaded - run Calibrate (16-point) first. Quick Recal only nudges an existing calibration.",
                     "Opening quick-recal window…", ok =>
                     {
                         var off = Platform.WebcamTracker.Instance.Calibration?.RuntimeOffset;
@@ -428,7 +428,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             var tracker = Platform.WebcamTracker.Instance;
             if (!Services.Webcam.WebcamConsent.IsCurrent(CoreSettings.Current))
             {
-                AppendWebcamDebugLog("Consent not given — opening consent dialog…");
+                AppendWebcamDebugLog("Consent not given - opening consent dialog…");
                 await new WebcamConsentDialog().ShowDialogSafe(owner);
                 if (!Services.Webcam.WebcamConsent.IsCurrent(CoreSettings.Current)) { AppendWebcamDebugLog("Consent declined."); return; }
             }
@@ -476,14 +476,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
                 if (!CoreWebcam.IsAvailable) return;
                 if (TopLevel.GetTopLevel(this) is not Window owner || !owner.IsVisible) return;
 
-                bool ok = await MessageDialog.ConfirmAsync(owner, "Revoke webcam consent",
-                    "Revoke webcam consent?\n\n" +
-                    "This will:\n" +
-                    "  • Stop webcam tracking immediately\n" +
-                    "  • Delete your calibration data\n" +
-                    "  • Disable Focus Gaze and any webcam triggers\n" +
-                    "  • Clear your consent record\n\n" +
-                    "You'll be re-prompted to consent and recalibrate the next time you enable a webcam feature.",
+                bool ok = await MessageDialog.ConfirmAsync(owner, Loc.Get("blink_trainer_consent_revoke_confirm_title"),
+                    Loc.Get("webcam_revoke_confirm_body"),
                     defaultToCancel: true);
                 if (!ok) return;
 
@@ -515,7 +509,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             // Performance section makes for the same reason.
             CoreSettings.Save();
             AppendWebcamDebugLog(v
-                ? "Auto drift correction enabled — clicks near your gaze will fine-tune calibration."
+                ? "Auto drift correction enabled - clicks near your gaze will fine-tune calibration."
                 : "Auto drift correction disabled.");
         }
 
@@ -602,7 +596,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
                     "• You will have NO emergency escape option\n" +
                     "• The ONLY way to exit will be the Exit button\n" +
                     "• Combined with Strict Lock, this is VERY restrictive\n" +
-                    "• Make sure you know what you're doing!");
+                    "• Make sure you know what you're doing.");
 
                 if (!confirmed) { RevertNoPanic(); return; }
 

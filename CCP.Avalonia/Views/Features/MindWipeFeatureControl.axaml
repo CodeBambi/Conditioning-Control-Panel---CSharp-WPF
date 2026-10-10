@@ -125,7 +125,7 @@
                     <!-- Custom audio clip: its own card, same grammar. TxtAudioFile stays visible because
                          code-behind writes the current filename into it. -->
                     <Border Theme="{StaticResource SettingCardStyle}"
-                            ToolTip.Tip="Pick your own mind-wipe sound. Keep it short — about 2 seconds works best. Leave it on Default to use the built-in clips.">
+                            ToolTip.Tip="{loc:Str mindwipe_sound_tip}">
                         <Grid>
                             <Border Background="{StaticResource SectionHueStudioWashBrush}" CornerRadius="11"/>
                             <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"

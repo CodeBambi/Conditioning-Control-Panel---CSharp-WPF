@@ -266,11 +266,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
                     _txtStatus.Text = attempt == 1
                         ? "Look at the pink dot…"
-                        : "Missed that one — let's try again. Look at the pink dot…";
+                        : "Missed that one - let's try again. Look at the pink dot…";
                     await Delay(attempt == 1 ? ReadyMs : RetryReadyMs);
                     if (_cancelled) return;
 
-                    _txtStatus.Text = "Hold steady — sampling…";
+                    _txtStatus.Text = "Hold steady - sampling…";
                     WebcamQuickRecalWindow.Play("lvup.mp3", 0.25f);   // CalibrationSoundService.DotSampleStart
                     _collecting = true;
                     await Delay(SampleMs);
@@ -314,14 +314,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 positions.Select(p => new OpenCvSharp.Point2d(p.Screen.X, p.Screen.Y)).ToArray(), Bounds.Width, Bounds.Height);
             if (fit.Data is not { } data)
             {
-                ShowError("Couldn't fit calibration from your samples. The points may have been too similar — try again and make sure to look directly at each dot.");
+                ShowError("Couldn't fit calibration from your samples. The points may have been too similar - try again and make sure to look directly at each dot.");
                 return;
             }
             if (fit.TooInaccurate)
             {
                 Log.Warning("WebcamCalibration: fit residual too high — rms_x={Rx:F0}, rms_y={Ry:F0} DIPs; prompting redo", fit.RmsX, fit.RmsY);
                 bool redo = await Dialogs.MessageDialog.ConfirmAsync(this, "Calibration inaccurate",
-                    "This calibration came out very inaccurate — the dots didn't line up, so eye tracking would be unreliable.\n\n" +
+                    "This calibration came out very inaccurate - the dots didn't line up, so eye tracking would be unreliable.\n\n" +
                     "For a better result: good, even lighting; avoid glare on glasses (or try without them); keep your head still and look right at each dot.\n\n" +
                     "Try the calibration again?", okText: "Yes");
                 if (_cancelled) return;
@@ -375,7 +375,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (_cancelled) return;
             await RunGestureCheckAsync("😮", "Open your mouth wide", 1, null, null);
             if (_cancelled) return;
-            _txtValidationDetail.Text = "Good — close, and once more in a moment…";
+            _txtValidationDetail.Text = "Good - close, and once more in a moment…";
             await Delay(1000);
             if (_cancelled) return;
             await RunGestureCheckAsync("😮", "Open your mouth wide again", 1, null, null);
@@ -419,7 +419,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             }
             else
             {
-                _txtValidationDetail.Text = "No worries — moving on.";
+                _txtValidationDetail.Text = "No worries - moving on.";
                 await Delay(700);
             }
         }
@@ -477,7 +477,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         private void UpdateVerifyCountdownUi() =>
-            _txtVerifyStatus.Text = $"Move your eyes around — the pink dot should track them. {_verifyCountdownSecondsLeft}s left.";
+            _txtVerifyStatus.Text = $"Move your eyes around - the pink dot should track them. {_verifyCountdownSecondsLeft}s left.";
 
         private void StopVerifyCountdown()
         {

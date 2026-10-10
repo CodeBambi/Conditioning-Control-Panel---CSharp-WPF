@@ -492,14 +492,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             var me = myIndex >= 0 ? _ranked[myIndex] : null;
             var s = CoreSettings.Current;
 
-            F<TextBlock>("TxtYouRankNumber").Text = rank > 0 ? rank.ToString(CultureInfo.InvariantCulture) : "\u2013";
+            F<TextBlock>("TxtYouRankNumber").Text = rank > 0 ? rank.ToString(CultureInfo.InvariantCulture) : "-";
             // WPF :1299: unknown or unranked = dash; no previous rank = NEW; else the move since the snapshot.
             var delta = F<TextBlock>("TxtYouDelta");
             var moved = _youPreviousRankKnown && rank > 0 && _youPreviousRank is > 0 ? _youPreviousRank.Value - rank : 0;
             var isNew = _youPreviousRankKnown && rank > 0 && _youPreviousRank is not > 0;
             delta.Text = isNew ? Loc.Get("lb_delta_new")
                 : moved > 0 ? "\u25B2" + moved
-                : moved < 0 ? "\u25BC" + (-moved) : "\u2013";
+                : moved < 0 ? "\u25BC" + (-moved) : "-";
             delta.Classes.Set("up", moved > 0);
             delta.Classes.Set("down", moved < 0);
             delta.Classes.Set("isnew", isNew);
@@ -508,9 +508,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             F<Ellipse>("EllYouAvatar").Fill = LeaderboardRow.BuildAvatarBrush(name);
 
             var level = me?.LevelColumnValue ?? (IsAllTimeMode ? s.HighestLevelEver : s.PlayerLevel);
-            F<TextBlock>("TxtYouLevel").Text = level > 0 ? level.ToString(CultureInfo.InvariantCulture) : "\u2013";
+            F<TextBlock>("TxtYouLevel").Text = level > 0 ? level.ToString(CultureInfo.InvariantCulture) : "-";
             F<TextBlock>("TxtYouXp").Text = me?.XpColumnDisplay
-                ?? (IsAllTimeMode ? "\u2013" : FormatCompact(XpCurve.GetTotalXP(s.PlayerLevel, s.PlayerXP, s.DescentEpoch)));
+                ?? (IsAllTimeMode ? "-" : FormatCompact(XpCurve.GetTotalXP(s.PlayerLevel, s.PlayerXP, s.DescentEpoch)));
 
             // Off the board the count is this install's own (WPF: App.Achievements.GetUnlockedCount()).
             var earned = me?.AchievementsCount ?? (App.Achievements?.Progress?.UnlockedAchievements?.Count ?? 0);

@@ -399,7 +399,7 @@ namespace ConditioningControlPanel.Avalonia
             }
             var window = shell();
             window?.Show();
-            splash.SetProgress(1.0, "Ready!");
+            splash.SetProgress(1.0, "Ready");
             splash.FadeOutAndClose(() => { if (window is { IsVisible: true }) window.Activate(); });
         }
 

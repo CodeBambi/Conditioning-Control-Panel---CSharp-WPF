@@ -1959,7 +1959,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
                 Cursor = new Cursor(StandardCursorType.Hand),
                 Tag = region,
             };
-            ToolTip.SetTip(rect, string.IsNullOrEmpty(region.Label) ? region.Id : $"{region.Id} — {region.Label}");
+            ToolTip.SetTip(rect, string.IsNullOrEmpty(region.Label) ? region.Id : $"{region.Id} - {region.Label}");
             Canvas.SetLeft(rect, startX);
             Canvas.SetTop(rect, laneTop);
             rect.PointerPressed += RegionRect_PointerPressed;
@@ -2636,7 +2636,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             var name = string.IsNullOrEmpty(_enhancement.Metadata.Name)
                 ? Loc.Get("deeper_editor_untitled") : _enhancement.Metadata.Name;
             TxtTitle.Text = name;
-            Title = $"Deeper — {name}";
+            Title = $"Deeper - {name}";
             // Linked-files strip shows the file path; keep it in sync.
             RefreshLinkedFilesUi();
             // Metadata drawer subtitle ("Metadata · {name}") shown when collapsed.

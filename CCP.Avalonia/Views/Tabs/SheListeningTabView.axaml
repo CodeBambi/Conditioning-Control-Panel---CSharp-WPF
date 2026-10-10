@@ -77,7 +77,7 @@
                                     Theme="{StaticResource OutlineButton}"
                                     BorderThickness="0" Foreground="#90EE90"
                                     FontWeight="Bold" FontSize="13" Padding="14,6"
-                                    ToolTip.Tip="Turn the offline mic on or off — wake word (&quot;Hey Bambi&quot;) + voice commands. Works whether or not Takeover is running.">
+                                    ToolTip.Tip="Turn the offline mic on or off - wake word (&quot;Hey Bambi&quot;) + voice commands. Works whether or not Takeover is running.">
                                 <TextBlock Text="▶  Start listening"/>
                             </Button>
                         </Border>
@@ -107,9 +107,9 @@
                                                FontSize="10" FontWeight="Bold" Margin="0,0,0,6"/>
                                     <TextBlock Foreground="{StaticResource TextLightBrush}" FontSize="13" TextWrapping="Wrap"
                                                LineHeight="20" Margin="0,0,0,6"
-                                               Text="Control the app with your voice — and let her hear you obey. Call her name, ask for an effect, and she does it. She can also prompt you to say things back to her. Everything runs offline on your device: nothing is recorded, nothing is sent."/>
+                                               Text="Control the app with your voice - and let her hear you obey. Call her name, ask for an effect, and she does it. She can also prompt you to say things back to her. Everything runs offline on your device: nothing is recorded, nothing is sent."/>
                                     <TextBlock Foreground="{StaticResource TextMutedBrush}" FontSize="12" TextWrapping="Wrap" LineHeight="18"
-                                               Text="Hit Start listening and she's on — works whether or not Takeover is running. The safety word stops everything at any time."/>
+                                               Text="Hit Start listening and she's on - works whether or not Takeover is running. The safety word stops everything at any time."/>
                                 </StackPanel>
                             </Grid>
                         </Border>
@@ -239,7 +239,7 @@
                                     <!-- Mic sensitivity (the loudness gate for commands and mantras; NOT the
                                          wake word). 36px row - the second line of prose it used to carry is
                                          the tooltip, verbatim. -->
-                                    <Grid Height="36" Background="Transparent" ToolTip.Tip="How softly you can speak and still be heard for voice COMMANDS and MANTRAS. Higher = picks up quieter speech (but may react more to background noise); lower = you must speak up. This does NOT affect the 'Hey Bambi' wake word — use Calibrate for that.">
+                                    <Grid Height="36" Background="Transparent" ToolTip.Tip="How softly you can speak and still be heard for voice COMMANDS and MANTRAS. Higher = picks up quieter speech (but may react more to background noise); lower = you must speak up. This does NOT affect the 'Hey Bambi' wake word - use Calibrate for that.">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto" MinWidth="120"/>
                                             <ColumnDefinition Width="*"/>
@@ -253,7 +253,7 @@
                                         <TextBlock x:Name="TxtSL_MicSensitivity" Grid.Column="2"
                                                    HorizontalAlignment="Right" VerticalAlignment="Center"
                                                    FontSize="13" FontWeight="Bold" Foreground="{DynamicResource PinkBrush}"
-                                                   TextAlignment="Right" Text="—"/>
+                                                   TextAlignment="Right" Text="-"/>
                                     </Grid>
 
                                     <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,6"/>
@@ -281,7 +281,7 @@
                                     <!-- Reliable wake (sherpa-onnx KWS) - open-source, offline, no key; far
                                          better at the OOV name "Bambi". TxtSL_WakeEngineStatus is code-painted
                                          (status + live calibration progress). -->
-                                    <Grid Background="Transparent" ToolTip.Tip="Optional but recommended. Drop the open-source sherpa-onnx keyword-spotting model into Resources\Models\sherpa-kws\ to use a purpose-built wake-word engine — much more reliable than the built-in recognizer for her name, fully offline, no account or key. Without it, the built-in recognizer is used. See the README in that folder.">
+                                    <Grid Background="Transparent" ToolTip.Tip="Optional but recommended. Drop the open-source sherpa-onnx keyword-spotting model into Resources\Models\sherpa-kws\ to use a purpose-built wake-word engine - much more reliable than the built-in recognizer for her name, fully offline, no account or key. Without it, the built-in recognizer is used. See the README in that folder.">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
@@ -302,7 +302,7 @@
                                                 Theme="{StaticResource OutlineButton}"
                                                 BorderBrush="{StaticResource SectionHueStudioBorderBrush}"
                                                 Foreground="{StaticResource SectionHueStudioBrush}"
-                                                ToolTip.Tip="Tune the wake word to your own voice and mic — say 'Hey Bambi' a few times and it finds the right sensitivity. Re-run any time (new mic, noisy room).">
+                                                ToolTip.Tip="Tune the wake word to your own voice and mic - say 'Hey Bambi' a few times and it finds the right sensitivity. Re-run any time (new mic, noisy room).">
                                             <TextBlock Text="🎚 Calibrate"/>
                                         </Button>
                                     </Grid>
@@ -354,7 +354,7 @@
                                                 <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
                                                     <TextBlock Text="Privacy" Foreground="{StaticResource TextLightBrush}"
                                                                FontSize="13" FontWeight="SemiBold"/>
-                                                    <TextBlock Text="Take back your mic consent — every voice feature turns off and she asks again next time."
+                                                    <TextBlock Text="Take back your mic consent - every voice feature turns off and she asks again next time."
                                                                Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap"/>
                                                 </StackPanel>
                                                 <Button x:Name="BtnSL_RevokeConsent" Grid.Column="1"
@@ -392,7 +392,7 @@
                                                FontSize="12" TextWrapping="Wrap" LineHeight="17" Margin="0,0,0,10"/>
 
                                     <TextBlock Text="2. Call her, then ask" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,2"/>
-                                    <TextBlock Text="Say your wake word (or press push-to-talk), then a command — like 'show me some bubbles'."
+                                    <TextBlock Text="Say your wake word (or press push-to-talk), then a command - like 'show me some bubbles'."
                                                Foreground="{DynamicResource TextMutedBrush}"
                                                FontSize="12" TextWrapping="Wrap" LineHeight="17" Margin="0,0,0,10"/>
 
@@ -445,7 +445,7 @@
                         <StackPanel Margin="20,14,20,16">
                             <TextBlock Text="WHAT YOU CAN SAY" Foreground="{StaticResource SectionHueStudioBrush}" FontSize="10" FontWeight="Bold" Margin="0,0,0,5"/>
                             <TextBlock Foreground="{DynamicResource TextMutedBrush}" FontSize="12" Margin="0,0,0,4" TextWrapping="Wrap"
-                                       Text="Call her with your wake word (or push-to-talk), then say a command. Each line shows a few ways to say the same thing — any of them work:"/>
+                                       Text="Call her with your wake word (or push-to-talk), then say a command. Each line shows a few ways to say the same thing - any of them work:"/>
                             <TextBlock Foreground="{DynamicResource TextDimBrush}" FontSize="11" Margin="0,0,0,14" TextWrapping="Wrap"
                                        Text="Tip: most effects also take a plain “&lt;name&gt; on” / “&lt;name&gt; off” (e.g. “spiral on”, “bubbles off”)."/>
 
@@ -453,7 +453,7 @@
                             <Border Background="#22FF69B4" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
                                     CornerRadius="8" Padding="14,10" Margin="0,0,0,16">
                                 <StackPanel>
-                                    <TextBlock Text="🛟  Safety word — stops every effect, instantly" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
+                                    <TextBlock Text="🛟  Safety word - stops every effect, instantly" Foreground="{StaticResource TextLightBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,3"/>
                                     <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" LineHeight="20"
                                                Text="“red”  ·  “stop everything”  ·  “make it stop”  ·  “all stop”"/>
                                 </StackPanel>
@@ -566,7 +566,7 @@
                             <Border Background="{DynamicResource ElevatedSurfaceBrush}" BorderBrush="{DynamicResource GlassBorderBrush}"
                                     BorderThickness="1" CornerRadius="8" Padding="12,8" Margin="0,16,0,0">
                                 <TextBlock Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap" LineHeight="16"
-                                           Text="Short, plain phrases recognize best. You can stack commands in one breath — say one, then another without calling her name again. If she mishears, she’ll give you a mantra to say instead."/>
+                                           Text="Short, plain phrases recognize best. You can stack commands in one breath - say one, then another without calling her name again. If she mishears, she’ll give you a mantra to say instead."/>
                             </Border>
                         </StackPanel>
                     </Grid>
