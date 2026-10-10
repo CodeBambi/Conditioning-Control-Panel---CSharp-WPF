@@ -179,6 +179,10 @@ public sealed class MandatoryVideoOverlayTests
                     }
                     finally { MandatoryVideoOverlay.ToyButtonArmed = armed; }
 
+                    // HB19: the wedge watchdog is armed for the clip on screen and has not seen a stall.
+                    Assert.NotNull(o.Wedge);
+                    Assert.Equal((0, false), (o.Wedge!.Rung, o.Wedge.StallSeen));
+
                     // HB19, WPF VideoService.GetGazeTargets / GazeClick: a live target is offered to the gaze
                     // dwell with its place on screen, and the dwell's click is the same one hit.
                     Assert.Empty(o.GazeTargets());
