@@ -10,7 +10,7 @@
 // Left/Right/Home/End/Enter/Space, a tier sign on a locked pill (PillLocked), "Moved" note.
 //
 // ponytail (not this wave): the "?" help badges + the Just Drop ask-first card
-// (SectionTabStrip.Help.cs), the hover lift/scale/glyph wiggle/sheen/burst (SectionTabStrip.Fx.cs).
+// (SectionTabStrip.Help.cs). The hover lift/scale/glyph wiggle/sheen/burst is SectionTabStrip.Fx.cs.
 // The pill PLATE (raised tint gradient + bevelled outline) and the tray fill are here; the
 // depth (sunken tray well, hue drop band under each raised pill, face travel, lit pill pressed
 // in its socket) is SectionTabStrip.Depth.cs, as WPF.
@@ -208,6 +208,7 @@ namespace ConditioningControlPanel.Avalonia.Controls.NavRail
 
             CrumbSep.Text = SafeLoc("nav_crumb_sep", "›");
             PillRow.SizeChanged += (_, _) => PositionFill(animate: false);
+            FxInit();   // SectionTabStrip.Fx.cs: hover lift, glyph wiggle, choose burst, idle sheen
         }
 
         // ------------------------------------------------------------------ read-only seams
