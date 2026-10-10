@@ -538,7 +538,7 @@
                                             VerticalAlignment="Center"
                                             IsVisible="{Binding ChatShortcutHint, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
                                         <TextBlock Text="{Binding ChatShortcutHint}" FontSize="10" FontWeight="SemiBold"
-                                                   Foreground="White" Opacity="0.8"/>
+                                                   Foreground="{DynamicResource TextSecondaryBrush}"/>
                                     </Border>
                                 </StackPanel>
                             </Button>
