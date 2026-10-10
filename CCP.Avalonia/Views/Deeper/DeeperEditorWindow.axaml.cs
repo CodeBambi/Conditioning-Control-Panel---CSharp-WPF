@@ -108,9 +108,32 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         private bool _isDirty;
         private bool _suppressDirty;
 
-        // ponytail: the waveform peaks still need a decoder (WPF AudioWaveformCache, NAudio). Local
+        // The waveform peaks come from DeeperWaveform (LibVLC transcode, cached per file). Local
         // audio PLAYBACK is real (_localAudio); remote AND local video poll the page's media element.
         private double[]? _waveformPeaks;
+        private System.Threading.CancellationTokenSource? _waveCts;
+
+        /// <summary>Tests: the peaks the strip is drawn from (null until decoded).</summary>
+        internal double[]? WaveformPeaks => _waveformPeaks;
+
+        /// <summary>WPF InitializeAudioAsync's AudioWaveformCache.LoadAsync (:1197), off the UI thread. A swap of
+        /// the clip or the window closing cancels it; a result for another clip is dropped.</summary>
+        private async Task LoadWaveformAsync(string path)
+        {
+            try { _waveCts?.Cancel(); } catch { }
+            var cts = _waveCts = new System.Threading.CancellationTokenSource();
+            try
+            {
+                var data = await DeeperWaveform.LoadAsync(path, cts.Token);
+                if (data == null || cts.IsCancellationRequested || !ReferenceEquals(_waveCts, cts) || _playbackDisposed) return;
+                if (!string.Equals(_enhancement.MediaSource, path, StringComparison.Ordinal)) return;
+                _waveformPeaks = Array.ConvertAll(data.Peaks, p => (double)p);
+                // Drawn once per load, resize or zoom into a cached bitmap, never per frame.
+                WaveformPath.CacheMode ??= new BitmapCache();
+                UpdateWaveformPath();
+            }
+            catch (Exception ex) { Log.Debug("DeeperEditor: waveform decode failed: {Error}", ex.Message); }
+        }
         private IDeeperLocalAudio? _localAudio;
 
         /// <summary>Open editors (UI thread): the panic sweep and the player's one-editor-per-file
@@ -231,6 +254,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             Closed += (_, _) => { try { (Owner as Window)?.Activate(); } catch { } };
             Opened += (_, _) => s_open.Add(this);
             Closed += (_, _) => s_open.Remove(this);
+            // Page zoom, Ctrl+wheel and HTML5 fullscreen on the browser preview: DeeperPageBridge.
+            _previewBridge = new DeeperPageBridge(BrowserPreview, this);
+            Closed += (_, _) => _previewBridge.Dispose();
 
             Loaded += DeeperEditorWindow_Loaded;
             KeyDown += DeeperEditorWindow_KeyDown;
@@ -953,15 +979,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         }
 
         /// <summary>WPF DeeperEditorWindow.xaml.cs:1189. Playback, duration, seek and end-of-clip
-        /// are real through <see cref="DeeperLocalAudio"/>. ponytail: the waveform peak extractor
-        /// (AudioWaveformCache) is not; wiring peaks in later is one assignment to
-        /// <c>_waveformPeaks</c>.</summary>
+        /// are real through <see cref="DeeperLocalAudio"/>; the peaks are <see cref="LoadWaveformAsync"/>.</summary>
         private async Task InitializeAudioAsync(string path)
         {
             BrowserPreview.IsVisible = false;
             VideoPreview.IsVisible = false;
             PreviewPlaceholder.IsVisible = false;
             WaveformCanvas.IsVisible = true;
+            _ = LoadWaveformAsync(path);
 
             IDeeperLocalAudio? audio = null;
             try { audio = await DeeperLocalAudio.Open(path); }
@@ -1255,18 +1280,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         private void BtnPreviewZoomIn_Click(object? sender, RoutedEventArgs e) => AdjustPreviewZoom(+0.10);
         private void BtnPreviewZoomOut_Click(object? sender, RoutedEventArgs e) => AdjustPreviewZoom(-0.10);
 
-        /// <summary>
-        /// ponytail: NativeWebView genuinely has no zoom factor - one of the three CoreWebView2
-        /// members with no counterpart at all, and NOT a missing script channel, since
-        /// InvokeScriptAsync works and everything else in this region uses it. CSS <c>zoom</c>
-        /// through that channel is the obvious substitute and is not one: it is per-document, so it
-        /// is lost on the next navigation, and it does not scale a fullscreened video. So WPF's
-        /// +/-10% clamped to [0.25, 5.0] stays lost, and these two buttons only log.
-        /// </summary>
-        private void AdjustPreviewZoom(double delta)
-        {
-            Log.Debug("DeeperEditor: preview zoom {Delta:+0.00;-0.00} ignored; NativeWebView has no zoom", delta);
-        }
+        /// <summary>WPF AdjustPreviewZoom: +/-10 % clamped to [0.25, 5.0]. NativeWebView has no zoom factor, so
+        /// DeeperPageBridge sets a CSS zoom on the document and puts it back after every navigation.</summary>
+        private void AdjustPreviewZoom(double delta) => _previewBridge.Adjust(delta);
+
+        private readonly DeeperPageBridge _previewBridge;
+
+        /// <summary>Tests: the preview's page bridge (zoom factor, fullscreen state).</summary>
+        internal DeeperPageBridge PreviewBridge => _previewBridge;
 
         private void TimelineScroll_PointerWheelChanged(object? sender, PointerWheelEventArgs e)
         {
@@ -3173,6 +3194,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             _playbackDisposed = true;
             DisposeLocalAudio();
             _isPlaying = false;
+            try { _waveCts?.Cancel(); } catch { }
             _waveformPeaks = null;
         }
 
@@ -3219,6 +3241,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         /// it has no AddScriptToExecuteOnDocumentCreatedAsync to install the sender, and both of the
         /// three messages' destinations (the fullscreen exit, the page zoom) are themselves stubs -
         /// so a bridge would carry messages nobody could act on.</summary>
+        // Now real, in DeeperPageBridge: the sender is installed after NavigationCompleted, the zoom is a CSS
+        // zoom, and fullscreen is this window's own state (no reparent, so the four members below stay empty).
         private void OnPreviewWebMessageReceived(object? sender, EventArgs e) { }
 
         /// <summary>ponytail: needs ContainsFullScreenElementChanged, which NativeWebView does not

@@ -215,12 +215,17 @@
         <!-- ================= top bar ================= -->
         <Border x:Name="TitleBar" Grid.Row="0" Background="Transparent" PointerPressed="TitleBar_PointerPressed">
             <Grid ColumnDefinitions="Auto,*,Auto">
-                <StackPanel x:Name="Wordmark" Orientation="Horizontal" Margin="18,0,0,0" VerticalAlignment="Center">
-                    <Image Source="avares://CCP.Avalonia/Resources/logo2.png" Height="28"/>
+                <!-- WPF LauncherWindow.xaml:357: the wordmark clips its own light pass. -->
+                <Panel x:Name="Wordmark" Margin="18,0,0,0" VerticalAlignment="Center" ClipToBounds="True">
+                <StackPanel Orientation="Horizontal">
+                    <Image x:Name="WordmarkImage" Source="avares://CCP.Avalonia/Resources/logo2.png" Height="28"/>
                     <TextBlock Text="{loc:Str launcher_window_title}" Margin="10,0,0,0"
                                FontFamily="Fredoka, Segoe UI" FontSize="18" FontWeight="SemiBold"
                                Foreground="{DynamicResource TextLightBrush}" VerticalAlignment="Center"/>
                 </StackPanel>
+                    <!-- One light pass every 25-40 s (LauncherWindow.ArtMotion.cs); opacity 0 at rest. -->
+                    <Rectangle x:Name="WordmarkSheen" Width="70" HorizontalAlignment="Left" IsHitTestVisible="False" Opacity="0"/>
+                </Panel>
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
                     <!-- signed out: a sign-in pill where the chip would be -->
                     <Button x:Name="SignInPill" Theme="{StaticResource LauncherSignInPill}" Margin="0,0,6,0"
@@ -408,6 +413,7 @@
     </Grid>
 
     <Canvas x:Name="ShockwaveCanvas" IsHitTestVisible="False" ClipToBounds="True"/>
+    <Canvas x:Name="TrailCanvas" IsHitTestVisible="False"/>
     <fx:AmbientFxCanvas x:Name="BurstLayer" IsHitTestVisible="False"/>
 
     <Panel x:Name="EdgeHost" IsHitTestVisible="False">

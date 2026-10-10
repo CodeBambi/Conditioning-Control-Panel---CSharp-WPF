@@ -177,6 +177,7 @@ public sealed class PanicSurfacesTests
         ["LeashExplainHost"] = "the leash '?' help router: a still explainer card the player opened, starts no feature; WPF panic leaves it alone",
         ["FriendsFeedHost"] = "the friends feed log: opens no surface, nothing to stop",
         ["RaceTrackPlayer"] = "the race's own track: the 'games' surface closes the race window, whose Closed funnel (DisposeRace -> DisposeRaceTracks) stops and disposes it (RaceTrackTests)",
+        ["DeeperWaveform"] = "the Deeper waveform's peak decode: a LibVLC sout chain that writes a temp WAV and nothing else (no sound, no picture, no window), so there is nothing for a panic to stop; it is cancelled by its window's token on close or clip swap (DeeperWaveformTests)",
         ["WinRtScreenReader"] = "screen OCR (RecognizeAsync is not the mic): not a surface of its own. Owner 2026-10-10: every accepted panic press calls PanicSurfaces.SwitchOffKeywordTriggers, which switches the screen read off as a saved setting and stops ScreenOcrService, this reader's only caller (PanicKeywordOffTests)",
     };
 

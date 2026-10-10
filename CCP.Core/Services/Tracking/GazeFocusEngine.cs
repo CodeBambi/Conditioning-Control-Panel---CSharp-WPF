@@ -3,7 +3,9 @@ using System.Collections.Generic;
 
 namespace ConditioningControlPanel.Services
 {
-    public enum GazeTargetKind { Flash, Bubble }
+    /// <summary>Video = a mandatory video's attention target (WPF IAttentionTarget, "Floating"): the head only
+    /// lists them while VideoGazeClickEnabled is on, a dwell clicks one, a blink does not.</summary>
+    public enum GazeTargetKind { Flash, Bubble, Video }
 
     /// <summary>One thing a gaze dwell can land on. Bounds are in the same space as the gaze point the
     /// head feeds the engine (width 0 = not hittable this tick).</summary>
@@ -90,9 +92,11 @@ namespace ConditioningControlPanel.Services
         {
             IGazeTarget? best = null;
             double bestScore = ScoreThreshold;
-            for (int pass = 0; pass < 2; pass++)
+            // Third pass: video attention targets, scored like bubbles with no type bonus, so a flash still
+            // wins when both are looked at (WPF GazeFocusService :1005).
+            for (int pass = 0; pass < 3; pass++)
             {
-                var kind = pass == 0 ? GazeTargetKind.Flash : GazeTargetKind.Bubble;
+                var kind = pass == 0 ? GazeTargetKind.Flash : pass == 1 ? GazeTargetKind.Bubble : GazeTargetKind.Video;
                 if (kind == GazeTargetKind.Bubble && !o.Bubbles) continue;
                 if (kind == GazeTargetKind.Flash && !o.FlashPop && !o.FlashLinger) continue;
                 for (int i = targets.Count - 1; i >= 0; i--)
@@ -128,6 +132,18 @@ namespace ConditioningControlPanel.Services
             }
             _current = hit;   // the adapter is rebuilt every tick; the key is what persists
             var elapsedMs = (now - _dwellStartedAt).TotalMilliseconds;
+
+            if (hit.Kind == GazeTargetKind.Video)
+            {
+                // WPF AdvanceFloatingTextDwell: the dwell clicks the target (the same Hit as a mouse click).
+                if (elapsedMs >= DwellMs)
+                {
+                    Safe(hit.Activate);
+                    _current = null;
+                    _cooldownUntil = now.AddMilliseconds(CooldownMs);
+                }
+                return hit;
+            }
 
             if (hit.Kind == GazeTargetKind.Bubble)
             {
@@ -165,7 +181,8 @@ namespace ConditioningControlPanel.Services
             if (hit == null) return false;
             ClearTarget();
             bool fired = false;
-            if (hit.Kind == GazeTargetKind.Bubble)
+            if (hit.Kind == GazeTargetKind.Video) { }   // a blink never clicks an attention target
+            else if (hit.Kind == GazeTargetKind.Bubble)
             {
                 if (o.Bubbles) { Safe(hit.Activate); Safe(() => GazePopped?.Invoke()); fired = true; }
             }

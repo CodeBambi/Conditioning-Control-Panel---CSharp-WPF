@@ -178,6 +178,21 @@ public sealed class MandatoryVideoOverlayTests
                         Assert.Equal(2, v.AttentionHits);
                     }
                     finally { MandatoryVideoOverlay.ToyButtonArmed = armed; }
+
+                    // HB19: the wedge watchdog is armed for the clip on screen and has not seen a stall.
+                    Assert.NotNull(o.Wedge);
+                    Assert.Equal((0, false), (o.Wedge!.Rung, o.Wedge.StallSeen));
+
+                    // HB19, WPF VideoService.GetGazeTargets / GazeClick: a live target is offered to the gaze
+                    // dwell with its place on screen, and the dwell's click is the same one hit.
+                    Assert.Empty(o.GazeTargets());
+                    o.Spawn(0);
+                    var gaze = Assert.Single(o.GazeTargets());
+                    Assert.True(gaze.W > 0 && gaze.H > 0);
+                    gaze.Click();
+                    gaze.Click();                                   // idempotent, as mouse + gaze racing
+                    Assert.Equal((3, 0), (v.AttentionHits, o.LiveTargets));
+                    Assert.Empty(o.GazeTargets());
                     await Task.Delay(1200);
 
                     // WPF #735 grace pause: the clip's first Esc pauses it behind the card (guards asleep);

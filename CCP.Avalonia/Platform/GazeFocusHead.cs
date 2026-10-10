@@ -223,6 +223,15 @@ namespace ConditioningControlPanel.Avalonia.Platform
                     if (!OnCal(x, y, size, size)) continue;
                     list.Add(new BubbleTarget(b, (x / scale, y / scale, size / scale, size / scale)));
                 }
+
+            // WPF GazeFocusService :1005: a mandatory video's attention targets answer a dwell, only with
+            // VideoGazeClickEnabled on.
+            if (s.VideoGazeClickEnabled)
+                foreach (var v in Views.Overlays.MandatoryVideoOverlay.Instance.GazeTargets())
+                {
+                    if (v.W <= 0 || v.H <= 0 || !OnCal(v.X, v.Y, v.W, v.H)) continue;
+                    list.Add(new VideoTarget(v.Key, (v.X / scale, v.Y / scale, v.W / scale, v.H / scale), v.Click));
+                }
             return list;
         }
 
@@ -234,6 +243,16 @@ namespace ConditioningControlPanel.Avalonia.Platform
             public void SetDwellProgress(double t01) { }   // ponytail: WPF swells the flash as the dwell fills
             public void Activate() => FlashOverlay.GazePop(w);
             public void BoostLifetime(int extraMs) => w.BoostLifetime(extraMs);
+        }
+
+        private sealed class VideoTarget(object key, (double, double, double, double) bounds, Action click) : IGazeTarget
+        {
+            public GazeTargetKind Kind => GazeTargetKind.Video;
+            public object Key => key;
+            public (double X, double Y, double W, double H) Bounds => bounds;
+            public void SetDwellProgress(double t01) { }
+            public void Activate() => click();
+            public void BoostLifetime(int extraMs) { }
         }
 
         private sealed class BubbleTarget(AmbientBubble b, (double, double, double, double) bounds) : IGazeTarget

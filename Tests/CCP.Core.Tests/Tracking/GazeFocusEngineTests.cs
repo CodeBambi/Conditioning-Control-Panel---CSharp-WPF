@@ -35,6 +35,35 @@ public sealed class GazeFocusEngineTests
         Assert.Equal(250, GazeFocusEngine.CooldownMs);
     }
 
+    /// <summary>WPF AdvanceFloatingTextDwell (hunt IB8, HB19): a mandatory video's attention target is clicked
+    /// by a 600 ms dwell, never by a blink, counts no bubble pop, and loses a tie to a flash.</summary>
+    [Fact]
+    public void AVideoAttentionTarget_IsClickedByTheDwell_NeverByABlink()
+    {
+        var e = new GazeFocusEngine();
+        var v = new Fake(GazeTargetKind.Video, 100, 100, 200, 60);
+        var list = new List<IGazeTarget> { v };
+        var none = new GazeFocusOptions(Bubbles: false, FlashPop: false, FlashLinger: false, LingerExtensionMs: 0);
+        int pops = 0; e.GazePopped += () => pops++;
+        e.GazeMoved(150, 120);
+        Assert.Same(v, e.Tick(T0, list, none));             // listed = enabled: no bubble or flash switch needed
+        Assert.False(e.Blink(T0.AddMilliseconds(10), list, none));
+        Assert.Equal(0, v.Activated);
+        var t1 = T0.AddMilliseconds(400);                   // past the blink's cooldown: a fresh dwell
+        e.Tick(t1, list, none);
+        e.Tick(t1.AddMilliseconds(599), list, none);
+        Assert.Equal(0, v.Activated);
+        e.Tick(t1.AddMilliseconds(600), list, none);
+        Assert.Equal(1, v.Activated);
+        Assert.Equal(0, pops);
+        Assert.Null(e.Tick(t1.AddMilliseconds(700), list, none));   // cooldown
+
+        var e2 = new GazeFocusEngine();
+        var flash = new Fake(GazeTargetKind.Flash, 100, 100, 200, 60);
+        e2.GazeMoved(150, 120);
+        Assert.Same(flash, e2.Tick(T0, new List<IGazeTarget> { v, flash }, All));
+    }
+
     [Fact]
     public void ABubbleFillsThenPops_AfterTheDwell_ThenCoolsDown()
     {

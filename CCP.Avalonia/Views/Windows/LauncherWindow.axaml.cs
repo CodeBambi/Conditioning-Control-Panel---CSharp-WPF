@@ -358,6 +358,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     ? Loc.GetF("launcher_panel_running", (CoreEngine.StartedUtc ?? DateTime.UtcNow).ToLocalTime().ToString("HH:mm"))
                     : Loc.Get("launcher_panel_idle");
                 StopLink.IsVisible = running;
+                SyncEngineFx();   // LauncherWindow.ArtMotion.cs: the dot, the card's comet and rim
                 if (_ctaRunning == running) return;
                 _ctaRunning = running;
                 PanelCtaText.Bind(TextBlock.TextProperty,
@@ -673,7 +674,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 BorderBrush = locked ? Res("Tier2DiamondBorderBrush") : RimBrush(hue),
                 BorderThickness = new Thickness(LauncherGridLayout.TileBorder),
                 Margin = new Thickness(LauncherGridLayout.TileMargin),
-                ClipToBounds = true,
                 Cursor = new Cursor(StandardCursorType.Hand),
                 Tag = card.Id,
             };
@@ -685,6 +685,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // WPF Tiles.cs:100-103: the art rides in its own host, 7 px larger each way, so the parallax slide
             // never shows an edge.
             TranslateTransform? artSlide = null;
+            Image? artImage = null;
             IImage? art = null;
             if (revealed)
                 art = (IImage?)ModArt.TryLoad(card.ArtPath, 640) ?? card.Id switch
@@ -700,7 +701,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 plate.Children.Add(new Panel
                 {
                     Tag = "tile-art", RenderTransform = artSlide, Margin = new Thickness(-TileArtParallaxPx),
-                    Children = { new Image { Source = art, Stretch = Stretch.UniformToFill } },
+                    Children = { (artImage = new Image { Source = art, Stretch = Stretch.UniformToFill }) },
                 });
             }
             else BuildGlyphPlate(plate, card.Glyph, hue);
@@ -771,8 +772,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             };
             if (!hosted && !needsAccount) ToolTip.SetTip(tile, Loc.Get("exclusives_not_on_this_build"));
 
-            tile.Child = body;
-            DecorateTileFx(tile, hue, artSlide);
+            // The glow is a BoxShadow on the tile (no Effect over art that drifts), so the tile no longer clips
+            // itself: the body carries the rounded clip one border in.
+            tile.Child = new Border
+            {
+                CornerRadius = new CornerRadius(Math.Max(0, TileRadius - LauncherGridLayout.TileBorder)),
+                ClipToBounds = true, Child = body,
+            };
+            DecorateTileFx(tile, hue, artSlide, artImage);
             return tile;
         }
 
