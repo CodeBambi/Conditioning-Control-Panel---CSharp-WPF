@@ -1783,15 +1783,27 @@
                                  An inline Hyperlink, never a printed URL (comms rule: the banner
                                  carries no addresses). Remove the whole beat in 6.9 with the NEW
                                  pills. -->
+                            <!-- Stretch, not Center: a Center TextBlock sizes itself from the inline
+                                 button's first measure (4 DIP short), clipping "app" to "ap".
+                                 TextAlignment centres the line just the same. -->
                             <TextBlock x:Name="TxtBannerWeb" Foreground="{DynamicResource PinkBrush}"
                                        FontSize="12" FontStyle="Italic"
-                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       HorizontalAlignment="Stretch" VerticalAlignment="Center"
                                        TextAlignment="Center" TextTrimming="CharacterEllipsis"
                                        Opacity="0" IsHitTestVisible="False">
                                 <Run Text="{loc:Str label_banner_web_xp}"/>
                                 <Run Text=" "/>
-                                <!-- ponytail: WPF Hyperlink/RequestNavigate has no Avalonia inline twin; renders as text. --><Run Text="{loc:Str label_banner_web_link}" FontWeight="Bold"/>
-                                
+                                <!-- WPF Hyperlink + RequestNavigate (MainWindow.xaml:1842) -> an inline
+                                     SafeHyperlinkButton (ExternalOpener); Click retires the beat. -->
+                                <InlineUIContainer BaselineAlignment="Center">
+                                    <fx:SafeHyperlinkButton x:Name="BannerWebLink" Padding="0" Margin="0" BorderThickness="0"
+                                                            NavigateUri="https://app.cclabs.app"
+                                                            Click="BannerWebLink_Click">
+                                        <TextBlock Text="{loc:Str label_banner_web_link}" FontWeight="Bold" FontSize="12"
+                                                   FontStyle="Italic" Foreground="{DynamicResource PinkBrush}"
+                                                   TextDecorations="Underline"/>
+                                    </fx:SafeHyperlinkButton>
+                                </InlineUIContainer>
                             </TextBlock>
                             <!-- Chrome FX (PR-1): one-shot sheen pass over the banner when the
                                  message changes. Its own ClipToBounds host so the band can't
