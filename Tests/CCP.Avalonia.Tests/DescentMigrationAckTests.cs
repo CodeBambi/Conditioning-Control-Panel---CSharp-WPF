@@ -53,7 +53,7 @@ public sealed partial class AccountSeedTests
         before = s.PlayerXP;
         ProgressionBank.Add(100, "Session");
         Assert.Equal(before + 110, s.PlayerXP, 3);
-        Assert.DoesNotContain(wire.Syncs, b => b.ContainsKey("descent_auto"));   // never claims to take offers
+        Assert.All(wire.Syncs, b => Assert.True((bool)b["descent_auto"]!));   // this head takes the offer silently (restore, no window)
     });
 
     [Fact]

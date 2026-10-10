@@ -232,11 +232,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                 case "discord-prefs":
                 {
                     var echo = GoonHostService.OnDiscordPrefs(o, out var sharedChanged, out var rpOff);
-                    // not ported: the immediate profile sync push WPF kicks on a change, and the rich presence
-                    // retract (no Discord RPC on this head).
-                    // SEAM(sync): Core SyncPush.Sent carries no goon_share_avatar / goon_share_dm at all, so a
-                    // push here would send nothing the server's room snapshot reads; when SyncPush sends them,
-                    // call Platform.AccountSeed.Sync?.PushAsync("goon-prefs") on sharedChanged.
+                    // WPF kicks a profile sync at once on a change, so the room snapshot reads the new consent
+                    // (a revoke lands now). The push marks the consent as set on this install.
+                    if (sharedChanged) _ = Platform.AccountSeed.Sync?.PushPrivacyAsync("goon-prefs");
+                    // not ported: the rich presence retract (no Discord RPC on this head).
                     if (rpOff) Log.Information("[Goon] rich presence switched off (no RPC client on this head)");
                     if (sharedChanged) KickGoonAvatarRefresh();
                     Post(echo);

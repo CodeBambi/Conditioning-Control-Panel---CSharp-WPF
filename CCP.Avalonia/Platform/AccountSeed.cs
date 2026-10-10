@@ -186,7 +186,8 @@ internal static class AccountSeed
         var s = CoreSettings.Current;
         var id = s.UnifiedId;
         if (s.OfflineMode || string.IsNullOrEmpty(id)) return false;
-        var user = await v2.GetUserProfileAsync(id);
+        var node = await v2.GetUserProfileNodeAsync(id);
+        var user = node?.ToObject<V2AuthService.V2User>();
         if (user == null)
         {
             Log.Warning("Profile load: server profile could not be read for {Id}", id);
@@ -199,11 +200,13 @@ internal static class AccountSeed
         // A migration submit still waiting for its ack: the server quotes the pre-migration ledger (WPF holds it too).
         if (!ConditioningControlPanel.Services.Descent.DescentMigrationChoices.IsValid(s.PendingDescentMigrationChoice))
             ProfileAdopt.AdoptReadBeforeWrite(s, user);
+        // Consent: the account's values in, before anything is pushed (never share more than the account holds).
+        ProfileAdopt.AdoptConsent(s, node);
         CoreSettings.Save();
         Log.Information("Profile load: Level {Level} ({Xp} XP into level) after adopt", s.PlayerLevel, (int)s.PlayerXP);
         if (Sync is { } sync)
         {
-            sync.MarkLoaded(user.Achievements);
+            sync.MarkLoaded(user.Achievements, consentAdopted: true);
             App.Descent?.RequestRefresh("profile loaded");   // WPF MainWindow.xaml.cs:753
             sync.StartHeartbeat();
             await sync.PushAsync("after load");

@@ -17,15 +17,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
     ///
     /// <para><b>Page wave k2 (2026-10-10).</b> The six consent switches (Allow DMs, Share profile
     /// picture, Show online status, the public real avatar, the two Goon share flags) write, save and
-    /// push through Core <c>SyncPush.PushPrivacyAsync</c>, so a REVOKE lands at once; the flags ride
-    /// every push until a sync delivers them. Rich Presence refuses to arm without
+    /// push through Core <c>SyncPush.PushPrivacyAsync</c>, so a REVOKE lands at once; from then on this
+    /// account's six ride every sync, as WPF sends them (lane z1). Rich Presence refuses to arm without
     /// <c>Current.HasLinkedDiscord</c> (WPF MainWindow.AccountShell.cs:279-300), and it and Show level
     /// write their setting. The Login / Link Discord / Logout button runs AccountSettingsSection's
     /// flows (WPF BtnDiscordTabLogin_Click, MainWindow.Browser.cs:1366).
     ///  - SEAM(discord rpc): <c>App.DiscordRpc</c> is not on this head, so the two presence settings
     ///    are stored for the presence client and drive nothing yet.
-    ///  - not ported: the server's values are not adopted on profile load (WPF does), and the Home
-    ///    quick Rich Presence toggle repaints from the setting only on its own next refresh.</para>
+    ///  - The profile load adopts the two consent values the server returns (allow DM, show online)
+    ///    before the first push (Core ProfileAdopt.AdoptConsent); the other four are not in that reply.
+    ///  - not ported: the Home quick Rich Presence toggle repaints from the setting only on its own
+    ///    next refresh.</para>
     ///
     /// The ctor uses <c>AvaloniaXamlLoader.Load</c>, so controls are reached with FindControl.
     /// </summary>
