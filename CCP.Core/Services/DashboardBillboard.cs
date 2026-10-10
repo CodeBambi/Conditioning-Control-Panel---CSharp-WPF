@@ -308,17 +308,19 @@ namespace ConditioningControlPanel.Services
         /// Chips name the CARD, not its kind (owner, 2026-10-07: two chips both read "Waiting").
         /// One short word per known card id; a card not in the table falls back to its kind's label.
         /// </summary>
+        // Card ids spelled out: the WPF providers that own them (Services/Billboard/Providers,
+        // LiveCards/WaitingCards/ResumeCards/EventCards.Card*) read App.* and stay in the head.
         public static readonly IReadOnlyDictionary<string, string> ChipNameKeys = new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            [Billboard.Providers.LiveCards.CardJoinFriend] = "billboard_chip_friend",
-            [Billboard.Providers.LiveCards.CardTables] = "billboard_chip_tables",
-            [Billboard.Providers.LiveCards.CardPlaying] = "billboard_chip_playing",
-            [Billboard.Providers.WaitingCards.CardQuests] = "billboard_chip_quests",
-            [Billboard.Providers.WaitingCards.CardProgram] = "billboard_chip_program",
-            [Billboard.Providers.WaitingCards.CardInvite] = "billboard_chip_invite",
-            [Billboard.Providers.ResumeCards.CardSession] = "billboard_chip_session",
-            [Billboard.Providers.ResumeCards.CardDeeper] = "billboard_chip_deeper",
-            [Billboard.Providers.EventCards.CardLocktober] = "billboard_chip_locktober",
+            ["live.friend"] = "billboard_chip_friend",
+            ["live.tables"] = "billboard_chip_tables",
+            ["live.playing"] = "billboard_chip_playing",
+            ["waiting.quests"] = "billboard_chip_quests",
+            ["waiting.program"] = "billboard_chip_program",
+            ["waiting.invite"] = "billboard_chip_invite",
+            ["resume.session"] = "billboard_chip_session",
+            ["resume.deeper"] = "billboard_chip_deeper",
+            ["event.locktober"] = "billboard_chip_locktober",
             ["house.discord"] = "billboard_chip_discord",
             ["house.webapp"] = "billboard_chip_webapp",
             ["house.remix"] = "billboard_chip_remix",

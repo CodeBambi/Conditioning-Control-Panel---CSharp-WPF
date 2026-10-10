@@ -187,3 +187,27 @@ Counts: 8 ported-by-merge, 132 needs-port, 8 n/a (total 148).
 | 146 | `a40bf0b9b` | fix(7.1.5): lockdown quests, flashes switched on mid-run, settings churn, quest nudges | `FlashScheduleRule.cs`, `FlashService.cs`, `PossessionEvents.cs`, `AchievementService.cs`, `SkillTreeService.cs`, `LockdownTabView.xaml`; langs: 9; tests: 1 | `FlashFeatureControl.axaml(.cs)`, `PopQuizWindow.axaml(.cs)`, `TubeFitDialog.axaml(.cs)`, `LockdownTabView.axaml`; Core Asks/QuestService/LockdownService (merged) | needs-port (`sync6-715-fixes`) | strings merged; Core `AskCatalog.cs`, `CompanionAskService.cs`, `ConversationDelivery.cs`, `LockdownService.cs`, `QuestService.cs` merged |
 | 147 | `f30b54f31` | fix(7.1.5): a session no longer restores the pop quiz switch at its end | `SessionEngine.cs` | `FlashFeatureControl.axaml(.cs)`, `PopQuizWindow.axaml(.cs)`, `TubeFitDialog.axaml(.cs)`, `LockdownTabView.axaml`; Core Asks/QuestService/LockdownService (merged) | needs-port (`sync6-715-fixes`) |  |
 | 148 | `ae52541de` | release: 7.1.5 "Stay Tuned" | `ConditioningControlPanel.csproj`, `MainWindow.xaml`, `UpdateService.cs`; `build-installer.bat`, `installer.iss`; langs: 9 | none (by design) | n/a | WPF release mechanics (csproj version, UpdateService, installer.iss, build-installer.bat, header version); release-notes strings merged into Core Languages |
+
+## Merge notes (`avalonia-port/main-20261009`) and -compat
+
+Hand edits in the merge commit, checked against `git merge-tree --write-tree` (21 paths, all conflict resolutions):
+
+- Language files (9): one conflict each, the stack's `exclusives_not_on_this_build` and main's `plans_chip_unlock`; kept both (no duplicate keys).
+- `CCP.Core/Services/Companion/Asks/CompanionAskService.cs`: kept the stack's non-null `KnownTopics`, added main's `QuestsOpen`.
+- `CCP.Core/Services/DashboardBillboard.cs`: took main's Tonight Board rewrite (the old six-card roster and `PosterUri` are gone on main).
+- `CCP.Core/Services/Haptics/LockdownService.cs`: took main's `RaiseEach` (ccp-bugs #1388) with `App.Logger` written as Serilog `Log`.
+- `ConditioningControlPanel.csproj`: the version stays in `Version.props` (bumped 7.0.5 -> 7.1.5 there); main's nav art plus the new per-mod `nav/mods/**` twins are linked from `..\Assets\nav`.
+- `MainWindow.DashboardBillboard.cs`, `MainWindow.Exclusives.cs`, `FlashService.cs` (#1377 slow recheck), `DashboardBillboardTests.cs`: took main (the stack's `BillboardPoster` / `ShelfOrder` edits were to code main deleted).
+- `EmiTargets.cs`: kept the stack's table, replayed main's vault target `exclusives` -> `premium`.
+- `NavRailFlyoutTests.cs`: main deleted it (replaced by `NavSectionRailTests`); deletion taken.
+- `YouLibraryDoorTests.cs`: main's assertions with the stack's `SourceRoots.EnumerateProductSources` walk.
+- The four `door_social.png` (main added them under `Resources/nav`, a directory the stack moved) land in `Assets/nav/`.
+
+-compat (`avalonia-port/main-20261009-compat`):
+
+- `BillboardContract.cs` moved to `CCP.Core/Services/Billboard/` (Core `DashboardBillboard` needs its types); its two WPF-typed members (`BillboardArt` registry, `IBillboardArtView`) stay in the head as `Services/Billboard/BillboardArt.cs`.
+- `NavSections.cs` moved to `CCP.Core/Services/UI/` (pure; Core `SettingsPaletteIndex` reads it).
+- Core `DashboardBillboard.ChipNameKeys` spells the provider card ids out (the WPF providers read `App.*`).
+- Seams: `SettingsPaletteIndex.GameAvailableProvider` (WPF sets `LauncherCatalogue.Find(id)?.Available`; Avalonia falls back to Core `LauncherCards`), `ConversationDelivery.QuestsOpenProvider` (both heads set it from `App.Quests`); `QuestService` logs through Serilog `Log`.
+- `CCP.Core/Services/LegacyBillboard.cs`: the pre-7.1 six-slide roster, renamed, so the Avalonia Home slideshow keeps working until `sync6-tonight-board` ports the deck (delete it in that lane).
+- WPF source-scan tests from main routed through `SourceRoots` / `Assets` (Languages, billboard posters, `flavours.js`, `door_social.png` twins).

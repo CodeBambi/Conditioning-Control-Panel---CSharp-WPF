@@ -23,8 +23,8 @@ public class FlavourPresetsTests
         return dir!.FullName;
     }
 
-    private static string Js() => File.ReadAllText(Path.Combine(RepoRoot(), "ConditioningControlPanel",
-        "Resources", "web", "goon", "ui", "flavours.js"));
+    private static string Js() => File.ReadAllText(Path.Combine(RepoRoot(), "Assets",
+        "web", "goon", "ui", "flavours.js"));
 
     private static string[] List(string body) =>
         Regex.Matches(body, "'([^']*)'").Select(m => m.Groups[1].Value).ToArray();

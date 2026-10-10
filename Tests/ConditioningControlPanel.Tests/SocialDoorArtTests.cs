@@ -127,11 +127,13 @@ public class SocialDoorArtTests
     {
         var root = RepoRoot();
         var app = Path.Combine(root, "ConditioningControlPanel");
-        Assert.True(File.Exists(Path.Combine(app, "Resources", "nav", "door_social.png")));
+        // The art lives in the repo-root Assets tree; the WPF csproj links it under Resources\.
+        var assets = Path.Combine(root, "Assets");
+        Assert.True(File.Exists(Path.Combine(assets, "nav", "door_social.png")));
         foreach (var id in ModsWithOwnDoors)
-            Assert.True(File.Exists(Path.Combine(app, "Resources", "nav", "mods", id, "door_social.png")), id);
+            Assert.True(File.Exists(Path.Combine(assets, "nav", "mods", id, "door_social.png")), id);
 
         var csproj = File.ReadAllText(Path.Combine(app, "ConditioningControlPanel.csproj"));
-        Assert.Contains("<Resource Include=\"Resources\\nav\\mods\\*\\*.png\" />", csproj, StringComparison.Ordinal);
+        Assert.Contains("<Resource Include=\"..\\Assets\\nav\\mods\\**\\*.png\" Link=\"Resources\\nav\\mods\\%(RecursiveDir)%(Filename)%(Extension)\" />", csproj, StringComparison.Ordinal);
     }
 }

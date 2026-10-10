@@ -26,7 +26,7 @@ public class Fix715UiTests
     }
 
     private static string Src(params string[] parts) =>
-        File.ReadAllText(Path.Combine(new[] { RepoRoot(), "ConditioningControlPanel" }.Concat(parts).ToArray()));
+        SourceRoots.ReadProductFile(parts);
 
     // ---------------------------------------------------------------- #1386
 
@@ -103,7 +103,7 @@ public class Fix715UiTests
     [InlineData("intake_popquiz_turn_off")]
     public void New_keys_ship_in_every_language(string key)
     {
-        var dir = Path.Combine(RepoRoot(), "ConditioningControlPanel", "Localization", "Languages");
+        var dir = SourceRoots.LanguagesDirectory;
         foreach (var file in Directory.GetFiles(dir, "*.json"))
             Assert.Contains($"\"{key}\":", File.ReadAllText(file));
     }

@@ -185,7 +185,7 @@ public class DashboardBillboardTests
         {
             // A drawn-only scene (the Daily Daze wheel) has no file; its path is a scene key.
             if (ConditioningControlPanel.Controls.Billboard.HouseScenes.DrawnOnly(c.Poster)) continue;
-            Assert.True(File.Exists(Path.Combine(root.FullName, "ConditioningControlPanel", "Resources", c.Poster)), c.Poster);
+            Assert.True(File.Exists(Path.Combine(root.FullName, "Assets", c.Poster)), c.Poster);
             Assert.Contains(@"Resources\" + c.Poster.Replace('/', '\\'), csproj);
             Assert.NotNull(BuiltInArt.PosterUri(c.Poster));
         }
