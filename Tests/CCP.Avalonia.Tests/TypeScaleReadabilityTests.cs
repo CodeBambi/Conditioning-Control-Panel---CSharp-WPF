@@ -5,6 +5,7 @@ using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.LogicalTree;
 using Avalonia.Media;
+using Avalonia.Styling;
 using Avalonia.Threading;
 using CCP.Avalonia.Testing;
 using ConditioningControlPanel;
@@ -87,6 +88,43 @@ public sealed class TypeScaleReadabilityTests
                 Assert.Equal(TextSecondary, Ink(blurb));
             }
             finally { shell.Close(); }
+            return Task.CompletedTask;
+        });
+    }
+
+    [Fact]
+    public async Task CompanionThemeAndMakeHerYoursRideTheTypeScale()
+    {
+        await AvaloniaTestDispatcher.RunAsync(() =>
+        {
+            if (Application.Current is null)
+                AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>()
+                    .UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                    .SetupWithoutStarting();
+            var service = new SettingsService();
+            CoreSettings.ServiceProvider = () => service;
+            var view = new global::ConditioningControlPanel.Avalonia.Views.Controls.Companion.MakeHerYoursView();
+            var window = new Window { Content = view, Width = 900, Height = 900 };
+            try
+            {
+                window.Show();
+                Dispatcher.UIThread.RunJobs();
+                // CompanionTheme's zone header is an eyebrow now (23c284a3c): 11 Bold Consolas, section ink, no glow.
+                var probe = new TextBlock { Text = "probe", Theme = (ControlTheme)view.FindResource("CmpSectionTitleStyle")! };
+                window.Content = new StackPanel { Children = { probe } };
+                Dispatcher.UIThread.RunJobs();
+                Assert.Equal(11, probe.FontSize);
+                Assert.Equal(FontWeight.Bold, probe.FontWeight);
+                Assert.Equal(SectionInk, Ink(probe));
+                Assert.Null(probe.Effect);
+                // Make Her Yours (19f5285e8): the Active line is Type.Body (13, TextSecondary).
+                window.Content = view;
+                Dispatcher.UIThread.RunJobs();
+                var active = view.GetLogicalDescendants().OfType<TextBlock>()
+                    .First(t => t.Theme == view.FindResource("Type.Body") && t.FontSize == 13 && Ink(t) == TextSecondary);
+                Assert.NotNull(active);
+            }
+            finally { window.Close(); }
             return Task.CompletedTask;
         });
     }
