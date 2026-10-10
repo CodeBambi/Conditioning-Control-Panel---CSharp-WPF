@@ -257,7 +257,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         // ponytail: ported: premium gate, double warning, Activate, panel swap, clock, the secret
         // phrase, the Emergency Exit breath; the title-bar badge, blood-red theme and activation flash
         // are MainShellWindow.Lockdown.cs; the Strict toggles grey themselves (HoldWhileLockdown).
-        // Not on this head: the Possession haunt/readout (no director yet), the Dose keeper and
+        // The Dose keeper is Core LockdownDoseKeeper, installed by MainShellWindow.LockdownDose.cs.
+        // Not on this head: the Possession haunt/readout (no director yet) and
         // the system-key hook (Linux has none, so the warning does not promise it).
 
         /// <summary>The head's live Lockdown (null in renders and tests that set none).</summary>

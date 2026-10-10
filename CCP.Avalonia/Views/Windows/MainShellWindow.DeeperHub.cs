@@ -38,8 +38,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         internal static Func<Window, string, string, Task<bool>> DeeperConfirm = (owner, title, message) =>
             MessageDialog.ConfirmAsync(owner, title, message, okText: Loc.Get("btn_delete"), cancelText: Loc.Get("btn_cancel"));
 
+        /// <summary>A dropped enhancement goes into the library (tests swap it so no library file is written).</summary>
+        internal static Func<IEnumerable<string>, string?> DeeperDropImport = files => DeeperImport.ImportFiles(files);
+
         private readonly Dictionary<string, DeeperEditorWindow> _deeperOpenEditors = new(StringComparer.OrdinalIgnoreCase);
-        private EnhancementPlayerWindow? _deeperPlayer;
         private DispatcherTimer? _deeperDeleteTimer;
 
         private DeeperTabViewModel? DeeperModel => Named<DeeperTabView>("DeeperTab")?.DataContext as DeeperTabViewModel;
@@ -90,20 +92,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         /// <summary>WPF EnhancementPlayerWindow.ShowOrActivate: one player window, reused.</summary>
-        private EnhancementPlayerWindow ShowOrActivateDeeperPlayer()
-        {
-            if (_deeperPlayer is { } open)
-            {
-                if (open.WindowState == WindowState.Minimized) open.WindowState = WindowState.Normal;
-                open.Activate();
-                return open;
-            }
-            var player = new EnhancementPlayerWindow(null, null);
-            player.Closed += (_, _) => { if (ReferenceEquals(_deeperPlayer, player)) _deeperPlayer = null; };
-            _deeperPlayer = player;
-            if (IsVisible) player.Show(this); else player.Show();
-            return player;
-        }
+        // The one shared player (the editor's Preview opens the same window), never a second one.
+        private EnhancementPlayerWindow ShowOrActivateDeeperPlayer() => EnhancementPlayerWindow.ShowOrActivate(this);
 
         /// <summary>WPF BtnDeeperOpenPlayer_Click (MainWindow.DeeperTab.cs:202).</summary>
         internal void BtnDeeperOpenPlayer_Click()
@@ -119,7 +109,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             try
             {
-                var already = _deeperPlayer != null && DeeperTabViewModel.PathsEqual(_deeperPlayer.LoadedFilePath, path);
+                var already = EnhancementPlayerWindow.Open.LastOrDefault() is { } open && DeeperTabViewModel.PathsEqual(open.LoadedFilePath, path);
                 var player = ShowOrActivateDeeperPlayer();
                 if (!already) player.LoadEnhancementFile(path);
             }
