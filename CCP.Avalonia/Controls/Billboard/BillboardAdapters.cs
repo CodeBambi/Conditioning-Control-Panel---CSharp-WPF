@@ -27,24 +27,26 @@ namespace ConditioningControlPanel.Avalonia.Controls.Billboard
     }
 
     /// <summary>
-    /// WAITING, the adapter (WPF 7.1.5 WaitingProvider): today's quests from App.Quests and an unused
-    /// invite code from <see cref="WaitingSignals"/>. The port constructs no ProgramService yet, so
-    /// the program-day card is absent until it does (the Core rule <see cref="WaitingCards.Program"/>
-    /// is ready for it).
+    /// WAITING, the adapter (WPF 7.1.5 WaitingProvider): today's program day from App.Programs,
+    /// today's quests from App.Quests and an unused invite code from <see cref="WaitingSignals"/>,
+    /// in that order (the program day leads, as WPF).
     /// </summary>
     public sealed class WaitingProvider : BillboardProviderBase
     {
         private readonly BillboardShellHooks _hooks;
         private readonly Func<(int Slots, int Done)> _quests;
+        private readonly Func<ProgramToday?> _program;
         private bool _hooked;
 
         public WaitingProvider(BillboardShellHooks hooks) : this(hooks, null) { }
 
-        /// <summary>Test seam: the quest reader.</summary>
-        internal WaitingProvider(BillboardShellHooks hooks, Func<(int Slots, int Done)>? quests)
+        /// <summary>Test seam: the quest reader and the program-day reader.</summary>
+        internal WaitingProvider(BillboardShellHooks hooks, Func<(int Slots, int Done)>? quests,
+            Func<ProgramToday?>? program = null)
         {
             _hooks = hooks ?? new BillboardShellHooks();
             _quests = quests ?? ReadQuests;
+            _program = program ?? ReadProgram;
         }
 
         public override string Id => "waiting";
@@ -53,7 +55,8 @@ namespace ConditioningControlPanel.Avalonia.Controls.Billboard
         {
             Hook();
             var loc = Loc;
-            var cards = new List<BillboardCardSpec>(2);
+            var cards = new List<BillboardCardSpec>(3);
+            if (WaitingCards.Program(_program(), loc) is { } program) cards.Add(program);
             var (slots, done) = _quests();
             if (WaitingCards.Quests(slots, done, loc) is { } quests) cards.Add(quests);
             if (WaitingCards.Invite(context.Tier, WaitingSignals.Invites, loc) is { } invite) cards.Add(invite);
@@ -82,9 +85,28 @@ namespace ConditioningControlPanel.Avalonia.Controls.Billboard
                     q.QuestsRefreshed += (_, _) => RaiseChanged();
                     q.QuestCompleted += (_, _) => RaiseChanged();
                 }
+                if (AppHost.Programs is { } p)
+                {
+                    p.TodayChanged += (_, _) => RaiseChanged();
+                    p.DayCompleted += (_, _) => RaiseChanged();
+                }
                 WaitingSignals.InvitesChanged += RaiseChanged;
             }
             catch (Exception ex) { Log.Debug("[Billboard] waiting hooks: {E}", ex.Message); }
+        }
+
+        /// <summary>WPF WaitingProvider.ReadProgram: the running enrollment's day, or null.</summary>
+        private static ProgramToday? ReadProgram()
+        {
+            var programs = AppHost.Programs;
+            var enrollment = programs?.ActiveEnrollment;
+            if (programs == null || enrollment == null) return null;
+            if (enrollment.State != global::ConditioningControlPanel.Models.Program.ProgramEnrollmentState.Active) return null;
+            var program = programs.ActiveProgram;
+            if (program == null || programs.Today == null) return null;
+            var record = programs.TodayRecord;
+            return new ProgramToday(program.Title, enrollment.CurrentDay, program.LengthDays,
+                record?.SessionCompleted == true, record?.DayCompleted == true);
         }
 
         private static (int Slots, int Done) ReadQuests()

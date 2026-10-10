@@ -29,8 +29,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     /// <see cref="BillboardDeckView"/>, the provider list is <see cref="BillboardWiring"/>.
     ///
     /// <para>Differences from 7.1.5, all because the port lacks the thing: snoozes live in board/snoozes.json (no
-    /// AppSettings.BillboardSnoozedUntil yet); there is no Showcase (no clips),
-    /// no program day (no ProgramService), and the Back Room house card waits for a Back Room
+    /// AppSettings.BillboardSnoozedUntil yet); the Showcase clip decodes through the silent
+    /// FlashClipPlayer (no MediaElement here), and the Back Room house card waits for a Back Room
     /// launcher destination. Live joins sit at the table (JoinFromBoard); a card with no key opens the Lobby. The board stays silent, as 7.1.5 shipped it.</para>
     /// </summary>
     public partial class MainShellWindow
