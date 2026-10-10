@@ -43,6 +43,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             PaintHeroArtFade();
             ActualThemeVariantChanged += (_, _) => PaintHeroArtFade();
             PaperTag.PointerReleased += (_, _) => ToggleBill();
+            // WPF :102: a long lock name shrinks to the hero's inner width instead of wrapping or clipping.
+            HeroCard.SizeChanged += (_, _) => HeroTitle.FitWidth = Math.Max(0, HeroCard.Bounds.Width - 52);
+            Calendar.SizeChanged += (_, _) => PlaceCalendarTag();
             TrailerInit();
             _menuReady = true;
         }
@@ -81,6 +84,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 : balance < 0 ? Color.FromRgb(0x1E, 0x8A, 0x6E) : Color.FromRgb(0x6E, 0x66, 0x86));
             TagStamp.BorderBrush = stamp;
             TxtTagStamp.Foreground = stamp;
+            PaintCalendarTag(balance);
         }
 
         // ---- the rows ----

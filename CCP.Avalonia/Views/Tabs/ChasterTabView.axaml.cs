@@ -100,7 +100,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private void OnLinkChanged() => Dispatcher.UIThread.Post(OnTabShown);
         // WPF :167-172: a lock starting or ending also opens or closes the figures.
         private void OnLockChanged() => Dispatcher.UIThread.Post(() => { RefreshHero(); PaintStamps(); });
-        private void OnBooked(string eventId, TabBooking booking) => Dispatcher.UIThread.Post(() => { RefreshHero(); RefreshAdded(); RefreshNumbers(); });
+        // WPF FxBooked (Fx.cs:676): a price landing tugs the title's padlocks.
+        private void OnBooked(string eventId, TabBooking booking) => Dispatcher.UIThread.Post(() => { RefreshHero(); RefreshAdded(); RefreshNumbers(); HeroTitle.Jolt(); });
 
         internal void Refresh()
         {
@@ -226,6 +227,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             PaintChasterChip(chaster);
             RefreshMood(chaster);
             HeroTitle.IsVisible = linked;
+            if (linked) HeroTitle.Text = Loc.Get("chaster_hero_title");
             HeroPills.Children.Clear();
             if (!linked)
             {
