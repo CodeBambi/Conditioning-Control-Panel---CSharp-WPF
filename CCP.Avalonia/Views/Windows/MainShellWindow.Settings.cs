@@ -270,18 +270,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (browser != null) browser.IsVisible = !open;
         }
 
-        // Every row of the ? panel: close the panel, then start a tour. The close half is real;
-        // the tour half is one call into App.Tutorial, which is not on this head. Named per row so
-        // the day TutorialService lands, each is one line rather than a rediscovery of which
-        // TutorialType a row meant.
-        //   WhatMoved => UpgradeTour   GettingStarted => GettingStarted   Settings => Settings
+        // Every row of the ? panel: close the panel, then start a tour. Both halves are real:
+        // the tour half is CoreTutorial.Start, seeded by Tours/TutorialHead. Named per row so each
+        // stays one line and the TutorialType a row means is written down once.
+        //   (What moved opens the card: MainShellWindow.WhatMoved.cs)   GettingStarted => GettingStarted   Settings => Settings
         //   Presets => Presets         Progression => Progression         Achievements => Achievements
         //   Companion => Companion     Patreon => Patreon                 Avatar => Avatar
         //   Awareness => Awareness (plus the one-shot "open the Puppy preset editor when the tour
         //   finishes naturally" hook in MainWindow.Settings.cs:670)
         //   StartTutorial (the panel's big button) => FullTour
         private void BtnStartTutorial_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => StartGuide("FullTour");
-        private void BtnTutorialWhatMoved_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => StartGuide("UpgradeTour");
         private void BtnTutorialGettingStarted_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => StartGuide("GettingStarted");
         private void BtnTutorialSettings_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => StartGuide("Settings");
         private void BtnTutorialPresets_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => StartGuide("Presets");

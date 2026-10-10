@@ -47,6 +47,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         public SettingsTabView()
         {
             InitializeComponent(); // generated: loads the XAML and fills the x:Name fields
+#if !DEBUG
+            // HA9: the diagnostics window is a developer affordance; players never see its bubble.
+            BtnOpenDiagnostics.IsVisible = false;
+#endif
 
             MarqueeFadeHost.SizeChanged += MarqueeFadeHost_SizeChanged;
             HomeBtnAudioAdvanced.IsCheckedChanged += HomeBtnAudioAdvanced_Changed;

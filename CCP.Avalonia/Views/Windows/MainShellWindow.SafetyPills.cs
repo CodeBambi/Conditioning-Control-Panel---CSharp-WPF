@@ -1,7 +1,7 @@
 // PORTED from ConditioningControlPanel/MainWindow/MainWindow.LabTab.cs (WPF 7.1.5): UpdateMicPill,
 // MicActivePill_Click (DisarmVoiceMic), WireWebcamActivePill, WebcamActivePill_Click (:108-150, :477).
 // Ledger row platform#17: the header "Mic active" / "Camera active" pills are privacy stops.
-// No Focus Gaze service exists on this head, so the camera pill stops the Blink Trainer and the tracker.
+// The camera pill stops Focus Gaze first, then the Blink Trainer, then the tracker (WPF order).
 
 using System;
 using System.ComponentModel;
@@ -69,10 +69,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         // inline: the teardown joins the capture thread (up to 5 s) on a wedged driver.
         private async void WebcamActivePill_Click(object? sender, global::Avalonia.Input.PointerPressedEventArgs e)
         {
+            await StopCameraConsumersAsync();
+            UpdateWebcamPill();
+        }
+
+        /// <summary>WPF WebcamActivePill_Click (MainWindow.LabTab.cs:477-493): Focus Gaze stands down FIRST, so
+        /// nothing is still reading the tracker while it tears down, then the Blink Trainer, then the camera.</summary>
+        internal static async System.Threading.Tasks.Task StopCameraConsumersAsync()
+        {
+            try { GazeFocusHead.Instance.Stop(); } catch (Exception ex) { Log.Debug("Camera pill: Focus Gaze stop failed: {Error}", ex.Message); }
             try { Overlays.BlinkTrainerSession.Stop(); } catch { }
             try { await WebcamTracker.Instance.StopAsync(); }
             catch (Exception ex) { Log.Debug("WebcamActivePill_Click stop failed: {Error}", ex.Message); }
-            UpdateWebcamPill();
         }
     }
 }
