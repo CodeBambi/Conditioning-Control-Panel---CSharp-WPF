@@ -16,7 +16,7 @@ namespace CCP.Avalonia.Tests;
 /// <summary>Panic leftovers from WPF 7.1.5 (parity wave 2, platform lane): the #919b watchdog tears
 /// down off-thread when the queued handler never runs; an Escape aimed at a marked surface is the
 /// surface's once, never twice in a row; the optional Pause key never shadows the panic key.</summary>
-[Collection("Win32PanicKey")]
+[Collection(RunsAloneCollection.Name)]   // swaps CoreSettings.ServiceProvider: raced a parallel class in the full suite
 public sealed class PanicLeftoversTests
 {
     private static readonly DateTime T0 = new(2026, 10, 9, 12, 0, 0, DateTimeKind.Utc);
