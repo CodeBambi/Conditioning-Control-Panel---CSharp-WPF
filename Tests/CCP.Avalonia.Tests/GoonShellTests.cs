@@ -123,5 +123,20 @@ public sealed class GoonShellTests
         Assert.Contains("--autoplay-policy=no-user-gesture-required", WebHost.WindowsBrowserArguments);
         Assert.Contains("--disable-background-timer-throttling", WebHost.WindowsBrowserArguments);
         Assert.Contains("--disable-backgrounding-occluded-windows", WebHost.WindowsBrowserArguments);
+
+        // ONE mechanism (the environment options), and what a page is told matches what the browser got:
+        // CCP_WEBVIEW_AUTOPLAY=off drops only the autoplay switch, and Arcademy's init.autoplayOk reads false.
+        Assert.Equal(WebHost.WindowsBrowserArguments, WebHost.BrowserArgumentsFor(autoplay: true));
+        Assert.DoesNotContain("autoplay", WebHost.BrowserArgumentsFor(autoplay: false));
+        Assert.Contains("--disable-background-timer-throttling", WebHost.BrowserArgumentsFor(autoplay: false));
+        Assert.True(WebHost.AutoplayFor(windows: true, env: null));
+        Assert.False(WebHost.AutoplayFor(windows: true, env: "OFF"));
+        Assert.False(WebHost.AutoplayFor(windows: false, env: null));   // WebKitGTK has no such switch
+        Assert.Equal(WebHost.BrowserArgumentsFor(WebHost.AutoplayWithoutGesture), WebHost.BrowserArguments);
+        var src = System.IO.File.ReadAllText(System.IO.Path.Combine(WebHostRepoRoot(), "CCP.Avalonia", "Views", "Controls", "WebHost.axaml.cs"));
+        Assert.DoesNotContain("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", src);
     }
+
+    private static string WebHostRepoRoot([System.Runtime.CompilerServices.CallerFilePath] string here = "") =>
+        System.IO.Path.GetFullPath(System.IO.Path.Combine(System.IO.Path.GetDirectoryName(here)!, "..", ".."));
 }

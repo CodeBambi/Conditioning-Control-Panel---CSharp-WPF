@@ -422,8 +422,8 @@
                     </Grid>
 
                     <!-- Emote picker: 5 user-editable presets + 1 custom slot. -->
-                    <!-- Hidden: waits for /v2/remote/emote on the port relay (every button here would send nothing). -->
-                    <Border x:Name="EmotePickerPanel" IsVisible="False" Theme="{StaticResource SettingCardStyle}">
+                    <!-- Live: the port relay posts /v2/remote/emote (Core RemoteRelay.SendEmoteAsync). -->
+                    <Border x:Name="EmotePickerPanel" Theme="{StaticResource SettingCardStyle}">
                         <Grid>
                             <Border Background="{StaticResource TabHueWashBrush}" CornerRadius="11"/>
                             <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"

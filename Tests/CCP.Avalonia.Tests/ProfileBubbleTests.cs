@@ -176,12 +176,14 @@ public sealed class ProfileBubbleTests
             Dispatcher.UIThread.RunJobs();
             Assert.False(shell.OgBorderLoopRunning);
             shell.ShowTab("discord");
-            Dispatcher.UIThread.RunJobs();
-            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
-            Assert.True(shell.OgBorderLoopRunning);
+            // Read at the show, before the dispatcher pumps: the stagger runs on the wall clock (460 ms at
+            // most), and a cold or loaded run spent longer than that inside RunJobs, so the fade had finished.
             var cards = page.FindControl<StackPanel>("ProfileColumnStack")!.Children.Where(c => c.IsVisible).ToList();
             Assert.True(cards.Count > 1);
             Assert.True(cards[^1].Opacity < 1, "the entrance stagger did not hold the last card back");
+            Dispatcher.UIThread.RunJobs();
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+            Assert.True(shell.OgBorderLoopRunning);
             page.FindControl<Grid>("ProfileCardWrapper")!.IsVisible = false;   // a search found no one
             Dispatcher.UIThread.RunJobs();
             Assert.False(shell.OgBorderLoopRunning);

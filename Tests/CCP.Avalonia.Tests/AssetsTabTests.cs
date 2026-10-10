@@ -162,8 +162,9 @@ public sealed class AssetsTabTests
             history.RecordImages(new[] { "/x/a.png" });
             shell.ShowTab("settings");
             shell.ShowTab("assets");
-            Dispatcher.UIThread.RunJobs();
+            // Read at the show: the pulse is finite (2.7 s) and a loaded run spent longer than that in RunJobs.
             Assert.True(tab.MediaLogPulsing);
+            Dispatcher.UIThread.RunJobs();
 
             shell.ShowTab("settings");
             Dispatcher.UIThread.RunJobs();

@@ -118,7 +118,9 @@ public sealed class PanicSurfacesTests
     [Fact]
     public void TheSurfaceListIsExactAndOrdered() =>
         Assert.Equal(new[] { "intake", "games", "friends-landing", "voice-capture", "ai-followups", "blink-trainer", "gaze-minigame", "mantra", "chaos", "haptics", "remote-haptics",
-            "takeover", "engine", "pink-rush", "corner-gif", "tube", "lock-cards", "attention-test", "deeper-editor-audio", "camera" }, PanicSurfaces.All.Select(x => x.Id));
+            "takeover", "program-session", "engine", "pink-rush", "corner-gif", "tube", "lock-cards", "attention-test", "deeper-editor-audio", "camera" }, PanicSurfaces.All.Select(x => x.Id));
+
+    [Fact]
     public void EveryIdIsUniqueAndEverySafetyCriticalIdIsRegistered()
     {
         var ids = PanicSurfaces.All.Select(x => x.Id).ToList();
@@ -171,6 +173,7 @@ public sealed class PanicSurfacesTests
         ["LeashTaskHost"] = "registers itself at startup (LeashTaskHost.HookPanic: the leash-task stop, right after intake)",
         ["LeashExplainHost"] = "the leash '?' help router: a still explainer card the player opened, starts no feature; WPF panic leaves it alone",
         ["FriendsFeedHost"] = "the friends feed log: opens no surface, nothing to stop",
+        ["RaceTrackPlayer"] = "the race's own track: the 'games' surface closes the race window, whose Closed funnel (DisposeRace -> DisposeRaceTracks) stops and disposes it (RaceTrackTests)",
         ["WinRtScreenReader"] = "screen OCR (RecognizeAsync is not the mic): WPF parity, a panic leaves the keyword screen reader to its switches (WPF stops it only in the panic fallback path and restarts it); it shows nothing itself",
     };
 

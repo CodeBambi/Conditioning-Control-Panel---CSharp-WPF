@@ -59,7 +59,7 @@ public sealed class CompanionPersonalityZoneTests
         try
         {
             shell.Show();
-            shell.ShowTab("companion");
+            shell.ShowTab("personality");   // 7.1.5 nav: the zone lives on Companion > Personality (PersonalityPage adopts the room's live view); the v2 conversation page leaves the old room collapsed
             Dispatcher.UIThread.RunJobs();
             var view = shell.GetLogicalDescendants().OfType<MakeHerYoursView>().Single();
             var vm = view.ViewModel;
@@ -118,7 +118,7 @@ public sealed class CompanionPersonalityZoneTests
             s.ActiveCommunityPromptId = "community-x";
             shell.ShowTab("achievements");
             Dispatcher.UIThread.RunJobs();
-            shell.ShowTab("companion");   // re-read on return (CompanionRoomView.ResumeClocks)
+            shell.ShowTab("personality");   // re-read on return (CompanionRoomView.ResumeClocks); the zone's page in the 7.1.5 nav
             Dispatcher.UIThread.RunJobs();
             Assert.True(vm.CanResetPersonality);
             Assert.Equal(Loc.GetF("companion_personality_active_custom_fmt", "community-x"), vm.ActivePersonalityLine);

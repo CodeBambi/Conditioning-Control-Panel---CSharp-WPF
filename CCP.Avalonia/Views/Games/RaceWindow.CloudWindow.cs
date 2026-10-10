@@ -210,7 +210,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
         /// <summary>Test seam: how a link that leaves the site is opened.</summary>
         internal static Action<string> OpenInBrowser = url =>
         {
-            try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); }
+            try { Platform.ExternalOpener.Open(url); }   // the one opener: a sandbox never opens a real site
             catch (Exception ex) { Log.Debug("RaceCloud.OpenExternally: {E}", ex.Message); }
         };
 

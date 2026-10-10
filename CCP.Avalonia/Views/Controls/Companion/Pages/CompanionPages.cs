@@ -84,7 +84,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion.Pages
             if (Shelf(owner) is { } shelf)
                 Adopt(shelf.Community, CommunityHost);
             if (Room(owner)?.FindControl<MakeHerYoursView>("PersonalityZone") is { } presets)
+            {
                 Adopt(presets, PresetsHost);
+                presets.ViewModel.Sync();   // WPF PersonalityPage.OnShown -> Tab(owner).Vm.Sync(): every visit re-reads the live personality
+            }
         }
 
         private async void OpenPromptEditor_Click(object? sender, RoutedEventArgs e)

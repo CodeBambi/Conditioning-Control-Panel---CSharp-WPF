@@ -43,19 +43,29 @@ public sealed class NotificationServiceTests
             Assert.Equal(Color.Parse("#FFB347"), ((SolidColorBrush)((Border)host.Children[1]).BorderBrush!).Color);
 
             // Expiry: 150 ms display + 220 ms fade-out removes the first toast only.
-            await Task.Delay(600);
-            Dispatcher.UIThread.RunJobs();
+            // Bounded wait, not a fixed sleep: every Avalonia test shares one UI thread, so another class's
+            // test can hold it through the gap and the toast's own timer + fade run late.
+            await Until(() => host.Children.Count == 2);
             Assert.Equal(new[] { "second", "third" }, host.Children.Select(Message));
 
             // Action button runs the callback once and the toast leaves; × dismisses the other.
             Find(host.Children[0], "ToastAction").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Find(host.Children[1], "ToastDismiss").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Assert.Equal(1, invoked);
-            await Task.Delay(400);
-            Dispatcher.UIThread.RunJobs();
+            await Until(() => host.Children.Count == 0);
             Assert.Empty(host.Children);
             window.Close();
         });
+    }
+
+    private static async Task Until(Func<bool> done)
+    {
+        var limit = DateTime.UtcNow.AddSeconds(15);
+        while (!done() && DateTime.UtcNow < limit)
+        {
+            await Task.Delay(50);
+            Dispatcher.UIThread.RunJobs();
+        }
     }
 
     private static string Message(Control toast) =>

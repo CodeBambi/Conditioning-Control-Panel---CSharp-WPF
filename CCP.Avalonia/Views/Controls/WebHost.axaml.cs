@@ -40,28 +40,23 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
         /// <summary>
         /// True when pages in this process may start audio / video without a click. WPF passes
         /// <c>--autoplay-policy=no-user-gesture-required</c> to every WebView2 it creates (ChaosWebViewHost,
-        /// BackRoomHostService, BrowserService); NativeWebView takes no browser arguments, so on Windows
-        /// the same flag goes through WebView2's own process-wide variable, set once before the first web
-        /// view exists (the string must stay constant per user-data folder). WebKitGTK has no such switch:
-        /// false there, and a page that asks (Arcademy <c>init.autoplayOk</c>) waits for its first click.
-        /// <c>CCP_WEBVIEW_AUTOPLAY=off</c> leaves the engine default.
+        /// BackRoomHostService, BrowserService); this head hands the same switch to WebView2 in ONE place,
+        /// the environment options (<see cref="BrowserArguments"/>, read once per process so the string
+        /// stays constant per user-data folder). WebKitGTK has no such switch: false there, and a page
+        /// that asks (Arcademy <c>init.autoplayOk</c>) waits for its first click.
+        /// <c>CCP_WEBVIEW_AUTOPLAY=off</c> leaves the engine default (the switch is dropped, this reads false).
         /// </summary>
-        public static bool AutoplayWithoutGesture { get; } = ApplyAutoplayPolicy();
+        public static bool AutoplayWithoutGesture { get; } = AutoplayFor(OperatingSystem.IsWindows(), ReadAutoplayEnv());
 
-        private static bool ApplyAutoplayPolicy()
+        private static string? ReadAutoplayEnv()
         {
-            const string Var = "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", Flag = "--autoplay-policy=no-user-gesture-required";
-            try
-            {
-                if (!OperatingSystem.IsWindows()) return false;
-                if (string.Equals(Environment.GetEnvironmentVariable("CCP_WEBVIEW_AUTOPLAY"), "off", StringComparison.OrdinalIgnoreCase)) return false;
-                var have = Environment.GetEnvironmentVariable(Var) ?? "";
-                if (!have.Contains(Flag, StringComparison.Ordinal))
-                    Environment.SetEnvironmentVariable(Var, (have + " " + Flag).Trim());
-                return true;
-            }
-            catch { return false; }
+            try { return Environment.GetEnvironmentVariable("CCP_WEBVIEW_AUTOPLAY"); }
+            catch { return null; }
         }
+
+        /// <summary>The rule behind <see cref="AutoplayWithoutGesture"/>: WebView2 only, unless switched off.</summary>
+        internal static bool AutoplayFor(bool windows, string? env) =>
+            windows && !string.Equals(env?.Trim(), "off", StringComparison.OrdinalIgnoreCase);
 
         /// <summary>Page to load. Mirrors <see cref="NativeWebView.SourceProperty"/>.</summary>
         public static readonly StyledProperty<Uri?> SourceProperty =
@@ -178,15 +173,23 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
         /// ONE constant for every WebHost: they share a user-data folder, and WebView2 refuses a second
         /// environment on a folder whose running browser was started with different switches.
         /// ponytail: WebKitGTK has no such switch here; autoplay there needs the page's own gesture.</summary>
-        internal const string WindowsBrowserArguments =
-            "--autoplay-policy=no-user-gesture-required --disable-background-timer-throttling --disable-backgrounding-occluded-windows";
+        internal const string WindowsBrowserArguments = AutoplaySwitch + " " + NoThrottlingSwitches;
+        private const string AutoplaySwitch = "--autoplay-policy=no-user-gesture-required";
+        private const string NoThrottlingSwitches = "--disable-background-timer-throttling --disable-backgrounding-occluded-windows";
+
+        /// <summary>What a WebView2 environment gets: the whole constant, or (CCP_WEBVIEW_AUTOPLAY=off)
+        /// the same without the autoplay switch, so <see cref="AutoplayWithoutGesture"/> stays the truth.</summary>
+        internal static string BrowserArgumentsFor(bool autoplay) => autoplay ? WindowsBrowserArguments : NoThrottlingSwitches;
+
+        /// <summary>The one string this process hands every WebView2 environment.</summary>
+        internal static string BrowserArguments { get; } = BrowserArgumentsFor(AutoplayWithoutGesture);
 
         private static void OnEnvironmentRequested(object? sender, WebViewEnvironmentRequestedEventArgs e)
         {
             if (e is WindowsWebView2EnvironmentRequestedEventArgs win)
                 win.AdditionalBrowserArguments = string.IsNullOrWhiteSpace(win.AdditionalBrowserArguments)
-                    ? WindowsBrowserArguments
-                    : win.AdditionalBrowserArguments + " " + WindowsBrowserArguments;
+                    ? BrowserArguments
+                    : win.AdditionalBrowserArguments + " " + BrowserArguments;
         }
 
         public WebHost()
@@ -203,7 +206,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
                 // promise the adapter builds. A throw here must show the panel, not kill the host.
                 try
                 {
-                    _ = AutoplayWithoutGesture;   // the browser flag is in place before the engine starts
                     _web = new NativeWebView();
                     _web.EnvironmentRequested += OnEnvironmentRequested;
                     // Subscribed once, here, rather than when a caller sets AllowNavigation: the

@@ -10,6 +10,7 @@ using Avalonia.Threading;
 using CCP.Avalonia.Testing;
 using ConditioningControlPanel;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Nav;
 using ConditioningControlPanel.Avalonia.Views.Windows;
 using ConditioningControlPanel.Services;
 using Xunit;
@@ -21,7 +22,9 @@ namespace CCP.Avalonia.Tests;
 /// Twin of WPF TypeScaleContrastTests / ReadabilityRenderTests.</summary>
 public sealed class TypeScaleReadabilityTests
 {
-    private static readonly Color SectionInk = Color.Parse("#FFCBB9FC");
+    // The ink follows the section (7.1.5 nav: MainWindow.SectionChrome PaintSectionInk repaints the SectionInk family from
+    // NavStripRules on every section change), so each page is measured against its own section's hue, not the lilac default.
+    private static Color SectionInk(string section) => Color.FromUInt32(NavStripRules.Ink(section));
     private static readonly Color TextLight = Color.Parse("#FFF0F0F5");
     private static readonly Color TextSecondary = Color.Parse("#FFCCCCE0");
 
@@ -76,10 +79,10 @@ public sealed class TypeScaleReadabilityTests
                 var play = shell.GetLogicalDescendants().OfType<global::ConditioningControlPanel.Avalonia.Views.Tabs.PlayTabView>().First();
                 var zone = ByText(play, "rf_play_zone_games");           // PlayZoneTag on Type.SectionHeader
                 Assert.Equal(11, zone.FontSize);
-                Assert.Equal(SectionInk, Ink(zone));
+                Assert.Equal(SectionInk(NavSections.Play), Ink(zone));
                 // GAMES gets its rule too, painted with the section rule through a fade mask.
                 var rule = Assert.IsType<Border>(((Grid)zone.Parent!).Children[1]);
-                Assert.Equal(Color.Parse("#59B79CFF"), Assert.IsAssignableFrom<ISolidColorBrush>(rule.Background).Color);
+                Assert.Equal(Color.FromUInt32(NavStripRules.Rule(NavSections.Play)), Assert.IsAssignableFrom<ISolidColorBrush>(rule.Background).Color);
                 Assert.NotNull(rule.OpacityMask);
                 var cardTitle = ByText(play, "launcher_game_breakout_title"); // PlayCardTitle on Type.CardTitle
                 Assert.Equal(18, cardTitle.FontSize);
@@ -110,12 +113,13 @@ public sealed class TypeScaleReadabilityTests
                 window.Show();
                 Dispatcher.UIThread.RunJobs();
                 // CompanionTheme's zone header is an eyebrow now (23c284a3c): 11 Bold Consolas, section ink, no glow.
+                MainShellWindow.PaintSectionInk(NavSections.Companion);   // no shell here: paint the section the page lives in
                 var probe = new TextBlock { Text = "probe", Theme = (ControlTheme)view.FindResource("CmpSectionTitleStyle")! };
                 window.Content = new StackPanel { Children = { probe } };
                 Dispatcher.UIThread.RunJobs();
                 Assert.Equal(11, probe.FontSize);
                 Assert.Equal(FontWeight.Bold, probe.FontWeight);
-                Assert.Equal(SectionInk, Ink(probe));
+                Assert.Equal(SectionInk(NavSections.Companion), Ink(probe));
                 Assert.Null(probe.Effect);
                 // Make Her Yours (19f5285e8): the Active line is Type.Body (13, TextSecondary).
                 window.Content = view;
