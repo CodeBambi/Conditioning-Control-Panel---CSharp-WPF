@@ -4,8 +4,8 @@
 // HeroArtPlate_SizeChanged (:383, the art's fade into the card).
 // The settings list is the truth and the rows are a view of it; a way-out id (TabPrices.NeverPriced)
 // is never on the table, so it never gets a row, a price or a toggle here.
-// ponytail: FxRow's burst and FxKeyTurned's ripple (Fx.cs) are a short pop on the row here; the
-// where line and the misses tooltip are read once per build, not live-bound to a language switch.
+// A row answers its click with FxRow (the pop, and sparks when it goes on: ChasterTabView.Fx.cs).
+// ponytail: the where line and the misses tooltip are read once per build, not live-bound to a language switch.
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -223,18 +223,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             FxRow(row, on);
         }
 
-        /// <summary>A row answers the click: a small pop out and back (in 90 ms, out 140 ms). Still under motion Off.</summary>
-        private static void FxRow(Control row, bool on)
-        {
-            if (AmbientFxCanvas.Env.Level == Models.MotionLevel.Off) return;
-            if (row.RenderTransform is not ScaleTransform s) row.RenderTransform = s = new ScaleTransform(1, 1);
-            var peak = on ? 1.03 : 0.98;
-            Helpers.TransformTween.Run(s, TimeSpan.FromMilliseconds(230), new (double, AvaloniaProperty, double)[]
-            {
-                (0, ScaleTransform.ScaleXProperty, 1), (0.4, ScaleTransform.ScaleXProperty, peak), (1, ScaleTransform.ScaleXProperty, 1),
-                (0, ScaleTransform.ScaleYProperty, 1), (0.4, ScaleTransform.ScaleYProperty, peak), (1, ScaleTransform.ScaleYProperty, 1),
-            });
-        }
+        /// <summary>The rows that are on, top to bottom, for the key's ripple (WPF LitRows).</summary>
+        private IEnumerable<ToggleButton> LitRows() => _priceToggles.Values.Where(r => r.IsChecked == true);
 
         /// <summary>Red flashes, with a 4 s ring to dodge them, or no red flashes at all (the default).</summary>
         private void ChkFlashDodge_Changed(object? sender, RoutedEventArgs e)

@@ -107,6 +107,12 @@ public sealed class FriendsDrawerParityTests
             Assert.Equal(0, feed.Unread);
             // Still dotted until the drawer folds.
             Assert.NotNull(Tagged<global::Avalonia.Controls.Shapes.Ellipse>(d, "friends-feed-new"));
+            // ...and the dot glows (WPF FriendsLook.Glow(Pink, 6, 0.9)): a BoxShadow halo, never an Effect
+            var halo = Tagged<Border>(d, "friends-feed-new-glow");
+            Assert.NotNull(halo);
+            Assert.Equal(6, halo!.BoxShadow[0].Blur);
+            Assert.Equal((byte)Math.Round(255 * 0.9), halo.BoxShadow[0].Color.A);
+            Assert.Null(Tagged<global::Avalonia.Controls.Shapes.Ellipse>(d, "friends-feed-new")!.Effect);
             d.OnClosed();
         }
         finally { FriendsDrawer.FeedSource = before; PresenceAsk.Asked = asked; }
@@ -121,6 +127,14 @@ public sealed class FriendsDrawerParityTests
         await svc.RefreshAsync();
         var chip = new FriendsRailChip(svc, feed);
         Assert.Equal(0, chip.UnreadBadge);
+        // WPF FriendsLook.Glow(Pink / Mint, 8, 0.7) on the two counts, as BoxShadows on the pills themselves
+        foreach (var tag in new[] { "friends-chip-unread", "friends-chip-online" })
+        {
+            var pill = chip.GetLogicalDescendants().OfType<Border>().Single(x => (x.Tag as string) == tag);
+            Assert.Equal(8, pill.BoxShadow[0].Blur);
+            Assert.Equal((byte)Math.Round(255 * 0.7), pill.BoxShadow[0].Color.A);
+            Assert.Null(pill.Effect);
+        }
         feed.Add(new FriendEvent(FriendEventKind.PokeReceived, "u_on", "Mia", DateTime.UtcNow, "b1", null, "hi"));
         feed.Add(new FriendEvent(FriendEventKind.PokeReceived, "u_on", "Mia", DateTime.UtcNow, "b2", null, "hi"));
         Assert.Equal(2, chip.UnreadBadge);

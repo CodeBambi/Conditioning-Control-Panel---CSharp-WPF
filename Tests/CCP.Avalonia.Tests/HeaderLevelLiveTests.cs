@@ -61,7 +61,8 @@ public sealed class HeaderLevelLiveTests
             Assert.Equal($"{Loc.Get("label_level")} 11", Text("ProfileMenuLevel"));   // the bubble rail agrees
 
             s.MotionLevel = MotionLevel.Full;          // the fill tweens instead of snapping
-            ProgressionBank.Add(1, "Quest");
+            // weather, not a completion: a quest's pot is held for THE BANK's tokens (BankFxTests)
+            ProgressionBank.Add(1, "Flash");
             Dispatcher.UIThread.RunJobs();
             // WPF MotionFx.Odometer: the readout counts 5 -> 6 over 0.7 s instead of snapping.
             Assert.True(shell.XpOdometerRunning);

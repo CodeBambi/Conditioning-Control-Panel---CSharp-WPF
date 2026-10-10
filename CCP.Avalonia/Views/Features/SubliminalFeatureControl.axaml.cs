@@ -99,6 +99,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
                 names = Array.Empty<string>();
             }
             if (names.Length == 0) names = new[] { FontFallback };
+            // WPF GetInstalledFontNames: the bundled Fredoka leads the list (it is installed nowhere)
+            names = new[] { Helpers.FontPicker.BundledFredoka }
+                .Concat(names.Where(n => !string.Equals(n, Helpers.FontPicker.BundledFredoka, StringComparison.OrdinalIgnoreCase))).ToArray();
 
             foreach (var name in names)
             {
@@ -108,7 +111,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
                 {
                     Content = name,
                     Tag = name,
-                    FontFamily = new FontFamily($"{name}, {FontFallback}"),
+                    FontFamily = Helpers.FontPicker.Resolve(name, FontFallback),
                     FontSize = 14,
                 });
             }

@@ -7,8 +7,8 @@
 //
 // Deviations:
 //   - The drop sits ABOVE the chip (Placement Top, as WPF), so it never covers its own trigger.
-//   - WPF PopupAnimation.Fade is not carried (the drop just shows); card hover is the WPF 1 px lift,
-//     in and out, off when the motion level forbids transitions.
+//   - WPF PopupAnimation.Fade is a 150 ms opacity transition on the drop's shell (in only, as WPF);
+//     card hover is the WPF 1 px lift, in and out, off when the motion level forbids transitions.
 //   - Under Lockdown the chip does nothing, like every other launcher control on this head.
 using System;
 using System.Linq;
@@ -33,6 +33,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     public partial class LauncherWindow
     {
         internal const int LobbyDropMax = 6;
+        internal const int LobbyDropFadeMs = 150;   // WPF Popup's fade (AnimationDelayTime)
 
         private static readonly FontFamily LobbyFredoka = new("Fredoka, Segoe UI");
         private Button? _lobbyChip;
@@ -131,7 +132,22 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             if (_lobbyDrop == null || MainShellWindow.LockdownActive) return;
             PaintLobbyChip(MainShellWindow.Lobby.Snapshot);
-            _lobbyDrop.IsOpen = !_lobbyDrop.IsOpen;
+            bool open = !_lobbyDrop.IsOpen;
+            // WPF PopupAnimation.Fade (Lobby.cs:75): the drop fades in over 150 ms when transitions are allowed.
+            // It closes at once there too (light dismiss cannot be delayed).
+            bool fade = open && AmbientFxCanvas.Env.AllowTransitions && _lobbyDrop.Child is Border;
+            if (open && _lobbyDrop.Child is Border shell)
+            {
+                shell.Transitions = null;
+                shell.Opacity = fade ? 0 : 1;
+                if (fade)
+                    shell.Transitions = new global::Avalonia.Animation.Transitions
+                    {
+                        new global::Avalonia.Animation.DoubleTransition { Property = OpacityProperty, Duration = TimeSpan.FromMilliseconds(LobbyDropFadeMs) },
+                    };
+            }
+            _lobbyDrop.IsOpen = open;
+            if (fade) ((Border)_lobbyDrop.Child!).Opacity = 1;   // the IN: 0 -> 1 through the transition
         }
 
         internal void PaintLobbyChip(LobbySnapshot snap)

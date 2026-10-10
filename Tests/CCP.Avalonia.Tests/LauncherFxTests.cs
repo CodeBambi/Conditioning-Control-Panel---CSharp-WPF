@@ -299,4 +299,126 @@ public sealed class LauncherFxTests
         Dispatcher.UIThread.RunJobs();
         Assert.False(shell.IsVisible);                   // the held step never ran
     });
+
+    // ---------------------------------------------------------------- j3: cursor parallax, lobby drop fade, Fredoka fit
+
+    [Fact]
+    public void Parallax_SlidesEachLayerItsOwnDistance_AndSettlesBack() => Run(MotionLevel.Full, (_, launcher, _) =>
+    {
+        // Bottom-right corner: nx = ny = 1. Near layers follow, the spirals lean away (WPF Backdrop.cs:26-32).
+        launcher.ParallaxToward(new Point(launcher.Bounds.Width, launcher.Bounds.Height));
+        Step(launcher, 0.1);
+        Assert.InRange(launcher.GlowShift.X, 0.1, 17.9);                 // mid-ease: an IN, never a jump
+        Step(launcher, 0.3);
+        Assert.Equal(18, launcher.GlowShift.X, 3);
+        Assert.Equal(18, launcher.GlowShift.Y, 3);
+        Assert.Equal(14, launcher.PoolShift.X, 3);
+        Assert.Equal(8, launcher.AmbientShift.X, 3);
+        Assert.Equal(-12, launcher.SpiralShift.X, 3);
+        Assert.Equal(-8.4, launcher.SpiralSmallShift.Y, 3);
+        Assert.Same(launcher.GlowShift, launcher.FindControl<Border>("GlowLayer")!.RenderTransform);
+        Assert.Same(launcher.PoolShift, launcher.FindControl<Border>("PoolLayer")!.RenderTransform);
+        Assert.Contains(launcher.SpiralShift, ((TransformGroup)launcher.FindControl<Panel>("SpiralLayer")!.RenderTransform!).Children);
+        Assert.Contains(launcher.SpiralTurn, ((TransformGroup)launcher.FindControl<Panel>("SpiralLayer")!.RenderTransform!).Children);
+
+        launcher.SettleParallax();                                        // the OUT: eased home
+        Step(launcher, 0.1);
+        Assert.InRange(launcher.GlowShift.X, 0.1, 17.9);
+        Step(launcher, 0.3);
+        Assert.Equal(0, launcher.GlowShift.X, 3);
+        Assert.Equal(0, launcher.SpiralShift.Y, 3);
+
+        launcher.ParallaxToward(new Point(0, 0));
+        Step(launcher, 0.1);
+        launcher.Hide();                                                  // parked: snapped to rest at once
+        Assert.Equal(0, launcher.GlowShift.X);
+        Assert.Equal(0, launcher.SpiralSmallShift.X);
+    });
+
+    [Fact]
+    public void Parallax_IsOffWithoutTransitions() => Run(MotionLevel.Off, (_, launcher, _) =>
+    {
+        launcher.ParallaxToward(new Point(launcher.Bounds.Width, launcher.Bounds.Height));
+        launcher.StepFx(0.3);
+        Assert.Equal(0, launcher.GlowShift.X);
+        Assert.Equal(0, launcher.SpiralShift.X);
+    });
+
+    [Fact]
+    public void TileArt_SlidesAgainstThePointer_AndEasesHome() => Run(MotionLevel.Full, (_, launcher, _) =>
+    {
+        var grid = launcher.FindControl<UniformGrid>("GamesGrid")!;
+        var tile = grid.Children.OfType<Border>().First(t => t.GetVisualDescendants().OfType<Panel>().Any(p => Equals(p.Tag, "tile-art")));
+        var host = tile.GetVisualDescendants().OfType<Panel>().First(p => Equals(p.Tag, "tile-art"));
+        var slide = Assert.IsType<TranslateTransform>(host.RenderTransform);
+        Assert.Equal(new Thickness(-LauncherWindow.TileArtParallaxPx), host.Margin);      // 7 px spare each way
+        Assert.True(((Panel)host.Parent!).ClipToBounds);
+
+        launcher.TileHover(tile, true);
+        tile.RaiseEvent(Moved(launcher, tile.TranslatePoint(new Point(tile.Bounds.Width, tile.Bounds.Height), launcher)!.Value));
+        Step(launcher, 0.2);
+        Assert.Equal(-7, slide.X, 3);
+        Assert.Equal(-7, slide.Y, 3);
+        launcher.TileHover(tile, false);
+        Step(launcher, 0.3);
+        Assert.Equal(0, slide.X, 3);
+        Assert.Equal(0, slide.Y, 3);
+    });
+
+    private static PointerEventArgs Moved(Visual over, Point at)
+    {
+        var pointer = new global::Avalonia.Input.Pointer(global::Avalonia.Input.Pointer.GetNextFreeId(), PointerType.Mouse, true);
+        return new PointerEventArgs(InputElement.PointerMovedEvent, over, pointer, over, at, 0,
+            new PointerPointProperties(RawInputModifiers.None, PointerUpdateKind.Other), KeyModifiers.None);
+    }
+
+    [Fact]
+    public void LobbyDrop_FadesIn_AndShowsAtOnceWithoutMotion()
+    {
+        Run(MotionLevel.Full, (_, launcher, _) =>
+        {
+            launcher.StartLobbyChip();
+            launcher.ToggleLobbyDrop();
+            var shell = Assert.IsType<Border>(launcher.LobbyDrop!.Child);
+            Assert.True(launcher.LobbyDrop.IsOpen);
+            var fade = Assert.IsType<global::Avalonia.Animation.DoubleTransition>(Assert.Single(shell.Transitions!));
+            Assert.Equal(Visual.OpacityProperty, fade.Property);
+            Assert.Equal(LauncherWindow.LobbyDropFadeMs, fade.Duration.TotalMilliseconds);
+            Assert.Equal(1, shell.GetBaseValue(Visual.OpacityProperty).Value);   // the target; the transition carries it there
+            Assert.InRange(shell.Opacity, 0, 1);
+            launcher.ToggleLobbyDrop();
+            Assert.False(launcher.LobbyDrop.IsOpen);
+        });
+        Run(MotionLevel.Off, (_, launcher, _) =>
+        {
+            launcher.StartLobbyChip();
+            launcher.ToggleLobbyDrop();
+            var shell = Assert.IsType<Border>(launcher.LobbyDrop!.Child);
+            Assert.Null(shell.Transitions);
+            Assert.Equal(1, shell.Opacity);
+        });
+    }
+
+    /// <summary>j2 packed Fredoka; its glyphs are wider than the Segoe UI fallback the head drew before. Every
+    /// Fredoka line on the launcher must still fit the box WPF's sizes give it (no ellipsis, no clip).</summary>
+    [Fact]
+    public void FredokaText_FitsTheLauncherTilesAndHeader() => Run(MotionLevel.Off, (_, launcher, _) =>
+    {
+        var lines = launcher.GetVisualDescendants().OfType<TextBlock>()
+            .Where(t => t.IsEffectivelyVisible && !string.IsNullOrEmpty(t.Text) && t.FontFamily.Name.Contains("Fredoka")).ToList();
+        Assert.True(lines.Count >= 6, $"only {lines.Count} Fredoka lines found");
+        var tight = new List<string>();
+        foreach (var t in lines)
+        {
+            var probe = new TextBlock
+            {
+                Text = t.Text, FontFamily = t.FontFamily, FontSize = t.FontSize, FontWeight = t.FontWeight, FontStyle = t.FontStyle,
+                LetterSpacing = t.LetterSpacing,
+            };
+            probe.Measure(Size.Infinity);
+            if (t.TextWrapping == TextWrapping.NoWrap && probe.DesiredSize.Width > t.Bounds.Width + 0.5)
+                tight.Add($"'{t.Text}' needs {probe.DesiredSize.Width:0.#} px, has {t.Bounds.Width:0.#}");
+        }
+        Assert.True(tight.Count == 0, string.Join("; ", tight));
+    });
 }

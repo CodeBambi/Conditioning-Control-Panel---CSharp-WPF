@@ -4,10 +4,10 @@
 // What is real: the registry (_statusPulses), its single decision point (ApplyStatusPulse) and the
 // four per-tab entry points. A dot breathes only while its feature genuinely runs, which is the
 // whole "zero idle loops" rule the WPF file is held to. WPF's DoubleAnimation with AutoReverse +
-// RepeatBehavior.Forever over DropShadowEffect.Opacity becomes one Avalonia Animation with
-// PlaybackDirection.Alternate + IterationCount.Infinite over the same property - the same motion,
-// not an approximation - cancelled through a CancellationTokenSource the way every other loop on
-// this head is (see MainShellWindow.DeeperFx.cs).
+// RepeatBehavior.Forever over DropShadowEffect.Opacity is one Helpers.BeatLoop here: the same breath
+// (min, max, period) written to a glow layer's Opacity on the shared 30 fps beat, stopped through a
+// CancellationTokenSource. Never an infinite Avalonia Animation and never an animated Effect: either
+// makes the whole window compose at 60 Hz (NoInfiniteAnimationTests keeps the head free of them).
 //
 // On WPF each status tab calls its Set*StatusPulse from the state-change method it already has.
 // Here SetBlinkTrainerStatusPulse is called by BlinkTrainerTabView.RefreshStatusRow and
@@ -98,7 +98,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _pr4aFxInitialized = true;
             try
             {
-                // A plain Animation does not park itself on deactivate/minimise the way
+                // A BeatLoop does not park itself on deactivate/minimise the way
                 // AmbientFxCanvas does, so the pulses need this window funnel.
                 Activated += OnPr4aFxWindowStateish;
                 Deactivated += OnPr4aFxWindowStateish;

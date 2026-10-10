@@ -681,7 +681,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             var body = new Grid { RowDefinitions = new RowDefinitions("*,Auto") };
 
             // --- the art plate: the mod's art (or the Breakout covers), else the glyph plate; the mystery face ---
-            var plate = new Panel { MinHeight = LauncherGridLayout.MinArtHeight, Background = new SolidColorBrush(hue, 0.35) };
+            var plate = new Panel { MinHeight = LauncherGridLayout.MinArtHeight, Background = new SolidColorBrush(hue, 0.35), ClipToBounds = true };
+            // WPF Tiles.cs:100-103: the art rides in its own host, 7 px larger each way, so the parallax slide
+            // never shows an edge.
+            TranslateTransform? artSlide = null;
             IImage? art = null;
             if (revealed)
                 art = (IImage?)ModArt.TryLoad(card.ArtPath, 640) ?? card.Id switch
@@ -691,7 +694,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     _ => null,
                 };
             if (!revealed) BuildMysteryPlate(plate, hue);
-            else if (art != null) plate.Children.Add(new Image { Source = art, Stretch = Stretch.UniformToFill });
+            else if (art != null)
+            {
+                artSlide = new TranslateTransform();
+                plate.Children.Add(new Panel
+                {
+                    Tag = "tile-art", RenderTransform = artSlide, Margin = new Thickness(-TileArtParallaxPx),
+                    Children = { new Image { Source = art, Stretch = Stretch.UniformToFill } },
+                });
+            }
             else BuildGlyphPlate(plate, card.Glyph, hue);
             var surface = ((ISolidColorBrush)Res("SurfaceBgBrush")).Color;
             plate.Children.Add(new Border
@@ -761,7 +772,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (!hosted && !needsAccount) ToolTip.SetTip(tile, Loc.Get("exclusives_not_on_this_build"));
 
             tile.Child = body;
-            DecorateTileFx(tile, hue);
+            DecorateTileFx(tile, hue, artSlide);
             return tile;
         }
 
