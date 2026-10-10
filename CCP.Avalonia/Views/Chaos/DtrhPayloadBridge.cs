@@ -18,9 +18,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
     /// <para>The DtRH host calls <see cref="Fire(string)"/> from its web-message switch; a true
     /// <c>audio</c> answer is what WPF counts as "a subliminal heard" for the run.</para>
     ///
-    /// <para>ponytail: WPF arms a random 15 s slice of the clip for a run's video
-    /// (VideoService.ArmRandomSegment(VideoPayload.SEGMENT_SEC)); MandatoryVideoScheduler has no
-    /// segment seam yet, so the whole clip plays.</para>
+    /// <para>A run's video is a random slice: the payload arms
+    /// <see cref="MandatoryVideoOverlay.ArmRandomSegment"/> (WPF VideoPayload.SEGMENT_SEC = 15) before it
+    /// triggers, so the clip starts at a random point that leaves at least 15 s to play.</para>
     /// </summary>
     internal static class DtrhPayloadBridge
     {
@@ -28,6 +28,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
         internal static Func<bool> HasVideos = () => MandatoryVideoScheduler.LocalLibrary().Count > 0
             || (ContentPackStore.Current?.GetAllActivePackVideos().Count ?? 0) > 0;   // WPF: pack clips count
         internal static Func<bool> TriggerVideo = () => MandatoryVideoOverlay.Instance.Scheduler.Trigger();
+        internal static Action<double> ArmSegment = sec => MandatoryVideoOverlay.Instance.ArmRandomSegment(sec);
         internal static Func<bool> Whisper = () =>
         {
             var phrase = CoreSubliminal.PickPhrase();
@@ -72,6 +73,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
                         Log.Information("DtrhHost: video payload with an empty library - nothing to fire");
                         return false;
                     }
+                    // WPF VideoPayload.Fire: arm the random start first (a run's payload is never Ambient).
+                    ArmSegment(ConditioningControlPanel.Services.Chaos.ChaosVideoSegment.SEGMENT_SEC);
                     fired = TriggerVideo();
                 }
                 else if (string.Equals(kind, "audio", StringComparison.OrdinalIgnoreCase))

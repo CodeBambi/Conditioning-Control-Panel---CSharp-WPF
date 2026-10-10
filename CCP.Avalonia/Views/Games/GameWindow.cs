@@ -143,6 +143,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                     break;
                 case "boot-error":
                     Log.Warning("[Game] {Id}: page boot-error: {Msg}", Spec.Id, (string?)o["msg"]);
+                    // WPF DtrhHostService.OnBootError: the descent falls back to the classic door.
+                    if (Spec.Id == "dtrh") { OnDtrhBootError((string?)o["msg"]); break; }
                     Close();
                     break;
                 case "exit":
@@ -158,7 +160,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                     break;
                 case "fire-payload" when Spec.Id == "dtrh":
                     // WPF DtrhHostService.cs:296: the run's video / whisper cross to the desktop.
-                    Chaos.DtrhPayloadBridge.Fire(json);
+                    NoteDtrhPayloadFired(Chaos.DtrhPayloadBridge.Fire(json));
                     break;
                 case "heartbeat":
                 case "pong":

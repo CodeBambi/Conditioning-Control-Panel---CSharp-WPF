@@ -41,6 +41,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             }
             catch (Exception ex) { Log.Debug("DtrhHost: hosts: {E}", ex.Message); }
             HookDtrhVideo(MandatoryVideoOverlay.Instance.Scheduler);
+            TuckShellForDtrh();
         }
 
         /// <summary>WPF HookVideoEvents(true): a mandatory video fully covers the game.</summary>
@@ -65,7 +66,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
         internal void OnDtrhVideoStartedForTest() => OnDtrhVideoStarted();
         internal void OnDtrhVideoEndedForTest() => OnDtrhVideoEnded();
 
-        private void OnDtrhVideoStarted() => Post(new { type = "payload-state", kind = "video", on = true });
+        private void OnDtrhVideoStarted()
+        {
+            NoteDtrhVideoShown();   // session telemetry: a video was shown this run
+            Post(new { type = "payload-state", kind = "video", on = true });
+        }
 
         private void OnDtrhVideoEnded()
         {
@@ -186,8 +191,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                     });
                     break;
                 case "bark":
+                    // not ported: the haptic tap WPF takes first (DtrhHapticDirector.OnGameEvent).
+                    RouteDtrhBark(o);
+                    break;
                 case "haptic-state":
-                    // not ported: BarkService's chaos hooks and DtrhHapticDirector are not on this head.
+                    // not ported: DtrhHapticDirector is not on this head.
                     break;
             }
         }
@@ -197,7 +205,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
         {
             _vnSpeaking = false;
             ApplyWorldFreeze(false);
+            ResetDtrhRunMetrics();
             if (_testMode) return;
+            DtrhBarkRunStarted(difficulty);
             try { ChaosCrashSentinel.Mark($"mode=dtrh-web diff={difficulty}"); } catch (Exception ex) { _ = ex; }
         }
 
@@ -222,6 +232,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
         private void CloseDtrhHost()
         {
             UnhookDtrhVideo();
+            RestoreShellAfterDtrh();
             if (_dtrhLoomHooked) { try { DtrhLoomStore.Changed -= OnDtrhLoomChanged; } catch { } _dtrhLoomHooked = false; }
             if (_worldFrozen) { _worldFrozen = false; try { DtrhVideoPause(false); } catch { } }
             // Unconditional (WPF #1103): the flag and the video's own mute can get out of step.
