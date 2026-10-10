@@ -1796,3 +1796,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/sync6-gate-pay: +74
 - Vault gate: card/PayPal checkout link under every pay button (main 750e76812), via ExternalOpener; fake-launcher test, fail-proven.
+
+## avalonia-port/sync6-tube-avatar: +369
+- Tube cel title plate (floating plate, raised coin arrows) and Embers motes in the glass (AmbientFxCanvas Embers/Retint/RunWhileInactive); sync6 rows 2889ddb23, bd95424c8 ported.
+- TubeMotesTests (fail-proven x3); render evidence only, no live check.
