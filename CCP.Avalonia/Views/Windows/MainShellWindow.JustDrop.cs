@@ -44,10 +44,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             await JustDropService.RefreshAvailabilityAsync().ConfigureAwait(false);
         };
 
+        /// <summary>Test seam: the "webapp" key's door (default: the Play card's, the system browser).</summary>
+        internal static Action<MainShellWindow>? WebAppDoor { get; set; }
+
         /// <summary>The Core doors' window halves on this head. Idempotent.</summary>
         internal static void SeedWindowDoors()
         {
             SettingsPaletteIndex.JustDropDoorAvailableProvider = () => JustDropService.DoorAvailable;
+            Models.ExclusiveFeature.JustDropDoorProvider = SettingsPaletteIndex.JustDropDoorAvailable;   // as App.axaml.cs seeds it
             JustDropHostService.LaunchShopProvider = () => GameWindow.LaunchJustDropShop();
             JustDropHostService.LaunchReplayProvider = code => GameWindow.LaunchJustDropReplay(code);
             JustDropHostService.IsActiveProvider = GameWindow.IsJustDropOpen;
@@ -139,7 +143,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     catch (Exception ex) { Log.Warning(ex, "Just Drop failed to open"); }
                     break;
                 case "webapp":
-                    OpenPlayWebApp();   // WPF OpenWebAppFromNav: the browser, and the banner beat retires
+                    // WPF OpenWebAppFromNav: the browser, and the banner beat retires.
+                    if (WebAppDoor is { } door) door(this); else OpenPlayWebApp();
                     break;
             }
         }

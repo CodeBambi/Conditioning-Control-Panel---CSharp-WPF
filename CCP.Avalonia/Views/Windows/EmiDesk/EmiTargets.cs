@@ -52,8 +52,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
             "arcademy" => (() => ConditioningControlPanel.Services.Arcademy.ArcademyHostService.DoorAvailable, () => GameLocked(id), () => Game(id)),
             "dtrh" or "goon" or "backroom" or "intake" => (Always, () => GameLocked(id), () => Game(id)),
             // WPF: OpenFypFeed demands premium itself; Just Drop exists only while the server's door does (never locked).
-            "fyp" => Premium(id, "fyp", () => Nav("fyp")),
-            "justdrop" => (() => ConditioningControlPanel.Services.JustDrop.JustDropService.DoorAvailable, Never, () => Nav("justdrop")),
+            "fyp" => Premium(id, "fyp", () => OpenWindowDoor("fyp")),
+            "justdrop" => (() => ConditioningControlPanel.Services.JustDrop.JustDropService.DoorAvailable, Never, () => OpenWindowDoor("justdrop")),
             "loom" => Free(() => Rack("spiral")),
             "sessions" => Free(() => Nav("presets")),
             "flashes" => Free(() => Rack("flash")),
@@ -82,6 +82,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         /// <summary>The launcher card's padlock probe (WPF LabOk / IntakePass.CanStartIntake).</summary>
         private static bool GameLocked(string id) =>
             ConditioningControlPanel.Services.Launcher.LauncherCards.Find(id) is { } card && LauncherWindow.LockedFor(card);
+
+        /// <summary>Test seam: the fyp / justdrop doors (default: ShowTab's window key on the panel).</summary>
+        internal static Action<string> OpenWindowDoor { get; set; } = key => Nav(key);
 
         /// <summary>Test seam: the game door (default: the panel card's launcher entry).</summary>
         internal static Func<string, bool> LaunchGame { get; set; } = id => Shell?.LaunchCardGame(id) == true;
