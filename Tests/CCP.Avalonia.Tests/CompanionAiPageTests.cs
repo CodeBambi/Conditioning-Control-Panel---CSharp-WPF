@@ -38,6 +38,7 @@ public sealed class CompanionAiPageTests
         s.CompanionSectionOpen.Clear();
         s.AwarenessModeEnabled = false;                         // no v2 consent dialog on the tab
 
+        var oldModel = s.CompanionPrompt.AiModel;
         var shell = new MainShellWindow();
         try
         {
@@ -47,6 +48,21 @@ public sealed class CompanionAiPageTests
             var room = shell.GetLogicalDescendants().OfType<CompanionRoomView>().Single();
             var accordion = room.FindControl<WorkshopAccordion>("WorkshopZone")!;
             var workshop = (WorkshopRuntimeVm)accordion.DataContext!;
+            var page = shell.GetLogicalDescendants().OfType<AiPage>().Single();
+
+            // The default: Workshop drawer closed. The page still gets the cells and gives them back,
+            // and re-reads the Connection settings changed elsewhere (WPF tab.Vm.Sync).
+            Dispatcher.UIThread.RunJobs();
+            s.CompanionPrompt.AiModel = "probe-model";
+            shell.ShowTab("companionai");
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(page.IsVisualAncestorOf(workshop.Parts.Behavior));
+            Assert.Equal("probe-model", ((EngineRoomVm)room.FindControl<EngineRoomDrawer>("EngineZone")!.DataContext!).OllamaModel);
+            shell.ShowTab("companion");
+            Dispatcher.UIThread.RunJobs();
+            Assert.False(page.IsVisualAncestorOf(workshop.Parts.Behavior));
+            Assert.False(page.IsVisualAncestorOf(workshop.Parts.Triggers));
+
             workshop.IsExpanded = true;                         // the cells sit in their presenters
             Dispatcher.UIThread.RunJobs();
             var engine = room.FindControl<EngineRoomDrawer>("EngineZone")!;
@@ -61,7 +77,6 @@ public sealed class CompanionAiPageTests
 
             shell.ShowTab("companionai");
             Dispatcher.UIThread.RunJobs();
-            var page = shell.GetLogicalDescendants().OfType<AiPage>().Single();
             Assert.True(page.IsVisible);
             Assert.Equal("companionai", shell.CurrentTab);
             Assert.All(zones, z => Assert.True(page.IsVisualAncestorOf(z)));
@@ -82,6 +97,7 @@ public sealed class CompanionAiPageTests
         finally
         {
             s.CompanionSectionOpen.Clear();
+            s.CompanionPrompt.AiModel = oldModel;
             foreach (var w in shell.OwnedWindows.ToList()) w.Close();
             shell.RequestExit();
             Dispatcher.UIThread.RunJobs();

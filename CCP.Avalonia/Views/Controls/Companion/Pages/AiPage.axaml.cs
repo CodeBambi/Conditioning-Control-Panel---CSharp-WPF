@@ -32,7 +32,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion.Pages
             var workshop = room.FindControl<WorkshopAccordion>("WorkshopZone")?.DataContext as WorkshopRuntimeVm;
             if (room.FindControl<EngineRoomDrawer>("EngineZone") is { } engine)
             {
-                if (engine.DataContext is EngineRoomVm vm) vm.IsExpanded = true;
+                // WPF tab.Vm.Sync() re-reads the engine (CompanionRoomRuntimeVm.cs:96) before expanding it.
+                if (engine.DataContext is EngineRoomVm vm) { vm.Sync(); vm.IsExpanded = true; }
                 Borrow(engine, EngineHost);
             }
             if (workshop is not null)
@@ -42,7 +43,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion.Pages
             }
             if (room.FindControl<MemoryDiaryView>("MemoryZone") is { } diary)
             {
-                diary.ViewModel?.Sync();   // WPF tab.Vm.Sync + Brain.EnsureCurrentAccount (Sync does both here)
+                diary.ViewModel?.Sync();   // WPF Brain.EnsureCurrentAccount + the memory half of tab.Vm.Sync
                 Borrow(diary, MemoryHost);
             }
         }
@@ -74,8 +75,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion.Pages
             else if (element.GetVisualParent() is ContentPresenter presenter)
             {
                 // A Workshop cell sits in the accordion's templated presenter.
-                presenter.Content = null;
-                restore = () => presenter.Content = element;
+                // SetCurrentValue keeps the template's {Binding Content}.
+                presenter.SetCurrentValue(ContentPresenter.ContentProperty, null);
+                restore = () => presenter.SetCurrentValue(ContentPresenter.ContentProperty, element);
             }
             else if (element.Parent is ContentControl owner)
             {
