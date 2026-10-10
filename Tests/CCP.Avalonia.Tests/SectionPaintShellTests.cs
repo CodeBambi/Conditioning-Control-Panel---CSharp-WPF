@@ -108,7 +108,7 @@ public sealed class SectionPaintShellTests
                 Assert.Equal(NavStripRules.WithAlpha(play, 0xE6 / 255.0), Solid(w.Named<Border>("GlassWindowEdge")!.BorderBrush));
                 var band = w.Named<Panel>("SectionEdgeGlow")!.Children.OfType<Border>().ToList();
                 Assert.Equal(4, band.Count);
-                Assert.All(band, b => Assert.Equal(NavStripRules.WithAlpha(play, MainShellWindow.SectionEdgeGlowAlpha(play) / 255.0), Solid(b.Background)));
+                Assert.All(band, b => Assert.Equal(NavStripRules.WithAlpha(play, NavStripRules.EdgeGlowAlpha(play) / 255.0), Solid(b.Background)));
                 Assert.False(w.Named<Border>("SectionEdgeLiftTop")!.IsVisible);
 
                 // Motion on: the lit pill glows in the section hue.

@@ -76,9 +76,12 @@ namespace ConditioningControlPanel.Controls.NavRail
         public static readonly Color Coral = FromRgb(NavStripTable.Coral);       // You
         public static readonly Color Sage = FromRgb(NavStripTable.Sage);         // Library
 
-        public static Color Accent(string? section) => FromRgb(NavStripTable.AccentRgb(section));
+        public static Color Accent(string? section) => C(NavStripPaint.Accent(section));
 
         private static Color FromRgb(uint rgb) => Color.FromRgb((byte)(rgb >> 16), (byte)(rgb >> 8), (byte)rgb);
+        // The colour math is Core NavStripPaint (0xAARRGGBB), shared with the Avalonia head.
+        internal static Color C(uint c) => Color.FromArgb((byte)(c >> 24), (byte)(c >> 16), (byte)(c >> 8), (byte)c);
+        internal static uint U(Color c) => NavStripPaint.Argb(c.A, c.R, c.G, c.B);
 
         // ---- Section ink (polish wave 8, readability pass) ----------------------------------
         // Saturation goes into the headers, not the body: the eyebrow, its rule, the card
@@ -90,25 +93,24 @@ namespace ConditioningControlPanel.Controls.NavRail
         public static readonly Color TextLight = Color.FromRgb(0xF0, 0xF0, 0xF5);
 
         /// <summary>How far the ink moves from the hue toward TextLight.</summary>
-        public const double InkLift = 0.35;
+        public const double InkLift = NavStripPaint.InkLift;
         /// <summary>How far the optional title tint moves from TextLight toward the hue.</summary>
-        public const double TintPull = 0.15;
+        public const double TintPull = NavStripPaint.TintPull;
         /// <summary>The rule under an eyebrow (35%) and a card outline (25%), as bytes.</summary>
-        public const byte RuleAlpha = 0x59, OutlineAlpha = 0x40;
+        public const byte RuleAlpha = NavStripPaint.RuleAlpha, OutlineAlpha = NavStripPaint.OutlineAlpha;
 
         /// <summary>Eyebrow / label / link ink: the hue mixed 35% toward TextLight.</summary>
-        public static Color Ink(string? section) => Mix(Accent(section), TextLight, InkLift);
+        public static Color Ink(string? section) => C(NavStripPaint.Ink(section));
 
         /// <summary>Optional title tint: TextLight mixed 15% toward the hue.</summary>
-        public static Color Tint(string? section) => Mix(TextLight, Accent(section), TintPull);
+        public static Color Tint(string? section) => C(NavStripPaint.Tint(section));
 
         /// <summary>The 1 px rule under an eyebrow: the hue at 35% alpha.</summary>
-        public static Color Rule(string? section) => WithAlphaByte(Accent(section), RuleAlpha);
+        public static Color Rule(string? section) => C(NavStripPaint.Rule(section));
 
         /// <summary>A card outline: the hue at 25% alpha (the SectionHueXBorder convention).</summary>
-        public static Color Outline(string? section) => WithAlphaByte(Accent(section), OutlineAlpha);
+        public static Color Outline(string? section) => C(NavStripPaint.Outline(section));
 
-        private static Color WithAlphaByte(Color c, byte a) => Color.FromArgb(a, c.R, c.G, c.B);
 
         /// <summary>Last-tab memory: section -> tab, stored as JSON in AppSettings.NavLastTabBySection.</summary>
         public static Dictionary<string, string> ParseLastTabs(string? json) => NavStripTable.ParseLastTabs(json);
@@ -136,7 +138,7 @@ namespace ConditioningControlPanel.Controls.NavRail
         // item"): every pill is a FILLED plate, so the strip reads as a tab bar at one glance.
 
         /// <summary>Inactive pill text: the hue at 95%.</summary>
-        public const double RestTextAlpha = 0.95;
+        public const double RestTextAlpha = NavStripPaint.RestTextAlpha;
 
         // Polish wave 7 (owner: the pills "should POP more and be easily distinguishable from the
         // rest of the UI"): a raised plate sitting in a darker tray. The plate is a vertical
@@ -144,10 +146,10 @@ namespace ConditioningControlPanel.Controls.NavRail
         // pill wears its own near-hue of the section (TabTint), so the bar still reads as one place.
 
         /// <summary>Inactive pill plate: the tab's tint at 24% (34% across the top, 14% at the foot).</summary>
-        public const double RestFillAlpha = 0.24;
+        public const double RestFillAlpha = NavStripPaint.RestFillAlpha;
         /// <summary>How far a plate's top and foot sit from its middle alpha (polish wave 9: 0.06 -> 0.10,
         /// owner: the pills "seem flat").</summary>
-        public const double PlateLift = 0.10;
+        public const double PlateLift = NavStripPaint.PlateLift;
         /// <summary>Inactive pill border: the tint at 95%, lit along the top and shaded along the foot.</summary>
         public const double RestOutlineAlpha = 0.95;
         /// <summary>The outline's top edge mixes this far toward white, its foot this far toward ink
@@ -167,8 +169,8 @@ namespace ConditioningControlPanel.Controls.NavRail
         /// <summary>The pill track is a tray: deep ink at 40% under the hue at 10%, so the pills sit in
         /// something darker than the page wash. Its 1.5 px border is shaded along the top (an inset)
         /// and the hue at 40% below.</summary>
-        public const double TrackInkAlpha = 0.40;
-        public const double TrackFillAlpha = 0.10;
+        public const double TrackInkAlpha = NavStripPaint.TrackInkAlpha;
+        public const double TrackFillAlpha = NavStripPaint.TrackFillAlpha;
         public const double TrackBorderAlpha = 0.40;
         public const double TrackInsetAlpha = 0.70;
         /// <summary>The active pill's soft outer glow in the hue (static, 0 offset).</summary>
@@ -179,10 +181,10 @@ namespace ConditioningControlPanel.Controls.NavRail
         public const double ActiveRingAlpha = 0.55;
         public const double ActiveRingTopAlpha = 0.80;
         public const double ActiveRingFootAlpha = 0.30;
-        public const double ActiveRingWhite = 0.75;
+        public const double ActiveRingWhite = NavStripPaint.ActiveRingWhite;
         /// <summary>The active pill's glyph: the label's ink mixed this far toward the tab's tint
         /// (less when the mix would drop under 3:1 on the solid hue).</summary>
-        public const double ActiveGlyphTint = 0.30;
+        public const double ActiveGlyphTint = NavStripPaint.ActiveGlyphTint;
         /// <summary>Pill size: 38 px tall, 14.5 px SemiBold label, 16 px padding, 6 px between pills.</summary>
         public const double PillHeight = 38;
         public const double PillFontSize = 14.5;
@@ -197,7 +199,7 @@ namespace ConditioningControlPanel.Controls.NavRail
         /// <summary>Extra right padding on a pill that carries a tier sign.</summary>
         public const double BadgePadExtra = 4;
         /// <summary>Hue step between neighbouring pills on one bar, in degrees.</summary>
-        public const double TabHueStep = 9;
+        public const double TabHueStep = NavStripPaint.TabHueStep;
         /// <summary>The leading glyph: 16 px in Segoe MDL2 Assets, wearing the label's colour.</summary>
         public const double GlyphSize = 16;
         public const string GlyphFont = "Segoe MDL2 Assets";
@@ -261,106 +263,43 @@ namespace ConditioningControlPanel.Controls.NavRail
         public const double NoteTextAlpha = 0.90;
 
         /// <summary>The hue at an alpha (0..1).</summary>
-        public static Color WithAlpha(Color c, double alpha) =>
-            Color.FromArgb((byte)Math.Round(Math.Clamp(alpha, 0, 1) * 255), c.R, c.G, c.B);
+        public static Color WithAlpha(Color c, double alpha) => C(NavStripPaint.WithAlpha(U(c), alpha));
 
         /// <summary>WCAG relative luminance of an opaque colour.</summary>
-        public static double Luminance(Color c)
-        {
-            static double Lin(byte v)
-            {
-                double s = v / 255.0;
-                return s <= 0.03928 ? s / 12.92 : Math.Pow((s + 0.055) / 1.055, 2.4);
-            }
-            return 0.2126 * Lin(c.R) + 0.7152 * Lin(c.G) + 0.0722 * Lin(c.B);
-        }
+        public static double Luminance(Color c) => NavStripPaint.Luminance(U(c));
 
         /// <summary>WCAG contrast ratio between two opaque colours (1..21).</summary>
-        public static double Contrast(Color a, Color b)
-        {
-            double la = Luminance(a), lb = Luminance(b);
-            return (Math.Max(la, lb) + 0.05) / (Math.Min(la, lb) + 0.05);
-        }
+        public static double Contrast(Color a, Color b) => NavStripPaint.Contrast(U(a), U(b));
 
         /// <summary>The active pill's text on its solid hue fill: dark ink or white, whichever
         /// reads better. SectionTabStripTests pins it at 4.5:1 or more for every section.</summary>
-        public static Color ActiveTextOn(Color fill) =>
-            Contrast(DarkInk, fill) >= Contrast(Colors.White, fill) ? DarkInk : Colors.White;
+        public static Color ActiveTextOn(Color fill) => C(NavStripPaint.ActiveTextOn(U(fill)));
 
         /// <summary>The app's dark page ground (the strip sits on it).</summary>
         public static readonly Color PageGround = Color.FromRgb(0x1A, 0x12, 0x30);
 
         /// <summary>Paints <paramref name="top"/> (with its alpha) over an opaque <paramref name="under"/>.</summary>
-        public static Color Over(Color top, Color under)
-        {
-            double a = top.A / 255.0;
-            byte Mix(byte t, byte u) => (byte)Math.Round(t * a + u * (1 - a));
-            return Color.FromRgb(Mix(top.R, under.R), Mix(top.G, under.G), Mix(top.B, under.B));
-        }
+        public static Color Over(Color top, Color under) => C(NavStripPaint.Over(U(top), U(under)));
 
         /// <summary>Porter-Duff "over" for two colours that may both be translucent.</summary>
-        public static Color Composite(Color top, Color under)
-        {
-            double at = top.A / 255.0, au = under.A / 255.0;
-            double a = at + au * (1 - at);
-            if (a <= 0) return Color.FromArgb(0, 0, 0, 0);
-            byte Mix(byte t, byte u) => (byte)Math.Round((t * at + u * au * (1 - at)) / a);
-            return Color.FromArgb((byte)Math.Round(a * 255), Mix(top.R, under.R), Mix(top.G, under.G), Mix(top.B, under.B));
-        }
+        public static Color Composite(Color top, Color under) => C(NavStripPaint.Composite(U(top), U(under)));
 
         /// <summary>A straight mix of two colours (t = 0 gives a, 1 gives b), opaque.</summary>
-        public static Color Mix(Color a, Color b, double t)
-        {
-            t = Math.Clamp(t, 0, 1);
-            byte M(byte x, byte y) => (byte)Math.Round(x + (y - x) * t);
-            return Color.FromRgb(M(a.R, b.R), M(a.G, b.G), M(a.B, b.B));
-        }
+        public static Color Mix(Color a, Color b, double t) => C(NavStripPaint.Mix(U(a), U(b), t));
 
         /// <summary>The tray's fill: the hue at 10% over deep ink at 40% (translucent).</summary>
-        public static Color TrackFill(Color hue) =>
-            Composite(WithAlpha(hue, TrackFillAlpha), WithAlpha(DarkInk, TrackInkAlpha));
+        public static Color TrackFill(Color hue) => C(NavStripPaint.TrackFill(U(hue)));
 
         // ---- HSL (polish wave 7: per-tab tints) ----------------------------------------------
 
         /// <summary>Hue (0..360), saturation and lightness (0..1) of a colour.</summary>
-        public static (double H, double S, double L) ToHsl(Color c)
-        {
-            double r = c.R / 255.0, g = c.G / 255.0, b = c.B / 255.0;
-            double max = Math.Max(r, Math.Max(g, b)), min = Math.Min(r, Math.Min(g, b));
-            double l = (max + min) / 2, d = max - min;
-            if (d < 1e-9) return (0, 0, l);
-            double sat = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-            double h = max == r ? (g - b) / d + (g < b ? 6 : 0)
-                     : max == g ? (b - r) / d + 2
-                     : (r - g) / d + 4;
-            return (h * 60, sat, l);
-        }
+        public static (double H, double S, double L) ToHsl(Color c) => NavStripPaint.ToHsl(U(c));
 
         /// <summary>An opaque colour from hue (degrees, any range), saturation and lightness.</summary>
-        public static Color FromHsl(double h, double sat, double l)
-        {
-            h = ((h % 360) + 360) % 360 / 360.0;
-            if (sat <= 0) { var v = (byte)Math.Round(l * 255); return Color.FromRgb(v, v, v); }
-            double q = l < 0.5 ? l * (1 + sat) : l + sat - l * sat, p = 2 * l - q;
-            static double Ch(double p, double q, double t)
-            {
-                if (t < 0) t += 1;
-                if (t > 1) t -= 1;
-                if (t < 1 / 6.0) return p + (q - p) * 6 * t;
-                if (t < 0.5) return q;
-                if (t < 2 / 3.0) return p + (q - p) * (2 / 3.0 - t) * 6;
-                return p;
-            }
-            byte B(double x) => (byte)Math.Round(Math.Clamp(x, 0, 1) * 255);
-            return Color.FromRgb(B(Ch(p, q, h + 1 / 3.0)), B(Ch(p, q, h)), B(Ch(p, q, h - 1 / 3.0)));
-        }
+        public static Color FromHsl(double h, double sat, double l) => C(NavStripPaint.FromHsl(h, sat, l));
 
         /// <summary>The colour turned round the hue wheel, saturation and lightness kept.</summary>
-        public static Color RotateHue(Color c, double degrees)
-        {
-            var (h, sat, l) = ToHsl(c);
-            return FromHsl(h + degrees, sat, l);
-        }
+        public static Color RotateHue(Color c, double degrees) => C(NavStripPaint.RotateHue(U(c), degrees));
 
         /// <summary>Shortest distance between two hues, in degrees (0..180).</summary>
         public static double HueDistance(double a, double b)
@@ -375,12 +314,7 @@ namespace ConditioningControlPanel.Controls.NavRail
         /// has its own near-hue and the bar still reads as one section. The middle pill wears the
         /// section hue itself. The key is part of the signature so a tab can be pinned later.
         /// </summary>
-        public static Color TabTint(string? section, string? key, int index, int count)
-        {
-            var hue = Accent(section);
-            if (count <= 1) return hue;
-            return RotateHue(hue, (index - (count - 1) / 2.0) * TabHueStep);
-        }
+        public static Color TabTint(string? section, string? key, int index, int count) => C(NavStripPaint.TabTint(section, index, count));
 
         /// <summary>The worst ground a rest pill's text sits on: the page with the section wash
         /// (lane CHROME, up to 14%), the tray and the pill's own plate at its lit top, in the hue.</summary>
@@ -388,9 +322,7 @@ namespace ConditioningControlPanel.Controls.NavRail
 
         /// <summary>The worst ground on a pill wearing <paramref name="tint"/>: page, wash and tray
         /// in the section hue, the plate's lit top in the tint.</summary>
-        public static Color RestGround(Color hue, Color tint) =>
-            Over(WithAlpha(tint, RestFillAlpha + PlateLift),
-                 Over(TrackFill(hue), Over(WithAlpha(hue, 0.14), PageGround)));
+        public static Color RestGround(Color hue, Color tint) => C(NavStripPaint.RestGround(U(hue), U(tint)));
 
         /// <summary>
         /// A rest pill's text: the hue at 95%. A dark hue (Play's violet-blue) reads muddy at 95%
@@ -401,36 +333,19 @@ namespace ConditioningControlPanel.Controls.NavRail
 
         /// <summary>The rest label on a tinted pill: the section hue, lifted until it reads at 4.5:1
         /// on that pill's ground (the label rule stays the section's; only the ground moves).</summary>
-        public static Color RestTextOn(Color hue, Color tint) => Lift(hue, RestGround(hue, tint));
+        public static Color RestTextOn(Color hue, Color tint) => C(NavStripPaint.RestTextOn(U(hue), U(tint)));
 
         /// <summary>The rest glyph: the tab's own tint, lifted until it reads at 4.5:1 on its ground.</summary>
-        public static Color RestGlyphOn(Color hue, Color tint) => Lift(tint, RestGround(hue, tint));
+        public static Color RestGlyphOn(Color hue, Color tint) => C(NavStripPaint.RestGlyphOn(U(hue), U(tint)));
 
         /// <summary>The active glyph: the label's ink mixed toward the tab's tint, never under 3:1
         /// on the solid section hue (an icon, so the WCAG graphics floor).</summary>
-        public static Color ActiveGlyphOn(Color hue, Color tint)
-        {
-            var ink = ActiveTextOn(hue);
-            for (double t = ActiveGlyphTint; t > 0; t -= 0.05)
-            {
-                var c = Mix(ink, tint, t);
-                if (Contrast(c, hue) >= 3.0) return c;
-            }
-            return ink;
-        }
+        public static Color ActiveGlyphOn(Color hue, Color tint) => C(NavStripPaint.ActiveGlyphOn(U(hue), U(tint)));
 
         /// <summary>The active pill's inner ring colour at an alpha: near-white in the tint.</summary>
-        public static Color ActiveRingColor(Color tint, double alpha) => WithAlpha(Mix(tint, Colors.White, ActiveRingWhite), alpha);
+        public static Color ActiveRingColor(Color tint, double alpha) => C(NavStripPaint.ActiveRingColor(U(tint), alpha));
 
-        private static Color Lift(Color start, Color ground)
-        {
-            var c = start;
-            for (int i = 0; i < 20 && Contrast(Over(WithAlpha(c, RestTextAlpha), ground), ground) < 4.5; i++)
-                c = Color.FromRgb((byte)Math.Round(c.R + (255 - c.R) * 0.08),
-                                  (byte)Math.Round(c.G + (255 - c.G) * 0.08),
-                                  (byte)Math.Round(c.B + (255 - c.B) * 0.08));
-            return WithAlpha(c, RestTextAlpha);
-        }
+        private static Color Lift(Color start, Color ground) => C(NavStripPaint.Lift(U(start), U(ground)));
 
         // ---- brushes ------------------------------------------------------------------------
 

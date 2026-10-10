@@ -103,7 +103,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             }
             if (Named<Panel>("SectionEdgeGlow") is { } glow)
                 foreach (var band in glow.Children.OfType<Border>())
-                    PaintFill(band, NavStripRules.WithAlpha(hue, SectionEdgeGlowAlpha(hue) / 255.0), ms);
+                    PaintFill(band, NavStripRules.WithAlpha(hue, NavStripRules.EdgeGlowAlpha(hue) / 255.0), ms);
             if (Named<Border>("SectionEdgeLiftTop") is { } lift)
             {
                 lift.IsVisible = level != Models.MotionLevel.Off;
@@ -133,14 +133,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>WPF SectionEdgeRules: the line's alpha (about 90%) and the lift's pull to white.</summary>
         internal const byte SectionEdgeLineAlpha = 0xE6;
         internal const double SectionEdgeLiftWhite = 0.35;
-
-        /// <summary>WPF SectionEdgeRules.GlowAlpha: 0.20 x sqrt(0.40 / luminance), clamped
-        /// 0.14..0.26, as a byte, so light hues take less and VioletBlue the most.</summary>
-        internal static byte SectionEdgeGlowAlpha(global::Avalonia.Media.Color hue)
-        {
-            double lum = Math.Max(NavStripRules.Luminance(hue), 0.0001);
-            return (byte)Math.Round(Math.Clamp(0.20 * Math.Sqrt(0.40 / lum), 0.14, 0.26) * 255);
-        }
 
         /// <summary>WPF PaintSectionInk (:192): the four section Color resources and their brushes
         /// (the SectionInkBrush family consumers bind with DynamicResource), swapped at once.</summary>

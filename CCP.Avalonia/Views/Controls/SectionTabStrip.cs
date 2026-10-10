@@ -119,7 +119,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
                 HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Center,
                 Child = new Panel { Children = { _activeFill, _pillRow } },
             };
-            _pillRow.LayoutUpdated += (_, _) => PositionFill(animate: false, onlyIfMoved: true);
+            _pillRow.LayoutUpdated += (_, _) => { if (IsVisible) PositionFill(animate: false, onlyIfMoved: true); };
             _pillRow.AddHandler(KeyDownEvent, PillRow_KeyDown, RoutingStrategies.Tunnel);
             var row = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), Margin = new Thickness(0, 0, 0, 6) };
             Grid.SetColumn(_track, 1);

@@ -42,12 +42,7 @@ namespace ConditioningControlPanel.Controls.NavRail
         /// <summary>The glow's edge alpha balances perceived brightness on the dark page:
         /// 0.20 x sqrt(0.40 / luminance), clamped 0.14..0.26, as a byte. Light hues (Sage, Coral)
         /// take less, VioletBlue the most.</summary>
-        internal static byte GlowAlpha(Color hue)
-        {
-            double lum = Math.Max(NavStripRules.Luminance(hue), 0.0001);
-            double a = Math.Clamp(0.20 * Math.Sqrt(0.40 / lum), 0.14, 0.26);
-            return (byte)Math.Round(a * 255);
-        }
+        internal static byte GlowAlpha(Color hue) => global::ConditioningControlPanel.Services.UI.NavStripPaint.EdgeGlowAlpha(NavStripRules.U(hue));
 
         /// <summary>The glow's middle stop alpha: round(0.42 x the edge alpha).</summary>
         internal static byte GlowMidAlpha(Color hue) => (byte)Math.Round(GlowAlpha(hue) * GlowMidShare);
