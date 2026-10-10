@@ -120,6 +120,15 @@ public class PremiumSparkRulesTests
         Assert.Equal(2, PremiumSparkRules.Travel(pressed: true, hovered: true));     // press pushes in
         Assert.Equal(0, PremiumSparkRules.ShadowLength(pressed: true, hovered: true));
         Assert.True(PremiumSparkRules.ShadowLength(false, true) > PremiumSparkRules.ShadowLength(false, false));
+        // The rules moved to Core and carry DepthRules' numbers; pin them to the head's source.
+        foreach (var pressed in new[] { false, true })
+        foreach (var hovered in new[] { false, true })
+        {
+            Assert.Equal(ConditioningControlPanel.Controls.Depth.DepthRules.TravelFor(true, pressed, false, hovered), PremiumSparkRules.Travel(pressed, hovered));
+            Assert.Equal(ConditioningControlPanel.Controls.Depth.DepthRules.ShadowFor(true, pressed, false, hovered), PremiumSparkRules.ShadowLength(pressed, hovered));
+        }
+        Assert.Equal(ConditioningControlPanel.Controls.Depth.DepthRules.PressMs, PremiumSparkRules.PressMs);
+        Assert.Equal(ConditioningControlPanel.Controls.Depth.DepthRules.HoverMs, PremiumSparkRules.HoverMs);
     }
 
     [Fact]
