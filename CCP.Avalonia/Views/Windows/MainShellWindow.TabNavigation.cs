@@ -87,7 +87,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             ["presets"] = "PresetsTab",          ["quests"] = "QuestsTab",
             ["programs"] = "ProgramsTab",        ["enhancements"] = "EnhancementsTab",
             ["deeper"] = "DeeperTab",            ["achievements"] = "AchievementsTab",
-            ["companion"] = "CompanionTab",      ["play"] = "PlayTab",  ["lab"] = "PlayTab",
+            ["companion"] = "CompanionTab",      ["companionai"] = "CompanionAiTab", ["play"] = "PlayTab",  ["lab"] = "PlayTab",
             ["leaderboard"] = "LeaderboardTab",  ["assets"] = "AssetsTab",
             ["discord"] = "DiscordTab",          ["awareness"] = "AwarenessTab",
             ["remotecontrol"] = "RemoteControlTab", ["availablesubjects"] = "AvailableSubjectsTab",
@@ -124,7 +124,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             ("home",        "settings",    new[] { "settings", "progression" },                                   null),
             ("studio",      "studio",      new[] { "studio", "presets", "haptics", "ramp" },                              "DoorPanelStudio"),
-            ("companion",   "companion",   new[] { "companion", "bambitakeover", "shelistening", "awareness" },   "DoorPanelCompanion"),
+            ("companion",   "companion",   new[] { "companion", "companionai", "bambitakeover", "shelistening", "awareness" },   "DoorPanelCompanion"),
             ("play",        "play",        new[] { "play", "lab", "playeyes", "playsessions", "deeper", "exclusives", "gradedintake", "lockdown", "blinktrainer", "remotecontrol", "availablesubjects" }, "DoorPanelPlay"),
             ("you",         "discord",     new[] { "discord", "spiral", "quests", "achievements", "enhancements", "programs", "leaderboard" }, "DoorPanelYou"),
             ("library",     "assets",      new[] { "assets", "folders" },                                                    "DoorPanelLibrary"),
@@ -199,6 +199,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     // WPF MainWindow.TabNavigation.cs:420/457/527/534 - the door tour cards (studio-rack: :505, case "studio").
                     case "play": case "lab": case "playeyes": case "playsessions": MaybeShowFeatureIntro("play-wall", "play"); break;
                     case "awareness": MaybeShowFeatureIntro("awareness"); break;
+                    // WPF MainWindow.CompanionTabs.cs NavTabHost("companionai", OnShown): borrow the room's live zones.
+                    case "companionai":
+                        Named<Controls.Companion.Pages.AiPage>("CompanionAiTab")?.OnShown(Named<Tabs.CompanionTabView>("CompanionTab")?.Room);
+                        break;
                     case "lockdown": MaybeShowFeatureIntro("lockdown"); break;
                     case "blinktrainer": MaybeShowFeatureIntro("blinktrainer"); break;
                     // WPF :581 - only once the room shows the map (its IsVisible hook re-read the gates).
