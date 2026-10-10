@@ -25,7 +25,7 @@ public sealed partial class AccountSeedTests
 {
     // descent_auto: this head takes the migration offer silently. The two consent flags the profile read returns ride
     // every sync once the load adopted them (lane z1).
-    private static readonly string[] Allowed = { "unified_id", "xp", "level", "descent_epoch", "descent_auto", "achievements", "allow_discord_dm", "show_online_status" };
+    private static readonly string[] Allowed = { "unified_id", "xp", "level", "descent_epoch", "descent_auto", "achievements", "allow_discord_dm", "show_online_status", "total_conditioning_minutes" };
 
     /// <summary>Records every request with its body; profile GET answers <see cref="Profile"/> (500 when null).</summary>
     private sealed class SyncWire : HttpMessageHandler
