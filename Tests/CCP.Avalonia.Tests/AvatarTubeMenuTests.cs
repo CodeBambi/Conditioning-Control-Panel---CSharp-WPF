@@ -92,8 +92,9 @@ public sealed class AvatarTubeMenuTests
         foreach (var name in new[] { "MenuItemTalkToBambi", "MenuItemDetach", "MenuItemEngine", "MenuItemTriggerMode",
                      "MenuItemBambiTakeover", "MenuItemMute", "MenuItemShowChatHistory", "MenuItemMuteWhispers" })
             Assert.True(Item(tube, name).Foreground != null, name + " has no Foreground");
-        // No browser seam can mute or pause media on this head, so the item does not promise it.
-        Assert.False(Item(tube, "MenuItemPauseBrowser").IsVisible);
+        // Pause browser rides the shell's script seam (page wave x1): shown, and it offers the pause.
+        Assert.True(Item(tube, "MenuItemPauseBrowser").IsVisible);
+        Assert.Equal(Loc.Get("menu_pause_browser"), Item(tube, "MenuItemPauseBrowser").Header as string);
         // Stopped engine: the item offers Start, in green, and is clickable.
         var engine = Item(tube, "MenuItemEngine");
         Assert.Equal(Loc.Get("menu_start_engine"), engine.Header as string);

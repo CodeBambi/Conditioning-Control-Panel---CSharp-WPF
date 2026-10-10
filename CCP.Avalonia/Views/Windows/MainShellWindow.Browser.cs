@@ -82,6 +82,36 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// so its generated fields are never assigned (MainShellWindow.TabNavigation.cs).</summary>
         private Tabs.SettingsTabView? BrowserPage => Named<Tabs.SettingsTabView>("SettingsTab");
 
+        /// <summary>True while "Pause browser" holds the embedded browser (tube menu, Companion cell).</summary>
+        internal bool BrowserPaused { get; private set; }
+
+        /// <summary>Raised on the UI thread when <see cref="BrowserPaused"/> changes.</summary>
+        internal event Action<bool>? BrowserPausedChanged;
+
+        /// <summary>WPF MainWindow.Patreon.cs:2172 SetBrowserPaused: mute and pause every media element,
+        /// or unmute and play. One difference, on purpose: a resume goes back to the SAVED mute
+        /// preference (the card's speaker button), where WPF unmutes outright and leaves that glyph wrong.</summary>
+        internal async System.Threading.Tasks.Task SetBrowserPaused(bool paused)
+        {
+            try
+            {
+                BrowserPaused = paused;
+                BrowserPausedChanged?.Invoke(paused);
+                if (BrowserView is not { } web) return;
+                if (paused)
+                {
+                    await web.SetMutedAsync(true);
+                    await web.PauseMediaAsync();
+                }
+                else
+                {
+                    await web.SetMutedAsync(CoreSettings.Current.BrowserVideoMuted);
+                    await web.ResumeMediaAsync();
+                }
+            }
+            catch (Exception ex) { Log.Debug("Failed to toggle browser audio: {Error}", ex.Message); }
+        }
+
         private WebHost? BrowserView => BrowserPage?.FindControl<WebHost>("BrowserWebHost");
 
         /// <summary>Homepage of whichever site radio is selected. BambiCloud is the default, as on

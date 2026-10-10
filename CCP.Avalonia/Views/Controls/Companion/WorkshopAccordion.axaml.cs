@@ -43,10 +43,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
             // five cards, then move the tube to that companion's look.
             parts.Roster.CompanionCardClicked += (_, index) => SwitchCompanionFromCard(parts.Roster, index);
 
+            // WPF MainWindow.Patreon.cs:2149 ChkPauseBrowser_Changed: the shell's one pause seam.
+            parts.Behavior.PauseBrowserChanged += (_, paused) =>
+            {
+                try { _ = (global::Avalonia.LogicalTree.LogicalExtensions.FindLogicalAncestorOfType<Views.Windows.MainShellWindow>(this) ?? Views.Windows.MainShellWindow.Current)?.SetBrowserPaused(paused); }
+                catch (Exception ex) { Log.Debug("Pause browser: {E}", ex.Message); }
+            };
+
             // NOT wired, and each control is HIDDEN in its cell so nothing visible is dead:
             //
             //  · Behavior.CameraShortcutRequested: no webcam engine or hotkey on this head.
-            //  · Behavior.PauseBrowserChanged: the port's browser has no mute or suspend hook.
             //  · Roster.PersonalityAssignRequested and Community.Browse/Import/Export/Refresh:
             //    CommunityPromptService is still in the WPF head.
         }

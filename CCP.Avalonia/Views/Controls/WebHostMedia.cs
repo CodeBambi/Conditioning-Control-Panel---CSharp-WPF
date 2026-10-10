@@ -39,6 +39,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls
             "d.querySelectorAll('iframe').forEach(function(f){try{if(f.contentDocument)each(f.contentDocument);}catch(x){}});}catch(x){}};" +
             "each(document);return String(n);}catch(e){return 'error';}})();";
 
+        /// <summary>WPF MenuItemPauseBrowser's resume half: every reachable media element plays again
+        /// (as WPF: all of them, not only the ones this paused).</summary>
+        internal const string ResumeScript =
+            "(function(){try{var each=function(d){try{d.querySelectorAll('video,audio').forEach(function(e){try{var p=e.play();if(p&&p.catch)p.catch(function(){});}catch(x){}});" +
+            "d.querySelectorAll('iframe').forEach(function(f){try{if(f.contentDocument)each(f.contentDocument);}catch(x){}});}catch(x){}};" +
+            "each(document);return 'ok';}catch(e){return 'error';}})();";
+
+        /// <summary>Plays every reachable media element on the live page.</summary>
+        internal static async Task<bool> ResumeMediaAsync(this WebHost host)
+        {
+            if (!host.HasEngine) return false;
+            var result = await host.InvokeScriptAsync(ResumeScript);
+            return result != null && !result.Contains("error");
+        }
+
         /// <summary>Applies the mute state to the live page. False when there is no engine or the
         /// script did not run (the caller then says so rather than showing a muted glyph).</summary>
         internal static async Task<bool> SetMutedAsync(this WebHost host, bool muted)

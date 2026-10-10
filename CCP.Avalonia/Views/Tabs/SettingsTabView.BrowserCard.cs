@@ -102,7 +102,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             try
             {
                 BrowserMuteApplies++;
-                _ = BrowserWebHost.SetMutedAsync(CoreSettings.Current.BrowserVideoMuted);
+                _ = BrowserWebHost.SetMutedAsync(CoreSettings.Current.BrowserVideoMuted || Shell?.BrowserPaused == true);
             }
             catch (Exception ex) { Log.Debug("ApplyBrowserMute: {E}", ex.Message); }
         }
