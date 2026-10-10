@@ -122,6 +122,7 @@ namespace ConditioningControlPanel
                 ArmLocked();
             }
             Log.Information("SubliminalService started");
+            ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("subliminalsStarted");   // WPF SubliminalService.cs:122
             Notify(true);
         }
 

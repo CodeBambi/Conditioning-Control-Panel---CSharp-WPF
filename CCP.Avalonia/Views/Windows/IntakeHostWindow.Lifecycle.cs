@@ -33,6 +33,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private void StartLifecycle()
         {
+            // WPF IntakeHostService.cs:100-104: the open, then a HOLD while the graded run is on screen.
+            ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("intakeOpened");
+            ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("intakeRunning");
             Run.Beat(Now);
             _heartbeatWatch = new DispatcherTimer { Interval = HeartbeatPoll };
             _heartbeatWatch.Tick += (_, _) => CheckHeartbeat();
@@ -42,6 +45,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private void EndLifecycle()
         {
+            ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.ReleaseHold("intakeRunning");   // WPF IntakeHostService.cs:1365
             _heartbeatWatch?.Stop();
             _heartbeatWatch = null;
             RestoreMain();   // WPF DisposeAll: give the control panel back before anything else

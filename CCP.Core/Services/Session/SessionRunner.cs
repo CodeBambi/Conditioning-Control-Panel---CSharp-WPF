@@ -92,6 +92,7 @@ namespace ConditioningControlPanel.Services
             IsPaused = false;
             PauseCount = 0;
             PinkOpacity = null;
+            ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("sessionStarted", new { target = session.Name?.ToLowerInvariant(), minutes = (int)session.DurationMinutes });   // WPF SessionEngine.cs:267
             _pausedElapsed = _lastElapsed = TimeSpan.Zero;
             PinkStartMinute = RandomizedStart(session.Settings.PinkFilterEnabled, session.Settings.PinkFilterStartMinute, _random);
             _startTime = DateTime.Now;
@@ -210,6 +211,7 @@ namespace ConditioningControlPanel.Services
             PausePhases();
             PauseCornerGif();   // SessionEngine.cs:552: hidden, the corner stays claimed
             Log.Information("Session paused (pause #{Count}, -100 XP penalty)", PauseCount);
+            ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("sessionPaused", new { n = PauseCount });   // WPF SessionEngine.cs:517
         }
 
         /// <summary>SessionEngine.ResumeSession (SessionEngine.cs:554): restart only what has reached its
@@ -230,6 +232,7 @@ namespace ConditioningControlPanel.Services
             ResumePhases(ss);
             ResumeCornerGif(ss);   // SessionEngine.cs:596
             Log.Information("Session resumed");
+            ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("sessionResumed", new { minutes = (int)Math.Round(Remaining.TotalMinutes) });   // WPF SessionEngine.cs:607
         }
 
         private void StartAt(string name, int minute, Action start, Action stop)
@@ -335,8 +338,12 @@ namespace ConditioningControlPanel.Services
                 Log.Information("Session completed: {Name}, XP: {XP} (banked {Banked}, paused {PauseCount}x, penalty: -{Penalty})",
                     session.Name, award, xp, PauseCount, XPPenalty);
                 CoreProgression.TrackSessionCompleted();   // WPF SessionEngine.cs:442 -> AchievementService.cs:999
+                ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("sessionCompleted", new { target = session.Name?.ToLowerInvariant(), minutes = (int)elapsed.TotalMinutes, n = xp });   // WPF SessionEngine.cs:471
             }
-            else Log.Information("Session stopped early");
+            else {
+                Log.Information("Session stopped early");
+                ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("sessionAbandoned", new { minutes = (int)elapsed.TotalMinutes });   // WPF SessionEngine.cs:486
+            }
 
             try { SessionLog.EndSession(completed, elapsed, xp); }
             catch (Exception ex) { Log.Error(ex, "SessionLog.EndSession failed"); }
