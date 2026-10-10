@@ -126,6 +126,8 @@ public sealed class LauncherWindowTests
         Dispatcher.UIThread.RunJobs();
         var w = LauncherWindow.Instance!;
         var grid = w.FindControl<UniformGrid>("GamesGrid")!;
+        // One tile fits: the block sits centred (WPF FitTiles).
+        Assert.Equal(global::Avalonia.Layout.VerticalAlignment.Center, grid.VerticalAlignment);
         for (int i = 0; i < 8; i++) grid.Children.Add(new Border());
         double old = w.Bounds.Height;
         w.SeatGrid();
@@ -133,6 +135,7 @@ public sealed class LauncherWindowTests
         Assert.True(grown > old + 1, $"{old} -> {grown}");
         var wa = w.Screens.ScreenFromWindow(w)!;
         Assert.True(grown <= wa.WorkingArea.Height / wa.Scaling + 0.5);
+        Assert.InRange(w.Position.Y, wa.WorkingArea.Y, wa.WorkingArea.Bottom - (int)Math.Ceiling(grown * wa.Scaling));
         Assert.Equal(global::Avalonia.Layout.VerticalAlignment.Top, grid.VerticalAlignment);
 
         w.Height = old;
