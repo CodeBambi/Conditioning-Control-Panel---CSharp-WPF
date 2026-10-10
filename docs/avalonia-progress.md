@@ -1741,3 +1741,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/sync6-tonight-board: +891
 - The Tonight Board deck (Core BillboardDeck, house + tip providers, dots as the hold clock, snooze + toast, push, no sound) replaces LegacyBillboard (deleted); HouseProvider and TipCards moved to Core.
 - 4 of 24 ledger rows ticked; the rest (drawn art, other providers, animation polish) moved to sync6-tonight-board-b. Parity row is stub.
+
+## avalonia-port/sync6-social-pages: +403
+- Friends page (drawer in page mode) and Leash page (WPF empty state) behind temporary You-door entries; Leaderboard opens on All-Time with no season countdown.
+- Chip tooltip carries the full name, HT box takes a pasted link; Lobby badge lease, Social medallion and Leash "?" stay needs-port (blockers named).
