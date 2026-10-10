@@ -415,6 +415,14 @@ public sealed class FypGhostTests
         }, eye, _ => { calibrations++; ghostedAtCalibration = window!.IsFypGhosted; return Task.CompletedTask; });
     }
 
+    [Fact]
+    public void TheParkedFeedKeepsRendering_ChromiumIsToldNotToCallItOccluded()
+    {
+        // WPF FypHostService :108: without these the mirror freezes on a still frame.
+        Assert.Contains("--disable-features=CalculateNativeWinOcclusion", ConditioningControlPanel.Avalonia.Views.Controls.WebHost.WindowsBrowserArguments);
+        Assert.Contains("--disable-backgrounding-occluded-windows", ConditioningControlPanel.Avalonia.Views.Controls.WebHost.WindowsBrowserArguments);
+    }
+
     // ---- the head-free decisions (WPF FypGhostFallbackTests) ------------------------------------
 
     private const int Ok = 0;

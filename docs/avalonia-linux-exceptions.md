@@ -39,6 +39,7 @@ Kind of limit:
 | Do-not-disturb list, awareness (foreground app, title, fullscreen) | X11 and XWayland windows only. A native Wayland window reads as "no foreground". | fundamental |
 | Idle time, typing-burst guess | X11 only, needs `libXss`. Under XWayland the idle counter only sees input that went to X windows. | fundamental (Wayland), needs a run |
 | Hiding overlays from screen capture | Not available. Windows only (`SetWindowDisplayAffinity`). | fundamental |
+| For You ghost mode (the see-through, click-through feed over other windows) | Not available. The toggle snaps back and the feed says it stays solid (`clickThrough:false` + `ghost-unavailable`, reason "not on this build"). Windows mirrors the parked feed with a DWM live thumbnail (`Platform/WindowsFypGhost.cs`); X11 has no live window thumbnail, and a translucent click-through WebKitGTK window would need a compositor (XComposite redirect + an input shape), never written. Owner call 2026-10-10: exception on Linux. | not built |
 | Camera shortcut from any app | Not available. Works only while the app has focus. | not built |
 | Icon glyphs (Segoe MDL2 Assets) | Missing. Nav pills and hover bubbles fall back (text only, or an emoji). Other glyph-only buttons draw an empty box or nothing. | not built |
 | Display face (Fredoka) | Packed (`Assets/fonts`, SIL OFL 1.1) and mapped by name on both OSes since 2026-10-10. Headless tests resolve it; no desk run yet. | built, needs a run |
