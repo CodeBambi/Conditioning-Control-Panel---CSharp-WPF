@@ -48,6 +48,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
         {
             if (_backRoom != null && HandleBackRoom(o)) return true;
             if (Spec.Id == "dtrh" && HandleDtrh(o)) return true;
+            if (Spec.Id == "goon" && HandleGoon(o)) return true;
             return false;
         }
 
