@@ -1789,3 +1789,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/sync6-drone-mod: +2
 - Ledger row 110 (drone-mode.ccpmod emotes + voice) marked n/a: content-only, ships via the shared mod-drone pack.
 - Drone outfit emotes folded into avatar-tube-window (this head has no emote mode).
+
+## avalonia-port/sync6-nav-rail-b: +857
+- Section rail replaces the flyout (Social door with Friends/Leash pills, lit row, last tab, Ctrl+1..7, fixed Back row); pills pin on right-click; Play zone pills scroll.
+- Ctrl+K held toggles once; 7 rows ported/n/a, 15 left needs-port for sync6-nav-rail-c.
