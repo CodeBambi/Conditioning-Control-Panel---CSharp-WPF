@@ -275,7 +275,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                         if (bubblesPopped > 0) global::ConditioningControlPanel.Avalonia.App.Achievements?.TrackBubblesPopped(bubblesPopped);
                     }
                     catch (Exception ex) { Log.Debug("DtrhHost bubble credit: {E}", ex.Message); }
-                    /* ponytail: reveals */
+                    try { RevealService.Sync("run_end"); } catch (Exception ex) { _ = ex; }
                     try
                     {
                         var nowRank = ChaosRanks.For(ChaosMeta.State.RunsCompleted);
@@ -287,7 +287,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                     // sync above is bookkeeping and still runs.
                     if (!fromTeardown)
                     {
-                        /* ponytail: barks (B1) */
+                        DtrhBarkRunCompleted((int)finalXp, diff);
                     }
                     // NOT on the teardown path: ChaosCrashSentinel.Recover("process-failed") and
                     // ("heartbeat-silent") both land in DisposeAll, and clearing the sentinel from
@@ -298,7 +298,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                     try { _meta?.Rebroadcast(); } catch (Exception ex) { _ = ex; }
                 }
 
-                // ponytail: local session telemetry (DtrhSessionStatsStore) is not ported.
+                // Local-only session telemetry, never sent to the server (WPF :707).
+                RecordDtrhSessionStats(o, diff, sparksEarned, finalXp);
 
                 Post(new
                 {
