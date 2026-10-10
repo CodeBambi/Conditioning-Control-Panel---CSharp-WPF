@@ -46,8 +46,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     /// page's scroller.</para>
     ///
     /// <para>Dropped: <c>RoundClipOnResize</c> (an Avalonia Border clips its child to its own
-    /// CornerRadius). Still not on this head: the Ken Burns drift on the spotlight, the card glass
-    /// sheen adorner and the FREE TODAY pulse (parity ledger).</para>
+    /// CornerRadius). The Ken Burns drift, the FREE TODAY pulse, the rim breath and the sign
+    /// shimmer ride one BeatLoop (StartFlairLoop); the card glass sheen is CardSheenAdorner.</para>
     /// </summary>
     public partial class ExclusivesTabView : UserControl
     {
@@ -57,7 +57,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private bool _motionOn;
         private bool _zonesQueued;
         private readonly List<DispatcherTimer> _entranceTimers = new();
-        private readonly List<CancellationTokenSource> _sheens = new();
         private readonly List<CardSheenAdorner> _cardSheens = new();
         private int _cardSheenRetries;
 
@@ -368,31 +367,103 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             foreach (var band in Shelf<Rectangle>("vault-sheen"))
             {
                 double span = Math.Max(120, (band.Parent as Control)?.Bounds.Width ?? 160) + 90;
-                var anim = new Animation
-                {
-                    Duration = TimeSpan.FromSeconds(period),
-                    Delay = TimeSpan.FromSeconds(0.5 + 0.7 * i++),
-                    IterationCount = IterationCount.Infinite,
-                    Easing = new SineEaseInOut(),
-                    Children =
-                    {
-                        new KeyFrame { Cue = new Cue(0), Setters = { new Setter(Canvas.LeftProperty, -90d) } },
-                        new KeyFrame { Cue = new Cue(cross / period), Setters = { new Setter(Canvas.LeftProperty, span) } },
-                        new KeyFrame { Cue = new Cue(1), Setters = { new Setter(Canvas.LeftProperty, span) } },
-                    },
-                };
                 Canvas.SetLeft(band, -90);
-                var cts = new CancellationTokenSource();
-                _sheens.Add(cts);
-                _ = anim.RunAsync(band, cts.Token);
+                _flairBands.Add((band, span, 0.5 + 0.7 * i++));
             }
+            _flairCross = cross;
+            _flairPeriod = period;
+            StartFlairLoop();
             QueueZones();
+        }
+
+        // ---- one beat for every loop on the page -------------------------------------------
+        // The rim breath, the spotlight's Ken Burns drift, the FREE TODAY pulse and the sign
+        // shimmer were four infinite Avalonia Animations; one of those anywhere makes the whole
+        // window compose at 60 Hz (AGENTS.md "GPU CACHE + 60 Hz TRAP"). They ride one BeatLoop on
+        // the window's shared 30 fps beat now, with WPF's periods and curves unchanged. The style
+        // classes (breathe / kenburns / pulse) stay as the state the gate sets.
+        private BeatLoop? _flairLoop;
+        private readonly List<(Rectangle Band, double Span, double Delay)> _flairBands = new();
+        private (Border Rim, double Still)[] _flairAuras = Array.Empty<(Border, double)>();
+        private (Border Pill, ScaleTransform Scale)[] _flairPills = Array.Empty<(Border, ScaleTransform)>();
+        private ScaleTransform? _flairSpotScale;
+        private double _flairCross = 1.1, _flairPeriod = 4.2;
+
+        /// <summary>Test seam: the page's one ambient loop is ticking.</summary>
+        internal bool FlairLoopRunning => _flairLoop?.IsRunning == true;
+
+        /// <summary>Test seam: one tick of the loop at <paramref name="t"/> seconds.</summary>
+        internal void FlairStepForTests(double t) => FlairStep(t);
+
+        private void StartFlairLoop()
+        {
+            _flairAuras = Shelf<Border>("aura").Where(a => a.Classes.Contains("breathe")).Select(a => (a, a.Opacity)).ToArray();
+            _flairPills = Shelf<Border>("free-pill").Append(Find<Border>("SpotFreeToday")).Where(p => p.Classes.Contains("pulse"))
+                .Select(p =>
+                {
+                    if (p.RenderTransform is not ScaleTransform sc) p.RenderTransform = sc = new ScaleTransform(1, 1);
+                    return (p, sc);
+                }).ToArray();
+            var spot = Find<Image>("SpotArtImage");
+            if (spot.Classes.Contains("kenburns"))
+            {
+                if (spot.RenderTransform is not ScaleTransform sc) spot.RenderTransform = sc = new ScaleTransform(1, 1);
+                _flairSpotScale = sc;
+            }
+            else _flairSpotScale = null;
+            if (_flairAuras.Length == 0 && _flairPills.Length == 0 && _flairSpotScale == null && _flairBands.Count == 0) return;
+            _flairLoop ??= new BeatLoop(this, FlairStep);
+            _flairLoop.Start();
+        }
+
+        private void FlairStep(double t)
+        {
+            try
+            {
+                // Rim: 0.5 -> 1 -> 0.5 of its own opacity over 2 x 2.8 s (WPF VaultCardAura).
+                double rim = 0.5 + 0.5 * BeatLoop.Breath(t, 2.8);
+                foreach (var (a, rest) in _flairAuras) a.Opacity = Math.Clamp(rim, 0, 1);
+                // Spotlight: 1.00 -> 1.07 and back over 2 x 26 s.
+                if (_flairSpotScale != null) _flairSpotScale.ScaleX = _flairSpotScale.ScaleY = 1 + 0.07 * BeatLoop.Breath(t, 26);
+                // FREE TODAY: opacity 0.72 -> 1, scale 1 -> 1.06 over 2 x 1.9 s.
+                double k = BeatLoop.Breath(t, 1.9);
+                foreach (var (pill, sc) in _flairPills)
+                {
+                    pill.Opacity = Math.Clamp(0.72 + 0.28 * k, 0, 1);
+                    sc.ScaleX = sc.ScaleY = 1 + 0.06 * k;
+                }
+                // Sign shimmer: a band crosses in `cross` seconds out of every `period`, sine
+                // in-out over the period (as the Animation's one Easing did), staggered by group.
+                foreach (var (band, span, delay) in _flairBands)
+                {
+                    double local = t - delay;
+                    if (local < 0) { Canvas.SetLeft(band, -90); continue; }
+                    double p = local % _flairPeriod / _flairPeriod;
+                    double e = (1 - Math.Cos(Math.PI * p)) / 2;
+                    double cue = _flairCross / _flairPeriod;
+                    Canvas.SetLeft(band, e >= cue ? span : -90 + (span + 90) * (e / cue));
+                }
+            }
+            catch (Exception ex) { Serilog.Log.Debug("ExclusivesTabView.FlairStep: {E}", ex.Message); }
+        }
+
+        /// <summary>The OUT: the loop stops and everything it moved rests where the still page has it.</summary>
+        private void StopFlairLoop()
+        {
+            _flairLoop?.Stop();
+            foreach (var (a, rest) in _flairAuras) a.Opacity = rest;
+            foreach (var (pill, sc) in _flairPills) { pill.Opacity = 1; sc.ScaleX = sc.ScaleY = 1; }
+            if (_flairSpotScale != null) _flairSpotScale.ScaleX = _flairSpotScale.ScaleY = 1;
+            foreach (var (band, _, _) in _flairBands) Canvas.SetLeft(band, -90);
+            _flairAuras = Array.Empty<(Border, double)>();
+            _flairPills = Array.Empty<(Border, ScaleTransform)>();
+            _flairSpotScale = null;
+            _flairBands.Clear();
         }
 
         private void StopSheens()
         {
-            foreach (var cts in _sheens) cts.Cancel();
-            _sheens.Clear();
+            StopFlairLoop();
             foreach (var sheen in _cardSheens) CardSheenAdorner.Detach(sheen);
             _cardSheens.Clear();
         }

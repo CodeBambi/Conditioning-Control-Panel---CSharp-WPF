@@ -36,7 +36,20 @@ public sealed class ExclusivesFlairTests
             var pill = view.FindControl<Border>("SpotFreeToday")!;
             Assert.Equal(loops, spot.Classes.Contains("kenburns"));
             Assert.Equal(loops, pill.Classes.Contains("pulse"));
+            // One beat loop carries every ambient loop on the page (no infinite Animation).
+            if (loops)
+            {
+                Assert.True(view.FlairLoopRunning);
+                view.FlairStepForTests(26);   // the far end of the Ken Burns drift
+                Assert.Equal(1.07, ((global::Avalonia.Media.ScaleTransform)spot.RenderTransform!).ScaleX, 3);
+                view.FlairStepForTests(1.9);  // the top of the FREE TODAY breath
+                Assert.InRange(pill.Opacity, 0, 1);
+                Assert.Equal(1.0, pill.Opacity, 3);
+            }
             view.SetMotion(false);
+            Assert.False(view.FlairLoopRunning);
+            if (spot.RenderTransform is global::Avalonia.Media.ScaleTransform rest) Assert.Equal(1.0, rest.ScaleX, 3);
+            Assert.Equal(1.0, pill.Opacity, 3);
             Assert.DoesNotContain("kenburns", spot.Classes);
             Assert.DoesNotContain("pulse", pill.Classes);
 

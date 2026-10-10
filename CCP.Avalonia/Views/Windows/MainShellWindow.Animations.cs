@@ -1,3 +1,6 @@
+// j1 (2026-10-10): StartSeasonTitleShimmer and StartLockdownPulse have NO caller on this head, so the
+// infinite Animations below never run. Whoever wires them must move them to Helpers/BeatLoop first
+// (an infinite Animation or an animated Effect property makes the whole window compose at 60 Hz).
 // PORTED-IN-PART from ConditioningControlPanel/MainWindow/MainWindow.Animations.cs (199 lines).
 //
 // The two ambient loops are LIVE. WPF drove them with Storyboards; the Avalonia twin of each is a

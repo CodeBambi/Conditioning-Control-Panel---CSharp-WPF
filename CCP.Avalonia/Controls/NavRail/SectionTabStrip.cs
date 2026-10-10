@@ -9,8 +9,7 @@
 // so lighting a pill never moves the row, a tab bar that never scrolls sideways, keyboard
 // Left/Right/Home/End/Enter/Space, a tier sign on a locked pill (PillLocked), "Moved" note.
 //
-// ponytail (not this wave): the "?" help badges + the Just Drop ask-first card
-// (SectionTabStrip.Help.cs), the hover lift/scale/glyph wiggle/sheen/burst (SectionTabStrip.Fx.cs).
+// The "?" help badges + the Just Drop ask-first card are SectionTabStrip.Help.cs. The hover lift/scale/glyph wiggle/sheen/burst is SectionTabStrip.Fx.cs.
 // The pill PLATE (raised tint gradient + bevelled outline) and the tray fill are here; the
 // depth (sunken tray well, hue drop band under each raised pill, face travel, lit pill pressed
 // in its socket) is SectionTabStrip.Depth.cs, as WPF.
@@ -208,6 +207,7 @@ namespace ConditioningControlPanel.Avalonia.Controls.NavRail
 
             CrumbSep.Text = SafeLoc("nav_crumb_sep", "›");
             PillRow.SizeChanged += (_, _) => PositionFill(animate: false);
+            FxInit();   // SectionTabStrip.Fx.cs: hover lift, glyph wiggle, choose burst, idle sheen
         }
 
         // ------------------------------------------------------------------ read-only seams
@@ -337,6 +337,8 @@ namespace ConditioningControlPanel.Avalonia.Controls.NavRail
 
         private void BuildPills(string section)
         {
+            CloseConfirm();
+            _helpBadges.Clear();
             PillRow.Children.Clear();
             _pills.Clear();
             _activePill = null;
@@ -484,7 +486,7 @@ namespace ConditioningControlPanel.Avalonia.Controls.NavRail
                 pill.GotFocus += (_, _) => ring.BorderBrush = FocusRing;
                 pill.LostFocus += (_, _) => ring.BorderBrush = Brushes.Transparent;
 
-                PillRow.Children.Add(pill);
+                PillRow.Children.Add(HostWithHelp(section, tab, pill, label.Text ?? string.Empty, tint, locked));   // SectionTabStrip.Help.cs
                 parts.Pill = pill;
                 parts.Ring = ring;
                 parts.Face = face;
@@ -636,6 +638,8 @@ namespace ConditioningControlPanel.Avalonia.Controls.NavRail
             if (tab.Kind is NavTabKind.Tab or NavTabKind.Zone && _section != null)
                 NavGlow.Once(PillFor(tab.Key), NavStripRules.Accent(_section), null, "pill-choose");
             if (focus) PillFor(tab.Key)?.Focus();
+            // A pill that opens its own window asks first (owner, 2026-10-07: Just Drop).
+            if (NavStripRules.AsksBeforeOpening(tab)) { AskBeforeOpening(tab); return; }
             TabRequested?.Invoke(tab);
         }
 

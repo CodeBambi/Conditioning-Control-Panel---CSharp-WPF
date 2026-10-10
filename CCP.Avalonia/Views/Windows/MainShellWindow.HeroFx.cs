@@ -11,7 +11,7 @@
 // The profile menu's Level/XP rail is painted from the same numbers.
 //
 // STILL MISSING vs WPF, so the row stays a stub:
-//   the XP odometer (MotionFx.Odometer - the readout snaps), the level-up burst (FireBurstAt) and THE BANK hold
+//   THE BANK hold (the XP odometer is live: AnimateXpReadout below; the level-up burst is MainShellWindow.LevelUpFx.cs)
 //   (the meniscus, the chip pop and the tube are live in MainShellWindow.HudDepth.cs)
 //   (MainWindow.BankFx.cs); the rank title (TxtPlayerTitle, a {loc:Str} a code write would lose);
 //   the Start button's charge/exhale/ignition/heartbeat set and FlashSaveAbsorb - no caller here
@@ -46,7 +46,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             Action<int> levelUp = _ => Dispatcher.UIThread.Post(() => { FlashLevelUp(); PopLevelChip(); BurstLevelUp(); UpdateLevelDisplay(); });
             ProgressionBank.Awarded += awarded;
             ProgressionBank.LevelUp += levelUp;
-            Closed += (_, _) => { ProgressionBank.Awarded -= awarded; ProgressionBank.LevelUp -= levelUp; };
+            Closed += (_, _) => { ProgressionBank.Awarded -= awarded; ProgressionBank.LevelUp -= levelUp; _xpOdometer?.Stop(); };
             if (Named<Border>("XPBar")?.Parent is Control track)
                 track.SizeChanged += (_, _) => FillXpBar(animate: false);
             // WPF XPBarTrack_ToolTipOpening (MainWindow.UiUpdates.cs:2897): the ambient-bubble daily
@@ -68,7 +68,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 var xp = s.PlayerXP;
                 var needed = XpCurve.GetXPForLevel(level, XpCurve.EpochOf(s));
                 if (Named<TextBlock>("TxtLevelLabel") is { } label) label.Text = $"LVL {level}";
-                if (Named<TextBlock>("TxtXP") is { } txt) txt.Text = $"{(int)xp} / {(int)needed} XP";
+                if (Named<TextBlock>("TxtXP") is { } txt) AnimateXpReadout(txt, xp, needed, level);
                 _xpFraction = Math.Min(1.0, needed > 0 ? xp / needed : 0);
                 FillXpBar(animate: true);
 
@@ -85,6 +85,65 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 RefreshAccountIdentity();
             }
             catch (Exception ex) { Log.Debug("UpdateLevelDisplay: {E}", ex.Message); }
+        }
+
+        private double _lastXpShown = double.NaN;
+        private int _lastXpLevelShown = -1;
+        private DispatcherTimer? _xpOdometer;
+
+        /// <summary>Test seam: the XP odometer is counting.</summary>
+        internal bool XpOdometerRunning => _xpOdometer?.IsEnabled == true;
+
+        /// <summary>Test seam: land a running count on its target now.</summary>
+        internal void SettleXpOdometerForTests()
+        {
+            _xpOdometer?.Stop();
+            _xpOdometer = null;
+            if (_xpOdometerTarget != null && Named<TextBlock>("TxtXP") is { } txt) txt.Text = _xpOdometerTarget;
+        }
+
+        private string? _xpOdometerTarget;
+
+        /// <summary>
+        /// WPF AnimateXpDisplay's readout half (MainWindow.ChromeFx.cs:672) over MotionFx.Odometer:
+        /// the numerator counts from the last shown value (0 on a new level) to the new one in
+        /// 0.7 s, quadratic ease out, formatted F0 with the denominator baked in; it snaps with
+        /// transitions off, on a step under 0.5 and while the window is not on screen.
+        /// </summary>
+        private void AnimateXpReadout(TextBlock txt, double xp, double needed, int level)
+        {
+            _xpOdometer?.Stop();
+            _xpOdometer = null;
+            double from = (!double.IsNaN(_lastXpShown) && level == _lastXpLevelShown) ? _lastXpShown : 0;
+            _xpOdometerTarget = $"{(int)xp} / {(int)needed} XP";
+            _lastXpShown = xp;
+            _lastXpLevelShown = level;
+            if (!AmbientFxCanvas.Env.AllowTransitions || !IsVisible
+                || Math.Abs(xp - from) < global::ConditioningControlPanel.Motion.MotionTimings.OdometerMinStep)
+            {
+                txt.Text = $"{(int)xp} / {(int)needed} XP";
+                return;
+            }
+            string tail = " / " + ((int)needed) + " XP";
+            double seconds = global::ConditioningControlPanel.Motion.MotionTimings.OdometerSeconds;
+            txt.Text = from.ToString("F0", System.Globalization.CultureInfo.CurrentCulture) + tail;
+            var started = System.Diagnostics.Stopwatch.GetTimestamp();
+            DispatcherTimer? timer = null;
+            timer = new DispatcherTimer(TimeSpan.FromMilliseconds(16), DispatcherPriority.Render, (_, _) =>
+            {
+                try
+                {
+                    double p = Math.Clamp(System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalSeconds / seconds, 0, 1);
+                    double e = 1 - (1 - p) * (1 - p);   // QuadraticEase, EaseOut
+                    txt.Text = (from + (xp - from) * e).ToString("F0", System.Globalization.CultureInfo.CurrentCulture) + tail;
+                    if (p < 1) return;
+                }
+                catch (Exception ex) { Log.Debug("XP odometer: {E}", ex.Message); }
+                timer!.Stop();
+                if (ReferenceEquals(_xpOdometer, timer)) _xpOdometer = null;
+            });
+            _xpOdometer = timer;
+            timer.Start();
         }
 
         /// <summary>FillXpBarTo: the fill is a fraction of the bar's parent grid (not the rounded track).</summary>

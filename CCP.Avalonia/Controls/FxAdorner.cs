@@ -23,7 +23,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
 
         protected readonly Control Adorned;
         private readonly int _fps;
-        private DispatcherTimer? _timer;
+        private global::ConditioningControlPanel.Avalonia.Controls.Fx.FrameClock? _timer;
         private IDisposable? _watch;
 
         protected FxAdorner(Control adorned, int fps) => (Adorned, _fps, IsHitTestVisible) = (adorned, fps, false);
@@ -60,8 +60,13 @@ namespace ConditioningControlPanel.Avalonia.Controls
         protected void StartTicking()
         {
             if (!IsVisible) return;
-            _timer ??= new DispatcherTimer(TimeSpan.FromMilliseconds(1000.0 / _fps),
-                                           DispatcherPriority.Background, (_, _) => Tick());
+            // The window's frame clock at the capped rate (Controls/Fx/FrameClock): frame-locked,
+            // where a free-running DispatcherTimer drifts against the refresh.
+            if (_timer == null)
+            {
+                _timer = new global::ConditioningControlPanel.Avalonia.Controls.Fx.FrameClock(this) { Interval = TimeSpan.FromMilliseconds(1000.0 / _fps) };
+                _timer.Tick += (_, _) => Tick();
+            }
             _timer.Start();
         }
 

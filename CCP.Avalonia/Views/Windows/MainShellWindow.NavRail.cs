@@ -14,7 +14,7 @@
 // rail's shadow on the page, upper-case labels.
 //
 // ponytail (not on this head / not this wave): mod-aware door art (ApplyDoorArt) and mod-aware
-// labels, the possession reroute seam, the hover lean (TiltNavCoin), NavGlow ("moved here"
+// labels, the possession reroute seam, NavGlow ("moved here"
 // ring), the section edge + embers.
 
 using System;
@@ -58,6 +58,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             internal NavCoinParts? Coin;
             internal Panel? Face;
             internal readonly TranslateTransform Lift = new();
+            internal readonly RotateTransform Tilt = new();
             internal bool Active;
             internal bool Painted;
             internal bool Hovered;
@@ -173,7 +174,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 {
                     row.Coin = BuildNavCoin(row.Face, row.Tile, hue);
                     row.Face.RenderTransformOrigin = new RelativePoint(0.5, 0.4, RelativeUnit.Relative);
-                    row.Face.RenderTransform = row.Lift;
+                    row.Face.RenderTransform = new TransformGroup { Children = { row.Tilt, row.Lift } };
                 }
 
                 var captured = row;
@@ -195,7 +196,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     captured.Pressed = false;
                     PaintNavRing(captured);
                     PaintNavCoin(captured);
+                    SettleNavTilt(captured);
                 };
+                btn.PointerMoved += (_, e) => TiltNavCoin(captured, captured.Tile is { } t ? e.GetPosition(t) : default);
                 // Press: the coin travels down and drops its shadow; release springs it to wherever
                 // the state now puts it. Both listen with handledEventsToo (Button handles them).
                 btn.AddHandler(PointerPressedEvent, (_, e) =>
@@ -373,6 +376,58 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 coin.Disc.Opacity = shadow > 0 ? 1 : 0;
             }
             catch (Exception ex) { Log.Debug("PaintNavCoin: {E}", ex.Message); }
+        }
+
+        /// <summary>Hover lean toward the pointer (the launcher tile recipe), idle coins only and
+        /// only where DepthRules.TiltAllowed says so. A lit coin sits in its socket and stays level.
+        /// WPF TiltNavCoin: a linear 90 ms chase of the angle (halved on Reduced, none on Off).</summary>
+        private static void TiltNavCoin(NavSectionRow row, Point at)
+        {
+            try
+            {
+                if (row.Face == null || row.Tile == null) return;
+                var level = NavPaint.Level;
+                if (row.Pressed || !NavRailRules.CoinTilts(row.Active, level, global::ConditioningControlPanel.Avalonia.Controls.AmbientFxCanvas.Env.CurrentTier))
+                {
+                    SettleNavTilt(row);
+                    return;
+                }
+                double w = row.Tile.Bounds.Width, h = row.Tile.Bounds.Height;
+                if (w <= 0 || h <= 0) return;
+                double angle = NavRailRules.CoinTilt(at.X / w * 2 - 1, at.Y / h * 2 - 1);
+                int ms = DepthRules.Ms(NavRailRules.CoinTiltMs, level);
+                row.Tilt.Transitions = ms <= 0 ? null : new Transitions
+                {
+                    new DoubleTransition { Property = RotateTransform.AngleProperty, Duration = TimeSpan.FromMilliseconds(ms) },
+                };
+                row.Tilt.Angle = angle;
+            }
+            catch (Exception ex) { Log.Debug("TiltNavCoin: {E}", ex.Message); }
+        }
+
+        /// <summary>The coin comes level again over the hover time (WPF SettleNavTilt).</summary>
+        private static void SettleNavTilt(NavSectionRow row)
+        {
+            try
+            {
+                int ms = DepthRules.Ms(DepthRules.HoverMs, NavPaint.Level);
+                row.Tilt.Transitions = ms <= 0 || row.Tilt.Angle == 0 ? null : new Transitions
+                {
+                    new DoubleTransition { Property = RotateTransform.AngleProperty, Duration = TimeSpan.FromMilliseconds(ms), Easing = new QuadraticEaseOut() },
+                };
+                row.Tilt.Angle = 0;
+            }
+            catch (Exception ex) { Log.Debug("SettleNavTilt: {E}", ex.Message); }
+        }
+
+        /// <summary>Test seam: the lean a section's coin wears after a pointer at (nx, ny) in -1..1.</summary>
+        internal double NavCoinTiltForTests(string section, double nx, double ny)
+        {
+            var row = _navSectionRows.FirstOrDefault(r => r.Section == section);
+            if (row?.Tile == null) return double.NaN;
+            double w = row.Tile.Bounds.Width, h = row.Tile.Bounds.Height;
+            TiltNavCoin(row, new Point((nx + 1) / 2 * w, (ny + 1) / 2 * h));
+            return row.Tilt.Angle;
         }
 
         /// <summary>WPF's release keyframes as one easing: ease out PAST the target (by
@@ -560,6 +615,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     row.Glow.Opacity = to;
                 }
                 PaintNavCoin(row);
+                if (row.Active) SettleNavTilt(row);
             }
             catch (Exception ex) { Log.Debug("PaintNavRowActive: {E}", ex.Message); }
         }

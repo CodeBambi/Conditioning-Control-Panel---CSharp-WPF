@@ -83,9 +83,64 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 _browserRevealed = false;
                 s.DashboardBrowserCollapsed = collapsed;
                 CoreSettings.Save();
-                SettleBrowserFold();
+                ApplyBrowserFold(animate: global::ConditioningControlPanel.Avalonia.Controls.AmbientFxCanvas.Env.AllowTransitions);
             }
             catch (Exception ex) { Log.Warning(ex, "BtnFoldBrowser_Click failed"); }
+        }
+
+        /// <summary>WPF BrowserFoldMs.</summary>
+        internal const int BrowserFoldMs = 180;
+        private global::Avalonia.Threading.DispatcherTimer? _browserFoldTween;
+
+        /// <summary>Test seam: the card is easing to its new height.</summary>
+        internal bool BrowserFoldAnimating => _browserFoldTween?.IsEnabled == true;
+
+        /// <summary>
+        /// WPF ApplyBrowserFold: paints the fold from the saved bool. Animated, the card eases
+        /// from the height on screen to its landing height in 180 ms, cubic out, with the body
+        /// out of the way for the whole ease in both directions; either way the last thing that
+        /// happens is a settle. Snaps with motion off, before the first layout and while hidden.
+        /// </summary>
+        private void ApplyBrowserFold(bool animate)
+        {
+            var tab = HomeTab;
+            var frame = tab?.FindControl<global::Avalonia.Controls.Border>("BrowserCardFrame");
+            _browserFoldTween?.Stop();
+            _browserFoldTween = null;
+            if (frame != null) frame.Height = double.NaN;
+            if (tab == null || frame == null) { SettleBrowserFold(); return; }
+
+            double from = frame.Bounds.Height;
+            if (!animate || from <= 0 || !IsVisible) { SettleBrowserFold(); return; }
+
+            // Settle first so the rows and the chevron are already where they belong, then take
+            // the body out of the way and measure the landing height.
+            SettleBrowserFold();
+            tab.BrowserFoldBody.IsVisible = false;
+            try { frame.UpdateLayout(); } catch { }
+            double to = frame.Bounds.Height;
+            if (to <= 0 || Math.Abs(to - from) < 1.0) { SettleBrowserFold(); return; }
+
+            frame.Height = from;
+            var started = System.Diagnostics.Stopwatch.GetTimestamp();
+            global::Avalonia.Threading.DispatcherTimer? timer = null;
+            timer = new global::Avalonia.Threading.DispatcherTimer(TimeSpan.FromMilliseconds(16),
+                global::Avalonia.Threading.DispatcherPriority.Render, (_, _) =>
+            {
+                double p = Math.Clamp(System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds / BrowserFoldMs, 0, 1);
+                if (p < 1)
+                {
+                    frame.Height = from + (to - from) * (1 - Math.Pow(1 - p, 3));   // CubicEase, EaseOut
+                    return;
+                }
+                timer!.Stop();
+                if (ReferenceEquals(_browserFoldTween, timer)) _browserFoldTween = null;
+                frame.Height = double.NaN;
+                try { SettleBrowserFold(); }
+                catch (Exception ex) { Log.Debug("Browser fold settle: {E}", ex.Message); }
+            });
+            _browserFoldTween = timer;
+            timer.Start();
         }
 
         /// <summary>Re-reads the bool and puts every surface the fold owns where it says. Idempotent,
