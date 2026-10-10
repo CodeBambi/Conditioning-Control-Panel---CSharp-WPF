@@ -52,9 +52,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 var version = CoreReleaseContent.AppVersion;
                 if (Named<TextBlock>("TxtTitleBarVersion") is { } title && !string.IsNullOrEmpty(version))
                 {
-                    title.Text = $"Conditioning Control Panel v{version}";
+                    title.Text = $"Conditioning Control Panel v{Platform.AppIdentity.VersionLabel}";
                     Title = title.Text;
                 }
+
+                // The idle pill names THIS build ("v7.2.0 IS OUT"), not the release frozen in its loc key:
+                // one version source (Version.props), no per-release key bump on this head.
+                StampIdleUpdatePill(version);
 
                 if (Named<Border>("SectionWashLine") is { } line)
                     line.PropertyChanged += (_, e) =>

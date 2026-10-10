@@ -220,8 +220,11 @@ namespace ConditioningControlPanel.Avalonia.Platform
                 ? InstallAsync(owner)
                 : ManualCheckAsync(owner);
 
-        /// <summary>WPF CheckForUpdatesManuallyAsync (App.xaml.cs:5252), minus the server-banner
-        /// fallback (no marquee banner service on this head).</summary>
+        /// <summary>WPF reads the pill's own tag: "UrgentUpdate" = the server banner lit it.</summary>
+        private static bool ServerIndicatedUpdate => Shell?.UpdatePillTag == "UrgentUpdate";
+
+        /// <summary>WPF CheckForUpdatesManuallyAsync (App.xaml.cs:4960), server-banner fallback
+        /// included: a banner with no url lands here and installs in app.</summary>
         internal static async Task ManualCheckAsync(Window owner)
         {
             if (_busy) return;
@@ -235,6 +238,14 @@ namespace ConditioningControlPanel.Avalonia.Platform
                     _busy = false;
                     await OfferAsync(owner, info);
                 }
+                else if (ServerIndicatedUpdate)
+                {
+                    // WPF App.xaml.cs:5014: the server banner says there is an update but the check
+                    // found none (not an installed copy, GitHub unreachable): offer the releases page.
+                    Log.Warning("Update check returned no update, but the server banner indicated one. Offering the releases page.");
+                    if (await MessageDialog.ConfirmAsync(owner, Loc.Get("dialog_update_available"), Loc.Get("msg_update_manual_fallback")))
+                        await OpenUrl(owner, ReleaseLinks.ReleasesPageUrl);
+                }
                 else
                 {
                     Shell?.ShowUpdateAvailableButton(false);
@@ -245,7 +256,15 @@ namespace ConditioningControlPanel.Avalonia.Platform
             catch (Exception ex)
             {
                 Log.Error(ex, "Manual update check failed");
-                await MessageDialog.ShowAsync(owner, Loc.Get("title_update_check_failed"), Loc.GetF("msg_update_check_failed", ex.Message));
+                if (ServerIndicatedUpdate)
+                {
+                    // WPF App.xaml.cs:5063.
+                    if (await MessageDialog.ConfirmAsync(owner, Loc.Get("title_update_check_failed"),
+                            Loc.GetF("msg_update_check_failed_fallback", ex.Message)))
+                        await OpenUrl(owner, ReleaseLinks.ReleasesPageUrl);
+                }
+                else
+                    await MessageDialog.ShowAsync(owner, Loc.Get("title_update_check_failed"), Loc.GetF("msg_update_check_failed", ex.Message));
             }
             finally
             {

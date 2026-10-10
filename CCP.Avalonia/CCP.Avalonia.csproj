@@ -20,6 +20,10 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <RootNamespace>ConditioningControlPanel.Avalonia</RootNamespace>
     <AssemblyName>CCP.Avalonia</AssemblyName>
+    <!-- The label of an unreleased build (Version.props) rides the informational version only:
+         AssemblyVersion stays the plain number every version check parses. -->
+    <InformationalVersion Condition="'$(CcpVersionLabel)' != ''">$(Version)-$(CcpVersionLabel)</InformationalVersion>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <WarningsAsErrors>$(WarningsAsErrors);CA1416</WarningsAsErrors>
   </PropertyGroup>

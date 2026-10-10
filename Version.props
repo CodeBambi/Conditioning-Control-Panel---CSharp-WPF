@@ -5,6 +5,10 @@
        CoreReleaseContent.AppVersion and every mod's MinAppVersion check then agree on every head.
        A release bumps this and UpdateService.AppVersion (see ConditioningControlPanel/CLAUDE.md). -->
   <PropertyGroup>
-    <Version>7.1.5</Version>
+    <Version>7.2.0</Version>
+    <!-- A build that is NOT a release wears a label (title bar, installer file name, the About
+         line): 7.2.0-parity. The number above stays plain digits because the updater, the mod
+         MinAppVersion check and the Linux tarball name parse it. A release empties the label. -->
+    <CcpVersionLabel>parity</CcpVersionLabel>
   </PropertyGroup>
 </Project>
