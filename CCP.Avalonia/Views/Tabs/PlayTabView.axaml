@@ -52,12 +52,13 @@
     <ControlTheme x:Key="PlayCard" TargetType="Border">
       <Setter Property="CornerRadius" Value="16"/>
       <Setter Property="Background" Value="{DynamicResource SurfaceBgBrush}"/>
-      <Setter Property="BorderBrush" Value="{DynamicResource PanelAccentBrush}"/>
+      <!-- Polish 8: a 1 px glass outline on every card so it lifts off the washed page. -->
+      <Setter Property="BorderBrush" Value="{DynamicResource GlassBorderBrush}"/>
       <Setter Property="BorderThickness" Value="1"/>
       <Setter Property="Padding" Value="22"/>
       <Setter Property="Margin" Value="9"/>
       <Style Selector="^:pointerover">
-        <Setter Property="BorderBrush" Value="{DynamicResource PanelAccentHoverBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource GlassBorderHoverBrush}"/>
       </Style>
     </ControlTheme>
     <!-- Tier livery variants: a tiered card wears its tier's metal PERMANENTLY - gold = Tier 1,
@@ -100,47 +101,45 @@
       <Setter Property="Margin" Value="-22,-22,-22,16"/>
       <Setter Property="ClipToBounds" Value="True"/>
     </ControlTheme>
-    <ControlTheme x:Key="PlayZoneTag" TargetType="TextBlock">
-      <Setter Property="Foreground" Value="{DynamicResource PinkBrush}"/>
-      <Setter Property="FontFamily" Value="Consolas, Courier New"/>
-      <Setter Property="FontWeight" Value="Bold"/>
-      <Setter Property="FontSize" Value="12"/>
+    <!-- Readability pass (polish 8, 23c284a3c): the zone tag is the type scale's eyebrow. -->
+    <ControlTheme x:Key="PlayZoneTag" TargetType="TextBlock" BasedOn="{StaticResource Type.SectionHeader}">
       <Setter Property="VerticalAlignment" Value="Center"/>
       <Setter Property="Margin" Value="0,0,14,0"/>
     </ControlTheme>
-    <!-- The hairline that trails off to the right of a zone tag. Geometry only: the gradient stays
-         INLINE on each Border, the same markup the WPF original uses. -->
+    <!-- The hairline that trails off to the right of a zone tag (polish 8): the section rule
+         through a static fade mask, so the four inline gradients are gone. -->
     <ControlTheme x:Key="PlayZoneRule" TargetType="Border">
       <Setter Property="Height" Value="1"/>
       <Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="Background" Value="{DynamicResource SectionRuleBrush}"/>
+      <Setter Property="OpacityMask">
+        <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
+          <GradientStop Color="Black" Offset="0"/>
+          <GradientStop Color="Transparent" Offset="1"/>
+        </LinearGradientBrush>
+      </Setter>
     </ControlTheme>
-    <ControlTheme x:Key="PlayCardTitle" TargetType="TextBlock">
-      <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
-      <Setter Property="FontWeight" Value="Bold"/>
-      <Setter Property="FontSize" Value="18"/>
+    <!-- Polish 8: card title / blurb on Type.CardTitle / Type.Body (the blurb carries meaning). -->
+    <ControlTheme x:Key="PlayCardTitle" TargetType="TextBlock" BasedOn="{StaticResource Type.CardTitle}">
       <Setter Property="VerticalAlignment" Value="Center"/>
     </ControlTheme>
-    <ControlTheme x:Key="PlayCardBlurb" TargetType="TextBlock">
-      <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
-      <Setter Property="FontSize" Value="12.5"/>
-      <Setter Property="TextWrapping" Value="Wrap"/>
+    <ControlTheme x:Key="PlayCardBlurb" TargetType="TextBlock" BasedOn="{StaticResource Type.Body}">
       <Setter Property="VerticalAlignment" Value="Top"/>
     </ControlTheme>
-    <!-- NEW / BETA / SOON chip. Mod-tinted, unlike the lock vocabulary below. -->
+    <!-- NEW / BETA / SOON chip (polish 8): section ink on a card-surface plate inside the section
+         outline. The lock vocabulary below keeps its own colours. -->
     <ControlTheme x:Key="PlayBadgePill" TargetType="Border">
-      <Setter Property="Background" Value="{DynamicResource TransparentPink20Brush}"/>
-      <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+      <Setter Property="Background" Value="{DynamicResource ElevatedSurfaceBrush}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource SectionOutlineBrush}"/>
       <Setter Property="BorderThickness" Value="1"/>
       <Setter Property="CornerRadius" Value="6"/>
       <Setter Property="Padding" Value="6,2"/>
       <Setter Property="Margin" Value="9,0,0,0"/>
       <Setter Property="VerticalAlignment" Value="Center"/>
     </ControlTheme>
-    <ControlTheme x:Key="PlayBadgePillText" TargetType="TextBlock">
-      <Setter Property="Foreground" Value="{DynamicResource PinkBrush}"/>
-      <Setter Property="FontFamily" Value="Consolas, Courier New"/>
-      <Setter Property="FontWeight" Value="Bold"/>
-      <Setter Property="FontSize" Value="9.5"/>
+    <ControlTheme x:Key="PlayBadgePillText" TargetType="TextBlock" BasedOn="{StaticResource Type.Label}">
+      <Setter Property="Foreground" Value="{DynamicResource SectionInkBrush}"/>
+      <Setter Property="FontSize" Value="10"/>
     </ControlTheme>
     <!-- The small square emblem plate beside a title, kept for the Eyes cards and the two strips. -->
     <ControlTheme x:Key="PlayTitleGlyphPlate" TargetType="Border">
@@ -227,14 +226,7 @@
              launcher's own call (PlayTabView.Cards.cs); the bands are decoration only. -->
         <Grid x:Name="ZoneGames" Margin="2,4,2,8" ColumnDefinitions="Auto,*">
           <TextBlock Grid.Column="0" Text="{loc:Str rf_play_zone_games}" Theme="{StaticResource PlayZoneTag}"/>
-          <Border Grid.Column="1" Theme="{StaticResource PlayZoneRule}">
-            <Border.Background>
-              <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
-                <GradientStop Color="{DynamicResource PanelAccentHover}" Offset="0"/>
-                <GradientStop Color="Transparent" Offset="1"/>
-              </LinearGradientBrush>
-            </Border.Background>
-          </Border>
+          <Border Grid.Column="1" Theme="{StaticResource PlayZoneRule}"/>
         </Grid>
         <UniformGrid Columns="3">
           <Grid x:Name="SlotBreakoutDemo">
@@ -445,14 +437,7 @@
              half-width it was authored at. -->
         <Grid Margin="2,4,2,8" ColumnDefinitions="Auto,*">
           <TextBlock Grid.Column="0" Text="{loc:Str rf_play_zone_together}" Theme="{StaticResource PlayZoneTag}"/>
-          <Border Grid.Column="1" Theme="{StaticResource PlayZoneRule}">
-            <Border.Background>
-              <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
-                <GradientStop Color="{DynamicResource PanelAccentHover}" Offset="0"/>
-                <GradientStop Color="Transparent" Offset="1"/>
-              </LinearGradientBrush>
-            </Border.Background>
-          </Border>
+          <Border Grid.Column="1" Theme="{StaticResource PlayZoneRule}"/>
         </Grid>
         <!-- Column counts are FIXED on every zone, deliberately: an explicit Columns keeps each
              card the width it was authored at even while a neighbour is hidden. -->
@@ -476,8 +461,8 @@
                       </Border>
                     </Grid>
                   </Border>
-                  <TextBlock Grid.Row="1" Text="{loc:Str tab_remote_control}" Theme="{StaticResource PlayCardTitle}" Margin="0,0,0,8"/>
-                  <TextBlock Grid.Row="2" Text="{loc:Str pl6_card_blurb_remote}" Theme="{StaticResource PlayCardBlurb}" Margin="0,0,0,16"/>
+                  <TextBlock Grid.Row="1" Text="{loc:Str tab_remote_control}" Theme="{StaticResource PlayCardTitle}" Margin="0,0,0,6"/>
+                  <TextBlock Grid.Row="2" Text="{loc:Str pl6_card_blurb_remote}" Theme="{StaticResource PlayCardBlurb}" Margin="0,0,0,14"/>
                   <!-- Navigation only. The waiver, the login check and the deferred revert all live
                        on that page; a second enable path here would be a second gate. -->
                   <Button Grid.Row="3" x:Name="BtnPlayRemoteControl" Cursor="Hand"
@@ -509,14 +494,7 @@
              All THREE webcam features, under the one webcam chip. -->
         <Grid x:Name="ZoneEyes" Margin="2,18,2,8" ColumnDefinitions="Auto,*">
           <TextBlock Grid.Column="0" Text="{loc:Str rf_play_zone_eyes}" Theme="{StaticResource PlayZoneTag}"/>
-          <Border Grid.Column="1" Theme="{StaticResource PlayZoneRule}">
-            <Border.Background>
-              <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
-                <GradientStop Color="{DynamicResource PanelAccentHover}" Offset="0"/>
-                <GradientStop Color="Transparent" Offset="1"/>
-              </LinearGradientBrush>
-            </Border.Background>
-          </Border>
+          <Border Grid.Column="1" Theme="{StaticResource PlayZoneRule}"/>
         </Grid>
         <!-- Read-only webcam status chip. Settings → Devices owns the camera; this is DISPLAY
              ONLY. Three named parts, painted by UpdateWebcamStatusChips, which paints THREE
@@ -698,7 +676,7 @@
                     </Border>
                     <TextBlock Text="{loc:Str tab_blink_trainer}" Theme="{StaticResource PlayCardTitle}"/>
                   </StackPanel>
-                  <TextBlock Grid.Row="2" Text="{loc:Str pl6_card_blurb_blink}" Theme="{StaticResource PlayCardBlurb}" Margin="0,0,0,16"/>
+                  <TextBlock Grid.Row="2" Text="{loc:Str pl6_card_blurb_blink}" Theme="{StaticResource PlayCardBlurb}" Margin="0,0,0,14"/>
                   <Button Grid.Row="3" x:Name="BtnPlayBlinkTrainer" Cursor="Hand"
                           HorizontalAlignment="Left" Padding="16,8" CornerRadius="10"
                           Background="{DynamicResource AccentGradientBrush}" Foreground="White"
@@ -725,14 +703,7 @@
              over the keys on a timer. -->
         <Grid x:Name="ZoneSessions" Margin="2,18,2,8" ColumnDefinitions="Auto,*">
           <TextBlock Grid.Column="0" Text="{loc:Str rf_play_zone_sessions}" Theme="{StaticResource PlayZoneTag}"/>
-          <Border Grid.Column="1" Theme="{StaticResource PlayZoneRule}">
-            <Border.Background>
-              <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
-                <GradientStop Color="{DynamicResource PanelAccentHover}" Offset="0"/>
-                <GradientStop Color="Transparent" Offset="1"/>
-              </LinearGradientBrush>
-            </Border.Background>
-          </Border>
+          <Border Grid.Column="1" Theme="{StaticResource PlayZoneRule}"/>
         </Grid>
         <!-- Columns FIXED at 3, but Rows deliberately UNSET here, unlike its neighbours. This zone
              is the one whose card count varies: Just Drop is hidden until the server opens it, and
@@ -759,7 +730,7 @@
                       </Border>
                     </Grid>
                   </Border>
-                  <TextBlock Grid.Row="1" Text="{loc:Str tab_gradedintake}" Theme="{StaticResource PlayCardTitle}" Margin="0,0,0,8"/>
+                  <TextBlock Grid.Row="1" Text="{loc:Str tab_gradedintake}" Theme="{StaticResource PlayCardTitle}" Margin="0,0,0,6"/>
                   <TextBlock Grid.Row="2" Text="{loc:Str pl6_card_blurb_intake}" Theme="{StaticResource PlayCardBlurb}" Margin="0,0,0,10"/>
                   <StackPanel Grid.Row="3">
                     <!-- The state line: written by RefreshPlayCards from the SAME
@@ -825,8 +796,8 @@
                       </Border>
                     </Grid>
                   </Border>
-                  <TextBlock Grid.Row="1" Text="{loc:Str tab_fyp}" Theme="{StaticResource PlayCardTitle}" Margin="0,0,0,8"/>
-                  <TextBlock Grid.Row="2" Text="{loc:Str pl6_card_blurb_fyp}" Theme="{StaticResource PlayCardBlurb}" Margin="0,0,0,16"/>
+                  <TextBlock Grid.Row="1" Text="{loc:Str tab_fyp}" Theme="{StaticResource PlayCardTitle}" Margin="0,0,0,6"/>
+                  <TextBlock Grid.Row="2" Text="{loc:Str pl6_card_blurb_fyp}" Theme="{StaticResource PlayCardBlurb}" Margin="0,0,0,14"/>
                   <Button Grid.Row="3" x:Name="BtnPlayFyp" Cursor="Hand"
                           HorizontalAlignment="Left" Padding="16,8" CornerRadius="10"
                           Background="{DynamicResource AccentGradientBrush}" Foreground="White"
@@ -868,8 +839,8 @@
                       </Border>
                     </Grid>
                   </Border>
-                  <TextBlock Grid.Row="1" Text="{loc:Str tab_lockdown_mode}" Theme="{StaticResource PlayCardTitle}" Margin="0,0,0,8"/>
-                  <TextBlock Grid.Row="2" Text="{loc:Str pl6_card_blurb_lockdown}" Theme="{StaticResource PlayCardBlurb}" Margin="0,0,0,16"/>
+                  <TextBlock Grid.Row="1" Text="{loc:Str tab_lockdown_mode}" Theme="{StaticResource PlayCardTitle}" Margin="0,0,0,6"/>
+                  <TextBlock Grid.Row="2" Text="{loc:Str pl6_card_blurb_lockdown}" Theme="{StaticResource PlayCardBlurb}" Margin="0,0,0,14"/>
                   <!-- Navigation only. The duration dial, the double warning and
                        App.Lockdown.Activate stay on that page - this card must not be a second way
                        to take someone's keys away for an hour. -->
@@ -900,14 +871,7 @@
              art yet. -->
         <Grid Margin="2,18,2,8" ColumnDefinitions="Auto,*">
           <TextBlock Grid.Column="0" Text="{loc:Str rf_play_zone_more}" Theme="{StaticResource PlayZoneTag}"/>
-          <Border Grid.Column="1" Theme="{StaticResource PlayZoneRule}">
-            <Border.Background>
-              <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
-                <GradientStop Color="{DynamicResource PanelAccentHover}" Offset="0"/>
-                <GradientStop Color="Transparent" Offset="1"/>
-              </LinearGradientBrush>
-            </Border.Background>
-          </Border>
+          <Border Grid.Column="1" Theme="{StaticResource PlayZoneRule}"/>
         </Grid>
         <!-- Loom NAVIGATES, it does not launch: ShowTab("studio") + FocusRackEntry("spiral"),
              through OpenStudioModule. A second Launch() button here would be the duplicate-editor

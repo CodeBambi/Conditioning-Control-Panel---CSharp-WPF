@@ -96,6 +96,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             _ => null,
         };
 
+        /// <summary>The section whose pill is checked (the page's breadcrumb word), or null.</summary>
+        internal string? CheckedSectionKey => System.Array.Find(SectionKeys, k => PillFor(k)?.IsChecked == true);
+
         private RadioButton? PillFor(string? key) => (key ?? string.Empty).ToLowerInvariant() switch
         {
             "general" => SectionPillGeneral,

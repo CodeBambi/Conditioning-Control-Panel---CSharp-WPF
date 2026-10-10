@@ -189,6 +189,43 @@ namespace ConditioningControlPanel
             Close();
         }
 
+        /// <summary>
+        /// The card's "Turn these off" link. Switches the Graded Intake page's own setting off and
+        /// closes the card the way Esc does: never an answer, so no XP and no penalty. PURE on the
+        /// settings object; returns whether anything changed.
+        /// </summary>
+        internal static bool TurnOffPopQuestions(Models.AppSettings settings)
+        {
+            if (!settings.PopQuizEnabled) return false;
+            settings.PopQuizEnabled = false;
+            return true;
+        }
+
+        private void TurnOff_Click(object sender, MouseButtonEventArgs e)
+        {
+            if (_answered) return;
+            e.Handled = true;
+            try
+            {
+                var settings = App.Settings?.Current;
+                if (settings != null && TurnOffPopQuestions(settings))
+                {
+                    // The page's switch drives the same setting; keep it in step (its Unchecked
+                    // handler writes the same false back).
+                    var chk = App.MainWindowRef?.GradedIntakeTab?.ChkPopQuizEnabled;
+                    if (chk != null) chk.IsChecked = false;
+                    App.Settings?.Save();
+                    App.Logger?.Information("PopQuiz: turned off from the card");
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "PopQuiz: turning off from the card failed");
+            }
+            CleanupAndClose();
+            App.PopQuiz?.Stop();
+        }
+
         private static void PlayChime()
         {
             try

@@ -160,10 +160,9 @@
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,252,0">
                                 <TextBlock Text="🔒" FontSize="26" VerticalAlignment="Center" Margin="0,0,12,0"/>
                                 <StackPanel VerticalAlignment="Center">
-                                    <TextBlock Text="{loc:Str tab_lockdown_mode}" FontSize="17" FontWeight="Bold"
-                                               Foreground="{DynamicResource TextLightBrush}"/>
+                                    <TextBlock Theme="{StaticResource Type.CardTitle}" Text="{loc:Str tab_lockdown_mode}"/>
                                     <TextBlock Text="{loc:Str label_lock_yourself_into_a_timed_conditioning_sessi}"
-                                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11.5"
+                                               Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11.5"
                                                Margin="0,1,0,0" TextTrimming="CharacterEllipsis"/>
                                 </StackPanel>
                             </StackPanel>
@@ -418,8 +417,7 @@
                                             </Grid>
 
                                             <TextBlock Text="{loc:Str lockdown_poss_safeties_note}" FontSize="10.5"
-                                                       Foreground="{DynamicResource TextMutedBrush}" TextWrapping="Wrap"
-                                                       Opacity="0.85" Margin="0,2,0,0"/>
+                                                       Foreground="{DynamicResource TextMutedBrush}" TextWrapping="Wrap" Margin="0,2,0,0"/>
 
                                             <Border Height="1" Background="{DynamicResource GlassBorderBrush}" Margin="0,6"/>
 

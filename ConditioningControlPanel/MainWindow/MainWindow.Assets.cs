@@ -2234,16 +2234,13 @@ namespace ConditioningControlPanel
         private readonly List<ToggleButton> _remoteSourceChipButtons = new();
         private readonly List<ToggleButton> _remoteNicheChipButtons = new();
 
-        /// <summary>Niche ids whose sub list is currently unfolded under the chip row. Session
-        /// state on purpose: which disclosure triangles you left open is not worth a settings
-        /// key, and a fresh launch showing every niche as one tidy line is the better default.</summary>
-        private readonly HashSet<string> _remoteNicheExpanded = new(StringComparer.OrdinalIgnoreCase);
+        /// <summary>Flavour tiles (five flavours + Mine) and each niche's tint, built once.</summary>
+        private readonly List<Button> _remoteFlavourTiles = new();
 
-        /// <summary>Whether the custom-subreddit block (hint, add row, library chips) is
-        /// unfolded. Folded on every launch for the same reason the niche lines are: the block
-        /// is the tallest thing in the media-source panel and the asset browser below pays for
-        /// every pixel of it (AssetsTabView.xaml, RemoteMediaScroll). Session-only, no key.</summary>
-        private bool _remoteCustomSubsExpanded;
+        /// <summary>The player's own selection from before their first flavour click this
+        /// session, so the Mine tile can bring it back. Session-only, no key.</summary>
+        private List<string>? _remoteMineNiches;
+        private List<string>? _remoteMineSubs;
 
         /// <summary>The sub being probed right now, or null. Held as state rather than as a
         /// captured Border so the pending pill survives a picker repaint mid-probe.</summary>
@@ -2252,6 +2249,10 @@ namespace ConditioningControlPanel
         /// <summary>Same cap the FYP popover host enforces (Take(20)). The WPF picker used to
         /// have none, so the two surfaces could disagree about what was saved.</summary>
         private const int RemoteCustomSubCap = 20;
+
+        /// <summary>Whether the Fine-tune row is open. Session-only on purpose: the block
+        /// opens calm (source, flavour, one line) every time the app starts.</summary>
+        private bool _remoteFineTuneOpen;
 
         /// <summary>Builds the picker once, then re-syncs it to settings on every tab visit.</summary>
         private void InitializeRemoteMediaPicker()
@@ -2265,6 +2266,7 @@ namespace ConditioningControlPanel
                 {
                     _remotePickerWired = true;
                     BuildRemoteSourceChips();
+                    BuildRemoteFlavourTiles();
                     BuildRemoteNicheChips();
 
                     if (tab.SliderRemoteRatio != null)
@@ -2273,8 +2275,8 @@ namespace ConditioningControlPanel
                         tab.BtnRemoteAddSub.Click += BtnRemoteAddSub_Click;
                     if (tab.TxtRemoteCustomSub != null)
                         tab.TxtRemoteCustomSub.KeyDown += TxtRemoteCustomSub_KeyDown;
-                    if (tab.RemoteCustomSubsToggle != null)
-                        tab.RemoteCustomSubsToggle.MouseLeftButtonUp += RemoteCustomSubsToggle_Click;
+                    if (tab.BtnRemoteFineTune != null)
+                        tab.BtnRemoteFineTune.Click += (_, _) => SetRemoteFineTuneOpen(!_remoteFineTuneOpen);
                 }
 
                 RefreshRemoteMediaPicker();
@@ -2282,14 +2284,32 @@ namespace ConditioningControlPanel
             catch (Exception ex) { App.Logger?.Warning(ex, "Remote media picker init failed"); }
         }
 
-        /// <summary>Own assets / Reddit / Both, as chips rather than radio buttons so the whole
-        /// panel speaks one shape language (the niche row below uses the same style).</summary>
+        /// <summary>Opens or closes the Fine-tune list (niches + your own communities).</summary>
+        private void SetRemoteFineTuneOpen(bool open)
+        {
+            _remoteFineTuneOpen = open;
+            var tab = AssetsTab;
+            if (tab == null) return;
+            if (tab.RemoteFineTuneScroll != null)
+                tab.RemoteFineTuneScroll.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
+            // One decision at a time: the browser steps aside while the list is open, which is
+            // also the only way the list fits on a page that never scrolls (desk run 4).
+            if (tab.AssetBrowserSection != null)
+                tab.AssetBrowserSection.Visibility = open ? Visibility.Collapsed : Visibility.Visible;
+            if (tab.TxtRemoteFineTuneChevron != null)
+                tab.TxtRemoteFineTuneChevron.Text = open ? "" : "";
+        }
+
+        /// <summary>Own assets / Reddit / Both, as the segments of one rounded bar
+        /// (RemoteSourceSegment in AssetsTabView.xaml). Radio behaviour is enforced in
+        /// <see cref="RemoteSourceChip_Changed"/>.</summary>
         private void BuildRemoteSourceChips()
         {
             var host = AssetsTab?.RemoteSourceChips;
             if (host == null || host.Children.Count > 0) return;
 
-            var chipStyle = TryFindResource("AchievementFilterChip") as Style;
+            var chipStyle = host.TryFindResource("RemoteSourceSegment") as Style
+                ?? TryFindResource("AchievementFilterChip") as Style;
 
             void Add(string key, string locKey, string english, string tipKey, string tipEnglish)
             {
@@ -2322,16 +2342,12 @@ namespace ConditioningControlPanel
             var host = AssetsTab?.RemoteNicheChips;
             if (host == null || host.Children.Count > 0) return;
 
-            var chipStyle = TryFindResource("AchievementFilterChip") as Style;
+            var chipStyle = host.TryFindResource("RemoteNichePill") as Style
+                ?? TryFindResource("AchievementFilterChip") as Style;
 
             foreach (var niche in Services.Fyp.Online.FypOnlineCoordinator.Catalog)
             {
-                var chip = new ToggleButton
-                {
-                    Style = chipStyle,
-                    Tag = niche.Id,
-                    Content = niche.Label
-                };
+                var chip = CreateRemoteNicheChip(niche, chipStyle);
                 chip.Checked += RemoteNicheChip_Changed;
                 chip.Unchecked += RemoteNicheChip_Changed;
                 _remoteNicheChipButtons.Add(chip);
@@ -2371,8 +2387,9 @@ namespace ConditioningControlPanel
                 foreach (var chip in _remoteNicheChipButtons)
                     chip.IsChecked = chip.Tag is string id && selected.Contains(id);
 
-                RebuildRemoteNicheSubs(settings);
+                PaintRemotePickerChrome(settings);
                 RebuildRemoteCustomSubChips(settings);
+                SetRemoteFineTuneOpen(_remoteFineTuneOpen);
             }
             catch (Exception ex) { App.Logger?.Warning(ex, "Remote media picker refresh failed"); }
             finally { _remotePickerSyncing = false; }
@@ -2463,7 +2480,7 @@ namespace ConditioningControlPanel
                 settings.FypOnlineNiches = selected;
                 PersistRemoteChannelChange();
                 // The sub list under the row is a projection of exactly this selection.
-                RebuildRemoteNicheSubs(settings);
+                PaintRemotePickerChrome(settings);
             }
             catch (Exception ex) { App.Logger?.Warning(ex, "Remote niche toggle failed"); }
         }
@@ -2669,6 +2686,9 @@ namespace ConditioningControlPanel
             {
                 label.Text = text;
                 label.Visibility = Visibility.Visible;
+                // The reason lives inside Fine-tune; a refusal raised from a flavour click
+                // (library full) must not land in a closed drawer.
+                if (!_remoteFineTuneOpen) SetRemoteFineTuneOpen(true);
             }
         }
 
@@ -2741,258 +2761,467 @@ namespace ConditioningControlPanel
 
             host.Children.Clear();
 
-            var verified = AssetsTab?.TryFindResource("RemoteSubVerifiedBrush") as Brush;
-            var muted = Application.Current?.TryFindResource("TextMutedBrush") as Brush ?? Brushes.Gray;
-            var removeTip = LocOr("tooltip_remote_library_remove", "Forget this subreddit everywhere");
-
-            // The chips ARE the library (every sub kept anywhere in the app), not the pool. A lit
-            // pill is in this machine's media pool; a dashed one is kept but unused here, one
-            // click from being back. The X is the only thing that forgets a name.
+            // The rows ARE the library (every sub kept anywhere in the app), not the pool. A
+            // switched-on row is in this machine's media pool; switched off = kept but unused
+            // here, one click from being back. The X is the only thing that forgets a name.
             foreach (var row in settings.BuildRemoteSubLibraryView())
             {
-                var name = row.Name;   // captured per chip, not per loop variable
-                var label = $"r/{name}";
-                Brush? accent = null;
-                string? chipTip;
+                var name = row.Name;   // captured per row, not per loop variable
+                string? status = null;
+                bool verified = false;
 
                 if (row.Ok == true)
                 {
-                    // Orange = we asked and it answered. VideoCount 0 is a real answer too, and
-                    // the pill says "stills only" rather than promising clips it does not have.
-                    accent = row.Selected ? verified : muted;
-                    chipTip = row.StillOnly
+                    // VideoCount 0 is a real answer too: the row says "stills only" rather than
+                    // promising clips it does not have.
+                    verified = true;
+                    status = row.StillOnly
                         ? LocOr("label_remote_sub_verified_stills", "Verified · stills only")
                         : string.Format(LocOr("label_remote_sub_verified",
                             "Verified · {0} clips on Reddit"), row.VideoCount.GetValueOrDefault());
                 }
                 else if (row.Ok == false)
                 {
-                    // Probed and NOT found. It stays in the list (the user put it there and may
-                    // know something we do not) but it is marked, not quietly rendered as fine.
-                    accent = muted;
-                    label = $"r/{name} ?";
-                    chipTip = Services.Fyp.Online.RemoteSubAddMessages.Describe(
+                    // Probed and NOT found. It stays (the user put it there and may know
+                    // something we do not) but it says so on the row.
+                    status = Services.Fyp.Online.RemoteSubAddMessages.Describe(
                         Services.Fyp.Online.RemoteSubAddOutcome.NotCarried, name,
                         Models.AppSettings.RemoteSubLibraryCap);
                 }
-                else
-                {
-                    // No verdict at all = kept before probing existed. No claim either way.
-                    accent = row.Selected ? null : muted;
-                    chipTip = null;
-                }
 
-                var toggleTip = row.Selected
-                    ? LocOr("tooltip_remote_sub_in_pool", "In your media pool - click to drop it")
-                    : LocOr("tooltip_remote_sub_kept", "Kept - click to add it to your media pool");
-                chipTip = chipTip == null ? toggleTip : chipTip + "\n" + toggleTip;
-
-                host.Children.Add(BuildRemoteChip(label, removeTip,
-                    () => RemoveRemoteCustomSub(name), accent, chipTip,
-                    dashed: !row.Selected, onToggle: () => ToggleRemoteSubSelection(name)));
+                host.Children.Add(BuildRemoteSubRow(AssetsTab, $"r/{name}", status, row.Selected, verified,
+                    onToggle: () => ToggleRemoteSubSelection(name),
+                    onRemove: () => RemoveRemoteCustomSub(name)));
             }
 
-            // Grey dashed placeholder while the probe is out, so the click has a visible effect
-            // long before the network answers.
+            // A row with its switch off while the probe is out, so the click has a visible
+            // effect long before the network answers.
             if (_remoteSubPending != null)
             {
-                host.Children.Add(BuildRemoteChip($"r/{_remoteSubPending}…", null, null, muted,
+                host.Children.Add(BuildRemoteSubRow(AssetsTab, $"r/{_remoteSubPending}…",
                     string.Format(LocOr("label_remote_sub_checking", "Checking r/{0}…"), _remoteSubPending),
-                    dashed: true));
+                    on: false, verified: false, onToggle: null, onRemove: null));
             }
 
             if (host.Children.Count == 0)
                 host.Children.Add(MutedRemoteNote(LocOr("label_remote_custom_subs_none",
                     "None yet - the niches above are plenty to start with.")));
 
-            PaintRemoteCustomSubsToggle(settings);
+            RepaintRemoteSummary(settings);
         }
 
-        /// <summary>The disclosure line above the custom-sub block. Folded it reads
-        /// "▸ Your own subreddits · 2 in use · 5 kept", so the counts the chips would have shown
-        /// are still one glance away; unfolded it is just the heading with a ▾. Runs after every
-        /// chip rebuild because the counts move with the library.</summary>
-        private void PaintRemoteCustomSubsToggle(Models.AppSettings settings)
+        // ---- The modern picker (nav polish wave 3) ---------------------------------------
+        // The look is built by STATIC helpers (no window state), so AssetsMediaBlockRenderTests
+        // can draw the real cards, rows and switches offscreen without a MainWindow.
+
+        /// <summary>The 36x20 pill switch every list row leads with. Painted by
+        /// <see cref="PaintRemoteSwitch"/>; Tag "switch" lets the painters find it.</summary>
+        internal static Border BuildRemoteSwitch() => new()
         {
-            var tab = AssetsTab;
-            if (tab?.RemoteCustomSubsToggle == null || tab.RemoteCustomSubsBody == null) return;
+            Tag = "switch",
+            Width = 36,
+            Height = 20,
+            CornerRadius = new CornerRadius(10),
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 12, 0),
+            IsHitTestVisible = false,
+            Child = new System.Windows.Shapes.Ellipse { Width = 14, Height = 14, Margin = new Thickness(3, 0, 3, 0) }
+        };
 
-            try
+        /// <summary>On: Pink with a white knob at the right. Off: grey, knob left. The flavour tint
+        /// stays on the name only: a pale tint on the track (Trance lilac, Censored steel) read as
+        /// neither on nor off beside the pink ones (desk run 4).</summary>
+        internal static void PaintRemoteSwitch(Border track, bool on, Color tint)
+        {
+            track.Background = on ? new SolidColorBrush(RemoteNicheDefaultTint) : RemoteTintBrush(Colors.White, 0.16);
+            if (track.Child is System.Windows.Shapes.Ellipse knob)
             {
-                var title = LocOr("label_remote_custom_subs", "Your own subreddits");
-                if (_remoteCustomSubsExpanded)
-                {
-                    tab.RemoteCustomSubsToggle.Text = $"▾ {title}";
-                    tab.RemoteCustomSubsBody.Visibility = Visibility.Visible;
-                    return;
-                }
-
-                int kept = 0, inUse = 0;
-                foreach (var row in settings.BuildRemoteSubLibraryView())
-                {
-                    kept++;
-                    if (row.Selected) inUse++;
-                }
-                tab.RemoteCustomSubsToggle.Text = $"▸ {title} · " +
-                    string.Format(LocOr("label_remote_custom_subs_summary", "{0} in use · {1} kept"), inUse, kept);
-                tab.RemoteCustomSubsBody.Visibility = Visibility.Collapsed;
+                knob.Fill = on ? Brushes.White : RemoteTintBrush(Colors.White, 0.62);
+                knob.HorizontalAlignment = on ? HorizontalAlignment.Right : HorizontalAlignment.Left;
             }
-            catch (Exception ex) { App.Logger?.Debug("Painting the custom sub toggle failed: {E}", ex.Message); }
         }
 
-        private void RemoteCustomSubsToggle_Click(object sender, MouseButtonEventArgs e)
+        private static TextBlock RemoteRowName(string text) => new()
         {
-            try
-            {
-                _remoteCustomSubsExpanded = !_remoteCustomSubsExpanded;
-                var settings = App.Settings?.Current;
-                if (settings != null) PaintRemoteCustomSubsToggle(settings);
-                // Unfolding is nearly always a prelude to typing a name.
-                if (_remoteCustomSubsExpanded) AssetsTab?.TxtRemoteCustomSub?.Focus();
-            }
-            catch (Exception ex) { App.Logger?.Debug("Custom sub toggle failed: {E}", ex.Message); }
-        }
+            Text = text,
+            FontSize = 12.5,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = RemoteTintBrush(Colors.White, 0.92),
+            TextTrimming = TextTrimming.CharacterEllipsis
+        };
 
-        /// <summary>A removable pill. Same look as the niche toggles, with the companion tab's
-        /// ✕ affordance; both styles live in AssetsTabView.xaml's own resources.
-        ///
-        /// <paramref name="accent"/> repaints the border AND the label (orange = probed and real,
-        /// muted = probed and missing, null = never probed). <paramref name="onRemove"/> may be
-        /// null for a pill that cannot be removed yet - the in-flight probe placeholder.
-        /// <paramref name="dashed"/> draws the outline as a rounded Rectangle instead, because a
-        /// WPF Border has no dash style of its own.</summary>
-        private Border BuildRemoteChip(string label, string? removeTip, Action? onRemove,
-            Brush? accent = null, string? chipTip = null, bool dashed = false, Action? onToggle = null)
+        private static TextBlock RemoteRowLine(string text) => new()
         {
-            var chip = new Border { Style = AssetsTab?.TryFindResource("RemoteChipBorder") as Style };
-            if (chipTip != null) chip.ToolTip = chipTip;
-            if (onToggle != null)
-            {
-                // Two gestures on one pill: the body toggles this surface's selection, the X
-                // forgets the sub everywhere. ButtonBase marks its own MouseLeftButtonUp handled,
-                // so a click on the X never reaches this handler.
-                chip.Cursor = Cursors.Hand;
-                chip.MouseLeftButtonUp += (_, _) =>
-                {
-                    try { onToggle(); }
-                    catch (Exception ex) { App.Logger?.Debug("Remote chip toggle failed: {E}", ex.Message); }
-                };
-            }
-            var row = new StackPanel { Orientation = Orientation.Horizontal };
+            Text = text,
+            FontSize = 11,
+            Margin = new Thickness(0, 1, 0, 0),
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            Foreground = Application.Current?.TryFindResource("TextMutedBrush") as Brush
+                ?? RemoteTintBrush(Colors.White, 0.5)
+        };
 
-            row.Children.Add(new TextBlock
-            {
-                Text = label,
-                Foreground = accent ?? Brushes.White,
-                FontSize = 11,
-                FontWeight = FontWeights.SemiBold,
-                VerticalAlignment = VerticalAlignment.Center
-            });
+        /// <summary>
+        /// One of YOUR communities as a list row: switch (in this machine's pool or not), the
+        /// name, a muted status line, and an X that forgets it everywhere. The row body toggles;
+        /// ButtonBase marks its own MouseLeftButtonUp handled, so a click on the X never
+        /// reaches the row. <paramref name="onToggle"/> null = the in-flight probe row.
+        /// </summary>
+        internal static Border BuildRemoteSubRow(FrameworkElement? resources, string name, string? status,
+            bool on, bool verified, Action? onToggle, Action? onRemove)
+        {
+            var grid = new Grid();
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var track = BuildRemoteSwitch();
+            var tint = verified && resources?.TryFindResource("RemoteSubVerifiedBrush") is SolidColorBrush v
+                ? v.Color : RemoteNicheDefaultTint;
+            PaintRemoteSwitch(track, on, tint);
+            grid.Children.Add(track);
+
+            var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+            text.Children.Add(RemoteRowName(name));
+            if (!string.IsNullOrWhiteSpace(status)) text.Children.Add(RemoteRowLine(status));
+            Grid.SetColumn(text, 1);
+            grid.Children.Add(text);
 
             if (onRemove != null)
             {
                 var close = new Button
                 {
                     Content = "✕",
-                    ToolTip = removeTip,
-                    Style = AssetsTab?.TryFindResource("RemoteChipCloseButton") as Style
+                    ToolTip = LocOr("tooltip_remote_library_remove", "Forget this subreddit everywhere"),
+                    Style = resources?.TryFindResource("RemoteChipCloseButton") as Style
                 };
                 close.Click += (_, _) =>
                 {
                     try { onRemove(); }
-                    catch (Exception ex) { App.Logger?.Debug("Remote chip removal failed: {E}", ex.Message); }
+                    catch (Exception ex) { App.Logger?.Debug("Remote sub removal failed: {E}", ex.Message); }
                 };
-                row.Children.Add(close);
+                Grid.SetColumn(close, 2);
+                grid.Children.Add(close);
             }
 
-            if (dashed)
+            var row = new Border
             {
-                chip.BorderThickness = new Thickness(0);
-                chip.Background = Brushes.Transparent;
-                var stack = new Grid();
-                stack.Children.Add(new Rectangle
+                MinHeight = 44,
+                Padding = new Thickness(4, 6, 4, 6),
+                Margin = new Thickness(0, 0, 16, 0),
+                Background = Brushes.Transparent,
+                BorderBrush = RemoteTintBrush(Colors.White, 0x14 / 255.0),
+                BorderThickness = new Thickness(0, 0, 0, 1),
+                Child = grid
+            };
+            if (onToggle != null)
+            {
+                row.Cursor = Cursors.Hand;
+                row.MouseLeftButtonUp += (_, _) =>
                 {
-                    RadiusX = 13,
-                    RadiusY = 13,
-                    Fill = Brushes.Transparent,
-                    Stroke = accent ?? Brushes.Gray,
-                    StrokeThickness = 1,
-                    StrokeDashArray = new DoubleCollection { 3, 2 }
-                });
-                stack.Children.Add(row);
-                chip.Child = stack;
+                    try { onToggle(); }
+                    catch (Exception ex) { App.Logger?.Debug("Remote sub toggle failed: {E}", ex.Message); }
+                };
             }
-            else
+            return row;
+        }
+
+        /// <summary>The Pink of the app, used for a niche no flavour owns.</summary>
+        private static readonly Color RemoteNicheDefaultTint = Color.FromRgb(0xFF, 0x69, 0xB4);
+
+        private static Color RemoteTint(string hex)
+        {
+            try { return (Color)ColorConverter.ConvertFromString(hex); }
+            catch { return RemoteNicheDefaultTint; }
+        }
+
+        private static SolidColorBrush RemoteTintBrush(Color c, double alpha) =>
+            new(Color.FromArgb((byte)Math.Round(255 * Math.Clamp(alpha, 0, 1)), c.R, c.G, c.B));
+
+        /// <summary>A niche wears the tint of the flavour whose preset selects it, Pink otherwise.</summary>
+        internal static Color RemoteNicheTintOf(string? nicheId)
+        {
+            if (nicheId == null) return RemoteNicheDefaultTint;
+            var owner = Services.Fyp.Online.FlavourPresets.OwnerOf(nicheId,
+                Services.Fyp.Online.FypOnlineCoordinator.Catalog);
+            return owner != null ? RemoteTint(owner.Tint) : RemoteNicheDefaultTint;
+        }
+
+        /// <summary>One catalog niche as a list row: switch, name, and its subreddits on one
+        /// muted line, so no tooltip is needed to know what it brings.</summary>
+        internal static ToggleButton CreateRemoteNicheChip(Services.Fyp.Online.FypOnlineCoordinator.Niche niche, Style? style)
+        {
+            var subs = niche.Subs ?? Array.Empty<string>();
+            var grid = new Grid();
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            grid.Children.Add(BuildRemoteSwitch());
+
+            var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+            text.Children.Add(RemoteRowName(niche.Label));
+            text.Children.Add(RemoteRowLine(string.Join(", ", subs.Select(x => "r/" + x))));
+            Grid.SetColumn(text, 1);
+            grid.Children.Add(text);
+
+            var chip = new ToggleButton
             {
-                if (accent != null) chip.BorderBrush = accent;
-                chip.Child = row;
-            }
+                Style = style,
+                Tag = niche.Id,
+                Content = grid
+            };
+            System.Windows.Automation.AutomationProperties.SetName(chip, niche.Label);
+            chip.Checked += (_, _) => PaintRemoteNicheChip(chip);
+            chip.Unchecked += (_, _) => PaintRemoteNicheChip(chip);
+            PaintRemoteNicheChip(chip);
             return chip;
         }
 
-        /// <summary>One grey line per checked niche, naming the subs it really resolves to.
-        /// Collapsed to a count by default and unfolded on click - the picker should never hide
-        /// that "Censored" is two subreddits, or that Bambi Sleep borrows from Hypno.
-        /// Single-sub niches skip the disclosure entirely: there is nothing to unfold, and the
-        /// name is shorter than the promise to show it.</summary>
-        private void RebuildRemoteNicheSubs(Models.AppSettings settings)
-        {
-            var host = AssetsTab?.RemoteNicheSubs;
-            if (host == null) return;
+        /// <summary>The number of distinct subreddits a flavour brings, or for Mine none (its
+        /// count is painted from the live selection).</summary>
+        private static string RemoteCommunitiesText(int n) =>
+            Plural(LocOr("label_remote_communities_n", "{0} community|{0} communities"), n);
 
+        /// <summary>How many distinct communities choosing the flavour puts in the pool: the catalog
+        /// niches it selects plus the leftovers it adds as your own, the figure Fine-tune shows
+        /// after the click (the flavour's own core count read smaller than the row, desk run 4).</summary>
+        internal static int RemoteFlavourPoolCount(Services.Fyp.Online.FlavourPresets.Flavour f)
+        {
             try
             {
-                host.Children.Clear();
-                var muted = Application.Current?.TryFindResource("TextMutedBrush") as Brush ?? Brushes.Gray;
-                var selected = new HashSet<string>(settings.FypOnlineNiches ?? new List<string>(),
-                    StringComparer.OrdinalIgnoreCase);
+                var sel = Services.Fyp.Online.FlavourPresets.Resolve(f, Services.Fyp.Online.FypOnlineCoordinator.Catalog);
+                var subs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var n in Services.Fyp.Online.FypOnlineCoordinator.Catalog)
+                    if (n?.Id != null && sel.NicheIds.Contains(n.Id, StringComparer.OrdinalIgnoreCase))
+                        foreach (var s in n.Subs ?? Array.Empty<string>()) subs.Add(s);
+                foreach (var s in sel.CustomSubs) subs.Add(s);
+                return subs.Count;
+            }
+            catch { return f.Subs.Count; }
+        }
 
-                foreach (var niche in Services.Fyp.Online.FypOnlineCoordinator.Catalog)
+        /// <summary>One flavour card: a 4 px accent bar in its tint, name, one-liner, how many
+        /// communities, and a check glyph (Tag "check") shown on the chosen one.</summary>
+        internal static Button CreateRemoteFlavourTile(Services.Fyp.Online.FlavourPresets.Flavour f, Style? style)
+        {
+            var tint = RemoteTint(f.Tint);
+            bool mine = f.Id == Services.Fyp.Online.FlavourPresets.MineId;
+            var muted = Application.Current?.TryFindResource("TextMutedBrush") as Brush
+                ?? RemoteTintBrush(Colors.White, 0.5);
+
+            var grid = new Grid();
+            grid.Children.Add(new Border
+            {
+                Width = 4,
+                Margin = new Thickness(7, 10, 0, 10),
+                CornerRadius = new CornerRadius(2),
+                HorizontalAlignment = HorizontalAlignment.Left,
+                Background = new SolidColorBrush(tint)
+            });
+
+            var stack = new StackPanel { Margin = new Thickness(20, 8, 24, 8), VerticalAlignment = VerticalAlignment.Center };
+            stack.Children.Add(new TextBlock
+            {
+                Text = f.Name,
+                FontSize = 14,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = RemoteTintBrush(Colors.White, 0.95),
+                TextTrimming = TextTrimming.CharacterEllipsis
+            });
+            stack.Children.Add(new TextBlock
+            {
+                Text = mine ? LocOr("label_remote_flavour_mine", "Your own mix") : f.Line,
+                FontSize = 11,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                Foreground = muted
+            });
+            stack.Children.Add(new TextBlock
+            {
+                Tag = "count",
+                Text = mine ? string.Empty : RemoteCommunitiesText(RemoteFlavourPoolCount(f)),
+                FontSize = 11,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                Foreground = muted
+            });
+            grid.Children.Add(stack);
+
+            grid.Children.Add(new TextBlock
+            {
+                Tag = "check",
+                Text = "",
+                FontFamily = new FontFamily("Segoe MDL2 Assets, Segoe UI Symbol, Segoe UI"),
+                FontSize = 12,
+                Margin = new Thickness(0, 9, 10, 0),
+                HorizontalAlignment = HorizontalAlignment.Right,
+                VerticalAlignment = VerticalAlignment.Top,
+                Foreground = new SolidColorBrush(tint),
+                Visibility = Visibility.Collapsed
+            });
+
+            var tile = new Button { Style = style, Tag = f.Id, Content = grid };
+            System.Windows.Automation.AutomationProperties.SetName(tile, f.Name);
+            return tile;
+        }
+
+        /// <summary>Six tiles: the five flavours plus Mine, copied from the web pickers
+        /// (Services/Fyp/Online/FlavourPresets.cs). Built once; painted on every refresh.</summary>
+        private void BuildRemoteFlavourTiles()
+        {
+            var host = AssetsTab?.RemoteFlavourTiles;
+            if (host == null || host.Children.Count > 0) return;
+            var style = host.TryFindResource("RemoteFlavourTile") as Style;
+
+            foreach (var f in Services.Fyp.Online.FlavourPresets.All.Append(Services.Fyp.Online.FlavourPresets.Mine))
+            {
+                var flavour = f;   // captured per tile
+                var tile = CreateRemoteFlavourTile(f, style);
+                tile.Click += (_, _) => ApplyRemoteFlavour(flavour);
+                _remoteFlavourTiles.Add(tile);
+                host.Children.Add(tile);
+            }
+        }
+
+        /// <summary>
+        /// One click on a flavour: select the catalog niches that cover it and put the rest in
+        /// the pool as custom subs, through the same settings the chips write. The selection
+        /// the player had before their first flavour click is kept for this session, so Mine
+        /// brings it back.
+        /// </summary>
+        private void ApplyRemoteFlavour(Services.Fyp.Online.FlavourPresets.Flavour flavour)
+        {
+            try
+            {
+                var settings = App.Settings?.Current;
+                if (settings == null) return;
+                var catalog = Services.Fyp.Online.FypOnlineCoordinator.Catalog;
+                var current = Services.Fyp.Online.FlavourPresets.Match(
+                    settings.FypOnlineNiches, settings.FypOnlineCustomSubs, catalog);
+
+                ShowRemoteSubError(null);
+                if (flavour.Id == Services.Fyp.Online.FlavourPresets.MineId)
                 {
-                    if (niche?.Id == null || !selected.Contains(niche.Id)) continue;
-                    var subs = niche.Subs ?? Array.Empty<string>();
-                    if (subs.Length == 0) continue;
-
-                    var id = niche.Id;
-                    var names = string.Join(" · ", subs.Select(x => "r/" + x));
-
-                    var line = new TextBlock
+                    if (current == null || _remoteMineNiches == null) return;   // already Mine
+                    settings.FypOnlineNiches = new List<string>(_remoteMineNiches);
+                    settings.FypOnlineCustomSubs = new List<string>(_remoteMineSubs ?? new List<string>());
+                }
+                else
+                {
+                    if (current == null)
                     {
-                        Foreground = muted,
-                        FontSize = 11,
-                        TextWrapping = TextWrapping.Wrap,
-                        Margin = new Thickness(2, 0, 0, 3),
-                        Background = Brushes.Transparent   // so the whole row is a hit target
-                    };
-
-                    if (subs.Length == 1)
-                    {
-                        line.Text = $"{niche.Label} · {names}";
-                        host.Children.Add(line);
-                        continue;
+                        _remoteMineNiches = new List<string>(settings.FypOnlineNiches ?? new List<string>());
+                        _remoteMineSubs = new List<string>(settings.FypOnlineCustomSubs ?? new List<string>());
                     }
-
-                    line.Cursor = Cursors.Hand;
-                    void Paint() => line.Text = _remoteNicheExpanded.Contains(id)
-                        ? $"▾ {niche.Label} · {names}"
-                        : $"▸ {niche.Label} · " +
-                          string.Format(LocOr("label_remote_niche_subs", "{0} subs"), subs.Length);
-                    Paint();
-
-                    line.MouseLeftButtonUp += (_, _) =>
+                    var sel = Services.Fyp.Online.FlavourPresets.Resolve(flavour, catalog);
+                    var pool = new List<string>();
+                    foreach (var sub in sel.CustomSubs)
                     {
-                        try
-                        {
-                            if (!_remoteNicheExpanded.Add(id)) _remoteNicheExpanded.Remove(id);
-                            Paint();
-                        }
-                        catch (Exception ex) { App.Logger?.Debug("Niche sub toggle failed: {E}", ex.Message); }
-                    };
+                        if (pool.Count >= RemoteCustomSubCap) break;
+                        // Kept first (the library), then used here (the pool), same as a typed add.
+                        if (settings.LibraryHasSub(sub) || settings.TryAddLibrarySub(sub)) pool.Add(sub);
+                        else ShowRemoteSubOutcome(Services.Fyp.Online.RemoteSubAddOutcome.LibraryFull, sub);
+                    }
+                    settings.FypOnlineNiches = sel.NicheIds.ToList();
+                    settings.FypOnlineCustomSubs = pool;
+                }
 
-                    host.Children.Add(line);
+                PersistRemoteChannelChange();
+                RefreshRemoteMediaPicker();
+            }
+            catch (Exception ex) { App.Logger?.Warning(ex, "Applying a media flavour failed"); }
+        }
+
+        /// <summary>Repaints everything that is a projection of the selection: niche pill
+        /// colours, the lit flavour tile and the summary line.</summary>
+        private void PaintRemotePickerChrome(Models.AppSettings settings)
+        {
+            try
+            {
+                foreach (var chip in _remoteNicheChipButtons) PaintRemoteNicheChip(chip);
+                PaintRemoteFlavourTiles(_remoteFlavourTiles, settings.FypOnlineNiches, settings.FypOnlineCustomSubs);
+                RepaintRemoteSummary(settings);
+            }
+            catch (Exception ex) { App.Logger?.Debug("Painting the media picker failed: {E}", ex.Message); }
+        }
+
+        /// <summary>Lights the card whose preset equals the selection exactly; Mine otherwise.
+        /// Chosen: the tint at 18% with a 1.5 px tint border and the check. Others: a neutral
+        /// plate. Mine's count line follows the live selection.</summary>
+        internal static void PaintRemoteFlavourTiles(IEnumerable<Button> tiles,
+            IEnumerable<string>? niches, IEnumerable<string>? customSubs)
+        {
+            var nicheList = niches?.ToList() ?? new List<string>();
+            var subList = customSubs?.ToList() ?? new List<string>();
+            var lit = Services.Fyp.Online.FlavourPresets.Match(nicheList, subList,
+                Services.Fyp.Online.FypOnlineCoordinator.Catalog) ?? Services.Fyp.Online.FlavourPresets.Mine;
+            foreach (var tile in tiles)
+            {
+                var f = Services.Fyp.Online.FlavourPresets.ById(tile.Tag as string);
+                if (f == null) continue;
+                var tint = RemoteTint(f.Tint);
+                bool on = f.Id == lit.Id;
+                tile.Background = on ? RemoteTintBrush(tint, 0.18) : RemoteTintBrush(Colors.White, 0x14 / 255.0);
+                tile.BorderBrush = on ? new SolidColorBrush(tint) : RemoteTintBrush(Colors.White, 0x22 / 255.0);
+                tile.BorderThickness = new Thickness(on ? 1.5 : 1);
+                if (tile.Content is Grid g)
+                {
+                    foreach (var tb in g.Children.OfType<TextBlock>())
+                        if (tb.Tag as string == "check") tb.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+                    if (f.Id == Services.Fyp.Online.FlavourPresets.MineId && on)
+                        foreach (var sp in g.Children.OfType<StackPanel>())
+                            foreach (var tb in sp.Children.OfType<TextBlock>())
+                                if (tb.Tag as string == "count")
+                                    tb.Text = RemoteCommunitiesText(RemoteSelectionCounts(nicheList, subList).Subs);
                 }
             }
-            catch (Exception ex) { App.Logger?.Warning(ex, "Rebuilding the niche sub list failed"); }
+        }
+
+        /// <summary>On: the switch in the niche's own tint. Off: grey.</summary>
+        internal static void PaintRemoteNicheChip(ToggleButton chip)
+        {
+            if (chip.Content is Grid g && g.Children.Count > 0 && g.Children[0] is Border track)
+                PaintRemoteSwitch(track, chip.IsChecked == true, RemoteNicheTintOf(chip.Tag as string));
+        }
+
+        /// <summary>Selected catalog niches, and the distinct subreddits they and the custom
+        /// subs bring.</summary>
+        internal static (int Niches, int Subs) RemoteSelectionCounts(IEnumerable<string>? nicheIds,
+            IEnumerable<string>? customSubs)
+        {
+            var selected = new HashSet<string>(nicheIds ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
+            var subs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            int niches = 0;
+            foreach (var n in Services.Fyp.Online.FypOnlineCoordinator.Catalog)
+            {
+                if (n?.Id == null || !selected.Contains(n.Id)) continue;
+                niches++;
+                foreach (var s in n.Subs ?? Array.Empty<string>()) subs.Add(s);
+            }
+            foreach (var s in customSubs ?? Array.Empty<string>()) subs.Add(s);
+            return (niches, subs.Count);
+        }
+
+        /// <summary>The Fine-tune row's label: "Fine-tune: N niches, M communities".</summary>
+        internal static string RemoteSummaryText(IEnumerable<string>? nicheIds, IEnumerable<string>? customSubs)
+        {
+            var (niches, subs) = RemoteSelectionCounts(nicheIds, customSubs);
+            return string.Format(LocOr("label_remote_fine_tune", "Fine-tune: {0}, {1}"),
+                Plural(LocOr("unit_remote_niches", "{0} niche|{0} niches"), niches),
+                RemoteCommunitiesText(subs));
+        }
+
+        /// <summary>"{0} niche|{0} niches": the form after the bar for every count but one.</summary>
+        internal static string Plural(string forms, int n)
+        {
+            var parts = (forms ?? string.Empty).Split('|');
+            var form = parts.Length > 1 && n != 1 ? parts[1] : parts[0];
+            return string.Format(form, n);
+        }
+
+        private void RepaintRemoteSummary(Models.AppSettings settings)
+        {
+            var label = AssetsTab?.TxtRemoteSummary;
+            if (label == null) return;
+            label.Text = RemoteSummaryText(settings.FypOnlineNiches, settings.FypOnlineCustomSubs);
+            if (AssetsTab?.BtnRemoteFineTune != null)
+                System.Windows.Automation.AutomationProperties.SetName(AssetsTab.BtnRemoteFineTune, label.Text);
         }
 
         private static TextBlock MutedRemoteNote(string text) => new()

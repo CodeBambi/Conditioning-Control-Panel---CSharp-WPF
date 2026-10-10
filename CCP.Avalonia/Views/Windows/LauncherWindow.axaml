@@ -255,6 +255,20 @@
                                        Foreground="{DynamicResource TextSecondaryBrush}"/>
                         </StackPanel>
                     </Button>
+                    <!-- WPF LauncherWindow.xaml:452: mutes the launcher's own cues only -->
+                    <Button x:Name="BtnSound" Theme="{StaticResource LauncherBarPill}"
+                            Click="BtnSound_Click" Padding="10,0" Margin="0,0,6,0">
+                        <Grid Width="19" Height="17" VerticalAlignment="Center">
+                            <Path x:Name="SoundCone" Data="M1,6 L5,6 L10,1.5 L10,15.5 L5,11 L1,11 Z"
+                                  Fill="{DynamicResource PanelAccentBrush}"/>
+                            <Path x:Name="SoundWaves" Data="M12.5,5 A5,5 0 0 1 12.5,12"
+                                  Stroke="{DynamicResource PanelAccentBrush}" StrokeThickness="1.6"
+                                  StrokeLineCap="Round"/>
+                            <Path x:Name="SoundSlash" Data="M12.5,5.5 L18,11.5 M18,5.5 L12.5,11.5"
+                                  Stroke="{DynamicResource TextSecondaryBrush}" StrokeThickness="1.6"
+                                  StrokeLineCap="Round" IsVisible="False"/>
+                        </Grid>
+                    </Button>
                     <Button x:Name="BtnMinimize" Content="─" Width="46" Height="36"
                             Click="BtnMinimize_Click" Theme="{StaticResource WindowControlButton}"/>
                     <Button x:Name="BtnClose" Content="✕" Width="46" Height="36"

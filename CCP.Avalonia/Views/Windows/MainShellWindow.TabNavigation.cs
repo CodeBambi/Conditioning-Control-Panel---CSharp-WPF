@@ -278,6 +278,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
                     case "leaderboard": _ = Named<Tabs.LeaderboardTabView>("LeaderboardTab")?.RefreshLeaderboardAsync(); break;
 
+                    // WPF TabNavigation.cs:571: every door into Assets rescans the library and re-syncs presets (theirs, Assets browser).
+                    case "assets": case "folders": Named<Tabs.AssetsTabView>("AssetsTab")?.OnTabShown(); break;
+
                     // The vault re-reads its gates on every show (they can move between visits).
                     case "premium": RefreshExclusivesTab(); break;
                     case "chaster": Named<Tabs.ChasterTabView>("ChasterTab")?.OnTabShown(); break;
@@ -299,7 +302,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         /// <summary>WPF MaybeShowFeatureIntro: through the startup ladder, so a quiet window turns
         /// the card into an Inbox row. The door is the owning section's rail Tag.</summary>
-        private void MaybeShowFeatureIntro(string key, string? doorTab = null)
+        internal void MaybeShowFeatureIntro(string key, string? doorTab = null)
         {
             try { FeatureIntroPopup.ShowWhenStartupSettles(key, this, NavDoorForTab(doorTab ?? key)); }
             catch (Exception ex) { Log.Warning(ex, "Feature intro hook failed for {Key}", key); }

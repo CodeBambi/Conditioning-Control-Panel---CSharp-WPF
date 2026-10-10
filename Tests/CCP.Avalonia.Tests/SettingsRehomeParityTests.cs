@@ -14,6 +14,7 @@ using ConditioningControlPanel.Avalonia.Views.Controls.AppSettings;
 using ConditioningControlPanel.Avalonia.Views.Tabs;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Nav;
+using ConditioningControlPanel.Services.Fyp.Online;
 using Xunit;
 
 namespace CCP.Avalonia.Tests;

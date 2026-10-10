@@ -105,8 +105,8 @@ public sealed class FriendsRailChip : Grid
         };
         // The feed is built after the shell at startup: follow it while on screen (a static event must not hold a dead chip).
         Action feedBuilt = () => global::Avalonia.Threading.Dispatcher.UIThread.Post(RebindFeed);
-        AttachedToVisualTree += (_, _) => { Friends.FriendsFeedHost.FeedChanged += feedBuilt; Rebind(); };
-        DetachedFromVisualTree += (_, _) => { Friends.FriendsFeedHost.FeedChanged -= feedBuilt; _popup.IsOpen = false; _namePill.IsOpen = false; Unwire(); UnwireFeed(); Drawer.Unsubscribe(); };
+        AttachedToVisualTree += (_, _) => { Friends.FriendsFeedHost.FeedChanged += feedBuilt; LocalizationManager.Instance.LanguageChanged += OnLanguage; Rebind(); };
+        DetachedFromVisualTree += (_, _) => { Friends.FriendsFeedHost.FeedChanged -= feedBuilt; LocalizationManager.Instance.LanguageChanged -= OnLanguage; _popup.IsOpen = false; _namePill.IsOpen = false; Unwire(); UnwireFeed(); Drawer.Unsubscribe(); };
         Rebind();
     }
     internal FriendsDrawer Drawer { get; }
@@ -257,6 +257,9 @@ public sealed class FriendsRailChip : Grid
     /// <summary>Another app came to the front: fold, unless the keyboard is inside the drawer.</summary>
     private void OnHostDeactivated(object? sender, EventArgs e) { if (!Drawer.IsKeyboardFocusWithin) _popup.IsOpen = false; }
     internal bool IsOpen => _popup.IsOpen;
+
+    /// <summary>WPF UpdateTooltip runs on a language switch too: the tooltip is code-set, so rebuild it.</summary>
+    private void OnLanguage(object? sender, EventArgs e) => UpdateBadge();
 
     internal int PillCount => _pill.IsVisible && int.TryParse(_pillText.Text, out var n) ? n : 0;
     internal void Toggle()

@@ -81,8 +81,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             // WPF ShowTab("assets") runs RefreshAssetTree + InitializeAssetPresets on every visit.
             PropertyChanged += (_, e) =>
             {
-                if (e.Property != IsVisibleProperty || !IsVisible) return;
+                if (e.Property != IsVisibleProperty) return;
+                // WPF MainWindow.AssetsFx.cs OnAssetsTabVisibilityChanged: hidden stops the motion.
+                if (!IsVisible) { _refreshedOnShow = false; StopMediaLogPulse(resetOpacity: true); return; }
                 RefreshAssetBrowser();
+                _refreshedOnShow = true;   // the shell's OnTabShown follows the reveal: one scan, not two
             };
         }
 
@@ -106,8 +109,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             RefreshAssetBrowser();
             try
             {
-                if (OwnerWindow is { } owner)
-                    await Dialogs.MessageDialog.ShowAsync(owner, Loc.Get("title_success"), Loc.Get("msg_assets_refreshed"));
+                await InformAsync(Loc.Get("title_success"), Loc.Get("msg_assets_refreshed"));
             }
             catch (Exception ex) { Log.Debug("Assets refreshed note: {E}", ex.Message); }
         }
@@ -121,6 +123,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             HookExtensionRepair();
 
             var assetsPath = AssetsRoot;
+            // WPF keeps the open folder across a rescan or a preset switch; re-found in the new tree below.
+            var openPath = _selectedFolder?.FullPath;
             Browser.Folders.Clear();
             Browser.Thumbnails.Clear();
             _selectedFolder = null;
@@ -145,6 +149,23 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             AddContentPacksNode();
 
             UpdateAssetCounts();
+
+            if (!string.IsNullOrEmpty(openPath) && FindFolder(Browser.Folders, openPath) is { } reopen)
+            {
+                for (var p = reopen.Parent; p != null; p = p.Parent) p.IsExpanded = true;
+                AssetTreeView.SelectedItem = reopen;
+                if (!ReferenceEquals(_selectedFolder, reopen)) SelectFolder(reopen);
+            }
+        }
+
+        private static AssetTreeItem? FindFolder(IEnumerable<AssetTreeItem> nodes, string path)
+        {
+            foreach (var n in nodes)
+            {
+                if (string.Equals(n.FullPath, path, StringComparison.Ordinal)) return n;
+                if (FindFolder(n.Children, path) is { } hit) return hit;
+            }
+            return null;
         }
 
         /// <summary>WPF hooks the one-time extension heal here because every scan funnels through it.</summary>
@@ -156,6 +177,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             {
                 try
                 {
+                    // WPF MainWindow.Assets.cs:477: a tab torn down before the repair finished is left alone.
+                    if (!IsLoaded || VisualRoot == null) return;
                     RefreshAssetTree();
                     InvalidateAssetPoolsAfterSelectionChange();
                     Log.Information("AssetExtensionRepair: reloaded assets after {Count} rename(s)", renamed);
@@ -253,10 +276,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         //  thumbnails
         // =====================================================================================
 
+        /// <summary>Every thumbnail decode started by the last folder load (tests await it).</summary>
+        internal Task ThumbnailLoads { get; private set; } = Task.CompletedTask;
+        internal IReadOnlyList<AssetTreeItem> AssetTree => Browser.Folders;
+        internal IReadOnlyList<AssetThumbnailViewModel> CurrentFolderFiles => Browser.Thumbnails;
+
         private void LoadFolderThumbnails(string folderPath)
         {
             Browser.Thumbnails.Clear();
             Browser.ShowEmpty = false;
+            ThumbnailLoads = Task.CompletedTask;
 
             if (!Directory.Exists(folderPath))
             {
@@ -282,14 +311,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             }
 
             var basePath = AssetsRoot;
+            var loads = new List<Task>();
             foreach (var file in files)
             {
                 var rel = RelativeKey(basePath, file);
                 var item = new AssetThumbnailViewModel(file, rel, !S.DisabledAssetPaths.Contains(rel));
                 try { item.SizeBytes = new FileInfo(file).Length; } catch { }
                 Browser.Thumbnails.Add(item);
-                if (!item.IsVideo) _ = LoadThumbnailAsync(item);
+                if (!item.IsVideo) loads.Add(LoadThumbnailAsync(item));
             }
+            ThumbnailLoads = Task.WhenAll(loads);
         }
 
         /// <summary>WPF LoadThumbnailAsync: decoded off the UI thread at 100 px wide, four at a
@@ -473,11 +504,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         }
 
         /// <summary>DisabledAssetPaths is a set mutated in place, so nothing autosaves: save
-        /// (debounced) and tell the media services their pools are stale.</summary>
+        /// (debounced) and tell the media services their pools are stale. The mandatory-video and
+        /// bubble-count schedulers deal from a queue refilled only when empty, so it is dropped here
+        /// or an unticked clip keeps playing (WPF MainWindow.Assets.cs:1318, #130).</summary>
         private static void InvalidateAssetPoolsAfterSelectionChange()
         {
             CoreSettings.Save();
             AssetSelection.NotifyChanged();
+            try
+            {
+                Overlays.MandatoryVideoOverlay.Instance.Scheduler.ReloadAssets();
+                Windows.BubbleCountHost.Instance.Scheduler.ReloadAssets();
+            }
+            catch (Exception ex) { Log.Debug("Asset pools reload: {E}", ex.Message); }
         }
 
         // =====================================================================================
@@ -618,20 +657,43 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         private Window? OwnerWindow => TopLevel.GetTopLevel(this) as Window;
 
+        // The preset dialogs as seams (Mich, rows-assets-tab), so a test answers them: (title, prompt,
+        // default) -> text or null; (title, message) -> yes; (title, message) -> shown. Null = the
+        // real owned dialogs.
+        internal Func<string, string, string, Task<string?>>? AskText;
+        internal Func<string, string, Task<bool>>? Confirm;
+        internal Func<string, string, Task>? Inform;
+
+        private async Task<string?> AskTextAsync(string title, string prompt, string def)
+        {
+            if (AskText != null) return await AskText(title, prompt, def);
+            if (OwnerWindow is not { } owner) return null;
+            var dlg = new Dialogs.InputDialog(title, prompt, def);
+            return await dlg.ShowDialogSafe<bool?>(owner) == true ? dlg.ResultText : null;
+        }
+
+        private async Task<bool> ConfirmAsync(string title, string message, bool defaultToCancel = false)
+        {
+            if (Confirm != null) return await Confirm(title, message);
+            return OwnerWindow is { } owner && await Dialogs.MessageDialog.ConfirmAsync(owner, title, message, defaultToCancel);
+        }
+
+        private async Task InformAsync(string title, string message)
+        {
+            if (Inform != null) { await Inform(title, message); return; }
+            if (OwnerWindow is { } owner) await Dialogs.MessageDialog.ShowAsync(owner, title, message);
+        }
+
         private async void BtnSaveAssetPreset_Click(object? sender, RoutedEventArgs e)
         {
             try
             {
-                var owner = OwnerWindow;
-                if (owner == null) return;
                 var (_, _, images, videos) = CountAssets();
-                var dlg = new Dialogs.InputDialog(LocOr("title_save_asset_preset", "Save Asset Preset"),
-                    "Enter a name for this preset:", $"Preset {S.AssetPresets.Count}");
-                if (await dlg.ShowDialogSafe<bool?>(owner) != true) return;
-                var name = dlg.ResultText?.Trim();
+                var name = (await AskTextAsync(LocOr("title_save_asset_preset", "Save Asset Preset"),
+                    "Enter a name for this preset:", $"Preset {S.AssetPresets.Count}"))?.Trim();
                 if (string.IsNullOrWhiteSpace(name)) return;
                 SaveAssetPreset(name, images, videos);
-                await Dialogs.MessageDialog.ShowAsync(owner, "Preset Saved",
+                await InformAsync(LocOr("title_preset_saved", "Preset Saved"),
                     $"Preset '{name}' saved!\n\n{images} images, {videos} videos enabled.\n{S.DisabledAssetPaths.Count} assets disabled.");
             }
             catch (Exception ex) { Log.Warning(ex, "Save asset preset failed"); }
@@ -653,26 +715,24 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         {
             try
             {
-                var owner = OwnerWindow;
-                if (owner == null) return;
                 if (CmbAssetPresets.SelectedItem is not AssetPreset preset)
                 {
-                    await Dialogs.MessageDialog.ShowAsync(owner, "No Preset Selected", Loc.Get("msg_please_select_a_preset_to_update"));
+                    await InformAsync(LocOr("title_no_preset_selected", "No Preset Selected"), Loc.Get("msg_please_select_a_preset_to_update"));
                     return;
                 }
                 if (preset.IsDefault)
                 {
-                    await Dialogs.MessageDialog.ShowAsync(owner, "Cannot Update Default", Loc.Get("msg_cannot_update_the_default_all_assets_preset_n"));
+                    await InformAsync(LocOr("title_cannot_update_default", "Cannot Update Default"), Loc.Get("msg_cannot_update_the_default_all_assets_preset_n"));
                     return;
                 }
-                if (!await Dialogs.MessageDialog.ConfirmAsync(owner, "Update Preset",
+                if (!await ConfirmAsync(LocOr("title_update_preset", "Update Preset"),
                         $"Update preset '{preset.Name}' with the current selection?")) return;
                 var (_, _, images, videos) = CountAssets();
                 preset.UpdateFromCurrentSettings(images, videos);
                 CoreSettings.Save();
                 RefreshAssetPresetsComboBox();
                 InvalidateAssetPoolsAfterSelectionChange();
-                await Dialogs.MessageDialog.ShowAsync(owner, "Preset Updated",
+                await InformAsync(LocOr("title_preset_updated", "Preset Updated"),
                     $"Preset '{preset.Name}' updated!\n\n{images} images, {videos} videos enabled.\n{S.DisabledAssetPaths.Count} assets disabled.");
             }
             catch (Exception ex) { Log.Warning(ex, "Update asset preset failed"); }
@@ -682,19 +742,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         {
             try
             {
-                var owner = OwnerWindow;
-                if (owner == null) return;
                 if (CmbAssetPresets.SelectedItem is not AssetPreset preset)
                 {
-                    await Dialogs.MessageDialog.ShowAsync(owner, "No Preset Selected", Loc.Get("msg_please_select_a_preset_to_delete"));
+                    await InformAsync(LocOr("title_no_preset_selected", "No Preset Selected"), Loc.Get("msg_please_select_a_preset_to_delete"));
                     return;
                 }
                 if (preset.IsDefault)
                 {
-                    await Dialogs.MessageDialog.ShowAsync(owner, "Cannot Delete Default", Loc.Get("msg_cannot_delete_the_default_all_assets_preset"));
+                    await InformAsync(LocOr("title_cannot_delete_default", "Cannot Delete Default"), Loc.Get("msg_cannot_delete_the_default_all_assets_preset"));
                     return;
                 }
-                if (!await Dialogs.MessageDialog.ConfirmAsync(owner, "Delete Preset",
+                if (!await ConfirmAsync(LocOr("title_delete_preset", "Delete Preset"),
                         $"Delete preset '{preset.Name}'?\n\nThis cannot be undone.", defaultToCancel: true)) return;
                 S.AssetPresets.Remove(preset);
                 S.CurrentAssetPresetId = S.AssetPresets.FirstOrDefault(p => p.IsDefault)?.Id;

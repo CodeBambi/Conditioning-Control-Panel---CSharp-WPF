@@ -120,6 +120,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             Loaded += OnLeaderboardTabLoaded;
             PropertyChanged += OnLeaderboardTabPropertyChanged;
 
+            RefreshSeasonHeader();
+            ApplyModeLabels();
             RebuildLeaderboardView();
         }
 
@@ -248,6 +250,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         private void OnLeaderboardTabLoaded(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
         {
+            UpdateModeButtons();
             RefreshSeasonHeader();
             ApplyModeLabels();
         }

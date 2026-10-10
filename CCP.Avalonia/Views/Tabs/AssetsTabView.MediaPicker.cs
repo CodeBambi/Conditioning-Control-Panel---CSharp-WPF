@@ -65,6 +65,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// <summary>Session-only: the block opens calm every time the app starts.</summary>
         private bool _fineTuneOpen;
 
+        /// <summary>Test seams (Mich, sync6-media-picker): the consent modal (title, message) -> answer,
+        /// and the Scrolller probe. Production asks the real dialog and the real provider.</summary>
+        internal static Func<string, string, Task<bool>>? ConsentOverride { get; set; }
+        internal static Func<string, CancellationToken, Task<SubProbe>> ProbeSub { get; set; } = FypOnlineCoordinator.ProbeSubAsync;
+
+        /// <summary>The last async user action (source switch, sub add), so tests await its end.
+        /// Both bodies catch everything they can throw.</summary>
+        internal Task LastPickerTask { get; private set; } = Task.CompletedTask;
+
         /// <summary>Called from the constructor: builds the picker once and follows visibility.</summary>
         private void InitializeLibraryPicker()
         {
@@ -290,9 +299,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         //  source, ratio, niches
         // =====================================================================================
 
-        private async void SourceChip_Changed(object? sender, RoutedEventArgs e)
+        private void SourceChip_Changed(object? sender, RoutedEventArgs e)
         {
             if (_pickerSyncing || _consentAsking) return;
+            LastPickerTask = ChangeSourceAsync(sender);
+        }
+
+        private async Task ChangeSourceAsync(object? sender)
+        {
             try
             {
                 if (sender is not ToggleButton chip || chip.Tag is not string key) return;
@@ -328,19 +342,22 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// awaited: nothing is written until the answer lands.</summary>
         private async Task<bool> AskRemoteMediaConsentAsync(AppSettings settings)
         {
-            if (TopLevel.GetTopLevel(this) is not Window owner) return false;
+            var ask = ConsentOverride;
+            var owner = TopLevel.GetTopLevel(this) as Window;
+            if (ask == null && owner == null) return false;
             _consentAsking = true;
             try
             {
-                var yes = await Dialogs.MessageDialog.ConfirmAsync(owner,
-                    LocOr("title_remote_media_consent", "Use Reddit media?"),
-                    LocOr("msg_remote_media_consent",
+                var title = LocOr("title_remote_media_consent", "Use Reddit media?");
+                var message = LocOr("msg_remote_media_consent",
                         "Pull media from Reddit?\n\n" +
                         "The app will stream images and clips from the subreddits you pick, straight from your own machine. " +
                         "Nothing is saved to your disk, nothing is uploaded, and none of it goes through our servers.\n\n" +
                         "It is adult content and it is not curated by us - you choose the niches and subreddits, and only those are ever fetched.\n\n" +
-                        "Turn it on?"),
-                    defaultToCancel: true);
+                        "Turn it on?");
+                var yes = ask != null
+                    ? await ask(title, message)
+                    : await Dialogs.MessageDialog.ConfirmAsync(owner!, title, message, defaultToCancel: true);
                 if (!yes) return false;
                 settings.RemoteMediaConsented = true;
                 CoreSettings.Save();
@@ -723,7 +740,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// exists". A not-found verdict is stored (no round trip for the same typo); a transport
         /// failure stores nothing.
         /// </summary>
-        private async void AddRemoteCustomSub()
+        private void AddRemoteCustomSub() => LastPickerTask = AddRemoteCustomSubAsync();
+
+        internal async Task AddRemoteCustomSubAsync()
         {
             var settings = CoreSettings.Current;
             if (_subPending != null) return;   // one probe at a time; the button is disabled too
@@ -765,7 +784,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             }
 
             SubProbe probe;
-            try { probe = await Task.Run(() => FypOnlineCoordinator.ProbeSubAsync(clean, CancellationToken.None)); }
+            try { probe = await Task.Run(() => ProbeSub(clean, CancellationToken.None)); }
             catch (Exception ex)
             {
                 Log.Warning(ex, "Probing r/{Sub} threw", clean);

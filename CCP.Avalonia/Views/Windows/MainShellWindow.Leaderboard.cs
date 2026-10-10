@@ -5,8 +5,8 @@
 //
 // WHERE THIS WORK NOW GOES. WPF's MainWindow owned the board because the leaderboard markup was
 // inline in MainWindow.xaml. The port gave it a view, CCP.Avalonia/Views/Tabs/LeaderboardTabView,
-// which already owns the parts that need no service: the season countdown and its timer
-// start/stop discipline, SetLeaderboardMode + the Level-column relabel for the All-Time board, the
+// which already owns the parts that need no service: the board title (All-Time by default; seasons
+// are retired, WPF feda9c907), SetLeaderboardMode + the Level-column relabel for the All-Time board, the
 // tier band construction (its Band(index) is BuildTierBand with the same four bound tables), and the
 // read-only fetch. Anything restored HERE that
 // paints a row would be a second copy no click can reach - the tab's own axaml names the tab's

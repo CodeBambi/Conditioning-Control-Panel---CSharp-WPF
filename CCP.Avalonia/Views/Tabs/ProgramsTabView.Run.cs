@@ -1,172 +1,299 @@
-// PORTED from ConditioningControlPanel/MainWindow/MainWindow.ProgramsTab.cs (WPF 7.1.5) - progression#1:
-// RebuildProgramsTab (:498), BuildProgramRunPanel (:652), BuildProgramDayStrip (:753),
-// BuildProgramTodayPanel (:900), UpdateProgramSessionRow (:1410), the lapsed/graduated panels
-// (:1937/:1943) and the handlers (:1958-:2230). Same rules, numbers and loc keys.
-// ponytail: not yet carried - the ignition rig / heat tiers / seals (MainWindow.ProgramsFx.cs), the
-// per-task how-to lines and icons (ProgramTaskHowTo / ProgramTaskIconPath), the Today layer chips
-// (BuildProgramTodayLayers), Up Next (BuildProgramUpNext), the hero plate and sigil art (ProgramArt,
-// progression#2/#3) and the session sheen. Each needs its WPF block ported onto the names that are
-// already in ProgramsTabView.axaml.
-
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Interactivity;
+using Avalonia.Controls.Shapes;
 using Avalonia.Media;
-using Avalonia.Platform.Storage;
 using Avalonia.Threading;
-using ConditioningControlPanel.Avalonia.Views.Dialogs;
+using ConditioningControlPanel.Avalonia.Helpers;
 using ConditioningControlPanel.Avalonia.Views.Windows;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Models.Program;
 using ConditioningControlPanel.Services.Program;
+using AvApp = ConditioningControlPanel.Avalonia.App;
 
 namespace ConditioningControlPanel.Avalonia.Views.Tabs
 {
+    /// <summary>
+    /// The run view: the enrollment in <see cref="AvApp.Programs"/> drawn the way WPF
+    /// MainWindow.ProgramsTab.cs:539-1450 and :1978-1998 draw it. Every lifecycle door is live
+    /// (Withdraw, today's session, Pause/Resume, Restart, Dismiss, the ritual photo and the mantra
+    /// door, progression#1); a read-only service greys or hides them all. A day the program clock has
+    /// moved past without a rollover (a read-only service, or the minute poll not yet run) is labelled
+    /// "last saved" (<see cref="IsSnapshotStale"/>). The live session clock and bar follow the runner's tick.
+    /// ponytail: ignition FX, day/task pops, node breathe and the session sheen are programs
+    /// slice 5 (~/ccp-port/briefs/programs-run-plan.md).
+    /// </summary>
     public partial class ProgramsTabView
     {
-        private ProgramService? _hooked;
+        /// <summary>The wall clock the "last saved" label is computed from; tests step it (P08).</summary>
+        internal static TimeProvider Clock { get; set; } = TimeProvider.System;
 
-        private MainShellWindow? Shell => TopLevel.GetTopLevel(this) as MainShellWindow;
+        private ProgramService? _subscribed;
+        private global::ConditioningControlPanel.Services.SessionRunner? _ticking;
+        private bool _refreshPending;
 
-        private void HookPrograms()
+        /// <summary>The stale verdict the shown run panel was built with; null when no run panel is up.
+        /// A read-only service raises no TodayChanged, so crossing the day boundary is noticed here.</summary>
+        private bool? _builtStale;
+
+        /// <summary>
+        /// True when the program clock has moved past the saved day: the state is then a snapshot,
+        /// not today. Display only - ProgramClock.ProgramDate is pure and nothing is written back.
+        /// </summary>
+        internal static bool IsSnapshotStale(ProgramEnrollment enrollment, DateTime localNow) =>
+            ProgramClock.ProgramDate(localNow, enrollment.DayBoundaryHour) != enrollment.CurrentDayDate.Date;
+
+        // ---- wiring (WPF :113-190): TodayChanged / Lapsed / Graduated -> one marshalled refresh ----
+
+        private void SubscribePrograms()
         {
-            var svc = App.Programs;
-            if (svc == null || ReferenceEquals(svc, _hooked)) return;
-            UnhookPrograms();
-            _hooked = svc;
+            var svc = AvApp.Programs;
+            if (ReferenceEquals(svc, _subscribed)) return;
+            UnsubscribePrograms();
+            if (svc == null) return;
             svc.TodayChanged += OnProgramChanged;
             svc.ProgramLapsed += OnProgramChanged;
             svc.ProgramGraduated += OnProgramChanged;
             svc.DayCompleted += OnProgramChanged;
-            if (App.Sessions is { } runner) runner.Ticked += OnSessionTicked;
-        }
-
-        private void UnhookPrograms()
-        {
-            if (_hooked is { } svc)
+            _subscribed = svc;
+            if (AvApp.Sessions is { } runner)
             {
-                svc.TodayChanged -= OnProgramChanged;
-                svc.ProgramLapsed -= OnProgramChanged;
-                svc.ProgramGraduated -= OnProgramChanged;
-                svc.DayCompleted -= OnProgramChanged;
+                runner.Ticked += OnSessionTicked;
+                _ticking = runner;
             }
-            _hooked = null;
-            if (App.Sessions is { } runner) runner.Ticked -= OnSessionTicked;
         }
 
-        private void OnProgramChanged(object? sender, EventArgs e) =>
-            Dispatcher.UIThread.Post(() => { if (VisualRoot is not null) RefreshBrowse(); });
+        private void UnsubscribePrograms()
+        {
+            if (_subscribed == null) return;
+            _subscribed.TodayChanged -= OnProgramChanged;
+            _subscribed.ProgramLapsed -= OnProgramChanged;
+            _subscribed.ProgramGraduated -= OnProgramChanged;
+            _subscribed.DayCompleted -= OnProgramChanged;
+            _subscribed = null;
+            if (_ticking != null) _ticking.Ticked -= OnSessionTicked;
+            _ticking = null;
+        }
 
-        /// <summary>WPF UpdateProgramSessionRow runs on every progress tick: no list rebuilds.</summary>
+        /// <summary>WPF UpdateProgramSessionRow on every progress tick: the clock and the bar only,
+        /// never a rebuild (P07).</summary>
         private void OnSessionTicked() => Dispatcher.UIThread.Post(() =>
         {
-            if (VisualRoot is not null && Find<StackPanel>("ProgramsRunPanel").IsVisible) UpdateProgramSessionRow();
+            if (VisualRoot is null || !IsVisible || !Find<StackPanel>("ProgramsRunPanel").IsVisible) return;
+            try { UpdateSessionClock(); }
+            catch (Exception ex) { Serilog.Log.Debug("Program session clock: {E}", ex.Message); }
         });
 
-        /// <summary>Public refresh for the shell (WPF RefreshProgramsUI).</summary>
-        internal void RefreshProgramsUI() => RefreshBrowse();
-
-        /// <summary>
-        /// WPF RebuildProgramsTab: picks the state panel, builds it, reveals it. Returns false for the
-        /// browse state (the caller builds the list). Visibility is applied in a finally so a throw
-        /// inside a build leaves a half-dressed panel, never a blank tab.
-        /// </summary>
-        private bool RefreshRunState()
+        private void OnProgramChanged(object? sender, EventArgs e) => Dispatcher.UIThread.Post(() =>
         {
-            var svc = App.Programs;
+            if (VisualRoot is not null) RefreshPrograms();
+        });
+
+        private void OnProgramSessionChanged() => OnProgramChanged(null, EventArgs.Empty);
+
+        /// <summary>WPF :509-516: a hidden tab only remembers that it is stale; showing it flushes.</summary>
+        protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+        {
+            base.OnPropertyChanged(change);
+            if (change.Property != IsVisibleProperty || !IsVisible || VisualRoot is null) return;
+            var enrollment = AvApp.Programs?.ActiveEnrollment;
+            var boundaryCrossed = _builtStale is { } built && enrollment != null &&
+                                  built != IsSnapshotStale(enrollment, Clock.GetLocalNow().DateTime);
+            if (_refreshPending || boundaryCrossed) RefreshPrograms();
+        }
+
+        /// <summary>WPF RefreshProgramsUI + RebuildProgramsTab (:490-584): pick the panel, build it, reveal it.</summary>
+        internal void RefreshPrograms()
+        {
+            if (!IsVisible && VisualRoot is not null)
+            {
+                _refreshPending = true;
+                return;
+            }
+            _refreshPending = false;
+            SubscribePrograms();
+
+            var svc = AvApp.Programs;
             var enrollment = svc?.ActiveEnrollment;
             var program = svc?.ActiveProgram;
             var browse = svc == null || enrollment == null || program == null ||
                          enrollment.State == ProgramEnrollmentState.Withdrawn;
-            if (browse) return false;
+            var lapsed = !browse && enrollment!.State == ProgramEnrollmentState.Lapsed;
+            var graduated = !browse && enrollment!.State == ProgramEnrollmentState.Graduated;
+            var run = !browse && !lapsed && !graduated;
+            _builtStale = null;
 
-            var lapsed = enrollment!.State == ProgramEnrollmentState.Lapsed;
-            var graduated = enrollment.State == ProgramEnrollmentState.Graduated;
-            var run = !lapsed && !graduated;
             try
             {
-                if (lapsed)
-                    Find<TextBlock>("TxtLapsedBody").Text = Loc.GetF("programs_lapsed_body", program!.Title, enrollment.AttemptNumber + 1);
+                if (browse) RefreshBrowse();
+                else if (lapsed)
+                    Find<TextBlock>("TxtLapsedBody").Text =
+                        Loc.GetF("programs_lapsed_body", program!.Title, enrollment!.AttemptNumber + 1);
                 else if (graduated)
                 {
                     Find<TextBlock>("TxtGraduatedSub").Text = Loc.GetF("programs_graduated_sub", program!.Title);
                     Find<TextBlock>("TxtGraduatedStats").Text = Loc.GetF("programs_graduated_stats",
-                        enrollment.AttemptNumber, enrollment.PerfectDayCount, program.LengthDays);
+                        enrollment!.AttemptNumber, enrollment.PerfectDayCount, program.LengthDays);
                 }
-                else BuildRunPanel(program!, enrollment);
+                else BuildRunPanel(svc!, program!, enrollment!);
             }
             catch (Exception ex)
             {
-                Serilog.Log.Error(ex, "Programs tab build failed for {Program}", program?.Id);
+                Serilog.Log.Error(ex, "Programs tab build failed for {Program}", program?.Id ?? "(browse)");
             }
             finally
             {
-                Find<StackPanel>("ProgramsBrowsePanel").IsVisible = false;
+                Find<StackPanel>("ProgramsBrowsePanel").IsVisible = browse;
                 Find<StackPanel>("ProgramsLapsedPanel").IsVisible = lapsed;
                 Find<StackPanel>("ProgramsGraduatedPanel").IsVisible = graduated;
                 Find<StackPanel>("ProgramsRunPanel").IsVisible = run;
+                // A newer build's file: nothing here may write it, so every lifecycle door greys.
+                var readOnly = svc?.IsReadOnly == true;
+                Find<Border>("RunReadOnlyNote").IsVisible = !browse && readOnly;
+                Find<Button>("BtnProgramWithdraw").IsEnabled = !readOnly;
+                Find<Button>("BtnProgramLapsedWithdraw").IsEnabled = !readOnly;
+                // Pause/Resume, Restart and Dismiss would write too: not offered at all then.
+                Find<Button>("BtnProgramPauseResume").IsVisible = !readOnly;
+                Find<Button>("BtnProgramRestart").IsVisible = !readOnly;
+                Find<Button>("BtnProgramDismissGraduated").IsVisible = !readOnly;
             }
-            return true;
         }
 
-        private IBrush ThemeBrush(string key, IBrush fallback) =>
-            this.TryFindResource(key, ActualThemeVariant, out var o) && o is IBrush b ? b : fallback;
+        // ---- run panel (WPF BuildProgramRunPanel :693-792) ----
 
-        private void BuildRunPanel(ProgramDefinition program, ProgramEnrollment enrollment)
+        private void BuildRunPanel(ProgramService svc, ProgramDefinition program, ProgramEnrollment enrollment)
         {
-            var svc = App.Programs!;
             var chapter = svc.TodayChapter;
-            var accent = MainShellWindow.AccentBrush(chapter?.AccentColor ?? program.AccentColor);
+            var accent = MainShellWindow.AccentBrush(
+                !string.IsNullOrWhiteSpace(chapter?.AccentColor) ? chapter!.AccentColor : program.AccentColor);
+            var stale = IsSnapshotStale(enrollment, Clock.GetLocalNow().DateTime);
+            _builtStale = stale;
 
             Find<Border>("RunAccentBar").Background = accent;
-            // ponytail: ProgramArt.Sigil (progression#2) - no art on this head yet, so the plain bar shows.
-            Find<Grid>("RunSigilBox").IsVisible = false;
-            Find<Border>("RunAccentBar").IsVisible = true;
+            var sigilPath = ProgramArtPaths.Sigil(program);
+            var sigil = sigilPath == null ? null : ModArt.FirstOf(new[] { sigilPath }, 256);
+            Find<Grid>("RunSigilBox").IsVisible = sigil != null;
+            Find<Border>("RunSigilHost").IsVisible = sigil != null;
+            Find<Ellipse>("RunSigilGlow").IsVisible = sigil != null;
+            Find<Border>("RunAccentBar").IsVisible = sigil == null;
+            if (sigil != null)
+            {
+                var mark = Find<Rectangle>("RunSigil");
+                mark.OpacityMask = new ImageBrush(sigil) { Stretch = Stretch.Uniform };
+                mark.Fill = accent;
+                Find<Ellipse>("RunSigilGlow").Fill = MainShellWindow.ProgramRadialGlowBrush(accent, 150);
+            }
 
             Find<TextBlock>("TxtRunProgramTitle").Text = program.Title;
             var chapterName = Find<TextBlock>("TxtRunChapterName");
             chapterName.Text = chapter?.Name ?? program.Subtitle;
             chapterName.Foreground = accent;
-            Find<TextBlock>("TxtRunDayCounter").Text = Loc.GetF("programs_day_counter", enrollment.CurrentDay, program.LengthDays);
+            Find<TextBlock>("TxtRunDayCounter").Text =
+                Loc.GetF("programs_day_counter", enrollment.CurrentDay, program.LengthDays);
             Find<Border>("RunStrictBadge").IsVisible = enrollment.StrictMode;
-            var attempt = enrollment.AttemptNumber > 1;
-            Find<Border>("RunAttemptBadge").IsVisible = attempt;
-            if (attempt) Find<TextBlock>("TxtRunAttempt").Text = Loc.GetF("programs_attempt", enrollment.AttemptNumber);
+            Find<Border>("RunAttemptBadge").IsVisible = enrollment.AttemptNumber > 1;
+            if (enrollment.AttemptNumber > 1)
+                Find<TextBlock>("TxtRunAttempt").Text = Loc.GetF("programs_attempt", enrollment.AttemptNumber);
 
             Find<TextBlock>("TxtRunStatDone").Text = $"{enrollment.CompletedDayCount} / {program.LengthDays}";
             Find<TextBlock>("TxtRunStatPerfect").Text = enrollment.PerfectDayCount.ToString();
             Find<TextBlock>("TxtRunStatDaysOff").Text = enrollment.DaysOffRemaining.ToString();
 
-            var reward = chapter?.RewardDescription;
+            var chapterReward = chapter?.RewardDescription;
             var chip = Find<Border>("RunChapterRewardChip");
-            chip.IsVisible = !string.IsNullOrWhiteSpace(reward);
-            if (chip.IsVisible)
-            {
-                Find<TextBlock>("TxtRunChapterReward").Text = reward!;
-                ToolTip.SetTip(chip, reward);
-            }
+            chip.IsVisible = !string.IsNullOrWhiteSpace(chapterReward);
+            Find<TextBlock>("TxtRunChapterReward").Text = chapterReward ?? "";
+            ToolTip.SetTip(chip, chapterReward);
 
             var paused = enrollment.State == ProgramEnrollmentState.Paused;
             Find<Border>("RunPausedNote").IsVisible = paused;
             Find<TextBlock>("TxtProgramPauseResume").Text = Loc.Get(paused ? "btn_program_resume" : "btn_program_pause");
 
-            BuildDayStrip(program, enrollment, accent);
-            BuildTodayPanel(program, enrollment, accent);
+            BuildDayStrip(program, enrollment, accent, stale);
+            BuildTodayPanel(svc, program, enrollment, accent, stale);
         }
 
-        /// <summary>WPF BuildProgramDayStrip: one node per day, today ringed, done filled, missed crossed.</summary>
-        private void BuildDayStrip(ProgramDefinition program, ProgramEnrollment enrollment, IBrush accent)
+        /// <summary>WPF UpdateProgramSessionRow :1451-1585, button and glyph states. Repainted on every
+        /// refresh and on a session start/end (ProgramEngineBridge.SessionChanged), never per tick (P07);
+        /// the tick moves only <see cref="UpdateSessionClock"/>. ponytail: the sheen is programs slice 5.</summary>
+        private void UpdateSessionRow(ProgramService svc, ProgramEnrollment enrollment, ProgramDayRecord record,
+                                      IBrush accent, IBrush muted)
         {
-            var muted = ThemeBrush("TextMutedBrush", Brushes.Gray);
-            var light = ThemeBrush("TextLightBrush", Brushes.White);
-            var surface = ThemeBrush("SurfaceBgBrush", Brushes.Transparent);
-            var border = ThemeBrush("GlassBorderBrush", Brushes.Gray);
-            var danger = ThemeBrush("DangerBrush", Brushes.IndianRed);
+            var runner = AvApp.Sessions;
+            var running = runner?.IsRunning == true;
+            var ours = running && svc.IsProgramSession(runner!.CurrentSession);
+            var (key, enabled, tip) =
+                ours ? ("programs_session_in_progress", false, "programs_session_stop_hint")
+                : record.SessionCompleted ? ("programs_session_done", false, null)
+                : running ? ("programs_session_other_running", false, "programs_session_other_running_hint")
+                : ("btn_program_start_session", enrollment.State != ProgramEnrollmentState.Paused, (string?)null);
+            var glyph = Find<TextBlock>("TxtTodaySessionGlyph");
+            glyph.Text = ours ? "◉" : record.SessionCompleted ? "✓" : "○";
+            glyph.Foreground = ours || record.SessionCompleted ? accent : muted;
+            var button = Find<Button>("BtnStartTodaySession");
+            button.IsEnabled = enabled && !svc.IsReadOnly;
+            ToolTip.SetTip(button, tip == null ? null : Loc.Get(tip));
+            // P09: choose the key in code and bind it, so a language switch keeps the state's text.
+            Find<TextBlock>("TxtStartTodaySession").Bind(TextBlock.TextProperty,
+                (global::Avalonia.Data.Binding)new Localization.StrExtension(key).ProvideValue(null!));
+
+            // WPF :1470: no pausing the program out from under its own running session.
+            var paused = enrollment.State == ProgramEnrollmentState.Paused;
+            var pause = Find<Button>("BtnProgramPauseResume");
+            pause.IsEnabled = !(ours && !paused);
+            ToolTip.SetTip(pause, ours && !paused ? Loc.Get("programs_pause_blocked_hint") : null);
+            UpdateSessionClock();
+        }
+
+        private static string ClockText(TimeSpan span) =>
+            span.TotalHours >= 1 ? $"{(int)span.TotalHours}:{span.Minutes:D2}:{span.Seconds:D2}" : $"{(int)span.TotalMinutes}:{span.Seconds:D2}";
+
+        /// <summary>The live clock and bar while the program's own session runs (WPF
+        /// UpdateProgramSessionRow :1490-1530); hidden for any other state.</summary>
+        private void UpdateSessionClock()
+        {
+            var row = Find<Grid>("TodaySessionProgressRow");
+            var text = Find<TextBlock>("TxtTodaySessionProgress");
+            var bar = Find<ProgressBar>("TodaySessionProgressBar");
+            var svc = AvApp.Programs;
+            var runner = AvApp.Sessions;
+            var current = runner?.IsRunning == true ? runner.CurrentSession : null;
+            if (svc == null || runner == null || current == null || !svc.IsProgramSession(current))
+            {
+                row.IsVisible = text.IsVisible = false;
+                bar.Value = 0;
+                return;
+            }
+            var chapter = svc.TodayChapter;
+            var accent = MainShellWindow.AccentBrush(
+                !string.IsNullOrWhiteSpace(chapter?.AccentColor) ? chapter!.AccentColor : svc.ActiveProgram?.AccentColor);
+            var total = TimeSpan.FromMinutes(Math.Max(1, current.DurationMinutes));
+            var elapsed = runner.Elapsed;
+            if (elapsed > total) elapsed = total;
+            bar.Foreground = accent;
+            bar.Value = Math.Clamp(elapsed.TotalSeconds / total.TotalSeconds * 100, 0, 100);
+            var clock = Loc.GetF("programs_session_progress", ClockText(elapsed), ClockText(total));
+            text.Text = runner.IsPaused ? Loc.GetF("programs_session_progress_paused", clock) : clock;
+            text.Foreground = accent;
+            row.IsVisible = text.IsVisible = true;
+        }
+
+        // ---- reward track (WPF BuildProgramDayStrip :794-939) ----
+
+        private void BuildDayStrip(ProgramDefinition program, ProgramEnrollment enrollment, IBrush accent, bool stale)
+        {
+            var muted = Theme("TextMutedBrush", Brushes.Gray);
+            var light = Theme("TextLightBrush", Brushes.White);
+            var surface = Theme("SurfaceBgBrush", Brushes.Transparent);
+            var border = Theme("GlassBorderBrush", Brushes.Gray);
+            var danger = Theme("DangerBrush", Brushes.IndianRed);
             var days = program.AllDays.GroupBy(d => d.DayIndex).ToDictionary(g => g.Key, g => g.First());
+            var glow = MainShellWindow.ProgramRadialGlowBrush(accent, 170);
             var pips = new List<ProgramDayPip>(Math.Max(0, program.LengthDays));
+
             for (int i = 1; i <= program.LengthDays; i++)
             {
                 var record = enrollment.GetRecord(i);
@@ -177,123 +304,183 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 {
                     pip.RewardGlyph = day!.IsBoss ? "👑" : "🎁";
                     pip.RewardVisible = true;
-                    pip.RewardTip = !string.IsNullOrWhiteSpace(day.RewardDescription) ? day.RewardDescription! : Loc.Get("programs_boss_badge");
+                    pip.RewardTip = !string.IsNullOrWhiteSpace(day.RewardDescription)
+                        ? day.RewardDescription! : Loc.Get("programs_boss_badge");
                 }
+
                 string tip;
                 if (i == enrollment.CurrentDay)
                 {
-                    pip.Fill = Brushes.Transparent; pip.Stroke = accent; pip.PipBorderThickness = new Thickness(2.5);
-                    pip.LabelBrush = accent; pip.LabelWeight = FontWeight.Bold; pip.NodeSize = 42; pip.LabelSize = 15;
-                    pip.IsCurrent = true; pip.GlowVisible = true; pip.GlowBrush = accent;
-                    tip = Loc.GetF("programs_pip_today", i);
+                    pip.Stroke = accent;
+                    pip.PipBorderThickness = new Thickness(2.5);
+                    pip.LabelBrush = accent;
+                    pip.LabelWeight = FontWeight.Bold;
+                    pip.NodeSize = 42;
+                    pip.LabelSize = 15;
+                    pip.IsCurrent = true;
+                    pip.GlowBrush = glow;
+                    pip.GlowVisible = true;
+                    tip = Loc.GetF(stale ? "programs_pip_last_saved" : "programs_pip_today", i);
                 }
                 else if (record?.DayCompleted == true)
                 {
-                    pip.Fill = accent; pip.Stroke = accent; pip.Label = "✓"; pip.LabelBrush = light;
-                    pip.LabelWeight = FontWeight.Bold; pip.NodeSize = 32; pip.LabelSize = 13;
+                    pip.Fill = accent;
+                    pip.Stroke = accent;
+                    pip.Label = "✓";
+                    pip.LabelBrush = light;
+                    pip.LabelWeight = FontWeight.Bold;
+                    pip.NodeSize = 32;
+                    pip.LabelSize = 13;
                     tip = Loc.GetF("programs_pip_done", i);
                 }
                 else if (record?.Missed == true)
                 {
-                    pip.Fill = Brushes.Transparent; pip.Stroke = danger; pip.Label = "✕"; pip.LabelBrush = danger; pip.NodeSize = 32;
+                    pip.Stroke = danger;
+                    pip.Label = "✕";
+                    pip.LabelBrush = danger;
+                    pip.NodeSize = 32;
                     tip = Loc.GetF("programs_pip_missed", i);
                 }
                 else
                 {
-                    pip.Fill = surface; pip.Stroke = border; pip.LabelBrush = muted; pip.PipOpacity = 0.65;
+                    pip.Fill = surface;
+                    pip.Stroke = border;
+                    pip.LabelBrush = muted;
+                    pip.PipOpacity = 0.65;
                     tip = Loc.GetF("programs_pip_locked", i);
                 }
+
                 if (milestone) pip.NodeSize += 6;
                 pip.Tip = day != null && !string.IsNullOrWhiteSpace(day.Title) ? $"{tip} · {day.Title}" : tip;
                 pips.Add(pip);
             }
-            Find<ItemsControl>("ProgramDayStrip").ItemsSource = pips;
 
-            // The done segment ends on today's node centre (star units, WPF RailDoneColumn/RailRestColumn).
+            var rail = Find<Grid>("ProgramDayRail");
+            Find<ItemsControl>("ProgramDayStrip").ItemsSource = pips;
+            var railColumns = ((Grid)rail.Parent!).ColumnDefinitions;
+            railColumns[0].MaxWidth = program.LengthDays <= 14 ? 840 : double.PositiveInfinity;
+            railColumns[1].Width = program.LengthDays <= 14 ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
+
+            var total = Math.Max(1, program.LengthDays);
+            var done = Math.Max(0, Math.Clamp(enrollment.CurrentDay, 0, total) - 0.5);
             var fill = Find<Border>("RailProgressFill");
-            fill.Background = accent;
-            if (fill.Parent is Grid g && g.ColumnDefinitions.Count >= 2)
-            {
-                var total = Math.Max(1, program.LengthDays);
-                var done = Math.Max(0, Math.Clamp(enrollment.CurrentDay, 0, total) - 0.5);
-                g.ColumnDefinitions[0].Width = new GridLength(done, GridUnitType.Star);
-                g.ColumnDefinitions[1].Width = new GridLength(Math.Max(0.0001, total - done), GridUnitType.Star);
-            }
+            var fillColumns = ((Grid)fill.Parent!).ColumnDefinitions;
+            fillColumns[0].Width = new GridLength(done, GridUnitType.Star);
+            fillColumns[1].Width = new GridLength(Math.Max(0.0001, total - done), GridUnitType.Star);
+            fill.Background = RailFill(accent);
         }
 
-        /// <summary>WPF BuildProgramTodayPanel: today's title, session row, ambient row and tasks.</summary>
-        private void BuildTodayPanel(ProgramDefinition program, ProgramEnrollment enrollment, IBrush accent)
+        // ---- the day (WPF BuildProgramTodayPanel :941-1248) ----
+
+        private void BuildTodayPanel(ProgramService svc, ProgramDefinition program, ProgramEnrollment enrollment,
+                                     IBrush accent, bool stale)
         {
-            var svc = App.Programs!;
             var day = svc.Today;
             var record = svc.TodayRecord;
             var panel = Find<Border>("TodayPanel");
-            if (day == null || record == null) { panel.IsVisible = false; return; }
-            panel.IsVisible = true;
+            panel.IsVisible = day != null && record != null;
+            if (day == null || record == null) return;
 
-            var muted = ThemeBrush("TextMutedBrush", Brushes.Gray);
-            var light = ThemeBrush("TextLightBrush", Brushes.White);
-            var glass = ThemeBrush("GlassBorderBrush", Brushes.Gray);
-            var paused = enrollment.State == ProgramEnrollmentState.Paused;
+            var muted = Theme("TextMutedBrush", Brushes.Gray);
+            var light = Theme("TextLightBrush", Brushes.White);
+            var glass = Theme("GlassBorderBrush", Brushes.Gray);
+
+            // CHECKPOINT A: never call a snapshot "today". Set from code at Template priority (P09)
+            // and rebuilt on every language change by RefreshPrograms.
+            Find<TextBlock>("TxtTodayHeader").Text = stale
+                ? Loc.GetF("programs_last_saved_header", enrollment.CurrentDayDate.ToShortDateString())
+                : Loc.Get("programs_today_header");
 
             panel.BorderBrush = day.IsBoss ? accent : glass;
             panel.BorderThickness = new Thickness(day.IsBoss ? 2 : 1);
             Find<Border>("TodayBossBadge").IsVisible = day.IsBoss;
             Find<Border>("TodayReturnBadge").IsVisible = record.IsReturnDay;
+
+            var hero = ModArt.FirstOf(ProgramArtPaths.DayHero(program, day));
+            Find<Border>("RunHeroHost").IsVisible = hero != null;
+            Find<Grid>("TodayHeroGrid").ColumnDefinitions[1].Width =
+                hero != null ? new GridLength(2, GridUnitType.Star) : new GridLength(0);
+            if (hero != null)
+            {
+                var plate = Find<Rectangle>("RunHeroPlate");
+                plate.OpacityMask = new ImageBrush(hero) { Stretch = Stretch.UniformToFill };
+                plate.Fill = accent;
+            }
+            Find<Rectangle>("TodayHeroGlow").Fill = MainShellWindow.ProgramRadialGlowBrush(accent, 70, 0.78, 0.2, 0.9);
+
             Find<TextBlock>("TxtTodayTitle").Text = day.Title;
             Find<TextBlock>("TxtTodayBlurb").Text = day.Blurb;
+            BuildTodayLayers(program, day, accent);
 
-            var rewardChip = Find<Border>("TodayRewardChip");
-            rewardChip.IsVisible = !string.IsNullOrWhiteSpace(day.RewardDescription);
-            if (rewardChip.IsVisible)
-            {
-                Find<TextBlock>("TxtTodayReward").Text = day.RewardDescription!;
-                ToolTip.SetTip(rewardChip, day.RewardDescription);
-            }
+            Find<Border>("TodayRewardChip").IsVisible = !string.IsNullOrWhiteSpace(day.RewardDescription);
+            Find<TextBlock>("TxtTodayReward").Text = day.RewardDescription ?? "";
+            ToolTip.SetTip(Find<Border>("TodayRewardChip"), day.RewardDescription);
             Find<Border>("TodayCompleteBanner").IsVisible = record.DayCompleted;
 
             var minutes = record.IsReturnDay ? ProgramService.ReturnDayMinutes(day.SessionMinutes) : day.SessionMinutes;
             Find<TextBlock>("TxtTodaySessionMinutes").Text = Loc.GetF("programs_session_minutes", minutes);
-            UpdateProgramSessionRow();
+            UpdateSessionRow(svc, enrollment, record, accent, muted);
 
             var ambient = day.Ambient;
-            var ambientRow = Find<Border>("TodayAmbientRow");
-            ambientRow.IsVisible = ambient != null && (!string.IsNullOrWhiteSpace(ambient.Description) || ambient.RequiredMinutes > 0);
-            if (ambientRow.IsVisible)
+            var showAmbient = ambient != null &&
+                              (!string.IsNullOrWhiteSpace(ambient.Description) || ambient.RequiredMinutes > 0);
+            Find<Border>("TodayAmbientRow").IsVisible = showAmbient;
+            if (showAmbient)
             {
                 Find<TextBlock>("TxtTodayAmbient").Text = ambient!.Description;
                 var progress = Find<TextBlock>("TxtTodayAmbientProgress");
                 progress.IsVisible = ambient.RequiredMinutes > 0;
-                if (progress.IsVisible)
-                    progress.Text = Loc.GetF("programs_ambient_progress",
-                        Math.Min(record.AmbientMinutes, ambient.RequiredMinutes), ambient.RequiredMinutes);
+                progress.Text = ambient.RequiredMinutes > 0
+                    ? Loc.GetF("programs_ambient_progress",
+                        Math.Min(record.AmbientMinutes, ambient.RequiredMinutes), ambient.RequiredMinutes)
+                    : "";
             }
 
             var items = new List<ProgramTaskItem>();
+            int required = 0, completedRequired = 0, optional = 0, blocked = 0;
             var hasRitual = false;
-            int required = 0, completedRequired = 0, optional = 0, blockedCount = 0;
+            var doneInk = ContrastForeground(accent, light);
+            // The ritual picker and the mantra door record progress: never on a read-only service,
+            // never while the run is paused (WPF :1180).
+            var doors = !svc.IsReadOnly && enrollment.State != ProgramEnrollmentState.Paused;
             foreach (var task in day.Tasks)
             {
                 var complete = svc.IsTaskComplete(record, task);
-                var blocked = svc.IsTaskBlocked(task);
-                if (blocked) blockedCount++;
+                var isBlocked = svc.IsTaskBlocked(task);
+                if (isBlocked) blocked++;
                 else if (task.Optional) optional++;
                 else { required++; if (complete) completedRequired++; }
-                var ritual = task.Kind == ProgramTaskKind.Ritual;
-                if (ritual) hasRitual = true;
+                hasRitual |= task.Kind == ProgramTaskKind.Ritual;
 
+                var howTo = complete ? null : TaskHowTo(task);
                 var item = new ProgramTaskItem
                 {
                     TaskId = task.Id,
                     Description = task.Description,
+                    HowTo = howTo ?? "",
+                    HowToVisible = !string.IsNullOrWhiteSpace(howTo),
                     StatusGlyph = complete ? "✓" : "○",
                     StatusBrush = complete ? accent : muted,
                     TextBrush = complete ? muted : light,
-                    RowOpacity = blocked ? 0.5 : 1.0,
+                    RowOpacity = isBlocked ? 0.5 : 1.0,
                     AccentBrush = accent,
                     CardBorderBrush = complete ? accent : glass,
                     DoneChipVisible = complete,
+                    DoneChipForeground = doneInk,
+                    SubmitVisible = doors && task.Kind == ProgramTaskKind.Ritual && !complete && !isBlocked,
+                    OpenReps = Math.Max(1, task.TargetValue),
+                    OpenVisible = doors && task.Kind == ProgramTaskKind.AutoVerified &&
+                                  task.Verifier == QuestCategory.Mantra && !complete && !isBlocked,
                 };
+
+                var icon = ModArt.TryLoad(TaskIconPath(task));
+                if (icon != null)
+                {
+                    item.Icon = icon;
+                    item.IconVisible = true;
+                    item.GlyphVisible = false;
+                }
+
                 if (task.Kind == ProgramTaskKind.AutoVerified && task.TargetValue > 1)
                 {
                     record.TaskProgress.TryGetValue(task.Id, out var current);
@@ -303,18 +490,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                     item.RemainderStar = new GridLength(Math.Max(0.0001, task.TargetValue - shown), GridUnitType.Star);
                     item.BarVisible = true;
                 }
-                if (blocked) { item.BadgeText = Loc.Get("programs_task_locked"); item.BadgeVisible = true; }
-                else if (task.OutsideSession) { item.BadgeText = Loc.Get("programs_task_outside_session"); item.BadgeVisible = true; }
-                else if (task.Optional) { item.BadgeText = Loc.Get("programs_task_optional"); item.BadgeVisible = true; }
-                item.SubmitVisible = ritual && !complete && !blocked && !paused;
-                item.OpenReps = Math.Max(1, task.TargetValue);
-                item.OpenVisible = task.Kind == ProgramTaskKind.AutoVerified && task.Verifier == Models.QuestCategory.Mantra
-                                   && !complete && !blocked && !paused;
+
+                var badge = isBlocked ? "programs_task_locked"
+                    : task.OutsideSession ? "programs_task_outside_session"
+                    : task.Optional ? "programs_task_optional" : null;
+                item.BadgeText = badge == null ? "" : Loc.Get(badge);
+                item.BadgeVisible = badge != null;
                 items.Add(item);
             }
+
             Find<ItemsControl>("TodayTaskList").ItemsSource = items;
             Find<TextBlock>("TxtTodayNoTasks").IsVisible = items.Count == 0;
             Find<TextBlock>("TxtRitualPrivacyNote").IsVisible = hasRitual;
+            Find<Grid>("TaskArcGrid").ColumnDefinitions[0].MaxWidth = Math.Clamp(items.Count, 1, 3) * 370;
 
             var pill = Find<Border>("TodayTasksDonePill");
             pill.IsVisible = required > 0;
@@ -322,232 +510,235 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             {
                 var text = Loc.GetF("programs_tasks_done_count", completedRequired, required);
                 if (optional > 0) text += $"  ·  {optional} {Loc.Get("programs_task_optional")}";
-                if (blockedCount > 0) text += $"  ·  {blockedCount} {Loc.Get("btn_program_locked")}";
+                if (blocked > 0) text += $"  ·  {blocked} {Loc.Get("btn_program_locked")}";
                 Find<TextBlock>("TxtTodayTasksDone").Text = text;
-                ToolTip.SetTip(pill, blockedCount > 0 ? Loc.Get("programs_locked_hint") : null);
             }
+            ToolTip.SetTip(pill, required > 0 && blocked > 0 ? Loc.Get("programs_locked_hint") : null);
+
+            BuildUpNext(program, enrollment, day, record, accent, stale);
         }
 
-        private static string Clock(TimeSpan span) =>
-            span.TotalHours >= 1 ? $"{(int)span.TotalHours}:{span.Minutes:D2}:{span.Seconds:D2}" : $"{(int)span.TotalMinutes}:{span.Seconds:D2}";
+        // ---- WPF BuildProgramTodayLayers (:1250-1318) ----
 
-        /// <summary>WPF UpdateProgramSessionRow: the start button, the live progress row and the
-        /// pause lock while the program's own session runs.</summary>
-        internal void UpdateProgramSessionRow()
+        private static readonly (Func<SessionSettings, bool> IsOn, string LabelKey, string IconPath)[] LayerCatalog =
         {
-            try
+            (s => s.FlashEnabled,            "programs_layer_flash",       "features/flash.png"),
+            (s => s.SubliminalEnabled,       "programs_layer_subliminal",  "features/subliminal.png"),
+            (s => s.AudioWhispersEnabled,    "programs_layer_whispers",    "features/audio_whispers.png"),
+            (s => s.BouncingTextEnabled,     "programs_layer_bouncing",    "features/bouncing_text.png"),
+            (s => s.BubblesEnabled,          "programs_layer_bubbles",     "features/Bubble_pop.png"),
+            (s => s.PinkFilterEnabled,       "programs_layer_pink",        "features/Pink_filter.png"),
+            (s => s.SpiralEnabled,           "programs_layer_spiral",      "features/spiral_overlay.png"),
+            (s => s.MandatoryVideosEnabled,  "programs_layer_video",       "features/mandatory_videos.png"),
+            (s => s.LockCardEnabled,         "programs_layer_lockcard",    "features/Phrase_Lock.png"),
+            (s => s.BubbleCountEnabled,      "programs_layer_bubblecount", "features/Bubble_count.png"),
+            (s => s.MindWipeEnabled,         "programs_layer_mindwipe",    "features/Mind_Wipers.png"),
+            (s => s.CornerGifEnabled,        "programs_layer_cornergif",   "features/corner_gif.png")
+        };
+
+        private void BuildTodayLayers(ProgramDefinition program, ProgramDay day, IBrush accent)
+        {
+            var template = program.GetTemplate(day.SessionTemplateId);
+            var settings = DaySettings(program, day);
+            var panel = Find<StackPanel>("TodayLayersPanel");
+            if (template == null || settings == null)
             {
-                var svc = App.Programs;
-                var enrollment = svc?.ActiveEnrollment;
-                var record = svc?.TodayRecord;
-                var row = Find<Grid>("TodaySessionProgressRow");
-                var progressText = Find<TextBlock>("TxtTodaySessionProgress");
-                var pauseBtn = Find<Button>("BtnProgramPauseResume");
-                var start = Find<Button>("BtnStartTodaySession");
-                var glyph = Find<TextBlock>("TxtTodaySessionGlyph");
-                if (svc == null || enrollment == null || record == null)
-                {
-                    row.IsVisible = progressText.IsVisible = false;
-                    pauseBtn.IsEnabled = true;
-                    ToolTip.SetTip(pauseBtn, null);
-                    return;
-                }
-                var muted = ThemeBrush("TextMutedBrush", Brushes.Gray);
-                var accent = MainShellWindow.AccentBrush(svc.ActiveProgram?.AccentColor);
-                var paused = enrollment.State == ProgramEnrollmentState.Paused;
-                var runner = App.Sessions;
-                var running = runner?.IsRunning == true;
-                var current = running ? runner!.CurrentSession : null;
-                var ours = running && svc.IsProgramSession(current);
-
-                pauseBtn.IsEnabled = !(ours && !paused);
-                ToolTip.SetTip(pauseBtn, ours && !paused ? Loc.Get("programs_pause_blocked_hint") : null);
-
-                if (ours && current != null)
-                {
-                    var total = TimeSpan.FromMinutes(Math.Max(1, current.DurationMinutes));
-                    var elapsed = runner!.Elapsed;
-                    if (elapsed > total) elapsed = total;
-                    var bar = Find<ProgressBar>("TodaySessionProgressBar");
-                    bar.Foreground = accent;
-                    bar.Value = Math.Clamp(elapsed.TotalSeconds / total.TotalSeconds * 100, 0, 100);
-                    var clock = Loc.GetF("programs_session_progress", Clock(elapsed), Clock(total));
-                    progressText.Text = runner.IsPaused ? Loc.GetF("programs_session_progress_paused", clock) : clock;
-                    progressText.Foreground = accent;
-                    progressText.IsVisible = row.IsVisible = true;
-                    glyph.Text = "◉";
-                    glyph.Foreground = accent;
-                    start.Content = Loc.Get("programs_session_in_progress");
-                    start.IsEnabled = false;
-                    ToolTip.SetTip(start, Loc.Get("programs_session_stop_hint"));
-                    return;
-                }
-
-                row.IsVisible = progressText.IsVisible = false;
-                Find<ProgressBar>("TodaySessionProgressBar").Value = 0;
-                ToolTip.SetTip(start, null);
-                if (record.SessionCompleted)
-                {
-                    glyph.Text = "✓";
-                    glyph.Foreground = accent;
-                    start.Content = Loc.Get("programs_session_done");
-                    start.IsEnabled = false;
-                    return;
-                }
-                glyph.Text = "○";
-                glyph.Foreground = muted;
-                if (running)
-                {
-                    start.Content = Loc.Get("programs_session_other_running");
-                    start.IsEnabled = false;
-                    ToolTip.SetTip(start, Loc.Get("programs_session_other_running_hint"));
-                    return;
-                }
-                start.Content = Loc.Get("btn_program_start_session");
-                start.IsEnabled = !paused;
+                panel.IsVisible = false;
+                return;
             }
-            catch (Exception ex)
+
+            var previous = day.DayIndex > 1 ? DaySettings(program, program.GetDay(day.DayIndex - 1)) : null;
+            var muted = Theme("TextMutedBrush", Brushes.Gray);
+            var light = Theme("TextLightBrush", Brushes.White);
+            var glass = Theme("GlassBorderBrush", Brushes.Gray);
+            var newTip = Loc.Get("programs_layer_new_tip");
+            var newInk = ContrastForeground(accent, light);
+            var chips = new List<ProgramLayerChip>();
+            foreach (var (isOn, labelKey, iconPath) in LayerCatalog)
             {
-                Serilog.Log.Warning(ex, "UpdateProgramSessionRow failed");
-            }
-        }
-
-        // ---- HANDLERS (WPF MainWindow.ProgramsTab.cs:1958-2230) ------------------------------------
-
-        private async void BtnProgramEnroll_Click(object? sender, RoutedEventArgs e)
-        {
-            try
-            {
-                if (sender is not Button { Tag: string programId } || string.IsNullOrWhiteSpace(programId)) return;
-                var svc = App.Programs;
-                var def = svc?.Library.FirstOrDefault(p => string.Equals(p.Id, programId, StringComparison.OrdinalIgnoreCase));
-                if (svc == null || def == null || Shell is not { } shell) return;
-
-                if (def.Tier == ProgramTier.Premium && !CoreEntitlement.HasPremium)
+                if (!isOn(settings)) continue;
+                var label = Loc.Get(labelKey);
+                var isNew = previous != null && !isOn(previous);
+                var icon = ModArt.TryLoad(iconPath);
+                chips.Add(new ProgramLayerChip
                 {
-                    shell.OpenAppSettingsSection("account");   // WPF ShowAppInfoPopup
-                    return;
-                }
-                if (!svc.CanEnroll(def, out var reason))
-                {
-                    Serilog.Log.Information("Program enrollment blocked for {Program}: {Reason}", def.Id, reason);
-                    await MessageDialog.ShowAsync(shell, Loc.Get("programs_unavailable_title"), Loc.Get("programs_unavailable"));
-                    return;
-                }
-                var dialog = new ProgramEnrollDialog(def);
-                if (await dialog.ShowDialogSafe<bool?>(shell) != true) return;
-                svc.Enroll(def, dialog.StrictMode, ProgramShareLevel.Private, dialog.DayBoundaryHour, dialog.NudgeHour);
-                RefreshBrowse();
-                shell.RefreshProgramTodayCard();
-            }
-            catch (Exception ex)
-            {
-                Serilog.Log.Error(ex, "Program enrollment failed");
-            }
-        }
-
-        private async void BtnProgramPauseResume_Click(object? sender, RoutedEventArgs e)
-        {
-            try
-            {
-                var svc = App.Programs;
-                if (svc?.ActiveEnrollment == null) return;
-                if (svc.ActiveEnrollment.State == ProgramEnrollmentState.Paused) svc.Resume();
-                else if (!svc.Pause())
-                {
-                    if (Shell is { } shell)
-                        await MessageDialog.ShowAsync(shell, Loc.Get("programs_pause_blocked_title"), Loc.Get("programs_pause_blocked_body"));
-                    return;
-                }
-                RefreshBrowse();
-                Shell?.RefreshProgramTodayCard();
-            }
-            catch (Exception ex) { Serilog.Log.Warning(ex, "Program pause/resume failed"); }
-        }
-
-        private async void BtnProgramWithdraw_Click(object? sender, RoutedEventArgs e)
-        {
-            try
-            {
-                var svc = App.Programs;
-                if (svc?.ActiveEnrollment == null || Shell is not { } shell) return;
-                var runner = App.Sessions;
-                var sessionLive = runner?.IsRunning == true && svc.IsProgramSession(runner.CurrentSession);
-                var confirmed = await MessageDialog.ConfirmAsync(shell,
-                    Loc.Get("programs_withdraw_confirm_title"),
-                    Loc.Get(sessionLive ? "programs_withdraw_confirm_body_session" : "programs_withdraw_confirm_body"),
-                    defaultToCancel: true,
-                    okText: Loc.Get("btn_program_withdraw_confirm"),
-                    cancelText: Loc.Get("btn_program_withdraw_keep"));
-                if (!confirmed) return;
-                // SEAM(f-shell): MainShellWindow.SessionRun.cs OnSessionLogReady needs WPF Presets.cs:1679 SuppressNextSessionSummary(reason)
-                // (20 s one-shot); call it here when sessionLive, before Withdraw. Until then the recap still opens.
-                svc.Withdraw();
-                RefreshBrowse();
-                shell.RefreshProgramTodayCard();
-            }
-            catch (Exception ex) { Serilog.Log.Warning(ex, "Program withdraw failed"); }
-        }
-
-        private void BtnProgramRestart_Click(object? sender, RoutedEventArgs e)
-        {
-            try { App.Programs?.RestartAfterLapse(); RefreshBrowse(); Shell?.RefreshProgramTodayCard(); }
-            catch (Exception ex) { Serilog.Log.Warning(ex, "Program restart failed"); }
-        }
-
-        private void BtnProgramDismissGraduated_Click(object? sender, RoutedEventArgs e)
-        {
-            try { App.Programs?.DismissGraduated(); RefreshBrowse(); Shell?.RefreshProgramTodayCard(); }
-            catch (Exception ex) { Serilog.Log.Warning(ex, "Program graduation dismiss failed"); }
-        }
-
-        private async void BtnProgramSubmitRitual_Click(object? sender, RoutedEventArgs e)
-        {
-            try
-            {
-                if (sender is not Button { Tag: string taskId } || string.IsNullOrWhiteSpace(taskId)) return;
-                if (TopLevel.GetTopLevel(this)?.StorageProvider is not { } storage) return;
-                var files = await storage.OpenFilePickerAsync(new FilePickerOpenOptions
-                {
-                    Title = Loc.Get("programs_photo_dialog_title"),
-                    AllowMultiple = false,
-                    FileTypeFilter = new[] { new FilePickerFileType("Images") { Patterns = new[] { "*.jpg", "*.jpeg", "*.png", "*.bmp", "*.webp" } } },
+                    Label = label,
+                    AccentBrush = accent,
+                    LabelBrush = isNew ? light : muted,
+                    BorderBrush = isNew ? accent : glass,
+                    NewForeground = newInk,
+                    NewVisible = isNew,
+                    Tip = isNew ? $"{label} - {newTip}" : label,
+                    Icon = icon,
+                    IconVisible = icon != null,
                 });
-                var path = files.Count > 0 ? files[0].TryGetLocalPath() : null;
-                if (path == null) return;
-                App.Programs?.SubmitRitualTask(taskId, path, null);
-                RefreshBrowse();
             }
-            catch (Exception ex) { Serilog.Log.Warning(ex, "Program ritual submission failed"); }
+
+            var name = Find<TextBlock>("TxtTodayTemplateName");
+            name.Text = template.Name;
+            name.Foreground = accent;
+            var blurb = Find<TextBlock>("TxtTodayTemplateBlurb");
+            blurb.Text = template.Description;
+            blurb.IsVisible = !string.IsNullOrWhiteSpace(template.Description);
+            Find<ItemsControl>("TodayLayerList").ItemsSource = chips;
+            panel.IsVisible = chips.Count > 0;
         }
 
-        /// <summary>WPF StartProgramSession: today's session straight into the engine (no confirm).</summary>
-        private async void BtnStartTodaySession_Click(object? sender, RoutedEventArgs e)
+        /// <summary>WPF ProgramDaySettings (:464): the template floor, cloned only when overrides apply.</summary>
+        private static SessionSettings? DaySettings(ProgramDefinition program, ProgramDay? day)
         {
-            if (Shell is not { } shell) return;
+            if (day == null) return null;
+            var template = program.GetTemplate(day.SessionTemplateId);
+            if (template?.Floor == null) return null;
+            if (day.Overrides is not { Count: > 0 }) return template.Floor;
             try
             {
-                if (App.Sessions?.IsRunning == true)
-                {
-                    UpdateProgramSessionRow();
-                    await MessageDialog.ShowAsync(shell, Loc.Get("programs_session_busy_title"), Loc.Get("programs_session_busy_body"));
-                    return;
-                }
-                var session = App.Programs?.BuildTodaySession();
-                if (session == null)
-                {
-                    await MessageDialog.ShowAsync(shell, Loc.Get("title_error"), Loc.Get("programs_session_start_failed"));
-                    return;
-                }
-                shell.StartSession(session);
-                Dispatcher.UIThread.Post(UpdateProgramSessionRow, DispatcherPriority.Background);
-                Serilog.Log.Information("[Programs] Started program session: {Name}", session.Name);
+                var copy = ProgramSessionBuilder.Clone(template.Floor);
+                ProgramSessionBuilder.ApplyOverrides(copy, day.Overrides);
+                return copy;
             }
             catch (Exception ex)
             {
-                Serilog.Log.Error(ex, "[Programs] Failed to start today's session");
-                try { await MessageDialog.ShowAsync(shell, Loc.Get("title_error"), Loc.Get("programs_session_start_failed")); } catch { }
+                Serilog.Log.Warning(ex, "Program day {Day} overrides could not be previewed", day.DayIndex);
+                return template.Floor;
             }
+        }
+
+        // ---- WPF BuildProgramUpNext (:1333-1427) ----
+
+        private void BuildUpNext(ProgramDefinition program, ProgramEnrollment enrollment, ProgramDay day,
+                                 ProgramDayRecord record, IBrush accent, bool stale)
+        {
+            var muted = Theme("TextMutedBrush", Brushes.Gray);
+            var upcoming = program.AllDays.Where(d => d.DayIndex > day.DayIndex).Take(3).ToList();
+            var items = new List<ProgramUpNextItem>(upcoming.Count);
+            for (int i = 0; i < upcoming.Count; i++)
+            {
+                var next = upcoming[i];
+                var parts = new List<string> { Loc.GetF("programs_session_minutes", next.SessionMinutes) };
+                var first = next.Tasks.FirstOrDefault();
+                if (first != null && !string.IsNullOrWhiteSpace(first.Description))
+                {
+                    parts.Add(first.Description);
+                    if (next.Tasks.Count > 1) parts.Add(Loc.GetF("programs_next_more_tasks", next.Tasks.Count - 1));
+                }
+                items.Add(new ProgramUpNextItem
+                {
+                    DayLabel = Loc.GetF("programs_card_day", next.DayIndex),
+                    Title = next.Title,
+                    Meta = string.Join("  ·  ", parts),
+                    DayBrush = next.IsBoss ? accent : muted,
+                    Glyph = next.IsBoss ? "👑" : "",
+                    GlyphTip = next.IsBoss ? Loc.Get("programs_boss_badge") : "",
+                    GlyphVisible = next.IsBoss,
+                    RowOpacity = 1.0 - (i * 0.18)
+                });
+            }
+            Find<ItemsControl>("TodayUpNextList").ItemsSource = items;
+            Find<TextBlock>("TxtTodayUpNextFinal").IsVisible = items.Count == 0;
+
+            // The "closes at" deadline is about a live day; a stale snapshot's day has already
+            // closed, so no deadline is shown for it (CHECKPOINT A).
+            var boundary = DateTime.Today.AddHours(Math.Clamp(enrollment.DayBoundaryHour, 0, 23)).ToShortTimeString();
+            var closes = Find<TextBlock>("TxtTodayCloses");
+            var note = Find<TextBlock>("TxtTodayClosesNote");
+            closes.IsVisible = !stale && !(record.DayCompleted && items.Count == 0);
+            note.IsVisible = false;
+            if (enrollment.State == ProgramEnrollmentState.Paused) closes.Text = Loc.Get("programs_closes_paused");
+            else if (record.DayCompleted && items.Count > 0)
+                closes.Text = Loc.GetF("programs_closes_done", upcoming[0].DayIndex, boundary);
+            else if (!record.DayCompleted)
+            {
+                closes.Text = Loc.GetF("programs_closes_at", boundary);
+                note.Text = Loc.Get("programs_closes_note");
+                note.IsVisible = !stale;
+            }
+
+            var streak = 0;
+            for (int i = record.DayCompleted ? enrollment.CurrentDay : enrollment.CurrentDay - 1; i >= 1; i--)
+            {
+                if (enrollment.GetRecord(i)?.DayCompleted != true) break;
+                streak++;
+            }
+            Find<TextBlock>("TxtTodayStreak").Text = streak switch
+            {
+                0 => Loc.Get("programs_streak_none"),
+                1 => Loc.Get("programs_streak_one"),
+                _ => Loc.GetF("programs_streak_many", streak)
+            };
+        }
+
+        // ---- small helpers (WPF :201-435) ----
+
+        private IBrush Theme(string key, IBrush fallback) =>
+            this.TryFindResource(key, ActualThemeVariant, out var value) && value is IBrush brush ? brush : fallback;
+
+        /// <summary>WPF ProgramContrastForeground (:242): dark ink only on a pale (luminance &gt; 0.6) accent.</summary>
+        private IBrush ContrastForeground(IBrush background, IBrush light)
+        {
+            if (background is not ISolidColorBrush solid) return light;
+            static double Lin(byte c) { var v = c / 255.0; return v <= 0.03928 ? v / 12.92 : Math.Pow((v + 0.055) / 1.055, 2.4); }
+            var c = solid.Color;
+            var luminance = 0.2126 * Lin(c.R) + 0.7152 * Lin(c.G) + 0.0722 * Lin(c.B);
+            return luminance <= 0.6 ? light : Theme("DarkerBgBrush", Brushes.Black);
+        }
+
+        /// <summary>WPF ProgramRailFillBrush (:285): accent at 40% fading to full, left to right.</summary>
+        private static IBrush RailFill(IBrush accent)
+        {
+            if (accent is not ISolidColorBrush solid) return accent;
+            var c = solid.Color;
+            return new LinearGradientBrush
+            {
+                StartPoint = new RelativePoint(0, 0.5, RelativeUnit.Relative),
+                EndPoint = new RelativePoint(1, 0.5, RelativeUnit.Relative),
+                GradientStops =
+                {
+                    new GradientStop(Color.FromArgb((byte)(c.A * 0.40), c.R, c.G, c.B), 0),
+                    new GradientStop(c, 1),
+                },
+            };
+        }
+
+        /// <summary>WPF ProgramTaskIconPath (:370).</summary>
+        private static string? TaskIconPath(ProgramTask task) =>
+            task.Kind != ProgramTaskKind.AutoVerified ? null : task.Verifier switch
+            {
+                QuestCategory.Bubbles => "features/Bubble_pop.png",
+                QuestCategory.LockCard => "features/Phrase_Lock.png",
+                QuestCategory.Video => "features/mandatory_videos.png",
+                QuestCategory.BubbleCount => "features/Bubble_count.png",
+                QuestCategory.PinkFilter => "features/Pink_filter.png",
+                QuestCategory.Flash => "features/flash.png",
+                QuestCategory.Spiral => "features/spiral_overlay.png",
+                _ => null
+            };
+
+        /// <summary>WPF ProgramTaskHowTo (:395).</summary>
+        private static string? TaskHowTo(ProgramTask task)
+        {
+            if (task.Kind == ProgramTaskKind.Ritual) return Loc.Get("programs_howto_ritual");
+            if (task.Kind != ProgramTaskKind.AutoVerified || task.Verifier == null) return null;
+            var key = task.Verifier switch
+            {
+                QuestCategory.Flash => "programs_howto_flash",
+                QuestCategory.Bubbles => "programs_howto_bubbles",
+                QuestCategory.BubbleCount => "programs_howto_bubblecount",
+                QuestCategory.LockCard => "programs_howto_lockcard",
+                QuestCategory.Video => "programs_howto_video",
+                QuestCategory.PinkFilter => "programs_howto_pinkfilter",
+                QuestCategory.Spiral => "programs_howto_spiral",
+                QuestCategory.Mantra => "programs_howto_mantra",
+                QuestCategory.Autonomy => "programs_howto_autonomy",
+                QuestCategory.KeywordTrigger => "programs_howto_keyword",
+                QuestCategory.Lockdown => "programs_howto_lockdown",
+                QuestCategory.Remote => "programs_howto_remote",
+                QuestCategory.BlinkTrainer => "programs_howto_blink",
+                _ => null
+            };
+            if (key == null) return null;
+            var text = Loc.GetF(key, Math.Max(1, task.TargetValue));
+            return task.OutsideSession ? text + " " + Loc.Get("programs_howto_outside_suffix") : text;
         }
     }
 }

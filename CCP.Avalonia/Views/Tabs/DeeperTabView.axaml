@@ -376,9 +376,7 @@
                                    VerticalAlignment="Center" Margin="0,0,14,0"/>
                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
                             <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="{loc:Str deeper_empty_title}"
-                                           Foreground="{DynamicResource TextLightBrush}"
-                                           FontSize="17" FontWeight="Bold"
+                                <TextBlock Theme="{StaticResource Type.CardTitle}" Text="{loc:Str deeper_empty_title}"
                                            VerticalAlignment="Center"/>
                                 <Border Margin="10,0,0,0" Padding="7,2"
                                         VerticalAlignment="Center"

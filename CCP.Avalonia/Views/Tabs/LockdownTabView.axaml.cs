@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
@@ -254,9 +255,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         // ==== the running lockdown (WPF MainWindow.Lab.cs) ================================
         // ponytail: ported: premium gate, double warning, Activate, panel swap, clock, the secret
-        // phrase, the Emergency Exit breath; the title-bar badge is MainShellWindow.Lockdown.cs.
-        // Not on this head: the blood-red theme and activation flash,
-        // the Possession haunt/readout, the Dose keeper, greying of the Strict/No-panic toggles and
+        // phrase, the Emergency Exit breath; the title-bar badge, blood-red theme and activation flash
+        // are MainShellWindow.Lockdown.cs; the Strict toggles grey themselves (HoldWhileLockdown).
+        // Not on this head: the Possession haunt/readout (no director yet), the Dose keeper and
         // the system-key hook (Linux has none, so the warning does not promise it).
 
         /// <summary>The head's live Lockdown (null in renders and tests that set none).</summary>
@@ -285,7 +286,24 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             TxtPossessionRung.IsVisible = false;
             PossessionPips.IsVisible = false;
             UpdateEmergencyExitPulse();
+            // WPF ApplyLockdownTheme / RestoreLockdownTheme (Lab.cs:1188/1211): the card goes crimson
+            // on #1A0A0A; the override is dropped on exit, which leaves the XAML gradients (the values
+            // WPF's restore writes).
+            if (active && _cardHolds.Count == 0)
+            {
+                if (LockdownCardBorder.SetValue(Border.BorderBrushProperty, (IBrush?)new SolidColorBrush(Color.Parse("#DC143C")),
+                        global::Avalonia.Data.BindingPriority.Animation) is { } a) _cardHolds.Add(a);
+                if (LockdownCardBorder.SetValue(Border.BackgroundProperty, (IBrush?)new SolidColorBrush(Color.Parse("#1A0A0A")),
+                        global::Avalonia.Data.BindingPriority.Animation) is { } b) _cardHolds.Add(b);
+            }
+            else if (!active)
+            {
+                foreach (var d in _cardHolds) d.Dispose();
+                _cardHolds.Clear();
+            }
         }
+
+        private readonly List<IDisposable> _cardHolds = new();
 
         /// <summary>WPF MainWindow.Lab.cs:51 BtnActivateLockdown_Click. The consent lists only what
         /// this head enforces.</summary>

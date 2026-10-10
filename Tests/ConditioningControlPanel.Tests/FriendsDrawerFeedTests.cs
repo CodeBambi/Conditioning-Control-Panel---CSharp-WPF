@@ -226,7 +226,7 @@ public partial class FriendsDrawerTests
 
             feed.MarkAllRead();
             Assert.Equal(0, chip.UnreadBadge);
-            Assert.Equal(Loc.Get("friends_chip_tooltip"), chip.ToolTip as string);
+            Assert.EndsWith(Loc.Get("friends_chip_tooltip"), chip.ToolTip as string); // the full name may lead
 
             // Signed out: no badge, whatever the feed holds.
             feed.Add(new FriendEvent(FriendEventKind.RequestReceived, "ash", "Ash", DateTime.UtcNow, "req-in:ash:1"));

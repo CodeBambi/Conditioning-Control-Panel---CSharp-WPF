@@ -9194,9 +9194,17 @@ namespace ConditioningControlPanel.Models
         /// </summary>
         public string NavLastTabBySection { get; set; } = "";
 
+        /// <summary>Times the one-time "What moved" card has been shown (0 = never; the ladder
+        /// presents it once, replay lives in Help).</summary>
+        public int WhatMovedCardShown { get; set; }
+
         /// <summary>Old tab keys followed to their new home. The "Moved: Section > Page" toast
         /// shows for the first three hits, then retires itself.</summary>
         public int NavMovedToastHits { get; set; }
+
+        /// <summary>The Ctrl+K palette's last five destinations (row ids, newest first), as a JSON
+        /// string array. Shown when the search box is empty; a stale id is skipped.</summary>
+        public string NavSearchRecents { get; set; } = "";
 
         /// <summary>Swap open and toggle gestures on Home feature tiles only.</summary>
         public bool DashboardInvertClicks { get; set; }
@@ -9249,6 +9257,23 @@ namespace ConditioningControlPanel.Models
         /// </summary>
         [JsonProperty("favorites_drawer_open")]
         public bool FavoritesDrawerOpen { get; set; } = false;
+
+        private Dictionary<string, DateTime> _billboardSnoozedUntil = new(StringComparer.Ordinal);
+        /// <summary>
+        /// The Tonight Board (2026-10-07): card id to the UTC time its snooze runs out, as WPF 7.1.5
+        /// stores it (<see cref="Services.Billboard.DashboardBillboard.SnoozeFor"/>). Kept so a
+        /// settings.json shared with the WPF app round-trips; this head's deck reads and writes its
+        /// snoozes through <c>BillboardSnoozeStore</c> (CCP.Core/Board), not this property.
+        /// Machine-local view state.
+        /// </summary>
+        [JsonProperty("billboard_snoozed_until")]
+        public Dictionary<string, DateTime> BillboardSnoozedUntil
+        {
+            get => _billboardSnoozedUntil;
+            set => _billboardSnoozedUntil = value == null
+                ? new Dictionary<string, DateTime>(StringComparer.Ordinal)
+                : new Dictionary<string, DateTime>(value, StringComparer.Ordinal);
+        }
 
         #endregion
 

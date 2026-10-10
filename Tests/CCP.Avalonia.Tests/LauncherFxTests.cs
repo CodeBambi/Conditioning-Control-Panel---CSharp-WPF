@@ -5,12 +5,14 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Headless;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using CCP.Avalonia.Testing;
 using ConditioningControlPanel;
+using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Avalonia.Views.Windows;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
@@ -179,6 +181,35 @@ public sealed class LauncherFxTests
         CoreSettings.Current.LauncherSoundEnabled = true;
         launcher.WindowState = WindowState.Normal;
         launcher.FindControl<Button>("BtnMinimize")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Assert.Equal(new[] { "launcher-click" }, cues);
+    });
+
+    /// <summary>WPF LauncherWindow.Sound.cs: a real click on the title-bar speaker mutes in silence,
+    /// repaints (slash, dim cone, unmute tooltip); unmuting answers with one click.</summary>
+    [Fact]
+    public void SpeakerButton_ByRealClick_MutesQuietly_UnmutesWithANote() => Run(MotionLevel.Full, (_, launcher, cues) =>
+    {
+        var btn = launcher.FindControl<Button>("BtnSound")!;
+        var slash = launcher.FindControl<global::Avalonia.Controls.Shapes.Path>("SoundSlash")!;
+        void Press()
+        {
+            var p = btn.TranslatePoint(new Point(btn.Bounds.Width / 2, btn.Bounds.Height / 2), launcher)!.Value;
+            launcher.MouseDown(p, MouseButton.Left);
+            launcher.MouseUp(p, MouseButton.Left);
+            Dispatcher.UIThread.RunJobs();
+        }
+        Assert.False(slash.IsVisible);
+        Assert.Equal(Loc.Get("launcher_sound_mute"), ToolTip.GetTip(btn));
+        cues.Clear();
+        Press();
+        Assert.False(CoreSettings.Current.LauncherSoundEnabled);
+        Assert.True(slash.IsVisible);
+        Assert.False(launcher.FindControl<global::Avalonia.Controls.Shapes.Path>("SoundWaves")!.IsVisible);
+        Assert.Equal(Loc.Get("launcher_sound_unmute"), ToolTip.GetTip(btn));
+        Assert.Empty(cues);
+        Press();
+        Assert.True(CoreSettings.Current.LauncherSoundEnabled);
+        Assert.False(slash.IsVisible);
         Assert.Equal(new[] { "launcher-click" }, cues);
     });
 

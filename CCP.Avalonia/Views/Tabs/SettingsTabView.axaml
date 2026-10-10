@@ -281,6 +281,9 @@
           </Border>
         </ControlTemplate>
       </Setter>
+      <Style Selector="^:focus-visible /template/ Border#FoldPlate">
+        <Setter Property="BorderBrush" Value="White"/>
+      </Style>
     </ControlTheme>
   </UserControl.Resources>
 
@@ -628,7 +631,7 @@
 
                 <TextBlock Text="{loc:Str intake_pass_card_footnote}"
                            Foreground="{DynamicResource TextMutedBrush}"
-                           FontSize="9" Opacity="0.75"
+                           FontSize="9"
                            TextAlignment="Center" TextWrapping="Wrap"
                            Margin="0,6,0,0"/>
               </StackPanel>

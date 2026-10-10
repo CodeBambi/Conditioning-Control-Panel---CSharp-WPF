@@ -74,11 +74,26 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public Func<bool>? IsAvailable { get; init; }
 
+        /// <summary>Retired names this place used to carry (NavSections.Aliases). Searched like
+        /// aliases; a hit through one shows a small "(was X)" beside the row.</summary>
+        public string[] OldNames { get; init; } = Array.Empty<string>();
+
         /// <summary>Studio rack key: the row opens the Studio on this module (OpenStudioModule).</summary>
         public string? RackKey { get; init; }
 
-        /// <summary>Launcher game id: the row starts the game the way the launcher tile does.</summary>
+        /// <summary>LauncherCatalogue id: the row starts the game the way the launcher does.</summary>
         public string? GameId { get; init; }
+
+        /// <summary>Library launcher key (mods, catalogue, phrases, medialog): the row opens that
+        /// dialog or window through MainWindow.OpenLibraryLauncher, the same verb as the strip pill.</summary>
+        public string? LauncherKey { get; init; }
+
+        /// <summary>Play wall zone the row lands on after ShowTab ("games" for the Games row), so the
+        /// row means the same thing as the Games pill even when the wall was scrolled down.</summary>
+        public string? PlayZone { get; init; }
+
+        /// <summary>The row opens the CC Labs launcher itself (the title-bar button's verb).</summary>
+        public bool OpensLauncher { get; init; }
 
         /// <summary>The caption key carries its own leading emoji (rack form labels); the palette
         /// draws the glyph itself, so the label drops it.</summary>
@@ -126,12 +141,6 @@ namespace ConditioningControlPanel.Services
         /// <summary>Seeded by the head with JustDropService.DoorAvailable. Fail-closed: unset or throwing hides the door.</summary>
         public static volatile Func<bool>? JustDropDoorAvailableProvider;
 
-        internal static bool JustDropDoorAvailable()
-        {
-            try { return JustDropDoorAvailableProvider?.Invoke() ?? false; }
-            catch { return false; }
-        }
-
         /// <summary>Seeded by the head: true when this head can start launcher game <c>id</c>
         /// (WPF LauncherCatalogue.Find(id)?.Available). Fail-closed: unset or throwing hides the row.</summary>
         public static volatile Func<string, bool>? GameAvailableProvider;
@@ -142,19 +151,19 @@ namespace ConditioningControlPanel.Services
             catch { return false; }
         }
 
-        /// <summary>"🫧 Bubble Pop" -> "Bubble Pop": drops leading symbols and spaces.</summary>
-        internal static string StripGlyph(string label)
+        internal static bool JustDropDoorAvailable()
         {
-            if (string.IsNullOrEmpty(label)) return label ?? string.Empty;
-            int i = 0;
-            while (i < label.Length && !char.IsLetterOrDigit(label[i])) i++;
-            return i >= label.Length ? label : label.Substring(i);
+            try { return JustDropDoorAvailableProvider?.Invoke() ?? false; }
+            catch { return false; }
         }
 
         // Group captions (also used as the first breadcrumb crumb).
         private const string GroupNav = "set2_palette_group_go_to";
-        private const string GroupLaunch = "launcher_panel_launch";
         private const string GroupDoors = "set2_palette_group_doors";
+        // Verbs for rows that do NOT navigate: a game row starts the game and a Library launcher
+        // opens a dialog, so their breadcrumb must not say "Go to" (desk run 2026-10-06).
+        private const string GroupLaunch = "launcher_panel_launch";
+        private const string GroupOpen = "btn_open";
         private const string GroupSettings = "nav_door_settings";
 
         private static readonly SettingsPaletteEntry[] _all = BuildEntries();
@@ -202,9 +211,167 @@ namespace ConditioningControlPanel.Services
             if (Starts(label, q)) return 100;
             if (WordStarts(label, q)) return 80;
             if (Contains(label, q)) return 60;
+            // An old name outranks a plain alias: "vault" means the place that WAS the Vault.
+            if (OldNameHit(e, q) != null) return 50;
             if (Contains(e.Aliases, q)) return 40;
             if (Contains(e.Context, q)) return 20;
             return 0;
+        }
+
+        private static string? OldNameHit(SettingsPaletteEntry e, string q)
+        {
+            foreach (var old in e.OldNames)
+                if (Contains(old, q)) return old;
+            return null;
+        }
+
+        /// <summary>
+        /// The retired name a query reached this row through, for the "(was X)" hint. Null when
+        /// the caption itself matched (nobody needs to be told a place was called what they typed
+        /// and still is) or when no old name matched.
+        /// </summary>
+        public static string? WasHint(SettingsPaletteEntry e, string? query)
+        {
+            var q = (query ?? string.Empty).Trim();
+            if (q.Length == 0 || e == null) return null;
+            if (Contains(e.Label, q)) return null;
+            return OldNameHit(e, q);
+        }
+
+        /// <summary>Drops a leading emoji (and the space after it) from a form label.</summary>
+        internal static string StripGlyph(string label)
+        {
+            if (string.IsNullOrEmpty(label)) return label ?? string.Empty;
+            int i = 0;
+            while (i < label.Length && !char.IsLetterOrDigit(label[i])) i++;
+            return i >= label.Length ? label : label.Substring(i);
+        }
+
+        /// <summary>
+        /// The closest thing to a query that found nothing: the row whose caption, old name or
+        /// alias word is a few typos away ("monitr", "vaul", "chesss"). Null when nothing is
+        /// close enough to be a fair guess. Returns the row and the word it matched, which is
+        /// what the window shows after "Try:".
+        /// </summary>
+        public static (SettingsPaletteEntry Entry, string Term)? Nearest(string? query)
+        {
+            var q = (query ?? string.Empty).Trim().ToLowerInvariant();
+            if (q.Length < 3) return null;
+
+            // A typo budget that grows with the word: 1 for short words, a third of the length after.
+            int budget = Math.Max(1, q.Length / 3);
+            (SettingsPaletteEntry Entry, string Term, int Dist)? best = null;
+
+            foreach (var e in _all)
+            {
+                if (!e.Available) continue;
+                foreach (var term in Terms(e))
+                {
+                    var t = term.ToLowerInvariant();
+                    if (Math.Abs(t.Length - q.Length) > budget) continue;
+                    int d = Distance(q, t, budget);
+                    if (d > budget) continue;
+                    if (best == null || d < best.Value.Dist)
+                        best = (e, term, d);
+                }
+            }
+            return best == null ? null : (best.Value.Entry, best.Value.Term);
+        }
+
+        /// <summary>Caption, each caption word, old names and alias words: what a typo is measured against.</summary>
+        private static IEnumerable<string> Terms(SettingsPaletteEntry e)
+        {
+            var label = e.Label;
+            if (!string.IsNullOrWhiteSpace(label))
+            {
+                yield return label;
+                foreach (var w in Words(label)) yield return w;
+            }
+            foreach (var old in e.OldNames)
+            {
+                yield return old;
+                foreach (var w in Words(old)) yield return w;
+            }
+            foreach (var w in Words(e.Aliases)) yield return w;
+        }
+
+        private static IEnumerable<string> Words(string? text) =>
+            (text ?? string.Empty)
+                .Split(new[] { ' ', '&', '/', ',', '-', '(', ')' }, StringSplitOptions.RemoveEmptyEntries)
+                .Where(w => w.Length >= 3);
+
+        /// <summary>Levenshtein distance with an early exit once every cell passes the budget.</summary>
+        internal static int Distance(string a, string b, int budget = int.MaxValue)
+        {
+            var prev = new int[b.Length + 1];
+            var cur = new int[b.Length + 1];
+            for (int j = 0; j <= b.Length; j++) prev[j] = j;
+            for (int i = 1; i <= a.Length; i++)
+            {
+                cur[0] = i;
+                int rowMin = cur[0];
+                for (int j = 1; j <= b.Length; j++)
+                {
+                    int cost = a[i - 1] == b[j - 1] ? 0 : 1;
+                    cur[j] = Math.Min(Math.Min(cur[j - 1] + 1, prev[j] + 1), prev[j - 1] + cost);
+                    if (cur[j] < rowMin) rowMin = cur[j];
+                }
+                if (rowMin > budget) return rowMin;
+                (prev, cur) = (cur, prev);
+            }
+            return prev[b.Length];
+        }
+
+        /// <summary>
+        /// Every page the palette can open, for the "Show all pages" row: doors, tabs, Settings
+        /// sections, Studio modules and games. Individual settings are left out (they are
+        /// controls, not pages).
+        /// </summary>
+        public static IReadOnlyList<SettingsPaletteEntry> AllPages() =>
+            _all.Where(e => e.Available && !e.Id.StartsWith("set.", StringComparison.Ordinal)).ToList();
+
+        /// <summary>How many recent destinations the empty box shows.</summary>
+        public const int RecentCap = 5;
+
+        /// <summary>Parses the recents setting (a JSON string array); garbage reads as empty.</summary>
+        public static List<string> ReadRecents(string? json)
+        {
+            if (string.IsNullOrWhiteSpace(json)) return new List<string>();
+            try
+            {
+                return (System.Text.Json.JsonSerializer.Deserialize<List<string>>(json!) ?? new List<string>())
+                    .Where(id => !string.IsNullOrWhiteSpace(id)).Take(RecentCap).ToList();
+            }
+            catch { return new List<string>(); }
+        }
+
+        /// <summary>The recents setting with <paramref name="id"/> moved to the front, capped.</summary>
+        public static string PushRecent(string? json, string? id)
+        {
+            var list = ReadRecents(json);
+            if (!string.IsNullOrWhiteSpace(id))
+            {
+                list.RemoveAll(x => string.Equals(x, id, StringComparison.Ordinal));
+                list.Insert(0, id!);
+            }
+            return System.Text.Json.JsonSerializer.Serialize(list.Take(RecentCap).ToList());
+        }
+
+        /// <summary>The recent rows that still exist and are available, newest first.</summary>
+        public static IReadOnlyList<SettingsPaletteEntry> Recents(string? json) =>
+            ReadRecents(json).Select(ById).Where(e => e != null && e.Available).Select(e => e!).ToList();
+
+        /// <summary>The row with this id, or null.</summary>
+        public static SettingsPaletteEntry? ById(string? id) =>
+            string.IsNullOrEmpty(id) ? null : _all.FirstOrDefault(e => string.Equals(e.Id, id, StringComparison.Ordinal));
+
+        /// <summary>Old names for a destination: NavSections.Aliases keyed by tab key, or by the
+        /// Settings section key for the gear's own sections.</summary>
+        private static string[] OldNamesFor(string? tabKey, string? sectionKey = null)
+        {
+            var key = !string.IsNullOrEmpty(sectionKey) ? sectionKey : tabKey;
+            if (string.IsNullOrEmpty(key)) return Array.Empty<string>();
+            return global::ConditioningControlPanel.Nav.NavSections.Aliases.TryGetValue(key!, out var names) ? names : Array.Empty<string>();
         }
 
         private static bool Starts(string haystack, string q) =>
@@ -259,6 +426,7 @@ namespace ConditioningControlPanel.Services
             // still a working alias but is no longer the name of anything that exists.
             Door("play", "nav_door_play", "🎮", "play", "play games lab");
             Door("you", "nav_door_you", "👤", "discord", "you profile progress");
+            Door("social", "nav_section_social", "🫂", "availablesubjects", "social lobby friends leash remote leaderboard together");
             Door("library", "nav_door_library", "📚", "assets", "library assets media");
             // The withheld Just Drop row (Studio > Creator Tools since 2026-09-11, a creator tool by
             // owner call). It carries the first IsAvailable predicate in this index: the row is
@@ -320,9 +488,20 @@ namespace ConditioningControlPanel.Services
             // thing that actually exists. The 🧪 flask is the Tier 2 lockband badge now, not a
             // room, so the rail's joystick is the honest glyph. Every card on the wall is listed
             // in the aliases so the palette finds a feature by name, not just by room.
-            Tab("play", "nav_door_play", "🕹️", "play",
-                "play lab experiments gaze focus blink trainer intake lockdown remote control loom tier 2 " +
-                "gaze minigame haptics vibration");
+            // Nav rework polish (2026-10-06): this row is the Games pill ("Go to > Play", caption
+            // Games) and lands on the Games zone, so it is the navigation twin of the game.* rows
+            // below, which LAUNCH. The Play door row above keeps the "Play" caption.
+            list.Add(new SettingsPaletteEntry
+            {
+                Id = "tab.play",
+                LabelKey = "nav_tab_games",
+                Glyph = "🕹️",
+                TabKey = "play",
+                PlayZone = "games",
+                ContextKeys = new[] { GroupNav, "nav_door_play" },
+                Aliases = "play games lab experiments gaze focus blink trainer intake lockdown remote control loom tier 2 " +
+                          "gaze minigame haptics vibration",
+            });
 
             // DECLARED AFTER Play on purpose, and the order is the whole point. Score() gives every
             // alias hit the same 40 and breaks ties by declaration order, so while this row sat
@@ -339,6 +518,10 @@ namespace ConditioningControlPanel.Services
             // palette can navigate to.
             Tab("deeper", "tab_deeper", "🌊", "deeper", "deeper files audio video");
             Tab("exclusives", "tab_exclusives", "⭐", "exclusives", "premium exclusives velvet vault showcase");
+            // Polish 12 (2026-10-07): the vault is a page again. The retired row above stays
+            // registered and out of search; this one answers, old names via NavSections.Aliases.
+            Tab("premium", "nav_tab_premium", "⭐", "premium",
+                "premium basic prime plan plans unlock unlocked tier showcase what do i get");
             // Pop Quiz's only switch (ChkPopQuizEnabled) lives on this page, so "turn off the pop
             // quiz" has to land here - asked in support 2026-09-16 and answered by hand.
             Tab("gradedintake", "tab_gradedintake", "📝", "gradedintake",
@@ -346,7 +529,7 @@ namespace ConditioningControlPanel.Services
             Tab("lockdown", "tab_lockdown_mode", "🔒", "lockdown", "lockdown lock kiosk");
             Tab("blinktrainer", "tab_blink_trainer", "👀", "blinktrainer", "blink trainer eyes");
             Tab("remotecontrol", "tab_remote_control", "📱", "remotecontrol", "remote control phone");
-            Tab("availablesubjects", "tab_available_subjects", "🛰️", "availablesubjects", "lobby tables open join host chess goon remote subjects online users");
+            Tab("availablesubjects", "nav_tab_lobby", "🛰️", "availablesubjects", "lobby tables open tables open join host chess goon remote subjects online users social");
             Tab("discord", "tab_profile", "👤", "discord", "profile trainer card wardrobe");
             // The Spiral Room (CONTRACT-FUSE-0816 2.4), which replaced the map window. Listed like
             // every other live ShowTab key and deliberately NOT gated on the block: the palette has
@@ -364,41 +547,35 @@ namespace ConditioningControlPanel.Services
                 "skill tree enhancements perks streak pause streak freeze streak shield streak fix " +
                 "vacation away days off");
             Tab("programs", "tab_programs", "📅", "programs", "programs training multi day");
-            Tab("leaderboard", "tab_leaderboard", "📊", "leaderboard", "leaderboard ranks");
+            Tab("leaderboard", "tab_leaderboard", "📊", "leaderboard", "leaderboard ranks ranking rankings top players");
             Tab("assets", "tab_assets", "📁", "assets", "assets images videos packs folder");
             Tab("fyp", "tab_fyp", "📲", "fyp", "for you feed scroll fyp");
             Tab("appsettings", "tab_settings", "⚙️", "appsettings", "settings options preferences");
 
-            // ---- Library launchers (Phase 7) --------------------------------------------
-            // Four things the Library door opens that are NOT tabs: a dialog, a website, a dialog
-            // and a window. The palette has exactly one navigation verb - ShowTab - so a row here
-            // cannot press a button for the user, and inventing a second verb would put window
-            // launches behind a search box where a mistyped Enter opens a modal. These rows
-            // therefore do what the index says it does everywhere else: they take you to where the
-            // thing LIVES. TabKey "assets" is the Library door's default destination (opening the
-            // door via ExpandDoorForTab for free), and ElementNames pulses the rail row that
-            // launches it, so the answer to "where is the phrase manager" is the button itself.
-            //
-            // If the palette ever grows a launch verb, these four are its first customers.
-            void Launcher(string id, string labelKey, string glyph, string element, string aliases) =>
+            // ---- Library launchers -------------------------------------------------------
+            // Four things the Library opens that are NOT tabs: a dialog, a website, a dialog and a
+            // window. Nav rework (2026-10-06): their rail rows are gone, so these rows open the
+            // thing itself through MainWindow.OpenLibraryLauncher, the verb the Library strip's
+            // pills use. Same rows, same ids, so pinned favourites keep working.
+            void Launcher(string id, string labelKey, string glyph, string aliases) =>
                 list.Add(new SettingsPaletteEntry
                 {
                     Id = "launch." + id,
                     LabelKey = labelKey,
                     Glyph = glyph,
                     TabKey = "assets",
-                    ElementNames = new[] { element },
-                    ContextKeys = new[] { GroupNav, "nav_door_library" },
+                    LauncherKey = id,
+                    ContextKeys = new[] { GroupOpen, "nav_door_library" },
                     Aliases = aliases,
                 });
 
-            Launcher("mods", "yl7_nav_mods", "🧩", "BtnNavMods",
+            Launcher("mods", "yl7_nav_mods", "🧩",
                      "mods mod manager install ccpmod creator themes packs");
-            Launcher("catalogue", "yl7_nav_catalogue", "🌐", "BtnNavCatalogue",
+            Launcher("catalogue", "yl7_nav_catalogue", "🌐",
                      "catalogue community share browse presets sessions download");
-            Launcher("phrases", "yl7_nav_phrases", "💬", "BtnNavPhrases",
+            Launcher("phrases", "yl7_nav_phrases", "💬",
                      "phrase manager text pools mantras subliminals barks lines");
-            Launcher("medialog", "yl7_nav_medialog", "🎞️", "BtnNavMediaLog",
+            Launcher("medialog", "yl7_nav_medialog", "🎞️",
                      "media log history what did i see flashes videos recently shown");
 
             // ---- two title-bar buttons ---------------------------------------------------
@@ -410,14 +587,21 @@ namespace ConditioningControlPanel.Services
             // ("where in the app is the bug report button?", answered with a screenshot), and the
             // games moved into the CC Labs launcher on 2026-09-18, which took the Arcademy's
             // palette row with them - so the honest answer is "through this button", not nothing.
-            void TitleBarButton(string id, string labelKey, string glyph, string element, string aliases) =>
+            // Breadcrumbs (desk run 2026-10-06): a bare "Go to" read as an empty path. The bug
+            // button is pulsed where it sits ("Go to > Title bar"); the CC Labs row opens the
+            // launcher itself, the same verb as the button, so it says Open.
+            void TitleBarButton(string id, string labelKey, string glyph, string element, string aliases,
+                                bool opensLauncher = false) =>
                 list.Add(new SettingsPaletteEntry
                 {
                     Id = "chrome." + id,
                     LabelKey = labelKey,
                     Glyph = glyph,
                     ElementNames = new[] { element },
-                    ContextKeys = new[] { GroupNav },
+                    ContextKeys = opensLauncher
+                        ? new[] { GroupOpen, "set2_palette_all_games" }
+                        : new[] { GroupNav, "set2_palette_title_bar" },
+                    OpensLauncher = opensLauncher,
                     Aliases = aliases,
                 });
 
@@ -425,7 +609,8 @@ namespace ConditioningControlPanel.Services
                            "bug report feedback crash log problem broken send report suggestion");
             TitleBarButton("cclabs", "launcher_window_title", "🕹", "BtnBackToLauncher",
                            "cc labs launcher games arcademy academy campus school back room casino "
-                           + "racing thoughts race goon game rabbit hole piece by piece");
+                           + "racing thoughts race goon game rabbit hole piece by piece",
+                           opensLauncher: true);
 
             // ---- the eight Settings sections -------------------------------------------
             void Section(string key, string labelKey, string glyph, string aliases) =>
@@ -446,7 +631,7 @@ namespace ConditioningControlPanel.Services
             Section("performance", "set2_section_performance", "⚡", "performance motion gpu rendering");
             Section("notifications", "set2_section_notifications", "🔔", "notifications reminders nudge");
             Section("emidesk", "set2_section_emidesk", "📺", "emi desk widget companion mascot summon hotkey mute avatar spice glass offers");
-            Section("account", "set2_section_account", "👤", "account login patreon discord subscribestar tier");
+            Section("account", "settings_section_plans", "👤", "account plans login patreon discord subscribestar tier upgrade invites subscription");
             Section("data", "set2_section_data", "💾", "data backup export import offline reset");
             Section("updates", "set2_section_updates", "⬆️", "updates version patch notes changelog");
 
@@ -511,9 +696,9 @@ namespace ConditioningControlPanel.Services
             // surface only the WEBCAM's calibration monitor, which moves nothing (ask-support
             // 2026-09-08 - the reporter found that row, changed it, and content still covered
             // every screen).
-            Setting("content_monitor", "setting_content_monitor", "🖥️", "general",
-                    new[] { "ContentMonitorPicker", "CmbContentMonitor", "DisplayGeneralCard" },
-                    "set2_section_general",
+            Setting("content_monitor", "setting_content_monitor", "🖥️", "monitors",
+                    new[] { "ContentMonitorPicker", "CmbContentMonitor" },
+                    "settings_section_monitors",
                     "monitor screen display multi monitor dual monitor second screen one screen "
                     + "single monitor primary only all monitors show content on");
             Setting("enable_deeper", "setting_deeper_enable", "🌊", "general",
@@ -581,18 +766,18 @@ namespace ConditioningControlPanel.Services
 
             // Account (landed)
             Setting("patreon_login", "set2_palette_patreon_login", "🅿️", "account",
-                    new[] { "BtnPatreonLogin", "PatreonLoginCard" }, "set2_section_account",
+                    new[] { "BtnPatreonLogin", "PatreonLoginCard" }, "settings_section_plans",
                     "patreon login connect subscription");
             Setting("discord_login", "set2_palette_discord_login", "💬", "account",
-                    new[] { "BtnDiscordLogin", "DiscordLoginCard" }, "set2_section_account", "discord login link");
+                    new[] { "BtnDiscordLogin", "DiscordLoginCard" }, "settings_section_plans", "discord login link");
             Setting("link_accounts", "label_link_accounts", "🔗", "account",
-                    new[] { "AccountLinkingSection", "BtnLinkPatreon" }, "set2_section_account",
+                    new[] { "AccountLinkingSection", "BtnLinkPatreon" }, "settings_section_plans",
                     "link accounts patreon discord");
             Setting("cloud_backup", "label_cloud_settings_backup", "☁️", "account",
-                    new[] { "BtnBackupSettingsNow", "CloudSettingsBackupSection" }, "set2_section_account",
+                    new[] { "BtnBackupSettingsNow", "CloudSettingsBackupSection" }, "settings_section_plans",
                     "cloud backup restore settings sync");
             Setting("data_privacy", "label_data_privacy", "🛡️", "account",
-                    new[] { "BtnExportData", "DataPrivacySection" }, "set2_section_account",
+                    new[] { "BtnExportData", "DataPrivacySection" }, "settings_section_plans",
                     "privacy export data policy gdpr");
 
             // Data
@@ -615,12 +800,35 @@ namespace ConditioningControlPanel.Services
             // ---- the 2026-10-06 rework's new pages ---------------------------------------
             AddNavRework(list);
 
+            // Old names (NavSections.Aliases) ride on whichever rows land where the old page
+            // used to be. Rows whose key is a retired redirect stay registered (the door/tab
+            // parity tests read All) but drop out of search: the new home answers for them.
+            for (int i = 0; i < list.Count; i++)
+            {
+                var e = list[i];
+                var old = e.Id.StartsWith("set.", StringComparison.Ordinal) ? Array.Empty<string>() : OldNamesFor(e.TabKey, e.SectionKey);
+                bool retired = !string.IsNullOrEmpty(e.TabKey) && global::ConditioningControlPanel.Nav.NavSections.Redirects.ContainsKey(e.TabKey);
+                if (old.Length == 0 && !retired) continue;
+                list[i] = new SettingsPaletteEntry
+                {
+                    Id = e.Id, LabelKey = e.LabelKey, Glyph = e.Glyph, TabKey = e.TabKey,
+                    SectionKey = e.SectionKey, ElementNames = e.ElementNames, ContextKeys = e.ContextKeys,
+                    Aliases = e.Aliases, RackKey = e.RackKey, GameId = e.GameId,
+                    LauncherKey = e.LauncherKey, PlayZone = e.PlayZone, OpensLauncher = e.OpensLauncher,
+                    StripLeadingGlyph = e.StripLeadingGlyph,
+                    OldNames = old.Length > 0 ? old : e.OldNames,
+                    IsAvailable = retired ? () => false : e.IsAvailable,
+                };
+            }
+
             return list.ToArray();
         }
 
         /// <summary>
-        /// Rows the nav rework (2026-10-06) added (WPF 7.1.5 SettingsPaletteIndex.AddNavRework): the
-        /// new pills, Settings › Monitors, one row per Studio rack module and one per launcher game.
+        /// Rows the nav rework (2026-10-06) added: the new pills (Personality, Permissions, Links,
+        /// Friends, Leash, Folders, Sessions, Eyes, Scheduler &amp; Ramp, Settings › Monitors), one
+        /// row per Studio rack module, and one per launcher game. Kept apart from the authored
+        /// list above so the history of that list stays readable.
         /// </summary>
         private static void AddNavRework(List<SettingsPaletteEntry> list)
         {
@@ -675,6 +883,7 @@ namespace ConditioningControlPanel.Services
 
             // ---- Studio rack modules ---------------------------------------------------
             // One row per module so "bubble pop" opens Bubble Pop, not the rack's first module.
+            // Haptics and Scheduler/Ramp are not here: they are pills with rows of their own.
             void Rack(string key, string labelKey, string glyph, string aliases) =>
                 list.Add(new SettingsPaletteEntry
                 {
@@ -702,8 +911,8 @@ namespace ConditioningControlPanel.Services
             Rack("braindrain", "section_brain_drain", "💧", "brain drain blur melt screen blur");
 
             // ---- launcher games ----------------------------------------------------------
-            // Start the game the way the launcher tile does. A game this head cannot start
-            // (GameAvailableProvider) is hidden from search.
+            // Start the game the way the launcher tile does (LauncherCatalogue + its account
+            // rule). A game the catalogue reports unavailable is hidden from search.
             void Game(string id, string glyph, string aliases) =>
                 list.Add(new SettingsPaletteEntry
                 {
@@ -711,10 +920,11 @@ namespace ConditioningControlPanel.Services
                     LabelKey = "launcher_game_" + id + "_title",
                     Glyph = glyph,
                     GameId = id,
-                    // "Launch > CC Labs", never "Go to": the row starts the game.
+                    // "Launch > CC Labs", never "Go to": the row starts the game (desk run 2026-10-06,
+                    // shot 09f). The Games row (tab.play) is the navigation twin.
                     ContextKeys = new[] { GroupLaunch, "launcher_window_title" },
                     Aliases = aliases,
-                    IsAvailable = () => GameAvailable(id),
+                    IsAvailable = () => GameAvailable(id),   // a game this head cannot start is hidden from search
                 });
 
             Game("backroom", "🎰", "back room casino slots slot machine wheel blackjack roulette sparkle points");

@@ -641,7 +641,6 @@ public sealed class LeashHolderCard : Border
         g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         var box = new TextBox
         {
-            MaxLength = 8,
             FontFamily = FriendsLook.Mono,
             FontSize = 12.5,
             Foreground = FriendsLook.TextBrush,

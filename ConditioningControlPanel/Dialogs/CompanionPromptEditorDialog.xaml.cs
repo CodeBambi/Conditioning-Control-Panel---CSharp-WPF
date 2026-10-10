@@ -41,7 +41,6 @@ namespace ConditioningControlPanel
         /// </summary>
         private readonly CompanionPromptSettings _defaults;
         private bool _hasUnsavedChanges;
-        private readonly ObservableCollection<KnowledgeBaseLink> _knowledgeLinks = new();
 
         public CompanionPromptEditorDialog()
         {
@@ -114,31 +113,17 @@ namespace ConditioningControlPanel
         /// </summary>
         private void LoadKnowledgeLinks()
         {
-            _knowledgeLinks.Clear();
-            var links = App.Settings?.Current?.GlobalKnowledgeBaseLinks;
-            if (links != null)
-            {
-                foreach (var link in links)
-                {
-                    _knowledgeLinks.Add(link);
-                }
-            }
-            LstKnowledgeLinks.ItemsSource = _knowledgeLinks;
+            KnowledgeLinks.Load();
+            KnowledgeLinks.Changed -= KnowledgeLinks_Changed;
+            KnowledgeLinks.Changed += KnowledgeLinks_Changed;
         }
+
+        private void KnowledgeLinks_Changed(object? sender, EventArgs e) => _hasUnsavedChanges = true;
 
         /// <summary>
         /// Saves global knowledge base links from the list.
         /// </summary>
-        private void SaveKnowledgeLinks()
-        {
-            if (App.Settings?.Current == null) return;
-
-            App.Settings.Current.GlobalKnowledgeBaseLinks.Clear();
-            foreach (var link in _knowledgeLinks)
-            {
-                App.Settings.Current.GlobalKnowledgeBaseLinks.Add(link);
-            }
-        }
+        private void SaveKnowledgeLinks() => KnowledgeLinks.SaveToSettings();
 
         /// <summary>
         /// Updates the active prompt name display in the header.
@@ -239,7 +224,7 @@ namespace ConditioningControlPanel
             _hasUnsavedChanges = false;
 
             App.Logger?.Information("Companion prompt settings saved. UseCustomPrompt={UseCustom}, GlobalLinks={LinkCount}",
-                settings.UseCustomPrompt, _knowledgeLinks.Count);
+                settings.UseCustomPrompt, KnowledgeLinks.Links.Count);
         }
 
         private void UpdateEnabledState()
@@ -289,30 +274,6 @@ namespace ConditioningControlPanel
         private void ResetOutputRules_Click(object sender, RoutedEventArgs e)
         {
             TxtOutputRules.Text = _defaults.OutputRules;
-        }
-
-        private void AddKnowledgeLink_Click(object sender, RoutedEventArgs e)
-        {
-            var dialog = new KnowledgeLinkEditorDialog { Owner = this };
-            if (dialog.ShowDialog() == true && dialog.Result != null)
-            {
-                _knowledgeLinks.Add(dialog.Result);
-                _hasUnsavedChanges = true;
-            }
-        }
-
-        private void RemoveKnowledgeLink_Click(object sender, RoutedEventArgs e)
-        {
-            if (LstKnowledgeLinks.SelectedItem is KnowledgeBaseLink link)
-            {
-                _knowledgeLinks.Remove(link);
-                _hasUnsavedChanges = true;
-            }
-            else
-            {
-                MessageBox.Show(Loc.Get("msg_please_select_a_link_to_remove"), "No Selection",
-                    MessageBoxButton.OK, MessageBoxImage.Information);
-            }
         }
 
         private void ResetAll_Click(object sender, RoutedEventArgs e)

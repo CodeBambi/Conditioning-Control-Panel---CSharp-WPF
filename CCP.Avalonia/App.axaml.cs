@@ -57,8 +57,8 @@ namespace ConditioningControlPanel.Avalonia
 
         /// <summary>WPF App.xaml.cs:2527-2536 plus the CoreQuests seeds of :398-421. Seeded where this
         /// head has the service. The streak shield is WPF SkillTreeService.UseStreakShield (:378) over
-        /// Core settings; perfect-week bonus and Programs (TrackVerifier) stay unseeded: no bonus,
-        /// no program tracking - the WPF "service is null" answers.</summary>
+        /// Core settings; the perfect-week bonus stays unseeded (the WPF "service is null" answer).
+        /// Programs (TrackVerifier) is seeded next to the ProgramService below.</summary>
         private static void StartQuests()
         {
             CoreQuests.PatreonVerifyingProvider = () => Platform.AccountSeed.Patreon?.IsVerifying;
@@ -83,6 +83,7 @@ namespace ConditioningControlPanel.Avalonia
             var definitions = new QuestDefinitionService();
             _ = definitions.InitializeAsync(); // cache first, then the server, as WPF
             Quests = new QuestService(definitions);
+            global::ConditioningControlPanel.Services.Companion.ConversationDelivery.QuestsOpenProvider = () => Quests?.HasUnfinishedQuest();
             definitions.QuestDefinitionsUpdated += () => Quests?.CheckAndGenerateQuests();
             // WPF ProgressionService.AddXP:120 feeds every award to the "earn X XP" quests.
             ProgressionBank.Awarded += (amount, _) => Quests?.TrackXPEarned((int)amount);
@@ -726,6 +727,8 @@ namespace ConditioningControlPanel.Avalonia
                 };
                 SeedLevelAchievements(Achievements);
                 StartQuests();
+                // WPF App.xaml.cs:513 (main 03af6e8bb): a preset that switches the online selection re-deals every channel.
+                ConditioningControlPanel.Services.AssetPresetService.OnlineChannelsReset = ConditioningControlPanel.Services.Fyp.Online.FypOnlineCoordinator.ResetAllChannels;
                 // programs-3a: refuse programs whose required tasks this head never raises. Seeded
                 // before the service so it is never unset.
                 CoreProgram.TaskAvailableProvider = Platform.ProgramCapabilities.IsAvailable;

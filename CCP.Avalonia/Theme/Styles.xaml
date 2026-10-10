@@ -28,11 +28,54 @@
     <Setter Property="BorderBrush" Value="{DynamicResource GlassBorderBrush}"/>
   </ControlTheme>
 
-  <!-- MainWindow.xaml:542 -->
-  <ControlTheme x:Key="SectionHeader" TargetType="TextBlock">
-    <Setter Property="Foreground" Value="{DynamicResource PinkSoftBrush}"/>
-    <Setter Property="FontSize" Value="14"/>
+  <!-- Readability pass (polish 8, MainWindow.xaml baff475e4 / 4f22d0478): THE TYPE SCALE. Six levels,
+       one shared theme each: 26 / 18 / 13.5 / 13 / 11.5 / 11. WPF "/Fonts/#Fredoka" is not packed
+       on this head, so the family falls back by name (as ChaosHudWindow does). -->
+  <ControlTheme x:Key="Type.PageTitle" TargetType="TextBlock">
+    <Setter Property="FontFamily" Value="Fredoka, Segoe UI"/>
+    <Setter Property="FontSize" Value="26"/>
     <Setter Property="FontWeight" Value="SemiBold"/>
+    <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+    <Setter Property="TextWrapping" Value="NoWrap"/>
+    <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+  </ControlTheme>
+  <ControlTheme x:Key="Type.PageSubtitle" TargetType="TextBlock">
+    <Setter Property="FontSize" Value="13.5"/>
+    <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+    <Setter Property="TextWrapping" Value="Wrap"/>
+  </ControlTheme>
+  <ControlTheme x:Key="Type.SectionHeader" TargetType="TextBlock">
+    <Setter Property="FontFamily" Value="Consolas, Courier New"/>
+    <Setter Property="FontSize" Value="11"/>
+    <Setter Property="FontWeight" Value="Bold"/>
+    <Setter Property="Foreground" Value="{DynamicResource SectionInkBrush}"/>
+    <Setter Property="Margin" Value="0,0,0,6"/>
+  </ControlTheme>
+  <ControlTheme x:Key="Type.CardTitle" TargetType="TextBlock">
+    <Setter Property="FontSize" Value="18"/>
+    <Setter Property="FontWeight" Value="Bold"/>
+    <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+    <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+  </ControlTheme>
+  <ControlTheme x:Key="Type.Body" TargetType="TextBlock">
+    <Setter Property="FontSize" Value="13"/>
+    <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+    <Setter Property="TextWrapping" Value="Wrap"/>
+  </ControlTheme>
+  <ControlTheme x:Key="Type.Label" TargetType="TextBlock">
+    <Setter Property="FontSize" Value="11.5"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+    <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+  </ControlTheme>
+  <ControlTheme x:Key="Type.Caption" TargetType="TextBlock">
+    <Setter Property="FontSize" Value="11"/>
+    <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+    <Setter Property="TextWrapping" Value="Wrap"/>
+  </ControlTheme>
+
+  <!-- MainWindow.xaml:606. Polish 8: the eyebrow of the type scale (11 Bold Consolas in the section
+       ink, was 14 SemiBold PinkSoft); every SectionHeader user follows. -->
+  <ControlTheme x:Key="SectionHeader" TargetType="TextBlock" BasedOn="{StaticResource Type.SectionHeader}">
     <Setter Property="Margin" Value="0,0,0,8"/>
   </ControlTheme>
 
@@ -83,9 +126,9 @@
   </ControlTheme>
 
   <!-- MainWindow.xaml:550. Used by 36 view sites. -->
-  <ControlTheme x:Key="SettingLabel" TargetType="TextBlock">
+  <ControlTheme x:Key="SettingLabel" TargetType="TextBlock" BasedOn="{StaticResource Type.Body}">
     <Setter Property="Foreground" Value="{StaticResource TextLightBrush}"/>
-    <Setter Property="FontSize" Value="13"/>
+    <Setter Property="TextWrapping" Value="NoWrap"/>
     <Setter Property="VerticalAlignment" Value="Center"/>
   </ControlTheme>
 

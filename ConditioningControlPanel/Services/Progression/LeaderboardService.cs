@@ -42,7 +42,8 @@ public class LeaderboardService : IDisposable
     public string CurrentSortBy { get; private set; } = "level";
 
     /// <summary>Current leaderboard mode (monthly or all-time)</summary>
-    public string CurrentMode { get; private set; } = "monthly";
+    /// <summary>Seasons are retired (owner, 2026-09-24): the board opens on All-Time.</summary>
+    public string CurrentMode { get; private set; } = "all-time";
 
     /// <summary>Last successful refresh time</summary>
     public DateTime? LastRefreshTime { get; private set; }
@@ -105,11 +106,6 @@ public class LeaderboardService : IDisposable
                 OnlineUsers = result.OnlineUsers;
                 YourRank = result.YourRank;
                 YourTotal = result.YourTotal;
-
-                // Season Recap (decision #1): client-sampled season peak rank. Only the
-                // monthly board maps to a season; ignore the all-time board.
-                if (mode != "all-time" && YourRank.HasValue)
-                    SeasonRecapService.SampleRank(YourRank.Value, YourTotal ?? TotalUsers);
 
                 CurrentSortBy = sortBy;
                 CurrentMode = mode;

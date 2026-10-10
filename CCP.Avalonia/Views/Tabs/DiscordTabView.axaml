@@ -92,9 +92,7 @@
 
                     <!-- ===================== header ===================== -->
                     <Grid Margin="2,0,2,14" ColumnDefinitions="Auto,Auto,*,Auto">
-                        <TextBlock Grid.Column="0" Text="{loc:Str profile_tab_heading}"
-                                   FontWeight="SemiBold"
-                                   FontSize="25" Foreground="White" VerticalAlignment="Center">
+                        <TextBlock Theme="{StaticResource Type.PageTitle}" Grid.Column="0" Text="{loc:Str profile_tab_heading}" VerticalAlignment="Center">
                             <TextBlock.Effect>
                                 <DropShadowEffect Color="#FF69B4" BlurRadius="18" OffsetX="0" OffsetY="0" Opacity="0.8"/>
                             </TextBlock.Effect>
@@ -541,7 +539,7 @@
                                             </Border>
                                             <StackPanel Grid.Row="1" Orientation="Horizontal">
                                                 <TextBlock x:Name="TxtProfileXpProgress"
-                                                           Text="0 / 0 XP" Foreground="#B8B1CC" FontSize="11" Margin="0,5,0,0"
+                                                           Text="0 / 0 XP" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11" Margin="0,5,0,0"
                                                            VerticalAlignment="Center"/>
 
                                                 <!-- THE DESCENT RECEIPT (v6.9.1). The migration
@@ -701,7 +699,7 @@
                             <TextBlock Text="👤" FontSize="34" HorizontalAlignment="Center" Margin="0,0,0,10"/>
                             <TextBlock Text="{loc:Str label_search_for_a_user}" Foreground="{DynamicResource TextMutedBrush}"
                                        FontSize="14" HorizontalAlignment="Center"/>
-                            <TextBlock Text="{loc:Str label_or_click_my_profile}" Foreground="#8079A3" FontSize="12"
+                            <TextBlock Text="{loc:Str label_or_click_my_profile}" Foreground="{DynamicResource TextMutedBrush}" FontSize="12"
                                        HorizontalAlignment="Center" Margin="0,5,0,0"/>
                         </StackPanel>
                     </Border>
@@ -726,7 +724,7 @@
                                     <Border Grid.Column="0" Width="34" Height="34" CornerRadius="7" Background="{DynamicResource PanelAccentBrush}">
                                         <Image x:Name="ImgStatXp" Stretch="Uniform" Margin="2"/>
                                     </Border>
-                                    <TextBlock Grid.Column="1" Text="{loc:Str label_xp}" Foreground="#B8B1CC" FontSize="11"
+                                    <TextBlock Grid.Column="1" Text="{loc:Str label_xp}" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11"
                                                VerticalAlignment="Center" Margin="10,0,8,0" TextTrimming="CharacterEllipsis"/>
                                     <TextBlock Grid.Column="2" x:Name="TxtProfileViewerXp" Text="0"
                                                Foreground="White" FontSize="15" FontWeight="Bold" FontFamily="Consolas, Courier New"
@@ -738,7 +736,7 @@
                                     <Border Grid.Column="0" Width="34" Height="34" CornerRadius="7" Background="{DynamicResource PanelAccentBrush}">
                                         <Image x:Name="ImgStatBubbles" Stretch="Uniform" Margin="2"/>
                                     </Border>
-                                    <TextBlock Grid.Column="1" Text="{loc:Str label_bubbles_2}" Foreground="#B8B1CC" FontSize="11"
+                                    <TextBlock Grid.Column="1" Text="{loc:Str label_bubbles_2}" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11"
                                                VerticalAlignment="Center" Margin="10,0,8,0" TextTrimming="CharacterEllipsis"/>
                                     <TextBlock Grid.Column="2" x:Name="TxtProfileViewerBubbles" Text="0"
                                                Foreground="White" FontSize="15" FontWeight="Bold" FontFamily="Consolas, Courier New"
@@ -750,7 +748,7 @@
                                     <Border Grid.Column="0" Width="34" Height="34" CornerRadius="7" Background="{DynamicResource PanelAccentBrush}">
                                         <Image x:Name="ImgStatVideos" Stretch="Uniform" Margin="2"/>
                                     </Border>
-                                    <TextBlock Grid.Column="1" Text="{loc:Str label_videos}" Foreground="#B8B1CC" FontSize="11"
+                                    <TextBlock Grid.Column="1" Text="{loc:Str label_videos}" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11"
                                                VerticalAlignment="Center" Margin="10,0,8,0" TextTrimming="CharacterEllipsis"/>
                                     <TextBlock Grid.Column="2" x:Name="TxtProfileViewerVideos"
                                                Foreground="White" FontSize="15" FontWeight="Bold" FontFamily="Consolas, Courier New"
@@ -762,7 +760,7 @@
                                     <Border Grid.Column="0" Width="34" Height="34" CornerRadius="7" Background="{DynamicResource PanelAccentBrush}">
                                         <Image x:Name="ImgStatGifs" Stretch="Uniform" Margin="2"/>
                                     </Border>
-                                    <TextBlock Grid.Column="1" Text="{loc:Str label_flashes}" Foreground="#B8B1CC" FontSize="11"
+                                    <TextBlock Grid.Column="1" Text="{loc:Str label_flashes}" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11"
                                                VerticalAlignment="Center" Margin="10,0,8,0" TextTrimming="CharacterEllipsis"/>
                                     <TextBlock Grid.Column="2" x:Name="TxtProfileViewerGifs" Text="0"
                                                Foreground="White" FontSize="15" FontWeight="Bold" FontFamily="Consolas, Courier New"
@@ -774,7 +772,7 @@
                                     <Border Grid.Column="0" Width="34" Height="34" CornerRadius="7" Background="{DynamicResource PanelAccentBrush}">
                                         <Image x:Name="ImgStatLockCards" Stretch="Uniform" Margin="2"/>
                                     </Border>
-                                    <TextBlock Grid.Column="1" Text="{loc:Str label_lock_cards_2}" Foreground="#B8B1CC" FontSize="11"
+                                    <TextBlock Grid.Column="1" Text="{loc:Str label_lock_cards_2}" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11"
                                                VerticalAlignment="Center" Margin="10,0,8,0" TextTrimming="CharacterEllipsis"/>
                                     <TextBlock Grid.Column="2" x:Name="TxtProfileViewerLockCards" Text="0"
                                                Foreground="White" FontSize="15" FontWeight="Bold" FontFamily="Consolas, Courier New"
@@ -786,7 +784,7 @@
                                     <Border Grid.Column="0" Width="34" Height="34" CornerRadius="7" Background="{DynamicResource PanelAccentBrush}">
                                         <Image x:Name="ImgStatAchievements" Stretch="Uniform" Margin="2"/>
                                     </Border>
-                                    <TextBlock Grid.Column="1" Text="{loc:Str label_achievements}" Foreground="#B8B1CC" FontSize="11"
+                                    <TextBlock Grid.Column="1" Text="{loc:Str label_achievements}" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11"
                                                VerticalAlignment="Center" Margin="10,0,8,0" TextTrimming="CharacterEllipsis"/>
                                     <TextBlock Grid.Column="2" x:Name="TxtProfileViewerAchievements" Text="0"
                                                Foreground="White" FontSize="15" FontWeight="Bold" FontFamily="Consolas, Courier New"
@@ -806,7 +804,7 @@
                                                Text="{loc:Str profile_showcase_title}"
                                                FontWeight="Medium"
                                                FontSize="15" Foreground="White"/>
-                                    <TextBlock Text="{loc:Str profile_showcase_hint}" Foreground="#8079A3" FontSize="11"
+                                    <TextBlock Text="{loc:Str profile_showcase_hint}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                                HorizontalAlignment="Right" VerticalAlignment="Center"/>
                                 </Grid>
 
@@ -862,7 +860,7 @@
                                         <TextBlock Text="☆" Foreground="#59FFD700" FontSize="26"
                                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                     </Border>
-                                    <TextBlock Text="{loc:Str profile_showcase_pins_empty}" Foreground="#8079A3"
+                                    <TextBlock Text="{loc:Str profile_showcase_pins_empty}" Foreground="{DynamicResource TextMutedBrush}"
                                                FontSize="11" FontStyle="Italic" VerticalAlignment="Center"
                                                TextWrapping="Wrap" Margin="4,0,0,10" MaxWidth="180"/>
                                 </StackPanel>
@@ -897,7 +895,7 @@
                                             </ItemsControl.ItemTemplate>
                                         </ItemsControl>
                                         <TextBlock x:Name="TxtNoAchievements"
-                                                   Foreground="#8079A3" FontSize="11" FontStyle="Italic"
+                                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="11" FontStyle="Italic"
                                                    HorizontalAlignment="Center" IsVisible="False"/>
                                     </StackPanel>
                                 </Expander>
@@ -917,9 +915,9 @@
                                 </Border>
                                 <Grid Margin="0,6,0,0">
                                     <TextBlock x:Name="TxtProfileUnlockSummary"
-                                               Foreground="#B8B1CC" FontSize="11"/>
+                                               Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11"/>
                                     <TextBlock x:Name="TxtProfileNextUp"
-                                               Foreground="#8079A3" FontSize="11" HorizontalAlignment="Right"
+                                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11" HorizontalAlignment="Right"
                                                TextTrimming="CharacterEllipsis" MaxWidth="320"/>
                                 </Grid>
                             </StackPanel>
@@ -974,7 +972,7 @@
                                     <StackPanel>
                                         <TextBlock Text="{loc:Str profile_friends_where_title}" Foreground="#E7DEFF"
                                                    FontSize="11" FontWeight="Bold"/>
-                                        <TextBlock Text="{loc:Str profile_friends_where_body}" Foreground="#9A93B8"
+                                        <TextBlock Text="{loc:Str profile_friends_where_body}" Foreground="{DynamicResource TextMutedBrush}"
                                                    FontSize="11" TextWrapping="Wrap" Margin="0,3,0,0"/>
                                     </StackPanel>
                                 </Border>
@@ -983,7 +981,7 @@
                                 <Rectangle Height="1" Fill="#1FFFFFFF" Margin="0,0,0,9"/>
                                 <Grid ColumnDefinitions="*,Auto">
                                     <TextBlock Grid.Column="0" x:Name="TxtProfileSharingSummary"
-                                               Foreground="#9A93B8" FontSize="11" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11" VerticalAlignment="Center"
                                                TextTrimming="CharacterEllipsis"/>
                                     <Button Grid.Column="1" x:Name="BtnProfilePrivacyGear"
                                             Background="Transparent" BorderThickness="0" Cursor="Hand"

@@ -307,7 +307,26 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     return;
                 }
 
+                // A Library launcher (mods, catalogue, phrases, medialog): the dialog or window itself,
+                // the same verb as the Library strip's pill (WPF 7.1.5 palette, LauncherKey).
+                if (!string.IsNullOrWhiteSpace(entry.LauncherKey))
+                {
+                    if (!shell.OpenLibraryLauncher(entry.LauncherKey!))
+                        Serilog.Log.Debug("Palette: launcher {Key} has no handler", entry.LauncherKey);
+                    return;
+                }
+
+                // The CC Labs row opens the launcher itself (the title-bar button's verb; Lockdown vetoes on its own).
+                if (entry.OpensLauncher)
+                {
+                    LauncherWindow.BackToLauncher(shell);
+                    return;
+                }
+
                 if (!string.IsNullOrWhiteSpace(entry.TabKey)) shell.ShowTab(entry.TabKey);
+                // The Games row lands on its Play zone even when the wall was scrolled down.
+                if (!string.IsNullOrWhiteSpace(entry.PlayZone))
+                    shell.Named<Tabs.PlayTabView>("PlayTab")?.ScrollToZone(entry.PlayZone!);
                 if (!string.IsNullOrWhiteSpace(entry.SectionKey)) shell.AppSettingsPage?.FocusSection(entry.SectionKey);
                 if (entry.ElementNames.Length == 0) return;
 

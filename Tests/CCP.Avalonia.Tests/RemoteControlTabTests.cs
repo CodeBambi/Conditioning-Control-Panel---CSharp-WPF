@@ -1,4 +1,9 @@
+using System.Linq;
 using System.Threading.Tasks;
+using Avalonia.Controls.Primitives;
+using Avalonia.Interactivity;
+using Avalonia.VisualTree;
+using ConditioningControlPanel.Localization;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
@@ -61,6 +66,63 @@ public sealed class RemoteControlTabTests
                 (CoreEntitlement.HasPremiumProvider, CoreEntitlement.ShowDeniedHandler) = (premium, denied);
             }
             return Task.CompletedTask;
+        });
+    }
+
+    /// <summary>WPF BtnEmoteEdit/Save (MainWindow.RemoteControl.cs:441): the popup edits the shared preset;
+    /// a send without a session says so instead of failing silently.</summary>
+    [Fact]
+    public async Task Emote_edit_popup_saves_the_preset_and_a_send_without_a_session_says_so()
+    {
+        await AvaloniaTestDispatcher.RunAsync(async () =>
+        {
+            EnsureAvalonia();
+            var oldProvider = CoreSettings.ServiceProvider;
+            var service = new SettingsService();
+            CoreSettings.ServiceProvider = () => service;
+            Window? host = null;
+            try
+            {
+                var view = new RemoteControlTabView();
+                host = new Window { Width = 1200, Height = 900, Content = view };
+                host.Show();
+                Dispatcher.UIThread.RunJobs();
+                var preset = CoreSettings.Current.RemoteEmotePresets[0];
+                var buttons = view.FindControl<ItemsControl>("LstEmotePresets")!.GetVisualDescendants().OfType<Button>()
+                    .Where(b => ReferenceEquals(b.Tag, preset)).ToList();
+                var edit = buttons.First(b => b.Content as string == "✎");
+                edit.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Assert.True(view.FindControl<Popup>("EmoteEditPopup")!.IsOpen);
+                var text = view.FindControl<TextBox>("TxtEditEmoteText")!;
+                var save = view.FindControl<Button>("BtnEditEmoteSave")!;
+                text.Text = "   "; Dispatcher.UIThread.RunJobs();
+                Assert.False(save.IsEnabled);
+                text.Text = "  Good girl  "; Dispatcher.UIThread.RunJobs();
+                Assert.True(save.IsEnabled);
+                save.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Assert.Equal("Good girl", preset.Text);
+                Assert.False(view.FindControl<Popup>("EmoteEditPopup")!.IsOpen);
+
+                // Enter in the custom box sends (WPF :339); with no session it says so and keeps the text.
+                var status = view.FindControl<TextBlock>("TxtEmoteStatus")!;
+                var custom = view.FindControl<TextBox>("TxtEmoteCustom")!;
+                custom.Text = "hello";
+                custom.RaiseEvent(new global::Avalonia.Input.KeyEventArgs { RoutedEvent = global::Avalonia.Input.InputElement.KeyDownEvent, Key = global::Avalonia.Input.Key.Enter });
+                for (var i = 0; i < 50 && string.IsNullOrEmpty(status.Text); i++) { Dispatcher.UIThread.RunJobs(); await Task.Yield(); }
+                Assert.Equal(Loc.Get("status_emote_no_session"), status.Text);
+                Assert.Equal("hello", custom.Text);
+                status.Text = "";
+
+                buttons.First(b => b != edit).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                for (var i = 0; i < 50 && string.IsNullOrEmpty(view.FindControl<TextBlock>("TxtEmoteStatus")!.Text); i++)
+                { Dispatcher.UIThread.RunJobs(); await Task.Yield(); }
+                Assert.Equal(Loc.Get("status_emote_no_session"), view.FindControl<TextBlock>("TxtEmoteStatus")!.Text);
+            }
+            finally
+            {
+                host?.Close();
+                CoreSettings.ServiceProvider = oldProvider;
+            }
         });
     }
 

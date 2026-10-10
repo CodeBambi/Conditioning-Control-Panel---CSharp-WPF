@@ -63,6 +63,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         {
             try
             {
+                MarkMediaLogSeen();   // AssetsTabView.Fx.cs: opening the log ends the pulse
                 var win = new Views.Windows.MediaHistoryWindow();
                 if (TopLevel.GetTopLevel(this) is Window owner) win.Show(owner);
                 else win.Show();

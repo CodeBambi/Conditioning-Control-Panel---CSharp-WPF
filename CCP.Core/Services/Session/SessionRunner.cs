@@ -55,6 +55,9 @@ namespace ConditioningControlPanel.Services
         /// <summary>After every live tick: WPF's ProgressUpdated, for the head's clock labels.</summary>
         public event Action? Ticked;
 
+        /// <summary>A session ended; the bool is completed. Raised after the runner is idle again.</summary>
+        public event Action<Session, bool>? Stopped;
+
         /// <summary>Seeds IsSessionRunning: one runner per head. The pool delegates are the head's
         /// (PhrasePoolCustody.Seed at startup, CCP.Avalonia/Program.cs).</summary>
         public SessionRunner(SessionLogService sessionLog)
@@ -332,6 +335,9 @@ namespace ConditioningControlPanel.Services
             try { SessionLog.EndSession(completed, elapsed, xp); }
             catch (Exception ex) { Log.Error(ex, "SessionLog.EndSession failed"); }
             CurrentSession = null;
+            // WPF SessionEngine.SessionStopped + SessionCompleted, as one call (ProgramEngineBridge).
+            try { Stopped?.Invoke(session, completed); }
+            catch (Exception ex) { Log.Warning(ex, "SessionRunner.Stopped handler failed"); }
         }
     }
 }

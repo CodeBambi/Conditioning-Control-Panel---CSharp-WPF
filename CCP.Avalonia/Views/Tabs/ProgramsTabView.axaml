@@ -248,7 +248,7 @@
                                                            FontSize="11" FontStyle="Italic" Margin="0,8,0,0" TextWrapping="Wrap"/>
                                             </StackPanel>
 
-                                            <!-- Execution is intentionally unavailable in this browse-only layer. -->
+                                            <!-- Enroll (MainShellWindow.EnrollProgramAsync); disabled with its reason when refused. -->
                                             <Button Grid.Row="3" Margin="18,16,18,16"
                                                     HorizontalAlignment="Stretch"
                                                     HorizontalContentAlignment="Center"
@@ -334,6 +334,18 @@
                             </Grid>
                         </Border>
                     </StackPanel>
+
+                    <!-- Linux-only (docs/avalonia-decisions.md, programs 3a): shown with any run panel only
+                         while ProgramService.IsReadOnly (programs.json stamped by a newer build); the
+                         lifecycle buttons are greyed then. -->
+                    <Border x:Name="RunReadOnlyNote" IsVisible="False"
+                            Padding="14,10" CornerRadius="10" Margin="0,0,0,12"
+                            Background="{DynamicResource SurfaceBgBrush}"
+                            BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
+                        <TextBlock Text="{loc:Str programs_readonly_note}"
+                                   Foreground="{DynamicResource TextMutedBrush}"
+                                   FontSize="12" TextWrapping="Wrap"/>
+                    </Border>
 
                     <!-- ================================================================= -->
                     <!-- RUN: an active or paused enrollment.                               -->
@@ -480,7 +492,8 @@
                                     </Border>
                                 </StackPanel>
 
-                                <!-- Pause / Resume + Withdraw. Withdraw is always here, always plain. -->
+                                <!-- Pause / Resume + Withdraw. Withdraw is always here, always plain.
+                                     Pause/Resume is hidden only while the service is read-only. -->
                                 <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Top">
                                     <Button x:Name="BtnProgramPauseResume"
                                             Theme="{StaticResource SecondaryButton}" MinWidth="90"
@@ -738,7 +751,7 @@
 
                                 <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,10,0">
                                     <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                                        <TextBlock Text="{loc:Str programs_today_header}"
+                                        <TextBlock x:Name="TxtTodayHeader" Text="{loc:Str programs_today_header}"
                                                    Foreground="{DynamicResource TextMutedBrush}"
                                                    FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"/>
                                         <Border x:Name="TodayBossBadge" IsVisible="False"
@@ -926,8 +939,9 @@
                                                 Grid.Row="0" Grid.Column="3" MinWidth="190"
                                                 HorizontalContentAlignment="Center"
                                                 Theme="{StaticResource PinkButton}"
+                                                ToolTip.ShowOnDisabled="True"
                                                 Click="BtnStartTodaySession_Click">
-                                            <TextBlock Text="{loc:Str btn_program_start_session}"/>
+                                            <TextBlock x:Name="TxtStartTodaySession" Text="{loc:Str btn_program_start_session}"/>
                                         </Button>
 
                                         <!-- Live progress bar (hidden unless the program's own session is in flight) -->
@@ -995,7 +1009,7 @@
                                      Auto column: an Auto column measures the WrapPanel at infinity,
                                      so five cards would lay out in one ~1850px row and the overflow
                                      would be clipped silently. -->
-                                <Grid Margin="0,18,0,0">
+                                <Grid x:Name="TaskArcGrid" Margin="0,18,0,0">
                                     <Grid.ColumnDefinitions>
                                         <!-- 2:1 so the cards reach their cap on a normal window; the
                                              surplus a capped star does not use flows to the column
@@ -1251,6 +1265,7 @@
                                            Foreground="{DynamicResource TextMutedBrush}"
                                            FontSize="13" TextWrapping="Wrap" LineHeight="20"
                                            Margin="0,10,0,0" MaxWidth="620" HorizontalAlignment="Left"/>
+                                <!-- Restart / Withdraw. -->
                                 <StackPanel Orientation="Horizontal" Margin="0,20,0,0">
                                     <Button x:Name="BtnProgramRestart"
                                             Theme="{StaticResource PinkButton}" MinWidth="150"
@@ -1258,7 +1273,8 @@
                                             Click="BtnProgramRestart_Click">
                                         <TextBlock Text="{loc:Str btn_program_restart}"/>
                                     </Button>
-                                    <Button Theme="{StaticResource SecondaryButton}" MinWidth="120"
+                                    <Button x:Name="BtnProgramLapsedWithdraw"
+                                            Theme="{StaticResource SecondaryButton}" MinWidth="120"
                                             HorizontalContentAlignment="Center"
                                             Margin="10,0,0,0" Click="BtnProgramWithdraw_Click">
                                         <TextBlock Text="{loc:Str btn_program_withdraw}"/>

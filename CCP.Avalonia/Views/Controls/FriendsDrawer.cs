@@ -38,6 +38,13 @@ public sealed partial class FriendsDrawer : Border
     internal static readonly FontFamily Display = FriendsLook.Display, Mono = FriendsLook.Mono;
     private static IBrush Rgb(byte r, byte g, byte b) => FriendsLook.Frozen(Color.FromRgb(r, g, b));
     public const double DrawerWidth = 300, DrawerMaxHeight = 548;
+    /// <summary>The page body's widest: a list wider than this reads as a table, not a list (WPF PageMaxWidth).</summary>
+    public const double PageMaxWidth = 620;
+
+    /// <summary>True when this drawer is the body of the Social > Friends PAGE rather than the rail
+    /// chip's popup: it fills its column, leaves the leash to the Leash page, and never claims
+    /// Escape (on a page Escape belongs to the panic key, nothing to fold). WPF feda9c907.</summary>
+    internal bool AsPage { get; }
 
     internal static Cursor? Hand() { try { return new Cursor(StandardCursorType.Hand); } catch { return null; } }
     private readonly Func<IFriendsService?> _resolve;
@@ -65,11 +72,6 @@ public sealed partial class FriendsDrawer : Border
     /// <summary>WPF RefreshInviteLine: subscribers only (an invite week holds no codes).</summary>
     internal Func<bool> OffersInviteLink { get; set; } = () => ConditioningControlPanel.Services.Invites.InviteTicketRule.OffersInviteLink(
         CoreAccount.HasPremiumAccess, ConditioningControlPanel.Services.ProviderSubscription.IsInviteWeekOnly(AccountSeed.Patreon, AccountSeed.SubscribeStar, CoreSettings.Current));
-    public const double PageMaxWidth = 620;
-    /// <summary>True when this drawer is the body of the Social > Friends PAGE rather than the rail
-    /// chip's popup: it fills its column, leaves the leash to the Leash page and never claims Escape
-    /// (on a page Escape belongs to the panic key, there is nothing to fold).</summary>
-    internal bool AsPage { get; }
     public FriendsDrawer() : this(null) { }
     internal FriendsDrawer(IFriendsService? service) : this(service, false) { }
     internal FriendsDrawer(IFriendsService? service, bool asPage)
@@ -822,6 +824,9 @@ public sealed partial class FriendsDrawer : Border
         _codeBox.Focus();
         if (Amount > 0) StaggerIn(_addBox, TimeSpan.Zero);   // WPF MotionFx.StaggerIn(_addBox)
     }
+
+    /// <summary>True while the add-by-code box is open.</summary>
+    internal bool AddBoxOpen => _addBox.IsVisible;
 
     /// <summary>The page's empty state: one line and one button ("No friends yet. Add one").</summary>
     private Control PageEmptyBlock()

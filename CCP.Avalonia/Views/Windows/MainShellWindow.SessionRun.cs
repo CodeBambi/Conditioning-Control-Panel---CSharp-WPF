@@ -55,6 +55,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 try
                 {
                     runner.Start(session);
+                    Platform.ProgramEngineBridge.RaiseSessionChanged();   // the Programs session row (WPF OnSessionStarted)
                     PinkRushHost.Start();          // WPF: a session starts through StartEngine -> SkillTree.Start()
                     PinkFilterOverlay.Refresh(this);
                     SpiralOverlay.Refresh(this);
@@ -168,8 +169,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// completed or ended early. Raised on the runner's thread; hops to the UI thread.</summary>
         private SessionCompleteWindow? _liveSessionRecap;
 
+        /// <summary>Set by <see cref="EndProgramSessionQuietly"/>; the next recap is skipped once.</summary>
+        private bool _suppressNextSessionSummary;
+
         internal void OnSessionLogReady(object? sender, SessionLogReadyEventArgs e)
         {
+            if (_suppressNextSessionSummary) { _suppressNextSessionSummary = false; return; }
             var log = e.Log;
             Dispatcher.UIThread.Post(() =>
             {

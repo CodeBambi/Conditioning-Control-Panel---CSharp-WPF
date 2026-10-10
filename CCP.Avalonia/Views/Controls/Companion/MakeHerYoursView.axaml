@@ -117,8 +117,12 @@
 
             <DataTemplate x:Key="CmpPresetChipTemplate" x:DataType="local:PresetChip">
                 <ToggleButton Content="{Binding Label}" Theme="{StaticResource CmpToggleChipStyle}"
-                              ToolTip.Tip="{Binding Label}"
-                              IsChecked="{Binding IsSelected, Mode=TwoWay}"/>
+                              ToolTip.IsEnabled="{Binding HasDescription}"
+                              IsChecked="{Binding IsSelected, Mode=TwoWay}">
+                    <ToolTip.Tip>
+                        <TextBlock Text="{Binding Description}" TextWrapping="Wrap" MaxWidth="360"/>
+                    </ToolTip.Tip>
+                </ToggleButton>
             </DataTemplate>
         </ResourceDictionary>
     </UserControl.Resources>
@@ -137,13 +141,13 @@
                     <TextBlock Text="🪞" FontSize="16" Margin="0,0,9,0" VerticalAlignment="Center"/>
                     <TextBlock Text="{Binding LocPersonalityTitle}" Theme="{StaticResource CmpSectionTitleStyle}"/>
                 </StackPanel>
-                <Border Grid.Column="2" Theme="{StaticResource CmpTrainTagStyle}">
+                <Border x:Name="PreviewTrainTag" Grid.Column="2" Theme="{StaticResource CmpTrainTagStyle}">
                     <TextBlock Text="{Binding LocTagTrain3}" Theme="{StaticResource CmpTrainTagTextStyle}"/>
                 </Border>
             </Grid>
 
             <!-- ========== interview spotlight ========== -->
-            <Grid Margin="0,13,0,14" IsVisible="{Binding !IsInterviewed}">
+            <Grid x:Name="InterviewSpotlight" Margin="0,13,0,14" IsVisible="{Binding IsInterviewSpotlightShown}">
                 <Border x:Name="InterviewCard" Theme="{StaticResource CmpZ4InterviewCardStyle}"
                         Classes.dormant="{Binding !IsInterviewAvailable}">
                     <Grid>
@@ -268,11 +272,10 @@
                     </Grid.ColumnDefinitions>
                     <TextBlock Grid.Column="0" Text="🔥" FontSize="15" Margin="0,0,10,0" VerticalAlignment="Center"/>
                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                        <TextBlock Text="{Binding SpiceTitle}" FontSize="12.5" Foreground="White"/>
-                        <TextBlock Text="{Binding SpiceSubtitle}" FontSize="10" Margin="0,1,0,0"
-                                   Foreground="{StaticResource CmpFaintBrush}" TextWrapping="Wrap"/>
+                        <TextBlock Text="{Binding SpiceTitle}" Theme="{StaticResource Type.Body}" Foreground="{DynamicResource TextLightBrush}" TextWrapping="NoWrap"/>
+                        <TextBlock Text="{Binding SpiceSubtitle}" Theme="{StaticResource Type.Caption}" Margin="0,1,0,0"/>
                     </StackPanel>
-                    <ToggleButton Grid.Column="2" Theme="{StaticResource CmpToggleSwitchStyle}"
+                    <ToggleButton x:Name="SpiceToggle" Grid.Column="2" Theme="{StaticResource CmpToggleSwitchStyle}"
                                   VerticalAlignment="Center" ToolTip.Tip="{Binding SpiceSubtitle}"
                                   IsChecked="{Binding IsSpiceOn, Mode=TwoWay}"/>
                 </Grid>
@@ -284,9 +287,8 @@
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0" Text="{Binding ActivePersonalityLine}" FontSize="11"
-                           Foreground="{StaticResource CmpMutedBrush}" TextWrapping="Wrap"/>
-                <Button Grid.Column="1" Content="{Binding ResetLabel}" Theme="{StaticResource CmpLinkButtonStyle}"
+                <TextBlock Grid.Column="0" Text="{Binding ActivePersonalityLine}" Theme="{StaticResource Type.Body}"/>
+                <Button x:Name="BtnResetPersonality" Grid.Column="1" Content="{Binding ResetLabel}" Theme="{StaticResource CmpLinkButtonStyle}"
                         Command="{Binding ResetPersonalityCommand}" Padding="8,2,0,2"
                         IsVisible="{Binding CanResetPersonality}"/>
             </Grid>

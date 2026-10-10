@@ -145,6 +145,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         {
             ChatZone.ViewModel?.Sync();
             MemoryZone.ViewModel?.Sync();
+            PersonalityZone.ViewModel.Sync();   // WPF CompanionRoomRuntimeVm.Sync -> PersonalityVm.Sync
             AttentionZone.ViewModel?.Sync();
             // WPF UpdateCompanionCardsUI runs on the same show: the roster's levels and ring.
             RefreshRoster();

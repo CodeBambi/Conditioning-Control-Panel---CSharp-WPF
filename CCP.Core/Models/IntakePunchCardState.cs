@@ -56,4 +56,24 @@ public class IntakePunchCardState
     /// the prize is still TBD: the card can be finishable and celebrated before anything is
     /// actually granted, and whatever the reward turns out to be, it is claimed exactly once.</summary>
     public DateTime? PrizeClaimedUtc { get; set; }
+
+    /// <summary>The card's file under the user-data folder.</summary>
+    public const string FileName = "intake_punchcard.json";
+
+    /// <summary>Has this user ever finished a Graded Intake? The first hole is free, so anything
+    /// beyond one punch - or a stamp still pending - means a real run happened.</summary>
+    public bool EverCompletedIntake() => PunchedCount > 1 || PendingDrafts.Count > 0;
+
+    /// <summary><see cref="EverCompletedIntake()"/> read from the card on disk; no card or an
+    /// unreadable one is a first-ever run.</summary>
+    public static bool ReadEverCompletedIntake(string userDataDir)
+    {
+        try
+        {
+            var path = System.IO.Path.Combine(userDataDir, FileName);
+            return System.IO.File.Exists(path)
+                && System.Text.Json.JsonSerializer.Deserialize<IntakePunchCardState>(System.IO.File.ReadAllText(path))?.EverCompletedIntake() == true;
+        }
+        catch { return false; }
+    }
 }
