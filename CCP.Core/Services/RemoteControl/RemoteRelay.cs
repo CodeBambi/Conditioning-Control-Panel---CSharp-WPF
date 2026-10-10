@@ -302,6 +302,8 @@ namespace ConditioningControlPanel.Services
         private void ReleaseOnLeave()
         {
             RemoteCommands.RemoteHaptics.Stop();
+            // What the controller put on the screen comes down with it (pink filter, spiral, Melt haze).
+            try { RemoteCommands.ControllerLeft(); } catch (Exception ex) { Log.Warning(ex, "[RemoteControl] overlay release failed"); }
             var s = CoreSettings.Current;
             var changed = false;
             if (_remoteSetStrictLock) { _remoteSetStrictLock = false; if (s.StrictLockEnabled) { s.StrictLockEnabled = false; changed = true; } }
@@ -480,6 +482,8 @@ namespace ConditioningControlPanel.Services
         private static List<string> ActiveServices(Models.AppSettings s)
         {
             var list = new List<string>();
+            if (s.PinkFilterEnabled) list.Add("pink_filter");   // WPF GetActiveServices order
+            if (s.SpiralEnabled) list.Add("spiral");
             if (s.StrictLockEnabled) list.Add("strict_lock");
             if (CoreHaptics.Service?.IsConnected == true) list.Add("haptics");   // WPF 7b22ece8c: trigger_haptic will land
             if (!s.PanicKeyEnabled) list.Add("no_panic");

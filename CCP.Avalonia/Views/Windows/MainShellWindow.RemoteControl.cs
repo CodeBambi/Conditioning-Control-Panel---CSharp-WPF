@@ -4,8 +4,8 @@
 // "someone is controlling you" overlay (fade in/out, session code + PIN, idle subtitle, session info card,
 // big emote picker, End Session), the 2 s command toast, the controller-joined notice and the Start
 // button lock while a controller drives.
-// ponytail: still missing here - remote-driven session verbs (StartSessionFromRemote & co; Core
-// RemoteCommands refuses them "not on this build"), the directory opt-in chain, tray minimise/restore
+// The verbs that need a window (overlays, Melt, lock card, Takeover, session verbs) are in
+// MainShellWindow.RemoteVerbs.cs. ponytail: still missing here - tray minimise/restore
 // for remote, the taskbar flash on join (no Avalonia API), the RemoteHud pill and the browser
 // blindfold (no embedded browser under the overlay on this head).
 
@@ -51,12 +51,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             r.ControllerIdleChanged += idle;
             r.SessionEnded += ended;
             r.CommandReceived += command;
+            RemoteCommands.Head = this;   // the verbs that need a window (MainShellWindow.RemoteVerbs.cs)
             Closed += (_, _) =>
             {
                 r.ControllerConnectedChanged -= connected;
                 r.ControllerIdleChanged -= idle;
                 r.SessionEnded -= ended;
                 r.CommandReceived -= command;
+                if (ReferenceEquals(RemoteCommands.Head, this)) RemoteCommands.Head = null;
                 _remoteOverlayTimer?.Stop();
             };
             // WPF fades the overlay in 300 ms and the toast in 200 ms (out: 200 / 300 ms).
