@@ -159,6 +159,25 @@ public sealed class MandatoryVideoOverlayTests
                     o.Step(s.AttentionLifespan + 0.01, 0);
                     Assert.Equal(0, o.LiveTargets);
                     Assert.Equal(1, v.AttentionHits);
+
+                    // HB19, WPF VideoService.cs:5847-5881: a toy button press satisfies the check too, only
+                    // with the two haptics switches on and only while a target is up.
+                    var armed = MandatoryVideoOverlay.ToyButtonArmed;
+                    try
+                    {
+                        MandatoryVideoOverlay.ToyButtonArmed = () => true;
+                        Assert.False(o.ToyPressed());   // nothing on screen (the last spawn expired)
+                        o.Spawn(0);
+                        MandatoryVideoOverlay.ToyButtonArmed = () => false;
+                        Assert.False(o.ToyPressed());   // switch off: the click is the only way
+                        Assert.Equal((1, 1), (v.AttentionHits, o.LiveTargets));
+                        MandatoryVideoOverlay.ToyButtonArmed = () => true;
+                        Assert.True(o.ToyPressed());
+                        Assert.Equal((2, 0), (v.AttentionHits, o.LiveTargets));
+                        Assert.False(o.ToyPressed());   // one squeeze, one hit
+                        Assert.Equal(2, v.AttentionHits);
+                    }
+                    finally { MandatoryVideoOverlay.ToyButtonArmed = armed; }
                     await Task.Delay(1200);
 
                     // WPF #735 grace pause: the clip's first Esc pauses it behind the card (guards asleep);
