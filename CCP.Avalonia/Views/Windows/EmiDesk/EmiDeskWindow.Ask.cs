@@ -324,7 +324,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
             _parked = null;
             if (line == null) return;
             // A short beat so it does not step on the reply's own first frame.
-            NewAskTimer(900, () => SpeakLine(line));
+            _askTimer = NewAskTimer(900, () => { _askTimer = null; SpeakLine(line); });
         }
 
         private void HookAsk()
