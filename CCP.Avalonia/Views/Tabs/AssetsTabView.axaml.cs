@@ -34,9 +34,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     /// <see cref="OnTabShown"/> where WPF's ShowTab("assets") ran RefreshAssetTree +
     /// InitializeAssetPresets (MainWindow.TabNavigation.cs:433-438).
     ///
+    /// The remote media picker is ported in AssetsTabView.MediaPicker.cs.
+    ///
     /// ponytail: not on this head yet - the Content Packs tree node and pack cards (no
-    /// ContentPackService here; the section is hidden in WPF too), the remote-media picker
-    /// (needs an async consent gate, MainShellWindow.Assets.cs), video thumbnails (WPF uses the
+    /// ContentPackService here; the section is hidden in WPF too), video thumbnails (WPF uses the
     /// Windows shell thumbnailer; videos draw the 🎬 placeholder), BtnCreatorDiscord /
     /// PacksScrollViewer wheel-to-pan and the pack-card sheen (pack cards only).
     /// </summary>
@@ -84,6 +85,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             Confirm = (title, msg) => MessageDialog.ConfirmAsync((TopLevel.GetTopLevel(this) as Window)!, title, msg);
             Inform = (title, msg) => MessageDialog.ShowAsync((TopLevel.GetTopLevel(this) as Window)!, title, msg);
             IsVisibleChanged(this);
+            InitializeRemoteMediaPicker();   // AssetsTabView.MediaPicker.cs; re-syncs on every show
         }
 
         private static void IsVisibleChanged(AssetsTabView view)
@@ -443,6 +445,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 (def.EnabledImageCount, def.EnabledVideoCount) = ActiveCounts(_assetTree, all: true);
             RefreshAssetPresetsComboBox();
             UpdatePresetCountsFromCurrentState();
+            // WPF MainWindow.Assets.cs:1438: the media-source picker re-syncs on every visit here.
+            InitializeRemoteMediaPicker();
         }
 
         private static void UpdatePresetCountsFromCurrentState()
@@ -495,6 +499,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             if (preset == null) return;
             RefreshAssetTree();
             RefreshThumbnailCheckboxes();
+            // WPF MainWindow.Assets.cs:1592: a preset can carry its own niches and media source (#1142).
+            RefreshRemoteMediaPicker();
             InvalidateAssetPoolsAfterSelectionChange();
             Log.Information("Loaded asset preset: {Name}", preset.Name);
         }

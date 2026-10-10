@@ -18,9 +18,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 {
     /// <summary>
     /// The run view: the enrollment in <see cref="AvApp.Programs"/> drawn the way WPF
-    /// MainWindow.ProgramsTab.cs:539-1450 and :1978-1998 draw it. Programs 3a: Withdraw and today's
-    /// session are live (greyed while the service IsReadOnly); Pause/Resume, Restart, Dismiss and the
-    /// ritual/mantra doors are 3b. A day the program clock has moved past without a rollover (a
+    /// MainWindow.ProgramsTab.cs:539-1450 and :1978-1998 draw it. Every lifecycle door is live (greyed
+    /// while the service IsReadOnly); the ritual picker shows only once ProgramCapabilities.RitualsAvailable.
+    /// A day the program clock has moved past without a rollover (a
     /// read-only service, or the minute poll not yet run) is labelled "last saved" (<see cref="IsSnapshotStale"/>).
     /// ponytail: ignition FX, day/task pops, node breathe and the live session clock are programs
     /// slice 5 (~/ccp-port/briefs/programs-run-plan.md).
@@ -135,6 +135,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 Find<Border>("RunReadOnlyNote").IsVisible = !browse && readOnly;
                 Find<Button>("BtnProgramWithdraw").IsEnabled = !readOnly;
                 Find<Button>("BtnProgramLapsedWithdraw").IsEnabled = !readOnly;
+                // Restart greys (with the reason) for a program this head cannot finish, like CanEnroll.
+                var restartBlocked = lapsed ? ProgramService.UnavailableReason(program!, CoreProgram.IsTaskAvailable) : null;
+                Find<Button>("BtnProgramRestart").IsEnabled = !readOnly && restartBlocked == null;
+                ToolTip.SetTip(Find<Button>("BtnProgramRestart"), restartBlocked);
+                Find<Button>("BtnProgramDismissGraduated").IsEnabled = !readOnly;
             }
         }
 
@@ -184,7 +189,24 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             Find<TextBlock>("TxtRunChapterReward").Text = chapterReward ?? "";
             ToolTip.SetTip(chip, chapterReward);
 
-            Find<Border>("RunPausedNote").IsVisible = enrollment.State == ProgramEnrollmentState.Paused;
+            var paused = enrollment.State == ProgramEnrollmentState.Paused;
+            Find<Border>("RunPausedNote").IsVisible = paused;
+
+            // programs-3a decision: this head suppresses rollover for a run it cannot finish; say so.
+            var missing = ProgramService.UnavailableReason(program, CoreProgram.IsTaskAvailable);
+            Find<Border>("RunUnavailableNote").IsVisible = missing != null;
+            Find<TextBlock>("TxtRunUnavailableNote").Text =
+                missing == null ? "" : Loc.GetF("programs_run_unavailable_note", missing);
+
+            // WPF :744 caption + UpdateProgramSessionRow :1476: Pause greys (with why) only while OUR
+            // session is in flight; Resume and pausing around a foreign session stay available.
+            var pauseButton = Find<Button>("BtnProgramPauseResume");
+            var ours = AvApp.Sessions is { IsRunning: true } runner && svc.IsProgramSession(runner.CurrentSession);
+            pauseButton.IsEnabled = !svc.IsReadOnly && !(ours && !paused);
+            ToolTip.SetTip(pauseButton, ours && !paused ? Loc.Get("programs_pause_blocked_hint") : null);
+            Find<TextBlock>("TxtProgramPauseResume").Bind(TextBlock.TextProperty,
+                (global::Avalonia.Data.Binding)new Localization.StrExtension(
+                    paused ? "btn_program_resume" : "btn_program_pause").ProvideValue(null!));
 
             BuildDayStrip(program, enrollment, accent, stale);
             BuildTodayPanel(svc, program, enrollment, accent, stale);
@@ -370,6 +392,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                     : "";
             }
 
+            var paused = enrollment.State == ProgramEnrollmentState.Paused;
             var items = new List<ProgramTaskItem>();
             int required = 0, completedRequired = 0, optional = 0, blocked = 0;
             var hasRitual = false;
@@ -398,9 +421,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                     CardBorderBrush = complete ? accent : glass,
                     DoneChipVisible = complete,
                     DoneChipForeground = doneInk,
-                    // Read-only head: the ritual picker and the mantra door would record progress.
-                    SubmitVisible = false,
-                    OpenVisible = false,
+                    // WPF :1136-1153; the picker is also gated on the head's ritual capability flag.
+                    SubmitVisible = task.Kind == ProgramTaskKind.Ritual && !complete && !isBlocked && !paused
+                                    && Platform.ProgramCapabilities.RitualsAvailable,
+                    OpenReps = Math.Max(1, task.TargetValue),
+                    OpenVisible = task.Kind == ProgramTaskKind.AutoVerified && task.Verifier == QuestCategory.Mantra
+                                  && !complete && !isBlocked && !paused,
                 };
 
                 var icon = ModArt.TryLoad(TaskIconPath(task));
