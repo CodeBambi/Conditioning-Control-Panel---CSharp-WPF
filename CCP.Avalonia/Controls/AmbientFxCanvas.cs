@@ -27,6 +27,8 @@ namespace ConditioningControlPanel.Avalonia.Controls
         SheenSweep = 1 << 3,
         /// <summary>A pre-baked glow breathing 0.6 to 1.0 opacity.</summary>
         GlowBreath = 1 << 4,
+        /// <summary>Warm motes rising from the bottom edge on a slow sine sway, budgeted by the tier.</summary>
+        Embers = 1 << 5,
     }
 
     /// <summary>Per-surface tuning for <see cref="AmbientFxCanvas.StartLayers(AmbientFxConfig)"/>.</summary>
@@ -70,6 +72,13 @@ namespace ConditioningControlPanel.Avalonia.Controls
         /// panel is already painted in.
         /// </summary>
         public Color? Tint { get; set; }
+
+        /// <summary>
+        /// Keep ticking while the host window is NOT the active window (WPF polish wave 13). Only for
+        /// the companion tube, which is almost never the active window. Minimised, hidden, Motion and
+        /// the tier budget still stop it. Never set it on a surface inside the shell.
+        /// </summary>
+        public bool RunWhileInactive { get; set; }
     }
 
     /// <summary>
@@ -175,6 +184,18 @@ namespace ConditioningControlPanel.Avalonia.Controls
         private struct Dust { public float X, Y, VX, VY, Life, Max, Size; }
         private Dust[] _dust = Array.Empty<Dust>();
         private int _dustN;
+
+        // Embers: PORTED from the WPF twin's Ember layer (EmberMax / EmberBudgetShare / quarter-second refill).
+        private const int EmberMax = 40;
+        private const float EmberBudgetShare = 0.66f;
+        private struct Ember { public float X0, Y, VY, Amp, Phase, PhaseSpd, Life, Max, Size; }
+        private Ember[] _embers = Array.Empty<Ember>();
+        private int _emberN;
+        private float _emberT;
+        private IBrush? _emberDot;
+
+        /// <summary>Live ember count. Tests read it.</summary>
+        internal int EmberCount => _emberN;
 
         private struct Spark { public float X, Y, VX, VY, Life, Max, Size; }
         private Spark[]? _burst;
@@ -313,7 +334,18 @@ namespace ConditioningControlPanel.Avalonia.Controls
             _burst = null;
             _burstN = 0;
             _dustN = 0;
+            _emberN = 0;
             InvalidateVisual();
+        }
+
+        /// <summary>
+        /// Swap the tint override without reseeding: live particles take the new colour on the next
+        /// frame. WPF's Retint; the tube calls it when the glass flips between pink and midnight.
+        /// </summary>
+        public void Retint(Color tint)
+        {
+            _config.Tint = tint;
+            RefreshPalette();
         }
 
         /// <summary>
@@ -551,6 +583,10 @@ namespace ConditioningControlPanel.Avalonia.Controls
                 // The tighter-cored radial the glow-breath layer wants; the WPF twin baked a second
                 // 160px sprite with a 0.28 core stop for exactly this.
                 _glowSoft = MakeDot(glow, 0.28f);
+                // Embers sit halfway between the particle colour and a candle gold, so they read
+                // warm on every palette without leaving the theme (WPF ApplyAccent).
+                _emberDot = MakeDot(Color.FromRgb((byte)((particle.R + 255) / 2), (byte)((particle.G + 196) / 2),
+                                                  (byte)((particle.B + 110) / 2)), 0f);
 
                 _liveBudget = _particleBudget;
                 _fogOnly = false;
@@ -585,6 +621,11 @@ namespace ConditioningControlPanel.Avalonia.Controls
 
             _dust = _particleBudget > 0 ? new Dust[_particleBudget] : Array.Empty<Dust>();
             _dustN = 0;
+            _embers = _particleBudget > 0 && (_config.Layers & AmbientFxLayers.Embers) != 0
+                ? new Ember[Math.Min(EmberMax, _particleBudget)]
+                : Array.Empty<Ember>();
+            _emberN = 0;
+            _emberT = 0f;
             _fogT = _dustT = _sheenT = _breathT = _auroraT = 0f;
             _sheenDone = false;
             _burstN = 0;
@@ -696,7 +737,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
             if (w != null)
             {
                 if (w.WindowState == WindowState.Minimized) return false;
-                if (!w.IsActive && !oneShotLive) return false;
+                if (!w.IsActive && !oneShotLive && !_config.RunWhileInactive) return false;
             }
             return true;
         }
@@ -734,6 +775,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
                 _breathT += dt;
                 if (!_sheenDone) _sheenT += dt;
                 StepDust(dt);
+                StepEmbers(dt);
                 StepBurst(dt);
                 StepTokens(dt);
 
@@ -816,6 +858,51 @@ namespace ConditioningControlPanel.Avalonia.Controls
                     VY = -0.010f - (float)_rng.NextDouble() * 0.016f,
                     Life = life, Max = life,
                     Size = 0.0035f + (float)_rng.NextDouble() * 0.0055f,
+                };
+            }
+        }
+
+        /// <summary>How many embers the governor currently allows: a share of the live budget.</summary>
+        private int EmberTarget() =>
+            _fogOnly ? 0 : Math.Min(_embers.Length, (int)Math.Round(_liveBudget * EmberBudgetShare));
+
+        private void StepEmbers(float dt)
+        {
+            if (_embers.Length == 0) return;
+            for (int i = _emberN - 1; i >= 0; i--)
+            {
+                var m = _embers[i];
+                m.Y += m.VY * dt;
+                m.Phase += m.PhaseSpd * dt;
+                m.Life -= dt;
+                if (m.Life <= 0f || m.Y < -0.06f)
+                    _embers[i] = _embers[--_emberN];
+                else
+                    _embers[i] = m;
+            }
+
+            if ((_config.Layers & AmbientFxLayers.Embers) == 0 || _fogOnly) return;
+
+            int target = EmberTarget();
+            if (_emberN > target) _emberN = Math.Max(0, target);
+
+            // One every quarter second at most, so the field fills over ten seconds rather than
+            // appearing as a curtain.
+            _emberT += dt;
+            while (_emberN < target && _emberT > 0.25f)
+            {
+                _emberT -= 0.25f;
+                float life = 10f + (float)_rng.NextDouble() * 8f;
+                _embers[_emberN++] = new Ember
+                {
+                    X0 = (float)_rng.NextDouble(),
+                    Y = 1.02f + (float)_rng.NextDouble() * 0.05f,
+                    VY = -(0.035f + (float)_rng.NextDouble() * 0.030f),
+                    Amp = 0.010f + (float)_rng.NextDouble() * 0.022f,
+                    Phase = (float)(_rng.NextDouble() * Math.PI * 2),
+                    PhaseSpd = 0.8f + (float)_rng.NextDouble() * 1.2f,
+                    Life = life, Max = life,
+                    Size = 0.0040f + (float)_rng.NextDouble() * 0.0045f,
                 };
             }
         }
@@ -932,6 +1019,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
                 if ((layers & AmbientFxLayers.FogDrift) != 0) DrawFog(context, w, h, min, intensity);
                 if (!_fogOnly && (layers & AmbientFxLayers.GlowBreath) != 0) DrawGlowBreath(context, w, h, min, intensity);
                 if (!_fogOnly && (layers & AmbientFxLayers.DustField) != 0) DrawDust(context, w, h, min, intensity);
+                if (!_fogOnly && (layers & AmbientFxLayers.Embers) != 0) DrawEmbers(context, w, h, min, intensity);
                 if (!_fogOnly && (layers & AmbientFxLayers.SheenSweep) != 0) DrawSheen(context, w, h, intensity);
                 DrawBurst(context, w, h, min);
                 DrawTokens(context, w, h, min);
@@ -993,6 +1081,24 @@ namespace ConditioningControlPanel.Avalonia.Controls
                 if (a <= 0.004f) continue;
                 float size = d.Size * min * 2f;
                 DrawSprite(ctx, _particleDot, d.X * w, d.Y * h, size, size, a);
+            }
+        }
+
+        private void DrawEmbers(DrawingContext ctx, float w, float h, float min, float intensity)
+        {
+            for (int i = 0; i < _emberN; i++)
+            {
+                var m = _embers[i];
+                // Fade in over the first stretch of the climb, out toward the top edge, and flicker
+                // a little on the way like a spark that is still deciding.
+                float rise = Math.Clamp((1.02f - m.Y) / 0.08f, 0f, 1f);
+                float high = Math.Clamp(m.Y / 0.30f, 0f, 1f);
+                float flicker = 0.78f + 0.22f * (float)Math.Sin(m.Phase * 2.7f);
+                float a = 0.72f * rise * high * flicker * intensity;
+                if (a <= 0.004f) continue;
+                float x = m.X0 + m.Amp * (float)Math.Sin(m.Phase);
+                float size = m.Size * min * 2f;
+                DrawSprite(ctx, _emberDot, x * w, m.Y * h, size, size, a);
             }
         }
 
