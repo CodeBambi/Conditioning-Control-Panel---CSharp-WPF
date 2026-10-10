@@ -90,5 +90,12 @@
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
     </Content>
   </ItemGroup>
+  <ItemGroup>
+    <!-- Awareness v2 angle cards, moved here with AwarenessAngleCards (which reads its own
+         assembly's manifest). The logical name is the WPF one, so the loader is unchanged. -->
+    <EmbeddedResource Include="..\Assets\sounds\companion_audio\awareness_angles.json"
+                      LogicalName="ConditioningControlPanel.Resources.sounds.companion_audio.awareness_angles.json"
+                      Link="Resources\sounds\companion_audio\awareness_angles.json" />
+  </ItemGroup>
 
 </Project>

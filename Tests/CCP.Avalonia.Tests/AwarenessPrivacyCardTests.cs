@@ -101,13 +101,38 @@ public sealed class AwarenessPrivacyCardTests
             Assert.False(s.AwarenessConsentGiven);
             Assert.Equal(AwarenessIntensity.Off, vm.Intensity);
 
-            // Accepting opens her eyes, and the card says straight that the v2 protections are not here.
+            // Accepting opens her eyes on the v2 observer (lane w3): no legacy band, a live wire that
+            // says nothing has gone out yet rather than inventing a frame.
+            AwarenessLive.Publish(null);
             Assert.True(await PressDial(shell, vm, AwarenessIntensity.BroadStrokes, "BtnAccept"));
             AvApp.WindowAwareness.Stop();
             Assert.Equal(AwarenessIntensity.BroadStrokes, vm.Intensity);
+            Assert.False(vm.IsLegacyPipeline);
+            Assert.True(vm.IsWireLive);
+            Assert.False(vm.HasWireJson);
+            Assert.Equal(ConditioningControlPanel.Localization.Loc.Get("companion_awareness_wire_idle"), vm.WireLine);
+
+            // A frame that went out shows as the projection would send it: app and dwell, never more.
+            AwarenessLive.Publish(new ContextFrame
+            {
+                AppId = "youtube", AppCluster = "site_video", ServiceName = "YouTube",
+                Category = ConditioningControlPanel.Services.ActivityCategory.Media, DwellSeconds = 240, CutAt = DateTime.Now,
+            });
+            vm.Sync();
+            Assert.Contains("YouTube", vm.WireLine);
+            Assert.Contains("4m", vm.WireLine);
+            Assert.True(vm.HasWireJson);
+            AwarenessLive.Publish(null);
+
+            // The kill switch down (WPF IsLegacyPipeline = on and not AwarenessObserver.IsEnabled): she
+            // still watches through the legacy poll, and the card says the v2 protections are not behind it.
+            s.UseAwarenessV2 = false;
+            vm.Sync();
             Assert.True(vm.IsLegacyPipeline);
             Assert.False(vm.IsWireLive);
             Assert.Equal(ConditioningControlPanel.Localization.Loc.Get("companion_awareness_wire_legacy"), vm.WireLine);
+            s.UseAwarenessV2 = true;
+            vm.Sync();
 
             // Deny chips are the effective (seeded) list; removing one writes it.
             var first = vm.DenyList.First();

@@ -135,6 +135,42 @@ namespace ConditioningControlPanel.Services.Bark
         public void NoteUserMessage() { lock (_gate) _lastUserMessageUtc = DateTime.UtcNow; }
         public void NotifyExternalLineSpoken() { lock (_gate) _globalLastFireUtc = DateTime.UtcNow; }
 
+        /// <summary>
+        /// WPF BarkService.RaiseAwarenessBark (:289). The arbiter decided the moment is worth a canned
+        /// line: a Milestone frame raises StillOnActivity, anything else ActivityChanged. The arbiter
+        /// records this delivery itself, so <see cref="CommitFire"/> must not also report it.
+        /// </summary>
+        public bool RaiseAwarenessBark(Awareness.ContextFrame frame)
+        {
+            if (frame == null) return false;
+            try { AwarenessReactionStarting?.Invoke(); } catch { }
+
+            _inAwarenessBark = true;
+            try
+            {
+                if (frame.Transition == Awareness.TransitionKind.Milestone)
+                {
+                    return Raise("StillOnActivity", c => c
+                        .Set("activity", frame.ServiceName ?? "")
+                        .Set("still_minutes", Math.Floor(Math.Max(0, frame.DwellSeconds) / 60.0))
+                        .Set("app_cluster", frame.AppCluster ?? "")
+                        .Set("app", frame.AppId ?? ""));
+                }
+
+                return Raise("ActivityChanged", c => c
+                    .Set("activity", frame.ServiceName ?? "")
+                    .Set("category", frame.Category.ToString())
+                    .Set("app_cluster", frame.AppCluster ?? "")
+                    .Set("app", frame.AppId ?? ""));
+            }
+            finally { _inAwarenessBark = false; }
+        }
+
+        private bool _inAwarenessBark;
+
+        /// <summary>WPF App.EmiDesk.NoteAwarenessReaction(): the tube is about to talk about the window.</summary>
+        public Action? AwarenessReactionStarting;
+
         // ---------------- matcher ----------------
 
         /// <summary>WPF Raise. True when a line went to the mouth.</summary>
@@ -477,6 +513,16 @@ namespace ConditioningControlPanel.Services.Bark
             var now = DateTime.UtcNow;
             _lastFiredUtc[rule.Id] = now;
             _globalLastFireUtc = now;
+
+            // One mouth, in both directions (WPF BarkService.cs:1808). Every non-safety bark this
+            // engine fires on its own lands in the arbiter's cooldown ledger; the awareness bark is
+            // excluded because the arbiter records that one itself.
+            if (!_inAwarenessBark && !DryRun && rule.Class != BarkClass.Safety &&
+                Awareness.AwarenessV2Routing.IsActive)
+            {
+                try { Awareness.AwarenessV2Routing.Arbiter?.RecordExternalLine(Awareness.ReactionSource.Bark); }
+                catch (Exception ex) { Log.Debug("BarkEngine: arbiter report failed: {Error}", ex.Message); }
+            }
             if (variantIndex >= 0 && variantIndex < pool.Count) RememberSpoken(pool[variantIndex].Audio);
             if (rule.Class == BarkClass.Safety) _safetyHoldUntilUtc = now.AddMilliseconds(SafetyHoldMs);
             if (!rule.Repeatable)
