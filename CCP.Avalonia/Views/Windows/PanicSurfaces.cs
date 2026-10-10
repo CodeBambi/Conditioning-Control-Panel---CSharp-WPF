@@ -59,12 +59,26 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             new("corner-gif", _ => Overlays.CornerGifOverlay.StopAll()),
             // WPF :2005 "tube speech": voice line, bubble, thinking + listening dots (tube#T2).
             new("tube", _ => AvatarTube.AvatarTubeWindow.PanicSilenceLive()),
-            new("lock-cards", _ => MainShellWindow.StopLockCards()),      // WPF LockCardService.Stop(dismissOpenCards: true)
+            // WPF "modal / topmost cards" (:2015-2024): the lock cards, then the help popover and the settings palette.
+            new("lock-cards", _ => { try { MainShellWindow.StopLockCards(); } finally { CloseHelpAndPalette(); } }),      // WPF LockCardService.Stop(dismissOpenCards: true)
             new("attention-test", _ => Overlays.AttentionTestTarget.CloseAll()),   // the style editor's Test target (P06; WPF left it up)
             new("deeper-editor-audio", _ => Deeper.DeeperEditorWindow.PauseAllForPanic()),   // P06; WPF left it playing
             new("deeper-player", _ => Deeper.EnhancementPlayerWindow.StopAllForPanic()),    // media, engine and its effects
             new("camera", _ => MainShellWindow.StopCameraForPanic()),     // decision C: last, fire-and-forget
         };
+
+        /// <summary>Test seams for <see cref="CloseHelpAndPalette"/>.</summary>
+        internal static Action CloseHelpPopover = () => global::ConditioningControlPanel.Avalonia.Controls.HelpPopover.CloseActive();
+        internal static Action CloseSettingsPalette = () => SettingsPaletteWindow.CloseIfOpen();
+
+        /// <summary>WPF PanicStopEverySurface "help popover" + "settings palette" (:2019-2024). CloseIfOpen,
+        /// never TryConsumeEscape: a palette still open here did not claim the press (panic rebound to F8),
+        /// and consuming would burn the Escape grace window the caller's decision depends on.</summary>
+        private static void CloseHelpAndPalette()
+        {
+            try { CloseHelpPopover(); } catch (Exception ex) { Serilog.Log.Warning(ex, "Panic: help popover close failed"); }
+            try { CloseSettingsPalette(); } catch (Exception ex) { Serilog.Log.Warning(ex, "Panic: settings palette close failed"); }
+        }
 
         /// <summary>WPF AnyGameSurfaceOwnsTheScreen. Sample BEFORE <see cref="StopAll"/>.</summary>
         internal static bool AnyOwnsTheScreen()
@@ -83,9 +97,25 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// word and the leash gate's Panic; the 6-blink stop calls it itself. Never throws.</summary>
         internal static Action SafetyHold { get; set; } = () => Platform.ChasterHead.Service?.NoteSafetyExit();   // tests swap it
 
+        /// <summary>EMI's gif rain has no surface of its own (the cascade belongs to the Back Room's):
+        /// every panic route takes HER rain down here. Her spiral hold goes with the stop pass
+        /// (SpiralOverlay.ReleaseAllHolds). Tests swap it.</summary>
+        internal static Action StopEmiRain { get; set; } = EmiDesk.EmiDeskService.StopRain;
+
+        /// <summary>EMI's own spiral hold (owner "emi") lets go on every panic route too, the ones a lock
+        /// card or the palette consumes included (no stop pass runs there). Nobody else's hold is touched.
+        /// Tests swap it.</summary>
+        internal static Action ReleaseEmiSpiral { get; set; } =
+            () => Overlays.SpiralOverlay.Release(EmiDesk.EmiDeskService.EmiOwner, MainShellWindow.Current);
+
         internal static void ArmSafetyHold()
         {
+            try { StopEmiRain(); }
+            catch (Exception ex) { Serilog.Log.Debug(ex, "Panic: EMI rain stop failed"); }
+            try { ReleaseEmiSpiral(); }
+            catch (Exception ex) { Serilog.Log.Debug(ex, "Panic: EMI spiral release failed"); }
             ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("panicPressed");   // WPF MainWindow.xaml.cs:1585: a hold with a five minute silence tail, armed first
+            try { App.Achievements?.TrackPanicPressed(); } catch { /* WPF MainWindow.xaml.cs:1849: the relapse window opens */ }
             try { SafetyHold(); }
             catch (Exception ex) { Serilog.Log.Debug(ex, "Panic: Chaster safety hold failed"); }
         }
@@ -144,10 +174,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         /// <summary>Stops every surface in order. One failing stop never skips the rest. Never throws.</summary>
-        internal static void StopAll(string reason, MainShellWindow? shell = null)
+        /// <param name="holdArmed">The caller already ran <see cref="ArmSafetyHold"/> for this press (the
+        /// panic key arms it in its first lines, before the rungs that return early): arm once, not twice
+        /// (hunt3 IC8: EMI heard "panicPressed" twice a press).</param>
+        internal static void StopAll(string reason, MainShellWindow? shell = null, bool holdArmed = false)
         {
             Serilog.Log.Information("Panic: stopping every surface ({Reason})", reason);
-            ArmSafetyHold();
+            if (!holdArmed) ArmSafetyHold();
             SwitchOffKeywordTriggers();
             shell ??= MainShellWindow.Current;
             foreach (var s in All)

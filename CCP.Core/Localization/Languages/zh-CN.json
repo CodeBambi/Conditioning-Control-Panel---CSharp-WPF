@@ -7203,6 +7203,8 @@
   "tray_wake": "把他们叫醒",
   "tray_show": "显示窗口",
   "tray_stop_everything": "全部停止",
+  "tray_stop_refused_panic_off": "什么都没有停止。紧急键已停用。",
+  "tray_stop_refused_strict": "什么都没有停止。严格锁定已开启。",
   "panic_portal_description": "紧急：全部停止",
   "panic_portal_bound": "任何窗口中的紧急键：{0}",
   "panic_portal_unavailable": "紧急键仅在 CCP 或其他 X11 窗口获得焦点时有效。其他情况请使用托盘中的“全部停止”。",

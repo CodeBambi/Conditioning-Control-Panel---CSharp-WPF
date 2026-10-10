@@ -451,11 +451,17 @@ public sealed class WebAssetServer : IDisposable
     bool HoldsUserData(string root)
     {
         var data = Path.GetFullPath(CorePaths.UserData).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
-        if (!data.StartsWith(root, StringComparison.Ordinal)) return false;
+        if (!FolderHolds(root, data, OperatingSystem.IsWindows())) return false;
         if (Interlocked.Exchange(ref _userDataWarned, 1) == 0)
             Log.Warning("WebAssetServer: refusing to serve assets from {Root}: it holds the profile folder", root);
         return true;
     }
+
+    /// <summary>IB10: is <paramref name="folder"/> (ending in a separator) at or under <paramref name="root"/>
+    /// (ending in a separator)? Windows paths differ in letter case and still name one folder, so the
+    /// refusal there ignores case; elsewhere a path is exactly its letters.</summary>
+    internal static bool FolderHolds(string root, string folder, bool ignoreCase) =>
+        folder.StartsWith(root, ignoreCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
 
     static bool Inside(string full, string root) => full.StartsWith(root, StringComparison.Ordinal);
 

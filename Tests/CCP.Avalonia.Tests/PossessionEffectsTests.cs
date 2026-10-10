@@ -78,7 +78,8 @@ public sealed class PossessionEffectsTests
         {
             var cache = new Dictionary<string, PossessionTarget>();
             var targets = PossessionTree.Collect(win, cache);
-            Assert.Equal(new[] { "TxtPlain", "CardPlain" }, targets.Select(t => t.Key).ToArray());
+            // k22 (reach = WPF): a tagged button and the timer are enrolled too; safety names never are.
+            Assert.Equal(new[] { "TxtPlain", "CardPlain", "BtnGo", "TxtClock" }, targets.Select(t => t.Key).ToArray());
             Assert.Equal("the words", targets[0].DisplayName);
             Assert.Equal(PossessionRole.Card, targets[1].Role);
             Assert.Same(targets[0], PossessionTree.Collect(win, cache)[0]);   // cached: a cooldown survives
@@ -87,12 +88,13 @@ public sealed class PossessionEffectsTests
             foreach (var c in new Control[] { button, toggle, holder, face, reserved, excluded, phrase })
                 Assert.True(PossessionTree.IsOffLimits(c), c.Name);
             Assert.True(PossessionTree.IsOffLimits(null));
-            Assert.False(PossessionTree.MayEnrol(timer));                     // the timer is not a display role here
+            Assert.True(PossessionTree.MayEnrol(timer));                      // k22: the timer is enrolled (wobble draws a twin)
+            Assert.False(PossessionTree.MayEnrol(holder));                    // named for an exit: a safety control
 
             // The law is asked again at each effect's door: a hand-built target cannot get past it.
             var host = new PossessionHost();
             var effects = MainShellWindow.PossessionHeadEffects();
-            Assert.Equal(new[] { "nudge", "typo", "breathe", "drift", "rewrite", "toast", "melt", "glyphrot", "xpdrain", "crack", "retitle", "glitchportrait" }, effects.Select(e => e.Id).ToArray());
+            Assert.Equal(new[] { "nudge", "typo", "breathe", "drift", "rewrite", "toast", "melt", "glyphrot", "xpdrain", "crack", "retitle", "glitchportrait", "dodge", "wobble", "relabel", "togglelie", "reorderdoors" }, effects.Select(e => e.Id).ToArray());
             // Photosafe: the one flicker in the deck says so (the deck skips it) and refuses by itself too.
             var flicker = Assert.Single(effects, e => e.UsesFlicker);
             Assert.Equal("glitchportrait", flicker.Id);
@@ -107,7 +109,8 @@ public sealed class PossessionEffectsTests
                 foreach (var c in new Control[] { button, toggle, holder, face, reserved, excluded, phrase })
                     foreach (var role in e.Roles)
                         Assert.False(e.CanApply(Ctx(host), Target(c, role)), e.Id + " on " + c.Name);
-                Assert.False(e.CanApply(Ctx(host), Target(timer, PossessionRole.Timer)), e.Id + " on the timer");
+                // k22: only wobble may take the timer (it rocks a twin; the real timer never moves).
+                Assert.Equal(e.Id == "wobble", e.CanApply(Ctx(host), Target(timer, PossessionRole.Timer)));
                 // And Apply itself refuses, should a caller skip CanApply.
                 e.ApplyAsync(Ctx(host), Target(holder, PossessionRole.Card), default).GetAwaiter().GetResult();
                 Assert.False(e.IsLive);
@@ -136,11 +139,21 @@ public sealed class PossessionEffectsTests
             Assert.All(targets, t =>
             {
                 var c = (Control)t.Element;
-                Assert.True(PossessionTree.IsDisplayRole(t.Role));
-                Assert.False(PossessionTree.IsOffLimits(c), t.Key);
-                Assert.False(PossessionTree.IsInteractive(c) || PossessionTree.HoldsProtected(c), t.Key);
-                Assert.False(PossessionOffLimits.IsReservedName(t.Key));
+                Assert.False(PossessionTree.IsSafety(c), t.Key);
+                Assert.False(PossessionOffLimits.IsSafetyName(t.Key), t.Key);
+                if (PossessionTree.IsDisplayRole(t.Role))
+                {
+                    Assert.False(PossessionTree.IsOffLimits(c), t.Key);
+                    Assert.False(PossessionOffLimits.IsReservedName(t.Key));
+                }
+                else
+                {
+                    Assert.True(PossessionTree.IsInteractiveRole(t.Role), t.Key);   // k22: the roles WPF tags
+                    Assert.False(PossessionTree.HoldsSafety(c), t.Key);
+                }
             });
+            foreach (var door in new[] { "DoorHome", "DoorStudio", "DoorCompanion", "DoorPlay", "DoorSocial", "DoorYou", "DoorLibrary", "DoorSettings" })
+                Assert.Contains(targets, t => t.Key == door && t.Role == PossessionRole.TabHeader);
         }
         finally
         {
@@ -335,7 +348,7 @@ public sealed class PossessionEffectsTests
         };
         try
         {
-            Assert.Equal(new[] { "scene_the_count", "scene_where_you_are" }, MainShellWindow.PossessionHeadScenes().Select(x => x.Id).ToArray());
+            Assert.Equal(new[] { "scene_the_count", "scene_where_you_are", "scene_rail_sweep" }, MainShellWindow.PossessionHeadScenes().Select(x => x.Id).ToArray());
 
             var count = new TheCountScene();
             Assert.Equal(3, count.Beats);

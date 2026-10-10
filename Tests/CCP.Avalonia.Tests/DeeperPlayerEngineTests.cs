@@ -199,6 +199,58 @@ public sealed class DeeperPlayerEngineTests
         }
     });
 
+    /// <summary>IB2 (WPF Window_Closing :2661): the player hands back a camera IT started, and
+    /// leaves one that was already running, or that the user already stopped, alone.</summary>
+    [Theory]
+    [InlineData(false, 1)]   // the player started it: close stops it
+    [InlineData(true, 0)]    // somebody else's camera: close leaves it
+    public Task ClosingHandsBackOnlyACameraThePlayerStarted(bool alreadyRunning, int stopsOnClose) => AvaloniaTestDispatcher.RunAsync(async () =>
+    {
+        Setup();
+        var (isRunning, start, stop, consent, confirm, notice) = (EnhancementPlayerWindow.EyeIsRunning, EnhancementPlayerWindow.EyeStart,
+            EnhancementPlayerWindow.EyeStop, EnhancementPlayerWindow.EyeConsentCurrent, EnhancementPlayerWindow.EyeConfirm, EnhancementPlayerWindow.EyeNotice);
+        bool running = alreadyRunning;
+        int starts = 0, stops = 0;
+        EnhancementPlayerWindow.EyeIsRunning = () => running;
+        EnhancementPlayerWindow.EyeStart = () => { starts++; running = true; return Task.FromResult(true); };
+        EnhancementPlayerWindow.EyeStop = () => { stops++; running = false; return Task.CompletedTask; };
+        EnhancementPlayerWindow.EyeConsentCurrent = () => true;
+        EnhancementPlayerWindow.EyeConfirm = (_, _, _) => Task.FromResult(true);
+        EnhancementPlayerWindow.EyeNotice = (_, _, _) => Task.CompletedTask;
+        var player = new EnhancementPlayerWindow(null, null);
+        try
+        {
+            player.Show();
+            if (!alreadyRunning)
+            {
+                await player.ToggleEyeTrackingAsync();
+                Assert.Equal((1, 0), (starts, stops));
+            }
+            player.Close();
+            Assert.Equal(stopsOnClose, stops);
+            Assert.Equal(alreadyRunning, running);
+
+            // Started here, then stopped by the user, then started by another feature: not ours any more.
+            var second = new EnhancementPlayerWindow(null, null);
+            second.Show();
+            running = false; stops = 0;
+            await second.ToggleEyeTrackingAsync();   // start
+            await second.ToggleEyeTrackingAsync();   // the user's own stop
+            Assert.Equal(1, stops);
+            running = true;                          // Focus Gaze, say
+            second.Close();
+            Assert.Equal(1, stops);
+            Assert.True(running);
+        }
+        finally
+        {
+            try { player.Close(); } catch { }
+            (EnhancementPlayerWindow.EyeIsRunning, EnhancementPlayerWindow.EyeStart, EnhancementPlayerWindow.EyeStop,
+                EnhancementPlayerWindow.EyeConsentCurrent, EnhancementPlayerWindow.EyeConfirm, EnhancementPlayerWindow.EyeNotice)
+                = (isRunning, start, stop, consent, confirm, notice);
+        }
+    });
+
     [Fact]
     public void ImportCopiesIntoTheLibraryOnceAndSkipsWhatIsNotAnEnhancement()
     {

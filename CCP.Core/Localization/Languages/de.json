@@ -6694,6 +6694,8 @@
   "tray_wake": "Sie aufwecken",
   "tray_show": "Fenster anzeigen",
   "tray_stop_everything": "Alles stoppen",
+  "tray_stop_refused_panic_off": "Nichts gestoppt. Die Paniktaste ist ausgeschaltet.",
+  "tray_stop_refused_strict": "Nichts gestoppt. Die strikte Sperre ist an.",
   "panic_portal_description": "Panik: alles stoppen",
   "panic_portal_bound": "Paniktaste in jedem Fenster: {0}",
   "panic_portal_unavailable": "Die Paniktaste wirkt nur, solange ein CCP- oder anderes X11-Fenster den Fokus hat. Sonst hilft „Alles stoppen“ im Tray.",

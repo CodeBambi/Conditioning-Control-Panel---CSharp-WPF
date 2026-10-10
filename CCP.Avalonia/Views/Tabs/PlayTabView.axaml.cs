@@ -409,7 +409,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             TxtPlayFocusGazeStatus.Text = Loc.Get(Platform.GazeFocusHead.Instance.IsActive ? "label_focus_gaze_active" : "label_focus_gaze_waiting");
         }
 
-        private void OnFocusGazeActiveChanged(bool _) => global::Avalonia.Threading.Dispatcher.UIThread.Post(RefreshFocusGazeStatus);
+        private void OnFocusGazeActiveChanged(bool _) => global::Avalonia.Threading.Dispatcher.UIThread.Post(FollowFocusGazeIntent);
+
+        /// <summary>IA10: the box follows the saved intent whenever the engine changes state (the Camera
+        /// pill clears the intent from outside this page), silently, then the status line.</summary>
+        internal void FollowFocusGazeIntent()
+        {
+            bool intent = CoreSettings.Current.FocusGazeEnabled;
+            if (ChkPlayFocusGaze.IsChecked != intent)
+            {
+                _focusGazeSyncing = true;
+                try { ChkPlayFocusGaze.IsChecked = intent; }
+                finally { _focusGazeSyncing = false; }
+            }
+            RefreshFocusGazeStatus();
+        }
 
         /// <summary>WPF OpenFocusGazeSwitch: the Premium card lands on the switch.</summary>
         internal void ShowFocusGazeSwitch()

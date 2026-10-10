@@ -232,15 +232,15 @@ public class EmiRingCatalogueTests
         var expected = new (string File, string Id)[]
         {
             (SourceRoots.WpfHeadFile("Services", "Arcademy", "ArcademyHostService.cs"), "arcademy"),
-            (SourceRoots.FindProductFile("Services", "Chaos", "DtrhHostService.cs"), "dtrh"),
-            (SourceRoots.FindProductFile("Services", "Chaos", "LoomHostService.cs"), "loom"),
-            (SourceRoots.FindProductFile("Services", "Fyp", "FypHostService.cs"), "fyp"),
-            (SourceRoots.FindProductFile("Services", "Quiz", "IntakeHostService.cs"), "intake"),
+            (SourceRoots.WpfHeadFile("Services", "Chaos", "DtrhHostService.cs"), "dtrh"),
+            (SourceRoots.WpfHeadFile("Services", "Chaos", "LoomHostService.cs"), "loom"),
+            (SourceRoots.WpfHeadFile("Services", "Fyp", "FypHostService.cs"), "fyp"),
+            (SourceRoots.WpfHeadFile("Services", "Quiz", "IntakeHostService.cs"), "intake"),
             // Pinned to the WPF head: CCP.Core carries the windowless half under the same file name.
             (Path.Combine(SourceRoots.ProductDirectories.Single(d => Path.GetFileName(d) == "ConditioningControlPanel"),
                 "Services", "GoonGame", "GoonHostService.cs"), "goon"),
-            (SourceRoots.FindProductFile("Services", "JustDrop", "JustDropHostService.cs"), "justdrop"),
-            (SourceRoots.FindProductFile("Services", "BackRoom", "BackRoomHostService.cs"), "backroom"),
+            (SourceRoots.WpfHeadFile("Services", "JustDrop", "JustDropHostService.cs"), "justdrop"),
+            (SourceRoots.WpfHeadFile("Services", "BackRoom", "BackRoomHostService.cs"), "backroom"),
         };
 
         foreach (var (file, id) in expected)

@@ -6694,6 +6694,8 @@
   "tray_wake": "Les réveiller",
   "tray_show": "Afficher la fenêtre",
   "tray_stop_everything": "Tout arrêter",
+  "tray_stop_refused_panic_off": "Rien n'a été arrêté. La touche panique est désactivée.",
+  "tray_stop_refused_strict": "Rien n'a été arrêté. Le verrou strict est actif.",
   "panic_portal_description": "Panique : tout arrêter",
   "panic_portal_bound": "Touche panique dans toutes les fenêtres : {0}",
   "panic_portal_unavailable": "La touche panique ne marche que si une fenêtre CCP ou X11 a le focus. Sinon, utilise « Tout arrêter » dans la zone de notification.",

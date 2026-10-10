@@ -91,6 +91,40 @@ internal abstract class PossessionEffectBase : IPossessionEffect
         _outline = null;
     }
 
+    /// <summary>True for an effect written for controls the user acts on (a door, Start, a toggle,
+    /// the timer). Everything else is refused those roles at CanApply and again in Apply.</summary>
+    protected virtual bool TakesInteractive => false;
+    private IDisposable? _guard;
+    private readonly List<Control> _twins = new();
+
+    /// <summary>A picture laid over the victim on the adorner layer. It takes no input and no focus:
+    /// the real control stays underneath at its rest position and size, and every click lands on it.</summary>
+    protected bool ShowTwin(Control victim, Control twin)
+    {
+        try
+        {
+            if (AdornerLayer.GetAdornerLayer(victim) is not { } layer) return false;
+            twin.IsHitTestVisible = false;
+            twin.Focusable = false;
+            AdornerLayer.SetAdornedElement(twin, victim);
+            layer.Children.Add(twin);
+            _twins.Add(twin);
+            return true;
+        }
+        catch (Exception ex) { Log.Debug("Possession {Id}: twin failed: {E}", Id, ex.Message); return false; }
+    }
+
+    internal int TwinCount => _twins.Count;
+
+    private void DropTwins()
+    {
+        foreach (var t in _twins)
+        {
+            try { (t.Parent as Panel)?.Children.Remove(t); } catch { }
+        }
+        _twins.Clear();
+    }
+
     /// <summary>Overlays in place right now (tests: nothing is left behind).</summary>
     internal int OverlayCount => _overlays.Count;
 
@@ -103,8 +137,7 @@ internal abstract class PossessionEffectBase : IPossessionEffect
             if (Roles.Count > 0)
             {
                 if (target?.Element is not Control c || !c.IsEffectivelyVisible) return false;
-                if (PossessionTree.IsOffLimits(c)) return false;   // the law, asked again at the door
-                if (!PossessionTree.IsDisplayRole(target.Role)) return false;
+                if (!PossessionTree.MayTouch(c, target.Role, TakesInteractive)) return false;   // the law, asked again at the door
                 bool mine = false;
                 foreach (var r in Roles) if (r == target.Role) { mine = true; break; }
                 if (!mine) return false;
@@ -117,7 +150,7 @@ internal abstract class PossessionEffectBase : IPossessionEffect
     public Task ApplyAsync(PossessionContext ctx, PossessionTarget? target, CancellationToken ct)
     {
         if (IsLive || ctx == null) return Task.CompletedTask;
-        if (Roles.Count > 0 && (target?.Element is not Control tc || PossessionTree.IsOffLimits(tc))) return Task.CompletedTask;
+        if (Roles.Count > 0 && (target?.Element is not Control tc || !PossessionTree.MayTouch(tc, target.Role, TakesInteractive))) return Task.CompletedTask;
         Ctx = ctx;
         Victim = target?.Element as Control;
         Cts = new CancellationTokenSource();
@@ -125,6 +158,8 @@ internal abstract class PossessionEffectBase : IPossessionEffect
         try
         {
             ApplyCore(ctx, target);
+            if (IsLive && Victim is { } watched && target != null && PossessionTree.IsInteractiveRole(target.Role))
+                _guard = PossessionGuard.Watch(watched, Restore);
             if (IsLive && OutlineOnApply && Victim is { } victim) ShowOutline(victim);
         }
         catch (Exception ex)
@@ -161,6 +196,9 @@ internal abstract class PossessionEffectBase : IPossessionEffect
     private void Restore()
     {
         _epoch++;
+        try { _guard?.Dispose(); } catch { }
+        _guard = null;
+        DropTwins();
         StopMotion();
         try { RestoreCore(); } catch (Exception ex) { Log.Warning("Possession {Id}: restore failed: {E}", Id, ex.Message); }
         for (int i = _overlays.Count - 1; i >= 0; i--)

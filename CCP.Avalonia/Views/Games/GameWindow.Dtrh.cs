@@ -17,8 +17,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
     /// run-progress / run-ended with DtrhRunPayoutRule (abandoned runs pro rata, a minute to count) and
     /// payout-result (XP capped by score, sparks, previous best, rank up), and a window closed mid-run
     /// banks its last snapshot (DtrhRunCloseRule). Bodies copied from WPF 7.1.5 :480-744, :1133-1243.
-    /// ponytail: sfx, barks, haptics, the Loom, asset stats, world freeze / dive mute, session metrics,
-    /// reveals and the crash sentinel are not wired yet.
+    /// sfx, barks, haptics, the Loom, asset stats, world freeze / dive mute, session metrics and the
+    /// crash sentinel are wired in the Host and Director partials (see their headers for what is left).
     /// </summary>
     internal sealed partial class GameWindow
     {

@@ -211,7 +211,7 @@ public class LockdownDoseKeeperTests
     [Fact]
     public void Restore_MarshalsBeforeReadingTheWindow_AndOwnsTheRecoveryFile()
     {
-        var src = Source("Services", "Haptics", "LockdownDoseKeeper.cs");
+        var src = System.IO.File.ReadAllText(SourceRoots.WpfHeadFile("Services", "Haptics", "LockdownDoseKeeper.cs"));
         var start = src.IndexOf("private void Restore()", StringComparison.Ordinal);
         Assert.True(start > 0, "Restore() not found");
         var end = src.IndexOf("Crash recovery", start, StringComparison.Ordinal);
@@ -247,7 +247,7 @@ public class LockdownDoseKeeperTests
         // The duplicated Pop Quiz start block: two identical blocks started the service twice.
         Assert.Equal(1, engine.Split("App.PopQuiz?.Start();").Length - 1);
 
-        var keeper = Source("Services", "Haptics", "LockdownDoseKeeper.cs");
+        var keeper = System.IO.File.ReadAllText(SourceRoots.WpfHeadFile("Services", "Haptics", "LockdownDoseKeeper.cs"));
         Assert.Contains("mw.StartEngine(systemInitiated: true);", keeper, StringComparison.Ordinal);
     }
 
@@ -256,7 +256,7 @@ public class LockdownDoseKeeperTests
     {
         // A session owning the dose used to rewrite _wasEmpty every tick, consuming the edge: a
         // session ending with everything off never fired `starve` and the room refilled silently.
-        var src = Source("Services", "Haptics", "LockdownDoseKeeper.cs");
+        var src = System.IO.File.ReadAllText(SourceRoots.WpfHeadFile("Services", "Haptics", "LockdownDoseKeeper.cs"));
         var start = src.IndexOf("if (mw.IsSessionFeatureLockActive)", StringComparison.Ordinal);
         Assert.True(start > 0, "stand-down branch not found");
         var body = src.Substring(start, Math.Min(400, src.Length - start));

@@ -360,6 +360,17 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             _possessionGlitchTimer?.Stop();
             StopSpeechLoops();
             _clickBounceTimer?.Stop();
+            // hunt3 IC3: the ask-card hook on the CompanionAskService singleton, and the one-shot timers
+            // nothing stopped (each holds the closed window through its Tick closure until it fires).
+            ReleaseAskHook();
+            _companionGreetingDebounce?.Stop();
+            _listeningDotsTimer?.Stop();
+            _mutedIndicatorTimer?.Stop();
+            _speechDelayTimer?.Stop();
+            _speechLeadInTimer?.Stop();
+            _typewriterTimer?.Stop();
+            _talkTimer?.Stop();
+            _talkStartTimer?.Stop();
             ReleaseEmotes();
             base.OnClosed(e);
         }

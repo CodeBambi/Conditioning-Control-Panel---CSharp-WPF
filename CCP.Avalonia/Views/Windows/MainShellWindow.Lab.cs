@@ -38,10 +38,10 @@
 //   internal void BtnStartIntake_Click(…) -> GradedIntakeTabView
 //   internal void BtnStartBureau_Click(…)
 //   internal void BtnStartGoon_Click(…)
-//   internal void BtnStartChaos_Click(…)
+//   internal void BtnStartChaos_Click(…)          -> retired here: the native Chaos run is gone, Chaos is the web descent (GameWindow "dtrh")
 //   internal void OpenFypFeed(…)
 //   internal void BtnStartArcademy_Click(…)
-//   internal void BtnQuickStartChaos_Click(…)
+//   internal void BtnQuickStartChaos_Click(…)     -> retired with it
 //   private bool _intakePassHooked
 //   internal void RefreshGradedIntakeGate(…) -> GradedIntakeTabView
 //   private void SetGradedIntakeGateCopy(…) -> GradedIntakeTabView

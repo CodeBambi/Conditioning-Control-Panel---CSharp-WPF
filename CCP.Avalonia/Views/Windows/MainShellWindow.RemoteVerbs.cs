@@ -43,12 +43,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         /// <summary>WPF App.LockCard.ShowLockCard(): the next phrase from the subject's own list, with the
-        /// subject's own repeats / strict / voice settings. Never stacks.</summary>
+        /// subject's own repeats / voice settings. Never strict. Never stacks.</summary>
         string? RemoteCommands.IRemoteHead.ShowLockCard()
         {
             if (LockCardWindow.IsAnyOpen()) return "a lock card is already up";
             if (LockCardScheduler.EnabledPhrases().Count == 0) return "no phrases";
-            LockCardWindow.ShowNext(isTest: false);
+            // SAFETY (IC1): a controller's card is never strict, whatever the subject's setting says.
+            LockCardWindow.ShowNext(isTest: false, LockCardOrigin.Remote);
             return LockCardWindow.IsAnyOpen() ? null : "could not show a card";
         }
 

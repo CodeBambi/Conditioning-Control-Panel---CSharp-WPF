@@ -13,8 +13,8 @@
 //    AddScriptToExecuteOnDocumentCreated); it scans for the element, so a late start loses nothing;
 //  - page -> host goes through the engine's invokeCSharpAction, host -> page is a script call into
 //    the watcher (window.__ccpRaceCloud.host), so the same code runs on WebView2 and WebKitGTK;
-//  - SEAM(platform): no per-window browser profile, no "--autoplay-policy=no-user-gesture-required"
-//    and no NewWindowRequested hook. If their player refuses a scripted play, the page's own fallback
+//  - the window has its own browser profile (WebProfiles.BambiCloud, set in Build);
+//  - SEAM(platform): no "--autoplay-policy=no-user-gesture-required" and no NewWindowRequested hook. If their player refuses a scripted play, the page's own fallback
 //    (cloud-open {front:true} after 9 s) brings this window forward for a press by hand.
 using System;
 using System.Diagnostics;

@@ -28,6 +28,13 @@ internal static class FypHostService
     public static volatile Action? LaunchProvider;
     public static volatile Func<bool>? IsActiveProvider;
     public static volatile Action? CloseProvider;
+    /// <summary>WPF IsGhosted: the feed is parked behind its see-through mirror (not "on screen").</summary>
+    public static volatile Func<bool>? IsGhostedProvider;
+
+    public static bool IsGhosted
+    {
+        get { try { return IsGhostedProvider?.Invoke() == true; } catch { return false; } }
+    }
 
     public static bool IsActive
     {

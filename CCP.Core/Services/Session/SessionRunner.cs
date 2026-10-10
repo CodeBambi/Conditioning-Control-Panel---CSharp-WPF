@@ -31,6 +31,7 @@ namespace ConditioningControlPanel.Services
         private readonly Stopwatch _stopwatch = new();
         private Timer? _timer;
         private SessionSettingsSnapshot? _snapshot;
+        private bool _startPanicKey = true, _startStrictLock;
         private PhrasePoolCustody? _custody;
         private DateTime _startTime;
         private TimeSpan _lastElapsed;
@@ -94,6 +95,9 @@ namespace ConditioningControlPanel.Services
             PinkOpacity = null;
             ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("sessionStarted", new { target = session.Name?.ToLowerInvariant(), minutes = (int)session.DurationMinutes });   // WPF SessionEngine.cs:267
             _emiSaidHalfway = _emiSaidLastMinute = false;
+            // WPF SessionEngine.cs:279-289, behind sessionStarted on purpose: the started count, relapse,
+            // and EMI's firstSessionEver when this is the account's first.
+            try { AchievementEngine.Current?.TrackSessionStart(); } catch (Exception ex) { Log.Debug(ex, "session start count"); }
             _emiRampStep = 0;
             _pausedElapsed = _lastElapsed = TimeSpan.Zero;
             PinkStartMinute = RandomizedStart(session.Settings.PinkFilterEnabled, session.Settings.PinkFilterStartMinute, _random);
@@ -107,6 +111,8 @@ namespace ConditioningControlPanel.Services
 
             CaptureCornerGifUserState(s);   // the user's own Spiral master, before any override
             _snapshot = SessionSettingsSnapshot.Capture(s);
+            _startPanicKey = s.PanicKeyEnabled;      // WPF _sessionStartPanicKey / _sessionStartStrictLock:
+            _startStrictLock = s.StrictLockEnabled;  // the achievement reads the START state, not the restored one
             _custody = PhrasePoolCustody.Begin(s, session.Settings, CoreMods.ActiveModId, session);
             Apply(session.Settings, s);
             StartPhases(session);
@@ -388,11 +394,17 @@ namespace ConditioningControlPanel.Services
                 xp = (int)Math.Round(ProfileAdopt.TotalXp(s) - before);
                 Log.Information("Session completed: {Name}, XP: {XP} (banked {Banked}, paused {PauseCount}x, penalty: -{Penalty})",
                     session.Name, award, xp, PauseCount, XPPenalty);
+                // WPF SessionEngine.cs:442 TrackSessionComplete: the achievement half, then the quest half.
+                try { AchievementEngine.Current?.TrackSessionComplete(session.Name, elapsed.TotalMinutes, !_startPanicKey, _startStrictLock); }
+                catch (Exception ex) { Log.Debug(ex, "session complete count"); }
                 CoreProgression.TrackSessionCompleted();   // WPF SessionEngine.cs:442 -> AchievementService.cs:999
                 ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("sessionCompleted", new { target = session.Name?.ToLowerInvariant(), minutes = (int)elapsed.TotalMinutes, n = xp });   // WPF SessionEngine.cs:471
             }
             else {
                 Log.Information("Session stopped early");
+                // WPF SessionEngine.cs:411 + :490: the abandoned count, and the stop stamps the relapse window.
+                try { AchievementEngine.Current?.TrackSessionAbandoned(); AchievementEngine.Current?.TrackPanicPressed(); }
+                catch (Exception ex) { Log.Debug(ex, "session abandoned count"); }
                 ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("sessionAbandoned", new { minutes = (int)elapsed.TotalMinutes });   // WPF SessionEngine.cs:486
             }
 

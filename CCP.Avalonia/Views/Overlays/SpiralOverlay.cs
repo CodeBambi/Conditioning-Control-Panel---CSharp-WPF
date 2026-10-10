@@ -57,8 +57,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         /// <summary>WPF GetSpiralPath: with Randomize on, a random spiral from the pool, picked at
         /// overlay START only (never per tick: the decoded frames are keyed by path and a mid-run
         /// re-decode hitches); else the configured file if it exists, else the active mod's spiral,
-        /// else the shipped one. ponytail: video spirals (.mp4 etc., WPF MediaElement) decode to no
-        /// frames and show nothing.</summary>
+        /// else the shipped one. A video spiral (.mp4 etc., WPF MediaElement) plays through
+        /// SpiralOverlay.Hold.cs ("the video spiral"), silent.</summary>
         internal static string SourcePath()
         {
             var s = CoreSettings.Current;
@@ -233,7 +233,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         }
 
         /// <summary>WPF AchievementService:276 - quest minutes while the spiral is on screen.</summary>
-        internal static readonly OverlayQuestMinutes QuestMinutes = new(m => App.Quests?.TrackSpiralMinutes(m));
+        internal static readonly OverlayQuestMinutes QuestMinutes = new(m =>
+        {
+            App.Achievements?.TrackSpiralMinutes(m);   // WPF :444 the lifetime + continuous minutes (spiral_eyes, threadbare)
+            App.Quests?.TrackSpiralMinutes(m);
+        })
+        { Hidden = () => App.Achievements?.ResetContinuousSpiral() };   // WPF :469
 
         /// <summary>Same gate as the pink tint (WPF RefreshOverlays returns early unless the engine runs):
         /// a running engine or session, not paused. Unseeded (renders, tests) means the card owns it.</summary>

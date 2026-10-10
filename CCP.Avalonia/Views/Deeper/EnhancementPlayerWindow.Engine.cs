@@ -46,6 +46,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             _timeSource = new PlayerTimeSource(this);
             _host.ActionLogged += OnHostActionLogged;
             _host.Diagnostic += OnHostDiagnostic;
+            // WPF GamificationBridge.OnEnhancementCompleted (:657): the play count and the per-play badges.
+            _host.EnhancementCompleted += (_, e) => global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                try
+                {
+                    var a = App.Achievements; if (a == null) return;
+                    a.TrackEnhancementPlayed(e.DistinctTriggerTypes);
+                    if (e.WebcamTriggerUsed) a.TryUnlock("wired_in");
+                    if (e.GazeHeldFull) a.TryUnlock("dont_look_away");
+                    if (e.Featured) a.TryUnlock("directors_cut");
+                }
+                catch (Exception ex) { Serilog.Log.Debug(ex, "enhancement completed count"); }
+            });
             // Statics only once the window is really up: a window that is built and never shown
             // (render proof) must not sit in the open list or under the tracker's event.
             Opened += (_, _) =>
@@ -95,6 +108,28 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
                 _lastRaisedSec = _currentSec;
                 _timeSource!.Raise(_currentSec);
             }
+
+            CreditDeeperMinutes(_host.IsActivelyPlaying);
+        }
+
+        // WPF AchievementService.cs:493: Deeper time counts only while an enhancement is actively
+        // playing (permanent_resident, 600 minutes). Measured on a monotonic clock between two playing
+        // ticks (6 s ceiling, WPF's sanity bound) and handed to the engine a whole minute at a time,
+        // with the remainder on pause and on close.
+        private readonly global::ConditioningControlPanel.Services.RunningTimeCredit _deeperCredit = new(TimeSpan.FromSeconds(6));
+        private readonly System.Diagnostics.Stopwatch _deeperClock = System.Diagnostics.Stopwatch.StartNew();
+        private double _deeperPendingMinutes;
+
+        internal void CreditDeeperMinutes(bool playing) => CreditDeeperMinutes(playing, _deeperClock.Elapsed);
+
+        internal void CreditDeeperMinutes(bool playing, TimeSpan now)
+        {
+            _deeperPendingMinutes += _deeperCredit.Sample(playing, now);
+            if (_deeperPendingMinutes <= 0 || (playing && _deeperPendingMinutes < 1.0)) return;
+            var minutes = _deeperPendingMinutes;
+            _deeperPendingMinutes = 0;
+            try { App.Achievements?.TrackDeeperMinutes(minutes); }
+            catch (Exception ex) { Serilog.Log.Debug(ex, "deeper minutes"); }
         }
 
         private bool MediaReady => _isVideoMode ? _videoNavigated : _audio != null;
@@ -226,6 +261,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
 
         private void CloseEngine()
         {
+            HandBackEyeTracking();
             if (s_open.Remove(this))
             {
                 try { WebcamTracker.Instance.StateChanged -= OnEyeStateChanged; } catch { }
@@ -250,6 +286,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
 
         private bool _eyeBusy;
 
+        /// <summary>WPF _playerStartedWebcam: THIS player turned the camera on, so its close turns it
+        /// off again. A camera that was already running when the player opened is never touched.</summary>
+        private bool _eyeStartedHere;
+
+        /// <summary>WPF Window_Closing (:2661): leave the camera the way the player found it.</summary>
+        private void HandBackEyeTracking()
+        {
+            if (!_eyeStartedHere) return;
+            _eyeStartedHere = false;
+            try { if (EyeIsRunning()) _ = EyeStop(); }
+            catch (Exception ex) { Log.Debug("EnhancementPlayer: webcam auto-stop failed: {Error}", ex.Message); }
+        }
+
         internal async Task ToggleEyeTrackingAsync()
         {
             if (_eyeBusy) return;
@@ -259,6 +308,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             {
                 if (EyeIsRunning())
                 {
+                    _eyeStartedHere = false;   // the player's own stop: nothing left to hand back
                     await EyeStop();
                     return;
                 }
@@ -270,7 +320,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
                 }
                 // Awaited: the camera opens only after the answer.
                 if (!await EyeConfirm(this, title, Loc.Get("deeper_player_eye_tracking_confirm_start"))) return;
-                if (!await EyeStart())
+                if (await EyeStart()) _eyeStartedHere = true;   // WPF _playerStartedWebcam
+                else
                     await EyeNotice(this, title, string.Format(Loc.Get("deeper_player_eye_tracking_start_failed_fmt"), EyeLastError() ?? ""));
             }
             catch (Exception ex)

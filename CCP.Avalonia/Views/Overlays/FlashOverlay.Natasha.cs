@@ -25,9 +25,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
     {
         // ---- Natasha's favourite: the flash dodge ----
 
-        /// <summary>WPF ActivityTracker.GetIdleSeconds. Unknown (no probe on this platform) reads as
-        /// -1, and a player nobody can prove is at the desk is never dealt a red flash.</summary>
-        internal static Func<int> IdleSeconds = () => ActivityIdle.IdleSecondsProvider?.Invoke() ?? -1;
+        /// <summary>WPF ActivityTracker.GetIdleSeconds: GetLastInputInfo on Windows, the XScreenSaver
+        /// idle counter on an X11 desk (Platform/InputIdleProbe). Unknown reads as -1, and a player
+        /// nobody can prove is at the desk is never dealt a red flash.</summary>
+        internal static Func<int> IdleSeconds = Platform.InputIdleProbe.DeskIdleSeconds;
 
         /// <summary>WPF :1860-1864: only a first-generation flash the player can dodge (the setting on,
         /// clickable, at the desk), only while the price can land (tab on, linked, row on, no safety

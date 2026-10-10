@@ -21,8 +21,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
     /// the page as <c>balance</c>. The Breakout doors ride the same bridge (they are Back Room pages).
     /// media deals are WPF BackRoomMedia (local folders + the warm Scrolller pool, urls on loopback); fx run on
     /// BackRoomFxHead (the port's overlays; a primitive with none is acked skipped), words on BackRoomVoice
-    /// (recorded clips only), haptics on BackRoomHapticDirector, slot lines on Circe's tab. The race handoff
-    /// still opens its own window, and there is no feature day log on this head.
+    /// (recorded clips only), haptics on BackRoomHapticDirector, slot lines on Circe's tab, the feature day
+    /// log through NoteEvent. The race handoff still opens its own window.
     /// </summary>
     internal sealed partial class GameWindow
     {
@@ -47,6 +47,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                 var current = BackRoomApi.AppIdentity();
                 return current?.UnifiedId == roomAccount ? current : null;
             }
+            // IB6: this window's own door onto the shared fx head (the room and Breakout can be open together).
+            var fx = BackRoomFxHead.Attach(this);
             BackRoomBridge? bridge = null;
             var api = new BackRoomApi(null, RoomIdentity, sp => bridge?.AdoptSp(sp, () => RoomIdentity() != null));
             _backRoom = bridge = new BackRoomBridge(new BackRoomBridge.Deps
@@ -55,7 +57,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                 Relay = api,
                 Media = RoomMedia,
                 // WPF CreateBridge :421-431. Recorded clips only (no synthetic speech): a word with no clip stays silent.
-                Fx = BackRoomFxHead.Shared,
+                Fx = fx,
                 Voice = RoomVoiceFactory(() => IsBreakoutPage(Spec.Id)),
                 Haptic = BackRoomHapticDirector.OnHaptic,
                 NoteEvent = key => global::ConditioningControlPanel.Services.FeatureDayLogService.Current?.Note(key),   // WPF CreateBridge :427
@@ -76,7 +78,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             });
             _backRoomSettings = CoreSettings.Current;
             _backRoomSettings.PropertyChanged += OnBackRoomSetting;
-            BackRoomFxHead.Host = this;
         }
 
         /// <summary>The spoken word (10.21). Tests swap it for the null object.</summary>
@@ -106,7 +107,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             var b = _backRoom;
             _backRoom = null;
             b?.CloseNow();   // Finish -> CancelFx: every effect, word and pulse the room started stops with the window
-            if (ReferenceEquals(BackRoomFxHead.Host, this)) BackRoomFxHead.Host = null;
+            BackRoomFxHead.Detach(this);   // after the cancel: the last window out stops everything, an earlier one only its own holds
         }
 
         private void OnBackRoomSetting(object? sender, PropertyChangedEventArgs e)

@@ -156,7 +156,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             if (!on) SetChecked(false);
             TxtRemoteCode.Text = on ? string.Join(" ", code!.ToCharArray()) : "- - - - - - - -";
             var pin = on ? Relay.Value.ConnectPin : null;
-            TxtRemotePin.Text = string.IsNullOrEmpty(pin) ? "" : $"PIN: {pin}";
+            TxtRemotePin.Text = string.IsNullOrEmpty(pin) ? "" : Loc.GetF("remote_overlay_pin", pin);
             TxtRemotePin.IsVisible = !string.IsNullOrEmpty(pin);
             RemoteControlPanel.IsVisible = RemoteLinkPanel.IsVisible = RemoteCodePanel.IsVisible = BtnStopRemote.IsVisible = on;
             // SP5: the opt-in section stays visible but greyed while a session runs.
@@ -217,7 +217,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             RefreshTierCardHighlight();
             var r = Relay.Value;
             if (_isLoading || !r.IsActive || SelectedTier == r.Tier || TopLevel.GetTopLevel(this) is not Window owner) return;
-            if (!await WarningDialog.ShowDoubleWarningAsync(owner, "Remote Control", Waiver(SelectedTier))) return;
+            if (!await WarningDialog.ShowDoubleWarningAsync(owner, Loc.Get("tab_remote_control"), Waiver(SelectedTier))) return;
             await r.StopAsync();
             SetChecked(true);
             await StartAsync(owner, SelectedTier);
@@ -239,7 +239,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         {
             var r = Relay.Value;
             if (string.IsNullOrEmpty(r.SessionCode)) return;
-            await Copy(BtnCopyRemoteCode, string.IsNullOrEmpty(r.ConnectPin) ? r.SessionCode : $"{r.SessionCode} (PIN: {r.ConnectPin})", "btn_copy");
+            await Copy(BtnCopyRemoteCode, string.IsNullOrEmpty(r.ConnectPin) ? r.SessionCode : $"{r.SessionCode} ({Loc.GetF("remote_overlay_pin", r.ConnectPin)})", "btn_copy");
         }
 
         private async void BtnCopyRemoteLink_Click(object? sender, RoutedEventArgs e)

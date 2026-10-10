@@ -29,6 +29,10 @@ namespace ConditioningControlPanel
         /// cards, the pink tint). Runs after every Stop, running or not.</summary>
         public static volatile Action? StoppedHook;
 
+        /// <summary>WPF EngineCrashSentinel (StartStop.cs:417, :560): arm the dirty-shutdown file while the
+        /// engine runs. Off until a head that reads it at startup switches it on (hunt3 IC7).</summary>
+        public static volatile bool CrashSentinel;
+
         /// <summary>The head's pop-quiz scheduler (it owns the <see cref="IPopQuizHost"/>); null
         /// on a head with no pop-quiz window.</summary>
         public static volatile PopQuizScheduler? PopQuiz;
@@ -53,6 +57,8 @@ namespace ConditioningControlPanel
         public static void Start(bool systemInitiated = false)
         {
             var s = CoreSettings.Current;
+            // WPF StartStop.cs:298: Relapse = a start the player chose inside ten seconds of a panic press.
+            if (!systemInitiated) { try { AchievementEngine.Current?.CheckRelapse(); } catch (Exception ex) { Log.Debug(ex, "relapse check"); } }
             if (!systemInitiated) s.TotalSessions++;   // WPF StartStop.cs:308: a keeper start is not a session the user chose
             CoreSettings.Save();
 
@@ -80,6 +86,12 @@ namespace ConditioningControlPanel
             _running = true;
             StartedUtc = DateTime.UtcNow;
             ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("engineStarted", new { systemInitiated });   // WPF StartStop.cs:412
+            // WPF StartStop.cs:417: the dirty-shutdown sentinel, armed while the engine runs. Only a head
+            // that consumes it at startup switches it on (tests and other hosts never write the file).
+            if (CrashSentinel)
+                EngineCrashSentinel.Mark($"started {DateTime.Now:yyyy-MM-dd HH:mm:ss} | flash {(s.FlashEnabled ? "on" : "off")}" +
+                    $" | bubbles {(s.BubblesEnabled ? "on" : "off")} | video {(s.MandatoryVideosEnabled ? "on" : "off")}" +
+                    $" | subliminal {(s.SubliminalEnabled ? "on" : "off")}");
             ConditioningTime.OnEngineStarted(DateTime.Now);   // WPF StartStop.cs:423 StartConditioningTimeTracker
             Log.Information("Engine started - Flash: {Flash}, Subliminal: {Sub}, LockCard: {Lock}, BouncingText: {Bt}",
                 s.FlashEnabled, s.SubliminalEnabled, s.LockCardEnabled, s.BouncingTextEnabled);
@@ -115,6 +127,7 @@ namespace ConditioningControlPanel
                 StartedUtc = null;
                 ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("engineStopped", new { minutes = emiRanMinutes });   // WPF StartStop.cs:554
                 ConditioningTime.OnEngineStopped(DateTime.Now);   // WPF StartStop.cs:540 StopConditioningTimeTracker
+                if (CrashSentinel) EngineCrashSentinel.Clear();   // WPF StartStop.cs:560: a clean stop
                 try { StoppedHook?.Invoke(); }
                 catch (Exception ex) { Log.Warning(ex, "Engine stop hook failed"); }
                 CoreTubeEvents.RaiseEngineStopped();   // WPF MainWindow.EngineStopped -> the tube's EngineStop line

@@ -248,6 +248,7 @@ namespace ConditioningControlPanel
             DefaultSubliminalPoolProvider = () => mods.GetDefaultSubliminalPool();
             ReapplyActiveModPoolsProvider = mods.ReapplyActiveModPools;
             mods.ModChanged += RaiseModChanged;
+            mods.ModInstalled += (_, _) => { try { global::ConditioningControlPanel.Services.AchievementEngine.Current?.TrackModInstalled(); } catch { } };   // WPF GamificationBridge.OnModInstalled (modder)
             mods.ModAvailabilityChanged += (sender, id) =>
             {
                 try { ModAvailabilityChanged?.Invoke(sender, id); } catch { /* same rule as ModChanged */ }

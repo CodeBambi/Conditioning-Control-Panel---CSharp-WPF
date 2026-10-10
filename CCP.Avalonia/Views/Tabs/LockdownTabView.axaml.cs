@@ -474,11 +474,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// fire the EmergencyExit tripwire and Chaster's safety hold, then state the phrase steps
         /// and the time left. Never RestartTimer, never Deactivate, never open the phrase box.
         /// </summary>
+        /// <summary>hunt3 IC7, WPF EmergencyExitHostService.cs:134 / :548: EMI's <c>emergencyExitOpened</c> is
+        /// a hold for as long as the Emergency Exit games are up. This head has no games window (the
+        /// notice below is the whole surface), so the hold is armed and let go together.</summary>
+        internal static void FireEmergencyExitMoment()
+        {
+            ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("emergencyExitOpened");
+            ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.ReleaseHold("emergencyExitOpened");
+        }
+
         private void BtnEmergencyExit_Click(object? sender, RoutedEventArgs e)
         {
             if (Lockdown is not { IsActive: true } ld) return;
             try { ld.NotifyEscapeAttempt(EscapeKinds.EmergencyExit); } catch (Exception ex) { Log.Debug(ex, "EmergencyExit tripwire"); }
             try { Platform.ChasterHead.Service?.NoteSafetyExit(); } catch (Exception ex) { Log.Debug(ex, "EmergencyExit chaster hold"); }
+            FireEmergencyExitMoment();
             // The real time left even under HideLockdownTimer: this notice is the way out, it must not hide it.
             TxtEmergencyExitNotice.Text = Loc.GetF("lockdown_ee_phrase_steps_fmt", SessionClockLabel.LockdownClock(ld.Remaining, false));
             TxtEmergencyExitNotice.IsVisible = true;

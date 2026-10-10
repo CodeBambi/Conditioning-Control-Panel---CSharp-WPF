@@ -116,14 +116,33 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             };
         }
 
+        // hunt3 IC3: a named handler on the singleton, so OnClosed can take it off again (the lambda
+        // kept every closed tube alive and answering card changes).
+        private void OnAskCardChanged(AskCard c) => RunOnAvatar(() => { if (c.Id == _askCardId) RenderAskButtons(c); });
+
+        internal void HookAskCards()
+        {
+            if (_askHooked) return;
+            _askHooked = true;
+            CompanionAskService.Instance.CardChanged += OnAskCardChanged;
+        }
+
+        /// <summary>OnClosed: off the ask singleton, and every chat timer stops.</summary>
+        private void ReleaseAskHook()
+        {
+            if (_askHooked)
+            {
+                _askHooked = false;
+                try { CompanionAskService.Instance.CardChanged -= OnAskCardChanged; } catch { }
+            }
+            _thinkingTimer?.Stop();
+            _bounceTimer?.Stop();
+        }
+
         /// <summary>WPF ShowAskCard (Asks.cs): says the card's question and puts its answers under it.</summary>
         internal void ShowAskCard(AskCard card)
         {
-            if (!_askHooked)
-            {
-                _askHooked = true;
-                CompanionAskService.Instance.CardChanged += c => RunOnAvatar(() => { if (c.Id == _askCardId) RenderAskButtons(c); });
-            }
+            HookAskCards();
             _askCardId = card.Id;
             _askQuestion = card.Question;
             RenderAskButtons(card);

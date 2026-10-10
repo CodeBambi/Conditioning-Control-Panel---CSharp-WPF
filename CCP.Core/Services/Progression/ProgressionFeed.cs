@@ -50,6 +50,7 @@ namespace ConditioningControlPanel
             var previous = s.SkillPoints;
             s.SkillPoints += points;
             s.SeasonPeakLevel = Math.Max(s.SeasonPeakLevel, newLevel);
+            try { AchievementEngine.Current?.TrackSkillPointsEarned(points); } catch { /* a stat, never the wallet */ }   // WPF SkillTreeService.cs:858
             Log.Information("Level up to {Level}! Awarded {Points} skill points. Total: {Total}", newLevel, points, s.SkillPoints);
             SparklePointRewards.PublishCredit(previous, s.SkillPoints, SparklePointSource.LevelUp);
         }
@@ -77,8 +78,10 @@ namespace ConditioningControlPanel
     /// achievement tick's second credit, which double counted), so every minute lands once.
     /// <see cref="CoreEngine"/> calls <see cref="OnEngineStarted"/> / <see cref="OnEngineStopped"/>; the head
     /// drives <see cref="Tick"/> once a second.
-    /// ponytail: no server sync every 15 minutes (SyncPush does not carry total_conditioning_minutes yet)
-    /// and no Season Recap mirror (seasons are retired).
+    /// The server sync (WPF SyncConditioningTimeToServerAsync, hunt3 IC5): <see cref="SyncRequested"/> is
+    /// raised every 15 minutes of a run (counted on the same one-second tick, nothing new is written)
+    /// and once when the run stops. The head points it at the ordinary profile push, which carries
+    /// total_conditioning_minutes; that is the ONE sender. No Season Recap mirror (seasons are retired).
     /// </summary>
     public static class ConditioningTime
     {
@@ -86,6 +89,28 @@ namespace ConditioningControlPanel
         private static DateTime? _startedAt;
         private static double _baselineMinutes;
         private static int _secondCounter;
+        private static int _syncSecondCounter;
+
+        /// <summary>WPF _conditioningTimeSyncTimer: every 15 minutes while the engine runs.</summary>
+        public const int SyncEverySeconds = 15 * 60;
+
+        /// <summary>The head's sender (the ordinary profile push). Null: nothing is sent. Never called
+        /// under the lock; a throwing sender never breaks the tracker.</summary>
+        public static Action? SyncRequested { get; set; }
+
+        private static void RequestSync()
+        {
+            try { SyncRequested?.Invoke(); }
+            catch (Exception ex) { Log.Debug("Conditioning time sync request failed: {E}", ex.Message); }
+        }
+
+        /// <summary>A sync or profile load lifted the stored total by <paramref name="delta"/> minutes
+        /// mid-run: the baseline follows, so the stop credits only what this run really added.</summary>
+        public static void OnTotalLifted(double delta)
+        {
+            if (!(delta > 0)) return;
+            lock (_gate) { if (_startedAt != null) _baselineMinutes += delta; }
+        }
 
         public static bool IsTracking { get { lock (_gate) return _startedAt != null; } }
 
@@ -107,6 +132,7 @@ namespace ConditioningControlPanel
                 _startedAt = now;
                 _baselineMinutes = CoreSettings.Current.TotalConditioningMinutes;
                 _secondCounter = 0;
+                _syncSecondCounter = 0;
             }
             Log.Debug("Conditioning time tracker started");
         }
@@ -114,14 +140,21 @@ namespace ConditioningControlPanel
         /// <summary>One one-second tick: every 60th credits a minute.</summary>
         public static void Tick(DateTime now)
         {
+            bool minute, sync;
             lock (_gate)
             {
                 if (_startedAt == null) return;
-                if (++_secondCounter < 60) return;
-                _secondCounter = 0;
+                minute = ++_secondCounter >= 60;
+                if (minute) _secondCounter = 0;
+                sync = ++_syncSecondCounter >= SyncEverySeconds;
+                if (sync) _syncSecondCounter = 0;
             }
-            try { Add(1.0); }
-            catch (Exception ex) { Log.Warning(ex, "Error tracking conditioning time"); }
+            if (minute)
+            {
+                try { Add(1.0); }
+                catch (Exception ex) { Log.Warning(ex, "Error tracking conditioning time"); }
+            }
+            if (sync) RequestSync();   // after the minute landed, so the push carries it
         }
 
         /// <summary>WPF StopConditioningTimeTracker: credit what the minute ticks have not, measured
@@ -142,6 +175,7 @@ namespace ConditioningControlPanel
                 Log.Debug("Conditioning time tracker stopped (+{Minutes:F2} min on stop)", Math.Max(0, remaining));
             }
             catch (Exception ex) { Log.Warning(ex, "Error finalizing conditioning time"); }
+            RequestSync();   // WPF: sync to server on stop
         }
     }
 }

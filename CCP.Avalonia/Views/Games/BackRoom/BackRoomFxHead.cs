@@ -161,9 +161,70 @@ internal sealed class BackRoomFxHead : IBackRoomFxSink
         }
     }
 
-    /// <summary>Any attached visual of the open room (it only reaches <c>Screens</c>). Set by the host
-    /// while a room is open; null = no room, nothing shows.</summary>
-    internal static Visual? Host { get; set; }
+    // IB6: the room and a Breakout window can be open together. Each window attaches itself; the
+    // newest one still open is the host, so closing either never blanks the survivor's effects.
+    private static readonly List<Visual> Hosts = new();
+    private static Visual? _hostOverride;
+
+    /// <summary>Any attached visual of an open room (it only reaches <c>Screens</c>): the newest window
+    /// still attached; null = no room, nothing shows. The setter is the tests' override.</summary>
+    internal static Visual? Host
+    {
+        get { lock (Hosts) return _hostOverride ?? (Hosts.Count > 0 ? Hosts[^1] : null); }
+        set { lock (Hosts) _hostOverride = value; }
+    }
+
+    /// <summary>A room or Breakout window opened: it hosts the effects, and gets its own fx door.</summary>
+    internal static IBackRoomFx Attach(Visual window, IBackRoomFx? inner = null)
+    {
+        lock (Hosts) { Hosts.Remove(window); Hosts.Add(window); }
+        return new OwnedFx(window, inner ?? Shared);
+    }
+
+    /// <summary>That window closed. The next newest window (if any) hosts from here.</summary>
+    internal static void Detach(Visual window) { lock (Hosts) Hosts.Remove(window); }
+
+    private static bool AnotherIsOpen(Visual window) { lock (Hosts) return Hosts.Exists(h => !ReferenceEquals(h, window)); }
+
+    /// <summary>
+    /// One window's door onto the shared dispatcher (one hero gate for every window, as before). Its
+    /// "stop everything" is owner-scoped: while ANOTHER room window is open it releases only the holds
+    /// and the tunnel of the stations THIS window fired for, and leaves the other window's effects
+    /// alone; a one-shot it fired ends on its own clock. The last window to stop (and so a panic, which
+    /// closes every game window) still cancels everything.
+    /// </summary>
+    private sealed class OwnedFx : IBackRoomFx
+    {
+        private readonly Visual _owner;
+        private readonly IBackRoomFx _inner;
+        private readonly HashSet<string> _stations = new(StringComparer.Ordinal);
+
+        public OwnedFx(Visual owner, IBackRoomFx inner) { _owner = owner; _inner = inner; }
+
+        private void Note(string? station) { lock (_stations) _stations.Add(station ?? string.Empty); }
+
+        public BackRoomFxAck Fire(string fxId, string station, IReadOnlyList<string> symbolKeys, BackRoomMediaDeal deal)
+        { Note(station); return _inner.Fire(fxId, station, symbolKeys, deal); }
+
+        public BackRoomFxAck Fire(string fxId, string station, IReadOnlyList<string> symbolKeys, BackRoomMediaDeal deal, BackRoomFxArgs? args, string? token)
+        { Note(station); return _inner.Fire(fxId, station, symbolKeys, deal, args, token); }
+
+        public void Release(string token, string station) => _inner.Release(token, station);
+        public void Tunnel(string station, double level) { Note(station); _inner.Tunnel(station, level); }
+        public void ReleaseStation(string station) => _inner.ReleaseStation(station);
+
+        public void CancelAll()
+        {
+            string[] mine;
+            lock (_stations) { mine = _stations.ToArray(); _stations.Clear(); }
+            if (!AnotherIsOpen(_owner)) { _inner.CancelAll(); return; }
+            foreach (var station in mine)
+            {
+                try { _inner.ReleaseStation(station); }
+                catch (Exception ex) { Log.Debug("[BackRoom] owned release: {E}", ex.Message); }
+            }
+        }
+    }
 
     /// <summary>How long after a fire StopAll still considers a shared one-shot channel the room's.</summary>
     private const int OwnershipMs = 12_000;

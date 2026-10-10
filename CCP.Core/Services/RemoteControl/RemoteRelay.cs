@@ -84,6 +84,8 @@ namespace ConditioningControlPanel.Services
         public double PollInterval { get; private set; } = PollIntervalSeconds;
 
         public event EventHandler? ControllerConnectedChanged, ControllerIdleChanged, SessionEnded;
+        /// <summary>WPF RemoteControlService.SessionStarted (:221): the server opened a session for this code.</summary>
+        public event EventHandler? SessionStarted;
 
         // ---- Remote Control v2 (WPF Services/Remote/RemoteControlService.V2.cs): what the HUD pill reads.
         /// <summary>The three signals the subject can send up: more, easy, stop.</summary>
@@ -185,6 +187,8 @@ namespace ConditioningControlPanel.Services
                 (_consecutiveFailures, PollInterval, _lastStatusPush, _statusBackoffUntil) = (0, PollIntervalSeconds, DateTime.MinValue, DateTime.MinValue);
                 if (AutoPoll) StartLoop();
                 Log.Information("[RemoteControl] Session started: {Code}, tier: {Tier}", code, tier);
+                try { SessionStarted?.Invoke(this, EventArgs.Empty); } catch (Exception ex) { Log.Debug("[RemoteControl] SessionStarted listener threw: {E}", ex.Message); }
+                AchievementEngine.OnCurrent(e => e.TrackRemoteSessionStarted(), "remote session start");   // WPF GamificationBridge.OnRemoteSessionStarted
                 return code;
             }
             catch (Exception ex) { Log.Error(ex, "[RemoteControl] Start error"); return null; }

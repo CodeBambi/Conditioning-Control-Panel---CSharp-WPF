@@ -56,7 +56,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         private static readonly List<TintOverlayWindow> Windows = new();
 
         /// <summary>WPF AchievementService:239 - quest minutes while the tint is on screen.</summary>
-        internal static readonly OverlayQuestMinutes QuestMinutes = new(m => App.Quests?.TrackPinkFilterMinutes(m));
+        internal static readonly OverlayQuestMinutes QuestMinutes = new(m =>
+        {
+            App.Achievements?.TrackPinkFilterMinutes(m);   // WPF :414 the lifetime minutes (rose_tinted_reality)
+            App.Quests?.TrackPinkFilterMinutes(m);
+        });
 
         /// <summary>The tint is on screen now.</summary>
         internal static bool IsShowing => Windows.Count > 0;

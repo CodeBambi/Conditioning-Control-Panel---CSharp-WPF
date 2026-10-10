@@ -97,4 +97,16 @@ public class WebAssetServerTests
         Assert.Equal(HttpStatusCode.OK, res.StatusCode);
         Assert.Contains("<html", (await res.Content.ReadAsStringAsync()).ToLowerInvariant());
     }
+
+    /// <summary>IB10: on Windows a library path that differs from the profile path only in letter case
+    /// is the same folder, so the "assets root holds the profile" refusal ignores case there.</summary>
+    [Theory]
+    [InlineData("c:/users/a/", "C:/Users/A/AppData/CCP/", true, true)]
+    [InlineData("C:/Users/A/AppData/CCP/", "c:/users/a/appdata/ccp/", true, true)]
+    [InlineData("c:/users/a/", "C:/Users/A/AppData/CCP/", false, false)]     // elsewhere a path is its letters
+    [InlineData("C:/Users/A/", "C:/Users/A/AppData/CCP/", false, true)]
+    [InlineData("C:/Users/A/Pictures/", "C:/Users/A/AppData/CCP/", true, false)]
+    [InlineData("C:/Users/A/AppData/CCP/assets/", "C:/Users/A/AppData/CCP/", true, false)]   // a folder INSIDE the profile is fine
+    public void TheProfileRefusal_IgnoresLetterCaseOnWindowsOnly(string root, string profile, bool ignoreCase, bool holds) =>
+        Assert.Equal(holds, WebAssetServer.FolderHolds(root, profile, ignoreCase));
 }

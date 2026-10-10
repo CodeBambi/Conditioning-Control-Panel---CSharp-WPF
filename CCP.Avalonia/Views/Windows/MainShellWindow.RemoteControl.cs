@@ -95,6 +95,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>WPF OnRemoteSessionEnded (:832), shell half; the tab unticks itself.</summary>
         internal void OnRemoteSessionEnded()
         {
+            try { App.Achievements?.ResetRemoteSession(); } catch { }   // WPF GamificationBridge.OnRemoteSessionEnded
             HideRemoteControlOverlay();
             UpdateStartButtonForRemoteControl(false);
             RefreshRemoteHud();
@@ -103,6 +104,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>WPF OnRemoteCommandReceived (:1091): quiet verbs make no toast.</summary>
         internal void OnRemoteCommandReceived(string action)
         {
+            try { App.Achievements?.TrackRemoteCommand(); } catch { }   // WPF GamificationBridge.OnRemoteCommand (puppet_strings), quiet verbs count too
             if (RemoteCommands.Quiet.Contains(action)) return;
             ShowCommandNotification(action);
         }
