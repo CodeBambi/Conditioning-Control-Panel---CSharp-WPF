@@ -138,7 +138,7 @@ public sealed class LauncherFxTests
         Assert.Contains("launcher-hover", cues);
         Step(launcher, 0.5);
         Assert.Equal(1.02, scale.ScaleX, 3);
-        Assert.Equal(0.7, ((DropShadowEffect)tile.Effect!).Opacity, 3);
+        Assert.Equal(0.7, tile.BoxShadow[0].Color.A / 255.0, 2);   // the glow is a BoxShadow now
         Assert.Equal(0.45, glow.Opacity, 3);
 
         launcher.TileHover(tile, false);
@@ -420,5 +420,163 @@ public sealed class LauncherFxTests
                 tight.Add($"'{t.Text}' needs {probe.DesiredSize.Width:0.#} px, has {t.Bounds.Width:0.#}");
         }
         Assert.True(tight.Count == 0, string.Join("; ", tight));
+    });
+
+    // ---- the art motion (WPF Backdrop.cs Ken-Burns, Fx.cs trail / sheens / wordmark, Choreo.cs comets) ----
+
+    /// <summary>Long spans (the 14 s and 40 s drifts): 100 ms frames, the clock's own cap.</summary>
+    private static void StepLong(LauncherWindow w, double seconds)
+    {
+        for (double t = 0; t < seconds - 1e-9; t += 0.1) w.StepFx(0.1);
+    }
+
+    private static Border ArtTile(LauncherWindow w) =>
+        w.FindControl<UniformGrid>("GamesGrid")!.Children.OfType<Border>()
+            .First(t => t.GetVisualDescendants().OfType<Panel>().Any(p => Equals(p.Tag, "tile-art")));
+
+    [Fact]
+    public void KenBurns_DriftsTheArt_HoldsUnderThePointer_AndParksWithTheWindow() => Run(MotionLevel.Full, (_, launcher, _) =>
+    {
+        var tile = ArtTile(launcher);
+        Assert.Equal(1, launcher.ArtZoom(tile), 3);
+        StepLong(launcher, 7);
+        Assert.InRange(launcher.ArtZoom(tile), 1.025, 1.045);            // half way out, sine in-out
+        StepLong(launcher, 7);
+        Assert.Equal(LauncherWindow.KenBurnsTo, launcher.ArtZoom(tile), 2);
+
+        launcher.TileHover(tile, true);                                  // the drift holds while hovered
+        double held = launcher.ArtZoom(tile);
+        StepLong(launcher, 3);
+        Assert.Equal(held, launcher.ArtZoom(tile), 6);
+        launcher.TileHover(tile, false);
+        StepLong(launcher, 3);
+        Assert.True(launcher.ArtZoom(tile) < held - 0.002);              // and picks up where it was, on the way back
+
+        double before = launcher.ArtZoom(tile);
+        launcher.OnFxActivated(false);                                   // another window in front: parked
+        StepLong(launcher, 3);
+        Assert.Equal(before, launcher.ArtZoom(tile), 6);
+    });
+
+    [Fact]
+    public void Wordmark_DriftsAtFull_AndEasesHomeWhenParked() => Run(MotionLevel.Full, (_, launcher, _) =>
+    {
+        StepLong(launcher, 20);
+        Assert.InRange(launcher.WordmarkZoom, 1.015, 1.025);             // 1.00 -> 1.04 over 40 s
+        launcher.OnFxActivated(false);
+        Step(launcher, 0.1);
+        Assert.InRange(launcher.WordmarkZoom, 1.0001, 1.02);             // an OUT, never a jump
+        Step(launcher, 0.5);
+        Assert.Equal(1, launcher.WordmarkZoom, 4);
+
+        launcher.OnFxActivated(true);
+        var sheen = launcher.FindControl<global::Avalonia.Controls.Shapes.Rectangle>("WordmarkSheen")!;
+        Assert.Equal(0, sheen.Opacity);
+        launcher.RunWordmarkSheenNow();
+        Step(launcher, 0.5);
+        Assert.InRange(sheen.Opacity, 0.05, 0.3);
+        Assert.True(launcher.WordmarkSheenX > -90);
+        Step(launcher, 1);
+        Assert.Equal(0, sheen.Opacity);
+    });
+
+    [Fact]
+    public void Trail_SpawnsSparks_CapsAt48_AndFadesOut() => Run(MotionLevel.Full, (_, launcher, _) =>
+    {
+        var canvas = launcher.FindControl<Canvas>("TrailCanvas")!;
+        launcher.TrailAt(new Point(200, 200));
+        Assert.Equal(0, launcher.TrailLive);                             // held for the entrance (650 ms)
+        Step(launcher, 0.8);
+        launcher.TrailAt(new Point(200, 200));
+        Assert.InRange(launcher.TrailLive, 3, 5);
+        Assert.Equal(launcher.TrailLive, canvas.Children.Count);
+        for (int i = 0; i < 40; i++) launcher.TrailAt(new Point(210 + i, 200));
+        Assert.Equal(48, launcher.TrailLive);
+        Assert.Contains(canvas.Children, c => c is global::Avalonia.Controls.Shapes.Path);   // every eighth is a star
+        Assert.All(canvas.Children, c => Assert.False(c.IsHitTestVisible));
+        Step(launcher, 0.3);
+        Assert.All(canvas.Children, c => Assert.InRange(c.Opacity, 0, 1));
+        Step(launcher, 0.4);
+        Assert.Equal(0, launcher.TrailLive);
+        Assert.Empty(canvas.Children);
+
+        launcher.TrailAt(new Point(200, 200));
+        launcher.Hide();                                                 // hidden: the trail is gone at once
+        Assert.Equal(0, launcher.TrailLive);
+        Assert.Empty(canvas.Children);
+    });
+
+    [Fact]
+    public void Comets_Sheens_AndTheRunningDot_FollowHoverAndTheEngine() => Run(MotionLevel.Full, (_, launcher, _) =>
+    {
+        var tile = Tile(launcher);
+        var dot = launcher.FindControl<global::Avalonia.Controls.Shapes.Ellipse>("RunningDot")!;
+        Step(launcher, 0.1);
+        Assert.True(launcher.CtaSheenOn);
+        Assert.False(launcher.PanelCometOn);
+        Assert.Equal(0.35, dot.Opacity, 3);
+
+        launcher.TileHover(tile, true);
+        Assert.True(launcher.TileCometOn);
+        launcher.TileHover(tile, false);
+        Assert.False(launcher.TileCometOn);
+
+        var rim = launcher.FindControl<Border>("PanelCard")!.BorderBrush;
+        launcher.EngineRunning = () => true;
+        launcher.SyncEngineFx();
+        Assert.True(launcher.PanelCometOn);
+        Step(launcher, 1.3);
+        Assert.InRange(dot.Opacity, 0.56, 0.99);                         // breathing 0.55 - 1.0
+        Assert.InRange(launcher.FindControl<Border>("PanelCard")!.BorderBrush!.Opacity, 0.46, 0.99);
+        launcher.EngineRunning = () => false;
+        launcher.SyncEngineFx();
+        Assert.False(launcher.PanelCometOn);
+        Assert.Same(rim, launcher.FindControl<Border>("PanelCard")!.BorderBrush);
+        Assert.Equal(0.35, dot.Opacity, 3);
+
+        launcher.WanderNow();
+        Step(launcher, 0.1);
+        Assert.True(launcher.WanderSheenOn);
+        Step(launcher, 1.8);
+        Assert.False(launcher.WanderSheenOn);                            // one pass, then it leaves
+
+        launcher.TileHover(tile, true);
+        launcher.EngineRunning = () => true;
+        launcher.SyncEngineFx();
+        launcher.Hide();
+        Assert.False(launcher.TileCometOn);
+        Assert.False(launcher.PanelCometOn);
+        Assert.False(launcher.CtaSheenOn);
+        Assert.False(launcher.FxTicking);
+    });
+
+    [Fact]
+    public void ReducedMotion_HasNoArtLoops() => Run(MotionLevel.Reduced, (_, launcher, _) =>
+    {
+        var tile = ArtTile(launcher);
+        launcher.EngineRunning = () => true;
+        launcher.SyncEngineFx();
+        Step(launcher, 2);
+        Assert.Equal(1, launcher.ArtZoom(tile));
+        Assert.Equal(1, launcher.WordmarkZoom);
+        Assert.False(launcher.CtaSheenOn);
+        Assert.False(launcher.PanelCometOn);
+        Assert.Equal(1.0, launcher.FindControl<global::Avalonia.Controls.Shapes.Ellipse>("RunningDot")!.Opacity, 3);   // lit, still
+        launcher.TileHover(tile, true);
+        Assert.False(launcher.TileCometOn);
+        launcher.WanderNow();
+        Step(launcher, 0.2);
+        Assert.False(launcher.WanderSheenOn);
+    });
+
+    [Fact]
+    public void TileGlow_IsABoxShadow_NeverAnEffect() => Run(MotionLevel.Full, (_, launcher, _) =>
+    {
+        foreach (var tile in launcher.FindControl<UniformGrid>("GamesGrid")!.Children.OfType<Border>())
+        {
+            Assert.Null(tile.Effect);                                    // no Effect over art that drifts
+            Assert.False(tile.ClipToBounds);                             // the glow may draw outside the rim
+            Assert.True(((Border)tile.Child!).ClipToBounds);             // the body carries the rounded clip
+        }
     });
 }
