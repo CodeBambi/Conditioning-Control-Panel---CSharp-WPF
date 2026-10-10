@@ -236,6 +236,24 @@ public sealed class ChasterTabMenuTests
         Assert.Equal(600, s.ChasterPriceOverrides["attention"]);
     }));
 
+    /// <summary>WPF RefreshSetupHint + SetupHint_MouseLeftButtonUp: a tab that is on with no row on
+    /// says nothing can count and the line leads to the keys; the first row on ends it.</summary>
+    [Fact]
+    public Task TheNothingCountsLineLeadsToTheKeysUntilARowIsOn() => AvaloniaTestDispatcher.RunAsync(() => Run(async (chaster, fake, s) =>
+    {
+        fake.Locked = true;
+        await chaster.RefreshLockAsync();
+        s.ChasterTabEnabled = true;
+        var tab = new ChasterTabView();
+        Assert.True(tab.NudgingKeys);
+        Assert.Equal(Loc.Get("chaster_setup_nothing"), Named<TextBlock>(tab, "SetupHint").Text);
+        var row = tab.RowFor("typo")!;
+        row.IsChecked = true;
+        Press(row);
+        Assert.False(tab.NudgingKeys);
+        Assert.NotEqual(Loc.Get("chaster_setup_nothing"), Named<TextBlock>(tab, "SetupHint").Text);
+    }));
+
     /// <summary>The red flash switch writes its setting; its line follows Natasha's row and her figure.</summary>
     [Fact]
     public Task TheRedFlashSwitchWritesItsSettingAndItsLineFollowsNatashasRow() => AvaloniaTestDispatcher.RunAsync(() => Run((_, _, s) =>

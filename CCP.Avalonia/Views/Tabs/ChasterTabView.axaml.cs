@@ -46,10 +46,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private string _clockShape = "";
         private readonly List<TextBlock> _clockNumbers = new();
         private bool _loading;
+        private bool _nudgingKeys;
+        internal bool NudgingKeys => _nudgingKeys;
 
         public ChasterTabView()
         {
             InitializeComponent();
+            SetupHint.PointerReleased += (_, e) =>
+            {
+                if (!_nudgingKeys) return;
+                PresetRow.BringIntoView();
+                e.Handled = true;
+            };
             _tick.Tick += (_, _) => { PaintHeroClock(); PaintChasterChip(ChasterHead.Service); };
             SlowTick.Tick += (_, _) => RefreshHero();
             // WPF (:99) only listens and ticks while the page is on screen; the shell hides tabs with IsVisible.
@@ -245,10 +253,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 anyRowOn: TabPageText.AnyRowOn(CoreSettings.Current.ChasterPrices));
             SetupHint.Text = key == null ? "" : Loc.Get(key);
             SetupHint.IsVisible = key != null;
+            // Nothing can count: the line says so, and a click on it takes the player to the keys (WPF :276-286).
+            _nudgingKeys = key == "chaster_setup_nothing";
+            SetupHint.Cursor = _nudgingKeys ? new global::Avalonia.Input.Cursor(global::Avalonia.Input.StandardCursorType.Hand) : null;
             PaintHeroClock();
             var ends = LiveLockClock.EndsAt(snapshot, chaster.BalanceSeconds, DateTime.UtcNow)?.ToLocalTime();
             TxtHeroEnds.Text = ends is { } when ? Loc.GetF("chaster_hero_ends", when.ToString("ddd d MMM HH:mm")) : "";
             TxtHeroEnds.IsVisible = ends != null;
+            // WPF PaintHeroEnds (:289): the tooltip names the two parts, Chaster's own end and what the tab still adds.
+            var pending = LiveLockClock.PendingAdd(chaster.BalanceSeconds);
+            ToolTip.SetTip(TxtHeroEnds, ends != null && pending > 0 && snapshot?.EndsAtUtc is { } own
+                ? Loc.GetF("chaster_hero_ends_tip", own.ToLocalTime().ToString("ddd d MMM HH:mm"), CircesTab.Format(pending))
+                : null);
             RefreshPills(chaster.LockLookup, snapshot, chaster.SafetyHoldRemaining);
             BuildCalendar(snapshot);
         }

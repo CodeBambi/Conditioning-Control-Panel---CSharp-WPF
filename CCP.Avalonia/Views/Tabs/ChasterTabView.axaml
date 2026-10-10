@@ -147,7 +147,37 @@
         </ControlTheme>
     </UserControl.Resources>
 
-    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+    <Panel x:Name="PageRoot" ClipToBounds="True">
+        <!-- the ground (WPF ChasterTabView.xaml:262-308): the launcher's backdrop, the glow off the hero art, the vignette.
+             Still layers: the turning spiral watermark and the ambient motes are not on this head. -->
+        <Border CornerRadius="18">
+            <Border.Background>
+                <RadialGradientBrush GradientOrigin="22%,18%" Center="22%,18%" RadiusX="100%" RadiusY="95%">
+                    <GradientStop Color="#FF2C1450" Offset="0"/>
+                    <GradientStop Color="#FF1C1233" Offset="0.42"/>
+                    <GradientStop Color="#FF100A1E" Offset="0.74"/>
+                    <GradientStop Color="#FF07040F" Offset="1"/>
+                </RadialGradientBrush>
+            </Border.Background>
+        </Border>
+        <Border x:Name="GlowLayer" Opacity="0.3" IsHitTestVisible="False" CornerRadius="18">
+            <Border.Background>
+                <RadialGradientBrush GradientOrigin="78%,12%" Center="78%,12%" RadiusX="50%" RadiusY="55%">
+                    <GradientStop Color="{DynamicResource FxGlowColor}" Offset="0"/>
+                    <GradientStop Color="#00000000" Offset="1"/>
+                </RadialGradientBrush>
+            </Border.Background>
+        </Border>
+        <Border IsHitTestVisible="False" CornerRadius="18">
+            <Border.Background>
+                <RadialGradientBrush GradientOrigin="50%,45%" Center="50%,45%" RadiusX="85%" RadiusY="85%">
+                    <GradientStop Color="#00000000" Offset="0.45"/>
+                    <GradientStop Color="#55000000" Offset="0.8"/>
+                    <GradientStop Color="#B0000000" Offset="1"/>
+                </RadialGradientBrush>
+            </Border.Background>
+        </Border>
+    <ScrollViewer x:Name="PageScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
         <Grid Margin="26,22,26,20" MaxWidth="1080" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
             <!-- header: the name, and the account -->
             <Grid Grid.Row="0" Margin="4,0,4,14">
@@ -309,6 +339,7 @@
                     <StackPanel x:Name="LockRow" Orientation="Horizontal" Margin="0,8,0,0" IsVisible="False">
                         <ComboBox x:Name="CmbLock" FontSize="16" MinWidth="260" SelectionChanged="CmbLock_SelectionChanged"/>
                         <Button x:Name="BtnUseLock" Theme="{StaticResource CirceCta}" Padding="20,0" Height="48" Background="#E0B052"
+                                ToolTip.Tip="{loc:Str chaster_lock_use_tip}"
                                 Click="BtnUseLock_Click">
                             <TextBlock x:Name="TxtUseLock" FontSize="16" FontWeight="Bold" Foreground="#21152E"/>
                         </Button>
@@ -752,4 +783,5 @@
             </StackPanel>
         </Grid>
     </ScrollViewer>
+    </Panel>
 </UserControl>
