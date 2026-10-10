@@ -235,8 +235,7 @@
                                  machine-wide installs. -->
                             <TextBlock x:Name="TxtAudioFolderPath"
                                        Foreground="{DynamicResource TextMutedBrush}"
-                                       FontFamily="Consolas, Courier New" FontSize="10.5"
-                                       Opacity="0.75" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                                       FontFamily="Consolas, Courier New" FontSize="10.5" TextWrapping="Wrap" Margin="0,6,0,0"/>
 
                             <!-- Shown ONLY when the old install-directory folder still holds clips.
                                  Nothing is migrated automatically. -->
@@ -247,8 +246,7 @@
                                        IsVisible="False"/>
                             <TextBlock x:Name="TxtLegacyFolderPath"
                                        Foreground="{DynamicResource TextMutedBrush}"
-                                       FontFamily="Consolas, Courier New" FontSize="10.5"
-                                       Opacity="0.75" TextWrapping="Wrap" Margin="0,3,0,0"
+                                       FontFamily="Consolas, Courier New" FontSize="10.5" TextWrapping="Wrap" Margin="0,3,0,0"
                                        IsVisible="False"/>
                         </StackPanel>
                     </Grid>

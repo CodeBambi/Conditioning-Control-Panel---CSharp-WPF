@@ -107,8 +107,7 @@
         <!-- Header with title and actions -->
         <Grid Grid.Row="0" Margin="0,0,0,10">
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <TextBlock Text="{loc:Str section_assets_content_packs}" Theme="{StaticResource SectionHeader}"
-                           FontSize="18" VerticalAlignment="Center"/>
+                <TextBlock Text="{loc:Str section_assets_content_packs}" Theme="{StaticResource SectionHeader}" VerticalAlignment="Center"/>
                 <Button x:Name="HelpBtnAssets" Theme="{StaticResource HelpButtonStyle}"
                         VerticalAlignment="Center" Margin="8,0,0,0" Tag="Assets"/>
             </StackPanel>
