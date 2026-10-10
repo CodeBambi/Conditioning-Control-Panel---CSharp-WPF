@@ -1757,3 +1757,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/roadmap-atomic-save: +169
 - Core RoadmapService: flushed temp+rename save, and a roadmap.json.corrupt-<ts> backup before falling back to defaults; saving is turned off if that backup fails (both heads).
 - 4 fail-proven Core tests on temp dirs via an internal ctor.
+
+## avalonia-port/sync6-premium-page: +199
+- Premium page (main a1d8a7ff1): "premium" key on Home, silent "exclusives" redirect, shelf grouped Basic/Prime/Free under headers (Core PremiumShelfOrder git-mv), reserved seats dropped; fail-proven tests.
+- Left needs-port: header Premium spark (97/99) and vault flair (100).
