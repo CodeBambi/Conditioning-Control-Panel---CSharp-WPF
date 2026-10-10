@@ -130,28 +130,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         // ---- HANDLERS -------------------------------------------------------------
 
-        // Programs 3a: Enroll, Withdraw and today's session forward to the shell (WPF keeps them on
-        // MainWindow). Pause/Resume, Restart, Dismiss and Submit are programs 3b; their buttons are hidden.
+        // Every lifecycle button forwards to the shell (WPF keeps them on MainWindow, ProgramsTab.cs:1999-2187).
         private MainShellWindow? Shell => TopLevel.GetTopLevel(this) as MainShellWindow;
         internal void BtnProgramEnroll_Click(object? sender, RoutedEventArgs e) =>
             _ = Shell?.EnrollProgramAsync((sender as Button)?.Tag as string);
-        private void BtnProgramPauseResume_Click(object? sender, RoutedEventArgs e) { }
+        internal void BtnProgramPauseResume_Click(object? sender, RoutedEventArgs e) => _ = Shell?.PauseResumeProgramAsync();
         internal void BtnProgramWithdraw_Click(object? sender, RoutedEventArgs e) => _ = Shell?.WithdrawProgramAsync();
         internal void BtnStartTodaySession_Click(object? sender, RoutedEventArgs e) => _ = Shell?.StartProgramSessionAsync();
-        private void BtnProgramSubmitRitual_Click(object? sender, RoutedEventArgs e) { }
+        internal void BtnProgramSubmitRitual_Click(object? sender, RoutedEventArgs e) =>
+            _ = Shell?.SubmitProgramRitualAsync((sender as Button)?.Tag as string);
 
-        /// <summary>WPF MainWindow.ProgramsTab.cs:2174 BtnProgramOpenMantras_Click.</summary>
-        internal void BtnProgramOpenMantras_Click(object? sender, RoutedEventArgs e)
-        {
-            try
-            {
-                if (sender is not Button btn) return;
-                (TopLevel.GetTopLevel(this) as MainShellWindow)?.StartMantraSession(btn.Tag is int n ? n : 1);
-            }
-            catch (Exception ex) { Serilog.Log.Warning(ex, "Program mantra launch failed"); }
-        }
-        private void BtnProgramRestart_Click(object? sender, RoutedEventArgs e) { }
-        private void BtnProgramDismissGraduated_Click(object? sender, RoutedEventArgs e) { }
+        /// <summary>WPF MainWindow.ProgramsTab.cs:2148 BtnProgramOpenMantras_Click.</summary>
+        internal void BtnProgramOpenMantras_Click(object? sender, RoutedEventArgs e) =>
+            _ = Shell?.OpenProgramMantrasAsync((sender as Button)?.Tag is int n ? n : 1);
+        internal void BtnProgramRestart_Click(object? sender, RoutedEventArgs e) => _ = Shell?.RestartProgramAsync();
+        internal void BtnProgramDismissGraduated_Click(object? sender, RoutedEventArgs e) => Shell?.DismissGraduatedProgram();
 
         /// <summary>
         /// Keeps the session bar's clip a rounded rect at its live size. A Border's ClipToBounds
