@@ -164,7 +164,7 @@ public class ModManagerEntryTests
         // this keeps pinning the same nine files wherever they sit.
         var langDir = SourceRoots.LanguagesDirectory;
         var files = Directory.GetFiles(langDir, "*.json");
-        Assert.Equal(9, files.Length);
+        Assert.Equal(10, files.Length);
 
         foreach (var file in files)
         {

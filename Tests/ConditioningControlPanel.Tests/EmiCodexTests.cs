@@ -97,7 +97,7 @@ public class EmiCodexTests
     {
         var dir = SourceRoots.LanguagesDirectory;
         var files = Directory.GetFiles(dir, "*.json");
-        Assert.Equal(9, files.Length);
+        Assert.Equal(10, files.Length);
         foreach (var f in files)
         {
             using var doc = JsonDocument.Parse(File.ReadAllText(f));

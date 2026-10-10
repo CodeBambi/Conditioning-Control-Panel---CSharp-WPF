@@ -314,8 +314,8 @@ namespace ConditioningControlPanel.Features
         /// </summary>
         private void RebuildMotionPicker()
         {
-            bool rain = Services.AmbientBubbleMotion.RainOwned;
-            bool spiral = Services.AmbientBubbleMotion.SpiralInOwned;
+            bool rain = Services.AmbientBubbleMotionApp.RainOwned;
+            bool spiral = Services.AmbientBubbleMotionApp.SpiralInOwned;
             // The BOX is what collapses now, not the row: Motion and the Brain Drain bubble both
             // arrive with the v2 prizes, so with none owned there is nothing in here to show.
             ChkBrainDrainBubble.Visibility = rain || spiral ? Visibility.Visible : Visibility.Collapsed;

@@ -86,7 +86,7 @@ public class RampLinkLabelTests
     {
         var dir = SourceRoots.LanguagesDirectory;
         var files = Directory.GetFiles(dir, "*.json");
-        Assert.True(files.Length == 9, "expected 9 language files, found " + files.Length);
+        Assert.True(files.Length == 10, "expected 10 language files, found " + files.Length);
 
         foreach (var file in files)
         {
