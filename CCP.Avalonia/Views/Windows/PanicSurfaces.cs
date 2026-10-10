@@ -78,6 +78,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         internal static void ArmSafetyHold()
         {
+            ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("panicPressed");   // WPF MainWindow.xaml.cs:1585: a hold with a five minute silence tail, armed first
             try { SafetyHold(); }
             catch (Exception ex) { Serilog.Log.Debug(ex, "Panic: Chaster safety hold failed"); }
         }

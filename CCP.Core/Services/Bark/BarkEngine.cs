@@ -176,6 +176,7 @@ namespace ConditioningControlPanel.Services.Bark
         /// <summary>WPF Raise. True when a line went to the mouth.</summary>
         public bool Raise(string trigger, Action<BarkContext>? fill = null, bool guaranteed = false)
         {
+            EmiDesk.EmiBarkBridge.Mirror(trigger, fill);   // WPF BarkService.cs:1106: EMI hears the same funnel (no-op with no desk)
             try
             {
                 IReadOnlyList<BarkRule> rules;

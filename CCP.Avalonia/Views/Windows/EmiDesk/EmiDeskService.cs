@@ -22,9 +22,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
     /// knock (<c>TryKnock</c>) and the tube hand-off (<c>TubeDeskVisibility</c>). The system-wide chord
     /// (<c>ApplyHotkey</c>) is here, grabbed through Platform/X11SummonChord.</para>
     /// </summary>
-    internal sealed class EmiDeskService
+    internal sealed partial class EmiDeskService
     {
-        public static EmiDeskService Instance { get; } = new();
+        public static EmiDeskService Instance { get; } = new();   // ctor: EmiDeskService.Moments.cs (wires the bus)
 
         private EmiDeskWindow? _window;
         private long _summonGen;
@@ -91,6 +91,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                 int summons = EmiState.NoteSummon();
                 RaiseOutChanged();
                 Log.Information("[EmiDesk] summoned ({Why}), firstBoot={First}, summon #{N}", why ?? "user", first, summons);
+                OnSummoned(why);
             }
             catch (Exception ex)
             {
@@ -122,6 +123,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                     IsOut = true;
                 }
 
+                OnDismissing();
                 _window.RunDismiss(() =>
                 {
                     IsOut = false;

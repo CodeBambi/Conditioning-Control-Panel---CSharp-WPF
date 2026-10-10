@@ -2439,8 +2439,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         /// <summary>ponytail: needs App.EmiDesk.ResetOnboarding() - the QA gesture replay.</summary>
         private void ResetOnboarding() { }
 
-        /// <summary>ponytail: needs App.EmiDesk.Fire(...) - her own event bus.</summary>
-        private void FireDeskEvent(string name) { }
+        /// <summary>WPF App.EmiDesk.Fire(...): her own event bus (EmiDeskService.Moments.cs).</summary>
+        private void FireDeskEvent(string name, object? ctx = null) => EmiDeskService.Instance.Fire(name, ctx);
 
         // ---------------------------------------------------------------- teardown
 
