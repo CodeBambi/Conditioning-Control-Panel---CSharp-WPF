@@ -47,11 +47,13 @@ namespace ConditioningControlPanel
         public static volatile Action? AudioBedStop;
 
         /// <summary>WPF StartEngine's arming matrix, minus the services no head here has.
-        /// Not idempotent in TotalSessions, exactly as WPF; callers start only when stopped.</summary>
-        public static void Start()
+        /// Not idempotent in TotalSessions, exactly as WPF; callers start only when stopped.
+        /// <paramref name="systemInitiated"/> (WPF StartStop.cs:293): the app started the engine on the user's
+        /// behalf (the Lockdown Dose keeper), so it is not counted as a session and EMI is told so.</summary>
+        public static void Start(bool systemInitiated = false)
         {
             var s = CoreSettings.Current;
-            s.TotalSessions++;
+            if (!systemInitiated) s.TotalSessions++;   // WPF StartStop.cs:308: a keeper start is not a session the user chose
             CoreSettings.Save();
 
             // #668 Audio-Only Hypno (WPF :304): the visual features sit the session out.
@@ -77,7 +79,7 @@ namespace ConditioningControlPanel
 
             _running = true;
             StartedUtc = DateTime.UtcNow;
-            ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("engineStarted", new { systemInitiated = false });   // WPF StartStop.cs:412
+            ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("engineStarted", new { systemInitiated });   // WPF StartStop.cs:412
             ConditioningTime.OnEngineStarted(DateTime.Now);   // WPF StartStop.cs:423 StartConditioningTimeTracker
             Log.Information("Engine started - Flash: {Flash}, Subliminal: {Sub}, LockCard: {Lock}, BouncingText: {Bt}",
                 s.FlashEnabled, s.SubliminalEnabled, s.LockCardEnabled, s.BouncingTextEnabled);

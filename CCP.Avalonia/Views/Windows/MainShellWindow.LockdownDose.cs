@@ -36,7 +36,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         internal static LockdownDoseHost LockdownDoseHostFor(Func<MainShellWindow?> shell) => new()
         {
             IsEngineRunning = () => CoreEngine.IsRunning,
-            StartEngine = () => shell()?.StartEngine(),
+            StartEngine = () => shell()?.StartEngine(systemInitiated: true),   // WPF LockdownDoseKeeper.cs:399
             StopEngine = StopEngine,
             SetWallFeature = (key, on) =>
             {
