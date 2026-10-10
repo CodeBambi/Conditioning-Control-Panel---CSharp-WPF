@@ -101,7 +101,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             GoonHostService.AttachWindow(Post);
             GoonHostService.RoomCodeChanged += OnGoonRoomCodeChanged;
             Closing += (_, _) => GoonFinalWord();
-            Closed += (_, _) => CloseGoon();
+            Closed += (_, _) => { CloseGoon(); try { App.DiscordRpc?.SetGoonActivity("off"); } catch { /* WPF GoonHostService:2138 */ } };
             // WPF Launch: the window is BUILT in the remembered mode; a recovery comes back windowed.
             if (CoreSettings.Current.GoonFullscreen && !_goonRecoveredOnce)
             {
@@ -232,12 +232,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                 case "discord-prefs":
                 {
                     var echo = GoonHostService.OnDiscordPrefs(o, out var sharedChanged, out var rpOff);
-                    // not ported: the immediate profile sync push WPF kicks on a change, and the rich presence
-                    // retract (no Discord RPC on this head).
-                    // SEAM(sync): Core SyncPush.Sent carries no goon_share_avatar / goon_share_dm at all, so a
-                    // push here would send nothing the server's room snapshot reads; when SyncPush sends them,
-                    // call Platform.AccountSeed.Sync?.PushAsync("goon-prefs") on sharedChanged.
-                    if (rpOff) Log.Information("[Goon] rich presence switched off (no RPC client on this head)");
+                    // WPF kicks a profile sync at once on a change, so the room snapshot reads the new consent
+                    // (a revoke lands now). The push marks the consent as set on this install.
+                    if (sharedChanged) _ = Platform.AccountSeed.Sync?.PushPrivacyAsync("goon-prefs");
+                    if (rpOff) { try { App.DiscordRpc?.SetGoonActivity("off"); } catch { /* retract is best effort */ } }
                     if (sharedChanged) KickGoonAvatarRefresh();
                     Post(echo);
                     return true;
@@ -303,10 +301,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                     catch (Exception ex) { Log.Warning("[Goon] discord-link-request: {E}", ex.Message); }
                     return true;
                 case "rp-state":
-                    // not ported: Discord rich presence has no client on this head (SEAM(discord rpc), as the
-                    // Settings and Profile pages already note). The gate still runs so the log says what was asked.
-                    Log.Information("[Goon] rp-state {S}: not ported (no Discord RPC client)", GoonHostService.RichPresenceState(o) ?? "(dropped)");
+                {
+                    // WPF OnRichPresenceState: the gate (enum only, and only with the Goon presence flag on) then
+                    // the client. Fixed strings: never the opponent's name or Discord id.
+                    var rp = GoonHostService.RichPresenceState(o);
+                    if (rp != null)
+                    {
+                        try { App.DiscordRpc?.SetGoonActivity(rp); }
+                        catch (Exception ex) { Log.Debug("[Goon] rp-state: {E}", ex.Message); }
+                    }
                     return true;
+                }
                 case "share-card":
                     OnGoonShareCard(o);      // GameWindow.GoonShell.cs: PNG bytes only, clipboard or the save dialog
                     return true;

@@ -8370,6 +8370,20 @@ namespace ConditioningControlPanel.Models
             set { _goonShareDiscordDm = value; OnPropertyChanged(); }
         }
 
+        /// <summary>
+        /// The account whose consent switches were SET ON THIS INSTALL (Core SyncPush). The profile read
+        /// returns only two of the six consent values, so the other four ride a sync only for the account
+        /// that chose them here: a local default can never overwrite what another device granted or revoked.
+        /// Machine-local; never synced.
+        /// </summary>
+        [JsonProperty("consentOwnedAccount")]
+        public string? ConsentOwnedAccount { get; set; }
+
+        /// <summary>A consent switch changed here and no sync has delivered it yet (survives a restart, so a
+        /// revoke made offline is pushed before the server's older value could be adopted back).</summary>
+        [JsonProperty("consentPushPending")]
+        public bool ConsentPushPending { get; set; }
+
         private bool _goonRichPresence = false;
         /// <summary>
         /// Show Goon Game activity in Discord Rich Presence (fixed strings only — never the

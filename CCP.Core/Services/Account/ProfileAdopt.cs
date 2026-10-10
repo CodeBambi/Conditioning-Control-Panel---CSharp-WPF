@@ -201,6 +201,34 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// Consent, read before write. <c>/v2/user/profile</c> returns two of the six consent values
+        /// (<c>allow_discord_dm</c>, <c>show_online_status</c>); the account's value replaces the local one
+        /// BEFORE the first push, so a local default never shares more than the account holds. Skipped while a
+        /// change made here is still waiting for its sync (that change is newer than what the server holds).
+        /// Only JSON booleans count. True when a setting moved (the caller saves).
+        /// </summary>
+        public static bool AdoptConsent(AppSettings settings, JObject? userNode)
+        {
+            if (userNode == null) return false;
+            if (settings.ConsentPushPending && string.Equals(settings.ConsentOwnedAccount, settings.UnifiedId, StringComparison.Ordinal))
+                return false;
+            var changed = false;
+            if (userNode["allow_discord_dm"] is { Type: JTokenType.Boolean } dm && dm.Value<bool>() != settings.AllowDiscordDm)
+            {
+                settings.AllowDiscordDm = dm.Value<bool>();
+                changed = true;
+            }
+            if (userNode["show_online_status"] is { Type: JTokenType.Boolean } online && online.Value<bool>() != settings.ShowOnlineStatus)
+            {
+                settings.ShowOnlineStatus = online.Value<bool>();
+                changed = true;
+            }
+            if (changed) Log.Information("Profile load: adopted the account's consent values (allow DM {Dm}, show online {Online})",
+                settings.AllowDiscordDm, settings.ShowOnlineStatus);
+            return changed;
+        }
+
+        /// <summary>
         /// The read-before-write adopt (WPF ProfileSyncService.ReadServerProfileBeforePushAsync) after the curve
         /// epoch: level/XP take-higher, the season key forward only (clearing the watermark), and the watermark
         /// when the server's season is the one we sync under. Nothing else. Returns true when the season advanced.

@@ -315,7 +315,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             {
                 var (status, body) = await PbpHostRules.SendAsync(PbpHttpClient(), baseUrl, call, token, CoreReleaseContent.AppVersion)
                     .ConfigureAwait(false);
-                // ponytail: WPF also runs MergedAccountRecovery.TryHandle(status, body) (contract D); it is not on this head yet.
+                global::ConditioningControlPanel.Services.MergedAccountRecovery.TryHandle(status, body);   // contract D (WPF PieceByPieceHostService:604)
                 PbpOnUi(() => Post(PbpHostRules.NetResult(call.Id, status, body)));
             });
         }

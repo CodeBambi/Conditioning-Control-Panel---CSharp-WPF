@@ -224,6 +224,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             BtnDiscord.Click += BtnDiscord_Click;
             SyncQuickRichPresence();
             ChkQuickDiscordRichPresence.IsCheckedChanged += ChkDiscordRichPresence_Changed;
+            // The Privacy dialog's switch and this one are the same setting: each repaints when the other moves.
+            AttachedToVisualTree += (_, _) => { App.RichPresenceChanged -= SyncQuickRichPresence; App.RichPresenceChanged += SyncQuickRichPresence; };
+            DetachedFromVisualTree += (_, _) => App.RichPresenceChanged -= SyncQuickRichPresence;
 
             // Quick-toggles row.
             VelvetBtnWebcam.Click += VelvetBtnWebcam_Click;
@@ -422,8 +425,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
         /// <summary>WPF ChkDiscordRichPresence_Changed (MainWindow.AccountShell.cs:279): refused, with
         /// the reason, unless a Discord is linked; otherwise the setting is written and saved.
-        /// SEAM(core): App.DiscordRpc.IsEnabled has no seam on this head, so the presence client
-        /// itself picks the setting up when it is ported.</summary>
+        /// Then the presence client is armed or dropped and the Privacy dialog's switch repaints
+        /// (App.ApplyRichPresence).</summary>
         internal void ChkDiscordRichPresence_Changed(object? sender, RoutedEventArgs e)
         {
             if (_syncingRichPresence) return;
@@ -442,6 +445,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 if (s.DiscordRichPresenceEnabled == on) return;
                 s.DiscordRichPresenceEnabled = on;
                 CoreSettings.Save();
+                App.ApplyRichPresence();
                 Serilog.Log.Information("Discord Rich Presence {Status}", on ? "enabled" : "disabled");
             }
             catch (Exception ex) { Serilog.Log.Warning(ex, "ChkDiscordRichPresence_Changed failed"); }

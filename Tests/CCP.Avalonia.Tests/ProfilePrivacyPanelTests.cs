@@ -128,4 +128,63 @@ public sealed class ProfilePrivacyPanelTests
             CoreSettings.SaveImmediate();
         }
     }
+
+    /// <summary>Lane z1: Rich Presence is one setting on two surfaces. A click here tells the other one
+    /// (App.RichPresenceChanged), the other one moving repaints this switch, and it never arms unlinked.</summary>
+    [Fact]
+    public async Task RichPresence_FollowsTheOtherSurface_AndNeverArmsWithoutALinkedDiscord()
+    {
+        var s = CoreSettings.Current;
+        var old = (s.DiscordRichPresenceEnabled, s.HasLinkedDiscord);
+        try
+        {
+            await AvaloniaTestDispatcher.RunAsync(() =>
+            {
+                if (Application.Current is null)
+                    AppBuilder.Configure<AppA>()
+                        .UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                        .SetupWithoutStarting();
+
+                (s.DiscordRichPresenceEnabled, s.HasLinkedDiscord) = (false, true);
+                var panel = new ProfilePrivacyPanel { Tell = (_, _, _) => Task.CompletedTask };
+                var host = new Window { Content = panel };
+                host.Show();
+                panel.Refresh();
+                var box = panel.FindControl<CheckBox>("ChkDiscordTabRichPresence")!;
+                int told = 0;
+                System.Action count = () => told++;
+                AppA.RichPresenceChanged += count;
+                try
+                {
+                    box.IsChecked = true;
+                    Assert.True(s.DiscordRichPresenceEnabled);
+                    Assert.Equal(1, told);                       // the Home quick toggle repaints
+
+                    // The Home quick toggle switched it off: this switch follows, and writes nothing back.
+                    s.DiscordRichPresenceEnabled = false;
+                    AppA.ApplyRichPresence();
+                    Assert.False(box.IsChecked);
+                    Assert.False(s.DiscordRichPresenceEnabled);
+
+                    // No linked Discord: refused, whatever the click.
+                    s.HasLinkedDiscord = false;
+                    box.IsChecked = true;
+                    Assert.False(box.IsChecked);
+                    Assert.False(s.DiscordRichPresenceEnabled);
+                    Assert.Null(AppA.DiscordRpc);                // a headless run never builds the client
+                }
+                finally
+                {
+                    AppA.RichPresenceChanged -= count;
+                    host.Close();
+                }
+                return Task.CompletedTask;
+            });
+        }
+        finally
+        {
+            (s.DiscordRichPresenceEnabled, s.HasLinkedDiscord) = old;
+            CoreSettings.SaveImmediate();
+        }
+    }
 }

@@ -42,6 +42,8 @@
          12.1.2 as Avalonia itself - a control package built against a different Avalonia minor
          throws at attach, which no compiler catches. -->
     <PackageReference Include="Avalonia.Controls.ColorPicker" Version="12.1.2" />
+    <!-- Discord Rich Presence: the client WPF ships (cross-platform IPC; lane z1). -->
+    <PackageReference Include="DiscordRichPresence" Version="1.6.1.70" />
     <!-- Audio (and later video) on both OSes; see docs/avalonia-decisions.md. Linux loads the
          system libvlc (libvlc.so.5); only Windows needs the bundled natives. -->
     <PackageReference Include="LibVLCSharp" Version="3.10.1" />

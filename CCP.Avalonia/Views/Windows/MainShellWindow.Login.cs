@@ -83,6 +83,27 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             }
         }
 
+        /// <summary>
+        /// Contract D's last step (WPF MergedAccountRecovery.RefreshAccountUi / OfferSignIn): the account id
+        /// changed under the app, so the account chrome is repainted; when no provider could re-sign in, the
+        /// sign-in dialog is offered once. Called from a pool thread.
+        /// </summary>
+        internal void InitializeAccountRecovery()
+        {
+            Action<string, bool> finished = (canonical, reauthed) => global::Avalonia.Threading.Dispatcher.UIThread.Post(async () =>
+            {
+                try
+                {
+                    UpdateQuickLoginUI(accountChanged: true);
+                    UpdateLevelDisplay();
+                    if (!reauthed) await OpenUnifiedLoginDialog();
+                }
+                catch (Exception ex) { Serilog.Log.Debug("Account recovery UI: {E}", ex.Message); }
+            });
+            AccountSeed.RecoveryFinished = finished;
+            Closed += (_, _) => { if (AccountSeed.RecoveryFinished == finished) AccountSeed.RecoveryFinished = null; };
+        }
+
         /// <summary>WPF BtnQuickLogout_Click (AccountSeed.Logout carries the pre-logout sync and progression clear).</summary>
         internal async void Logout() => await LogoutAsync();
 
