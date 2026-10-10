@@ -124,7 +124,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         /// <summary>WPF PossessionSceneCatalog (the rail sweep joined with the doors, k22).</summary>
-        internal static IPossessionScene[] PossessionHeadScenes() => new IPossessionScene[]
+        internal static IPossessionChoreography[] PossessionHeadScenes() => new IPossessionChoreography[]
         {
             new Services.Possession.Scenes.TheCountScene(), new Services.Possession.Scenes.WhereYouAreScene(),
             new Services.Possession.Scenes.RailSweepScene(),

@@ -1,6 +1,6 @@
 // PORTED from ConditioningControlPanel/Services/Possession/Scenes/ (7.1.5): PossessionSceneBase (the
 // part this head needs), TheCountScene, WhereYouAreScene. A scene is a haunt the director starts with
-// no target (Core IPossessionScene, PossessionDirector.ElectScene): it takes free DISPLAY victims
+// no target (Core IPossessionChoreography, PossessionDirector.ElectScene): it takes free DISPLAY victims
 // from the host registry, books them, plays a few timed beats and gives every one back on undo.
 // RailSweepScene (the rail doors) is in PossessionReachEffects.cs (k22). Not here: the ember charge
 // before each beat, and the pointer-proximity pick in "where you are" (any free card is taken instead).
@@ -14,7 +14,7 @@ using ConditioningControlPanel.Services.Possession.Effects;
 
 namespace ConditioningControlPanel.Services.Possession.Scenes;
 
-internal abstract class PossessionSceneBase : PossessionEffectBase, IPossessionScene
+internal abstract class PossessionSceneBase : PossessionEffectBase, IPossessionChoreography
 {
     private readonly List<PossessionTarget> _booked = new();
 

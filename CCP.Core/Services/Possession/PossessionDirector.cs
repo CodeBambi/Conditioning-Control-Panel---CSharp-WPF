@@ -6,7 +6,7 @@
 // Carried from WPF: activation / deactivation / tick / tripwire / restart handlers, the one-pick-at-a-time
 // cadence, the live ledger mirrored by key, hold-then-undo, the reassembly exit with its generation
 // guard, UndoAll (sync, never throws), PulseEdges for the Dose keeper, the barks.
-// Scenes (one pick in three from Melt) are elected here and played by the head (IPossessionScene).
+// Scenes (one pick in three from Melt) are elected here and played by the head (IPossessionChoreography).
 // Not on this director (each logged once when it would have run):
 // the warden verbs (knock, stare, leave, return), the proximity pick (no pointer reading) and the ember charge / outline around a victim.
 
@@ -377,14 +377,14 @@ public sealed class PossessionDirector : IDisposable
     /// <summary>The choreographies this head can play (WPF PossessionSceneCatalog). A scene is a haunt
     /// with no target of its own: it takes its victims from the host registry, books them, and gives
     /// every one back on undo. Empty on a head with none.</summary>
-    public List<IPossessionScene> Scenes { get; } = new();
+    public List<IPossessionChoreography> Scenes { get; } = new();
 
     /// <summary>WPF TryStartSceneAsync, the election: a scene that is not already playing, is allowed
     /// at this rung, intensity and photosafe setting, fits the room by its beats, and says it has victims.</summary>
-    private IPossessionScene? ElectScene(PossessionRung rung, TimeSpan remaining, double frac, out PossessionContext? ctx)
+    private IPossessionChoreography? ElectScene(PossessionRung rung, TimeSpan remaining, double frac, out PossessionContext? ctx)
     {
         ctx = null;
-        var eligible = new List<(IPossessionScene Scene, PossessionContext Ctx)>();
+        var eligible = new List<(IPossessionChoreography Scene, PossessionContext Ctx)>();
         foreach (var sc in Scenes)
         {
             try

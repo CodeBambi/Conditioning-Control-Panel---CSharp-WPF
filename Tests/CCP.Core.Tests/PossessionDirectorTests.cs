@@ -38,7 +38,7 @@ public sealed class PossessionDirectorTests
         public Task UndoAsync(TimeSpan duration) { Undone.Add(duration); IsLive = false; return Task.CompletedTask; }
     }
 
-    private sealed class FakeScene : IPossessionScene
+    private sealed class FakeScene : IPossessionChoreography
     {
         public string Id => "scene_fake";
         public PossessionRung MinRung => PossessionRung.Melt;
