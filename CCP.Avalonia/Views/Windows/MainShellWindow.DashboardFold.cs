@@ -48,11 +48,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 // while the shell is open (P41).
                 Opened += (_, _) =>
                 {
-                    Env.MotionGateChanged -= RestartBillboardClock;
-                    Env.MotionGateChanged += RestartBillboardClock;
-                    RestartBillboardClock();
+                    Env.MotionGateChanged -= RefreshBillboardMotion;
+                    Env.MotionGateChanged += RefreshBillboardMotion;
+                    RefreshBillboardMotion();
                 };
-                Closed += (_, _) => { Env.MotionGateChanged -= RestartBillboardClock; StopBillboardClock(); };
+                Closed += (_, _) => Env.MotionGateChanged -= RefreshBillboardMotion;
                 ApplyBrowserFold(animate: false);
             }
             catch (Exception ex) { Log.Warning(ex, "InitDashboardBrowserFold failed"); }

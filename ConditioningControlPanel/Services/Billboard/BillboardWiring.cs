@@ -4,37 +4,6 @@ using ConditioningControlPanel.Controls.Billboard;
 
 namespace ConditioningControlPanel.Services.Billboard
 {
-    /// <summary>The art keys the deck lane registers itself. Providers pick one of these (or a
-    /// key another lane registers: "board", "clip").</summary>
-    public static class BuiltInArtKeys
-    {
-        /// <summary>A 16:9 poster. ArtData = a resource path under Resources/, e.g. "billboard/loom.png".</summary>
-        public const string Poster = "poster";
-
-        /// <summary>Open tables sliding in. ArtData = optional {count} (IReadOnlyDictionary of string to int, 1..3 rows drawn) or names.</summary>
-        public const string Tables = "tables";
-
-        /// <summary>A prize wheel turning. ArtData = optional {done, total}: a pip per slot under it.</summary>
-        public const string Wheel = "wheel";
-
-        /// <summary>A four-arm spiral in the card hue. ArtData = optional second hue "#rrggbb", or null.</summary>
-        public const string Spiral = "spiral";
-
-        /// <summary>A month of days. ArtData = {counted, need, days, today} (Locktober), {day, days} (a program), or null.</summary>
-        public const string Calendar = "calendar";
-
-        /// <summary>Four tiles, one switching on and off under a click ring. ArtData = the tip id (unused).</summary>
-        public const string Tip = "tip";
-
-        /// <summary>A paper invite pass: a code row with one glyph flipping up, seven day pips on the stub. ArtData unused.</summary>
-        public const string Invite = "invite";
-
-        /// <summary>Today's quests as slips on a clipboard, the done ones checked. ArtData = {done, total}.</summary>
-        public const string Quests = "quests";
-
-        public static readonly IReadOnlyList<string> All = new[] { Poster, Tables, Wheel, Spiral, Calendar, Tip, Invite, Quests };
-    }
-
     /// <summary>
     /// The Tonight Board's startup wiring: every art view registered once and the provider list the
     /// deck asks. Started lazily by the Home billboard the first time the fold settles (that is at
@@ -66,6 +35,7 @@ namespace ConditioningControlPanel.Services.Billboard
                 _started = true;
 
                 BuiltInArt.Register();
+                HouseProvider.OpenBackRoom = OpenBackRoomInApp;
                 Add(new HouseProvider());
 
                 try { Board.BoardArtRegistration.Register(); }
@@ -79,6 +49,17 @@ namespace ConditioningControlPanel.Services.Billboard
                 try { foreach (var p in global::ConditioningControlPanel.Services.Billboard.Providers.BillboardProviders.CreateAll()) Add(p); }
                 catch (Exception ex) { App.Logger?.Warning(ex, "Billboard: providers did not start"); }
             }
+        }
+
+        /// <summary>
+        /// The room's own door, the one the Play tab uses (its open-failed prompt included).
+        /// Signed out, the sign-in dialog comes first, the way the live join card does it.
+        /// </summary>
+        private static void OpenBackRoomInApp()
+        {
+            if (BackRoom.BackRoomApi.AppIdentity() == null) { App.MainWindowRef?.OpenUnifiedLoginDialog(); return; }
+            if (App.MainWindowRef is { } main) main.LaunchPlayBackRoom();
+            else BackRoom.BackRoomHostService.Launch();
         }
 
         /// <summary>The viewer's plan, as the header spark reads it: Prime = Lab access, Basic =

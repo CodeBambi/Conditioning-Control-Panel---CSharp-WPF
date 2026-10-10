@@ -1737,3 +1737,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/rows-assets-fx: +161
 - Assets FX: tree-row hover nudge (3 px / 130 ms, instant when motion is Off) and the Media Log pulse (stops on hide or open). Row stays stub (pack-card sheen).
+
+## avalonia-port/sync6-tonight-board: +891
+- The Tonight Board deck (Core BillboardDeck, house + tip providers, dots as the hold clock, snooze + toast, push, no sound) replaces LegacyBillboard (deleted); HouseProvider and TipCards moved to Core.
+- 4 of 24 ledger rows ticked; the rest (drawn art, other providers, animation polish) moved to sync6-tonight-board-b. Parity row is stub.
