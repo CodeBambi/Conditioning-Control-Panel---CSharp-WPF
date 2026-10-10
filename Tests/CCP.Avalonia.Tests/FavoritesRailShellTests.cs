@@ -61,8 +61,11 @@ public sealed class FavoritesRailShellTests
                 Assert.Equal(new[] { "tab.haptics" }, Tags(recent));
                 Assert.False(dash.FindControl<TextBlock>("RecentEmpty")!.IsVisible);
 
-                // Right-click the rail row: the menu reads "Pin to favorites" and pins it.
-                var row = w.Named<Button>("BtnNavHaptics")!;
+                // Right-click the Studio strip's Haptics pill (WPF ea2d4cfca; the rail rows left):
+                // the menu reads "Pin to favorites" and pins it.
+                w.ShowTab("haptics");
+                Dispatcher.UIThread.RunJobs();
+                var row = w.PageStrip!.PillFor("haptics")!;
                 var menu = row.ContextMenu!;
                 row.RaiseEvent(new ContextRequestedEventArgs());   // what a right-click raises
                 Dispatcher.UIThread.RunJobs();

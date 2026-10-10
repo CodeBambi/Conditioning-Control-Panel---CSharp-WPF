@@ -211,7 +211,7 @@
   </UserControl.Resources>
 
   <Grid>
-    <ScrollViewer VerticalScrollBarVisibility="Auto">
+    <ScrollViewer x:Name="WallScroll" VerticalScrollBarVisibility="Auto">
       <StackPanel Margin="20">
 
         <!-- ============================== HEADER ============================== -->
@@ -230,7 +230,7 @@
              and the Arcademy strip left this wall for the CC Labs launcher). The four games have no
              host on this head, so each Play button is disabled with the Exclusives wall's honest
              tooltip instead of a click that does nothing. -->
-        <Grid Margin="2,4,2,8" ColumnDefinitions="Auto,*">
+        <Grid x:Name="ZoneGames" Margin="2,4,2,8" ColumnDefinitions="Auto,*">
           <TextBlock Grid.Column="0" Text="{loc:Str rf_play_zone_games}" Theme="{StaticResource PlayZoneTag}"/>
           <Border Grid.Column="1" Theme="{StaticResource PlayZoneRule}"/>
         </Grid>
@@ -380,7 +380,7 @@
 
         <!-- ===================== ZONE: EYES =====================
              All THREE webcam features, under the one webcam chip. -->
-        <Grid Margin="2,18,2,8" ColumnDefinitions="Auto,*">
+        <Grid x:Name="ZoneEyes" Margin="2,18,2,8" ColumnDefinitions="Auto,*">
           <TextBlock Grid.Column="0" Text="{loc:Str rf_play_zone_eyes}" Theme="{StaticResource PlayZoneTag}"/>
           <Border Grid.Column="1" Theme="{StaticResource PlayZoneRule}"/>
         </Grid>
@@ -589,7 +589,7 @@
         <!-- ===================== ZONE: SESSIONS =====================
              Three ways to commit to a run: sit the evaluation, scroll until you can't, or hand
              over the keys on a timer. -->
-        <Grid Margin="2,18,2,8" ColumnDefinitions="Auto,*">
+        <Grid x:Name="ZoneSessions" Margin="2,18,2,8" ColumnDefinitions="Auto,*">
           <TextBlock Grid.Column="0" Text="{loc:Str rf_play_zone_sessions}" Theme="{StaticResource PlayZoneTag}"/>
           <Border Grid.Column="1" Theme="{StaticResource PlayZoneRule}"/>
         </Grid>

@@ -78,6 +78,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // Handlers live here rather than in markup, per the porting convention.
             _txtQuery.TextChanged += (_, _) => TxtQuery_TextChanged();
             AddHandler(KeyDownEvent, Window_PreviewKeyDown, RoutingStrategies.Tunnel);
+            AddHandler(KeyUpEvent, (_, e) => { if (e.Key == Key.K) ChordReleased(); }, RoutingStrategies.Tunnel, handledEventsToo: true);
             _listResults.AddHandler(PointerReleasedEvent, Item_Click, RoutingStrategies.Tunnel);
 
             Loaded += (_, _) => Window_Loaded();
@@ -95,6 +96,25 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         /// <summary>True while the palette is on screen.</summary>
         internal static bool IsOpen => _instance != null;
+
+        // WPF takes only the first press of a held Ctrl+K (lParam bit 30, MainWindow.TabNavigation.cs:1102).
+        // Avalonia reports no repeat flag, so a press counts as held until a K key-up in the shell or
+        // the palette, or a second without a repeat (a release lost to another app), whichever is first.
+        private static bool _chordHeld;
+        private static long _chordAt;
+        internal static TimeProvider ChordClock { get; set; } = TimeProvider.System;
+
+        /// <summary>True for a fresh Ctrl+K press, false for the auto-repeat of a held one.</summary>
+        internal static bool FirstChordPress()
+        {
+            var now = ChordClock.GetTimestamp();
+            bool repeat = _chordHeld && ChordClock.GetElapsedTime(_chordAt, now) < TimeSpan.FromSeconds(1);
+            _chordHeld = true;
+            _chordAt = now;
+            return !repeat;
+        }
+
+        internal static void ChordReleased() => _chordHeld = false;
 
         /// <summary>
         /// Ctrl+K: open the palette, or close it if it is already up. Never throws - it is wired
@@ -321,8 +341,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
                 case Key.K when e.KeyModifiers == KeyModifiers.Control:
                     // Ctrl+K again while the palette has focus = close it. The shell's own gesture
-                    // cannot fire here because the palette owns focus.
-                    ClosePalette(fromEscape: false);
+                    // cannot fire here because the palette owns focus. The press that opened it,
+                    // still held, auto-repeats here: only a fresh press closes.
+                    if (FirstChordPress()) ClosePalette(fromEscape: false);
                     e.Handled = true;
                     break;
             }

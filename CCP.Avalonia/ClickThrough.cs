@@ -51,42 +51,28 @@ namespace ConditioningControlPanel.Avalonia
             w.Show();
             Pump();
 
+            // The section rail (MainShellWindow.NavRail.cs): a row lands on a tab its section owns.
+            static bool In(Views.Windows.MainShellWindow s, string section) =>
+                global::ConditioningControlPanel.Services.UI.NavSections.SectionForTab(s.CurrentTab) == section;
+
             // The script. Each step clicks ONE named control and states what must be true after.
             // Keep the expectations behavioural - "the You door is open", not "Height is 224" -
             // because an implementation detail in an assertion is how the door bug hid: the old
             // check watched Height, and Height was never the thing that was broken.
             var steps = new List<Step>
             {
-                new("DoorYou",     "the You door opens",             s => s.ExpandedDoor == "you"),
-                new("BtnQuests",   "its Quests entry navigates",     s => s.CurrentTab == "quests"),
-                new("DoorStudio",  "the Studio door opens",          s => s.ExpandedDoor == "studio"),
-                new("BtnNavStudio","its Studio entry navigates",     s => s.CurrentTab == "studio"),
-                new("DoorPlay",    "the Play door opens",            s => s.ExpandedDoor == "play"),
-                // BtnLab's x:Name is legacy API; its Tag is "Play", so Play is where it goes.
-                new("BtnLab",      "its Lab entry navigates to Play", s => s.CurrentTab == "play"),
-                new("DoorCompanion", "the Companion door opens",     s => s.ExpandedDoor == "companion"),
-                new("DoorLibrary", "the Library door opens",         s => s.ExpandedDoor == "library"),
-                new("DoorHome",    "the Home door opens",            s => s.ExpandedDoor == "home"),
+                new("DoorYou", "the you row opens its section", s => In(s, "you")),
+                new("DoorStudio", "the studio row opens its section", s => In(s, "studio")),
+                new("DoorPlay", "the play row opens its section", s => In(s, "play")),
+                new("DoorSocial", "the social row opens its section", s => In(s, "social")),
+                new("DoorCompanion", "the companion row opens its section", s => In(s, "companion")),
+                new("DoorLibrary", "the library row opens its section", s => In(s, "library")),
+                new("DoorHome", "the home row opens its section", s => In(s, "home")),
             };
 
             var fails = 0;
             var n = 0;
 
-            // The rail before anything touches it: 56px, labels clipped. Then a real pointer move
-            // into it, which is the only thing that opens it - there is no click involved, which is
-            // exactly why every click-based proof missed that it never opened at all.
-            // InitializeNavRail runs in the window's constructor (a Window never gets
-            // OnAttachedToVisualTree, which is why the rail never opened live).
-            var railBefore = w.NavRailExpanded;
-            var rail = w.FindControl<Border>("NavSidebar");
-            if (rail is not null)
-            {
-                var p = rail.TranslatePoint(new Point(rail.Bounds.Width / 2, rail.Bounds.Height / 2), w);
-                if (p is { } pt) { w.MouseMove(pt); Pump(); }
-            }
-            if (!railBefore && w.NavRailExpanded) Console.WriteLine("  [PASS] pointer into the rail  -> the rail opens");
-            else { fails++; Console.Error.WriteLine("  [FAIL] the nav rail did not open under the pointer"); }
-            Save(w, Path.Combine(outDir, "00-rail-open.png"));
             Save(w, Path.Combine(outDir, "00-start.png"));
 
             foreach (var step in steps)

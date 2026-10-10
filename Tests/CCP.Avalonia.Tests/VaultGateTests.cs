@@ -233,6 +233,48 @@ public sealed class VaultGateTests
         return Task.CompletedTask;
     });
 
+    /// <summary>WPF 750e76812: under every Patreon button a link opens the site's card / PayPal checkout for that plan.</summary>
+    [Fact]
+    public Task EveryPayButtonAlsoOffersTheCardCheckoutForItsPlan() => AvaloniaTestDispatcher.RunAsync(() =>
+    {
+        EnsureAvalonia();
+        var opened = new System.Collections.Generic.List<string>();
+        var previous = VaultGateDialog.Launch;
+        VaultGateDialog.Launch = t => { opened.Add(t); return true; };   // never a real URL
+        string Url(string plan) => string.Format(VaultGateDialog.CardUrlFormat, plan);
+        try
+        {
+            var card = VaultGateDialog.ShowOffer(null, null, 2, () => { });   // Lab card -> prime
+            Dispatcher.UIThread.RunJobs();
+            Click(card, Loc.Get("vaultgate_or_card"));
+            Assert.Null(VaultGateDialog.Open);
+
+            card = VaultGateDialog.ShowOffer(null, null, 1, () => { });       // Vault card -> basic
+            Dispatcher.UIThread.RunJobs();
+            Click(card, Loc.Get("vaultgate_or_card"));
+
+            card = VaultGateDialog.ShowOffer(null, null, 1, () => { });       // Compare: one link per tier column
+            Dispatcher.UIThread.RunJobs();
+            Click(card, Loc.Get("vaultgate_compare"));
+            var links = card.GetVisualDescendants().OfType<Button>()
+                .Where(b => b.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text == Loc.Get("vaultgate_or_card"))).ToList();
+            Assert.Equal(2, links.Count);
+            Assert.All(links, l => Assert.True(l.Focusable));
+            Assert.All(links, l => Assert.Equal(TextAlignment.Center, ((TextBlock)l.Content!).TextAlignment));   // WPF centres wrapped lines
+            links[1].RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Dispatcher.UIThread.RunJobs();
+
+            card = VaultGateDialog.ShowEnding(null, DateTime.UtcNow.AddDays(2), () => { });   // Keep Basic -> basic
+            Dispatcher.UIThread.RunJobs();
+            Click(card, Loc.Get("vaultgate_or_card"));
+
+            Assert.Equal(new[] { Url("prime"), Url("basic"), Url("prime"), Url("basic") }, opened);
+            Assert.Equal("https://app.cclabs.app/subscribe?plan=basic&from=panel", Url("basic"));
+        }
+        finally { VaultGateDialog.Launch = previous; VaultGateDialog.Open?.Close(); }
+        return Task.CompletedTask;
+    });
+
     private static ConditioningControlPanel.Avalonia.Helpers.NotificationService Toasts(out StackPanel host)
     {
         var toasts = new ConditioningControlPanel.Avalonia.Helpers.NotificationService();

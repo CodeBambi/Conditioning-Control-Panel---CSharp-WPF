@@ -21,7 +21,6 @@ namespace ConditioningControlPanel.Avalonia
             global::Avalonia.Threading.Dispatcher.UIThread.RunJobs();
             bool Vis(string n) => w.FindControl<Control>(n)?.IsVisible == true;
             double H(string n) => w.FindControl<Control>(n)?.Height ?? -1;
-            bool Clickable(string n) => w.FindControl<Control>(n)?.IsHitTestVisible == true;
 
             var fails = 0;
             void Check(bool ok, string what) { if (!ok) { fails++; Console.Error.WriteLine("FAIL " + what); } }
@@ -30,26 +29,12 @@ namespace ConditioningControlPanel.Avalonia
 
             w.ShowTab("quests");
             Check(Vis("QuestsTab") && !Vis("SettingsTab"), "quests shows QuestsTab and hides Settings");
-            Check(w.ExpandedDoor == "you", "quests unfolds the You door only");
-            // WPF SetExpandedDoor: a SHUT rail opens nothing; the chosen door waits for the hover.
-            Check(!Clickable("DoorPanelYou"), "a shut rail keeps every door panel shut");
-            var hold = new object();
-            w.HoldNavRailOpen(hold);
-            // The assertion that was missing, and the reason a real defect survived every green run:
-            // the old check asked only about Height. The markup parks each closed door at
-            // IsHitTestVisible="False", and the port never set it back, so an open door drew its
-            // entries and not one of them could be clicked. Height alone cannot see that.
-            Check(Clickable("DoorPanelYou") && !Clickable("DoorPanelStudio"),
-                  "an unfolded door's entries can actually be clicked");
+            bool Lit(string n) => w.FindControl<Button>(n)?.Classes.Contains("active") == true;
+            Check(Lit("DoorYou") && !Lit("DoorHome"), "quests lights the You row only");
 
             w.ShowTab("Haptics");                       // alias + case-insensitive
             Check(Vis("StudioTab") && !Vis("QuestsTab"), "haptics lands on StudioTab");
-            Check(w.ExpandedDoor == "studio", "haptics unfolds the Studio door only");
-            Check(Clickable("DoorPanelStudio") && !Clickable("DoorPanelYou"),
-                  "the door that closed stops taking clicks");
-
-            w.ReleaseNavRailOpen(hold);
-            Check(!Clickable("DoorPanelStudio"), "shutting the rail parks the open door");
+            Check(Lit("DoorStudio") && !Lit("DoorYou"), "haptics lights the Studio row only");
 
             w.ShowTab("no-such-tab");
             Check(Vis("StudioTab"), "unknown key keeps the current tab, never a blank page");
@@ -118,29 +103,6 @@ namespace ConditioningControlPanel.Avalonia
             w.ShowTab("presets");
             Check(!ToolTip.GetIsOpen(w), "ShowTab closes a tooltip that was still open");
             ToolTip.SetTip(w, null);
-
-            // 2. The rail's one-time setup paints the premium pills
-            //    (MainShellWindow.NavPremiumTags.RefreshNavPremiumTags, called by
-            //    MainShellWindow.NavRail.InitializeNavRail). Forced ON first, so a no-op wiring
-            //    leaves it on and fails; the answer for every key is "not locked" on a head with no
-            //    entitlement service, which is WPF's own documented fallback.
-            var pillNames = new[]
-            {
-                "TagPremiumHaptics", "TagPremiumTakeover", "TagPremiumSheListening",
-                "TagPremiumAwareness", "TagPremiumGradedIntake", "TagPremiumLockdown",
-                "TagPremiumBlinkTrainer", "TagPremiumRemoteControl",
-            };
-            var pillsFound = 0;
-            foreach (var n in pillNames)
-                if (w.FindControl<Border>(n) is { } pill) { pillsFound++; pill.IsVisible = true; }
-            Check(pillsFound == pillNames.Length,
-                  $"every rail premium pill resolves by name (saw {pillsFound} of {pillNames.Length})");
-
-            w.InitializeNavRail();
-            var pillsLit = 0;
-            foreach (var n in pillNames)
-                if (w.FindControl<Border>(n)?.IsVisible == true) pillsLit++;
-            Check(pillsLit == 0, $"the rail setup repaints every pill from the roster (saw {pillsLit} still lit)");
 
             // 3. Landing on the Profile tab repaints the sharing footer
             //    (MainShellWindow.ProfileCard.UpdateProfileSharingSummary, called from OnTabShown).
