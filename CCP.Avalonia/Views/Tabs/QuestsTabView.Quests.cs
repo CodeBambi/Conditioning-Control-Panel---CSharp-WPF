@@ -237,7 +237,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private void PaintMonth(QuestService quests)
         {
             double width = StreakCalendarCanvas.Bounds.Width;
-            if (width <= 0) return;
+            if (width <= 0) { PaintFixButton(StreakFix.HasMissedDays(quests.Progress, DateTime.Today)); return; }   // not laid out yet
             var completed = new HashSet<DateTime>(quests.Progress.DailyQuestCompletionDates.Select(d => d.Date));
             var shielded = new HashSet<DateTime>(CoreSettings.Current.StreakShieldUsedDates.Select(d => d.Date));
             IBrush accent;
@@ -250,10 +250,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             double spacing = width / days, centerY = 25, prevX = 0;
             bool prevDone = false;
             const string letters = "SMTWTFS";
+            bool hasMissedDays = false;
+            _fixRings.Clear();
             for (int i = 0; i < days; i++)
             {
                 var day = new DateTime(today.Year, today.Month, i + 1);
                 bool done = completed.Contains(day), future = day > today, isToday = day == today;
+                bool missed = !done && day < today;
+                if (missed) hasMissedDays = true;
                 double size = day.DayOfWeek == DayOfWeek.Sunday ? 26 : 20, x = spacing * i + spacing / 2;
                 if (i > 0)
                     StreakCalendarCanvas.Children.Add(new Line
@@ -283,9 +287,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                     Canvas.SetTop(shield, centerY - size / 2 - 12);
                     StreakCalendarCanvas.Children.Add(shield);
                 }
+                if (_isStreakFixMode && missed) AddFixRing(day, x, centerY, size, accent);   // WPF :694
                 prevX = x;
                 prevDone = done;
             }
+            PaintFixButton(hasMissedDays);
         }
     }
 }
