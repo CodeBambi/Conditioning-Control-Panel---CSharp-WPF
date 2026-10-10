@@ -29,8 +29,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     /// CreateAnimatedSkillTreeBrush. Ownership, purchasability, multiplier and time come from Core
     /// <c>SkillTreeRules</c>, the same rules WPF SkillTreeService delegates to.
     ///
-    /// <para>Not here (see the parity rows): purchasing (SkillCard_Click / PurchaseSkillAsync is a
-    /// server call behind account auth) and the four Ditzy Data PRO analytics expanders.</para>
+    /// <para>Purchasing (SkillCard_Click) is EnhancementsTabView.Purchase.cs over Core <c>SkillPurchase</c>.
+    /// Not here (see the parity rows): the four Ditzy Data PRO analytics expanders.</para>
     /// </summary>
     public partial class EnhancementsTabView : UserControl
     {
@@ -418,6 +418,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             prestige.Children.Add(pInfo);
             var prestigeBox = Box(Rgb(52, 44, 28), new Thickness(15, 6, 15, 6), prestige);
             ToolTip.SetTip(prestigeBox, Loc.Get("tooltip_prestige"));
+            _prestigeRow = prestigeBox;
             main.Children.Add(prestigeBox);
 
             if (SkillTreeRules.HasSkill(settings, "ditzy_data"))
@@ -640,6 +641,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 tip.Children.Add(new TextBlock { Text = Loc.GetF("label_skill_requires", pre?.LocalizedName ?? skill.PrerequisiteId), Foreground = Rgb(255, 100, 100), Margin = new Thickness(0, 6, 0, 0) });
             }
             ToolTip.SetTip(wrapper, Tip(tip, Rgb(30, 30, 50), Accent));
+            if (canPurchase) MakePurchasable(wrapper, skill.Id);
             return wrapper;
         }
 
@@ -761,6 +763,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             tip.Children.Add(new TextBlock { Text = CoreMods.MakeModAware(skill.LocalizedFlavorText), Foreground = Rgb(200, 150, 255), FontStyle = FontStyle.Italic, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 6) });
             tip.Children.Add(new TextBlock { Text = CoreMods.MakeModAware(skill.LocalizedDescription), Foreground = Brushes.White, TextWrapping = TextWrapping.Wrap });
             ToolTip.SetTip(card, Tip(tip, Rgb(40, 25, 55), Rgb(153, 50, 204)));
+            if (canPurchase) MakePurchasable(card, skill.Id);
             return card;
         }
 

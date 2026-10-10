@@ -249,6 +249,20 @@ namespace ConditioningControlPanel.Services
             finally { _gate.Release(); }
         }
 
+        /// <summary>WPF ProfileSyncService.SyncBeforeRetryAsync (#1300): one real sync before a balance refusal is
+        /// asked again. Waits for a push already running; inside the 30 s cooldown waits out the rest of it once.
+        /// True only when a sync reached the server.</summary>
+        public async Task<bool> SyncBeforeRetryAsync()
+        {
+            var before = LastSyncTime;
+            if (await PushAsync("purchase-retry", waitForGate: true)) return true;
+            if (LastSyncTime != before) return true;   // the push we waited behind landed
+            var left = LastSyncTime is { } last ? Cooldown - (UtcNow() - last) : TimeSpan.Zero;
+            if (left <= TimeSpan.Zero || left > Cooldown) return false;
+            await Task.Delay(left + TimeSpan.FromMilliseconds(250));
+            return await PushAsync("purchase-retry", waitForGate: true);
+        }
+
         /// <summary>WPF NudgeSyncSoon: one coalesced push, 3 s out or just past the cooldown.</summary>
         public void Nudge(string reason)
         {
