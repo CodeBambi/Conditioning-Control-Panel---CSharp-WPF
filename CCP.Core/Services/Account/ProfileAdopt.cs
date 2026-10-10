@@ -163,10 +163,9 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public static void ApplySyncResponse(AppSettings settings, JObject response, DateTime nowUtc)
         {
-            // WPF ProfileSyncService.cs:2032-2046. A pending force_skills_reset is the server's own
-            // reset (not handled on this head): never raise over it.
-            var skillsReset = response["force_skills_reset"]?.Type == JTokenType.Boolean && response.Value<bool>("force_skills_reset");
-            if (!skillsReset) AdoptSkillPoints(settings, response["skill_points"], "V2 sync");
+            // WPF ProfileSyncService.cs:2017-2046: the admin skills reset, its acknowledgement, else the
+            // take-higher wallet adopt.
+            ApplySkillsResetOrAdopt(settings, response);
             AdoptConditioningMinutes(settings, response["total_conditioning_minutes"], "V2 sync");   // WPF :2296
             if (response["user"] is not JObject node) return;
             var user = node.ToObject<V2User>()!;
@@ -203,6 +202,48 @@ namespace ConditioningControlPanel.Services
                 }
             }
             RecordAgreedServerXp(settings, user.Xp, TotalXp(settings), "V2 sync");
+        }
+
+        /// <summary>
+        /// <c>force_skills_reset</c> on a sync reply (WPF ProfileSyncService.cs:2017-2046 and
+        /// ApplyForceSkillsReset, the admin <c>/admin/reset-skills</c>), in WPF's three branches:
+        /// <list type="number">
+        /// <item>flag set and not yet acknowledged: the tree is cleared, the refund lands and
+        /// <see cref="AppSettings.PendingSkillsResetAck"/> is armed (it is on disk, so a crash cannot apply the
+        /// reset twice). The next push carries <c>force_skills_reset: false</c> (<c>SyncPush.Body</c>).</item>
+        /// <item>acknowledgement pending and the flag gone: the server took the ack, the flag is dropped.</item>
+        /// <item>otherwise the plain take-higher adopt (<see cref="AdoptSkillPoints"/>).</item>
+        /// </list>
+        /// The refund is the reply's <c>skill_points</c>, or one point per level when the reply names none.
+        /// DEVIATION from WPF, on purpose: WPF writes the refund outright; here it only RAISES the wallet
+        /// (the wallet rule: only a debited receipt or a balance refusal may lower Sparkles, and a sync
+        /// reply is a snapshot). A refund is the spent points coming back, so it is higher in every real
+        /// case. True when anything moved (the caller saves).
+        /// </summary>
+        public static bool ApplySkillsResetOrAdopt(AppSettings settings, JObject response)
+        {
+            var flagged = response["force_skills_reset"]?.Type == JTokenType.Boolean && response.Value<bool>("force_skills_reset");
+            if (flagged && !settings.PendingSkillsResetAck)
+            {
+                var named = response["skill_points"] is { Type: JTokenType.Integer } sp
+                    ? (int)Math.Clamp(sp.Value<long>(), 0, SparklePoints.Cap)
+                    : (int?)null;
+                var refund = named ?? settings.PlayerLevel * SkillPointsBank.PointsPerLevel;
+                var next = SparklePoints.MergeMax(refund, settings.SkillPoints);
+                Log.Information("Applying force skills reset: clearing {Count} skills, points {Local} -> {Points} (refund {Refund})",
+                    settings.UnlockedSkills?.Count ?? 0, settings.SkillPoints, next, refund);
+                settings.UnlockedSkills = new System.Collections.Generic.List<string>();
+                settings.SkillPoints = next;
+                settings.PendingSkillsResetAck = true;
+                return true;
+            }
+            if (settings.PendingSkillsResetAck && !flagged)
+            {
+                // Server flag was cleared by our acknowledgment.
+                settings.PendingSkillsResetAck = false;
+                return true;
+            }
+            return AdoptSkillPoints(settings, response["skill_points"], "V2 sync");
         }
 
         /// <summary>

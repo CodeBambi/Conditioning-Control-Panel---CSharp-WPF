@@ -158,7 +158,11 @@ namespace ConditioningControlPanel.Services
             Known = (achievements == null ? Sent & ~SyncBody.Field.Achievements : Sent)
                     | (cosmetics == null ? SyncBody.Field.None : SyncBody.Field.Cosmetics)
                     | (consent & Privacy)
-                    | (featureDayLog == null ? SyncBody.Field.None : SyncBody.Field.Stats),
+                    | (featureDayLog == null ? SyncBody.Field.None : SyncBody.Field.Stats)
+                    // WPF ProfileSyncService.cs:1876: `false` acknowledges an applied admin skills reset; the key
+                    // is left out otherwise (ProfileAdopt.ApplySkillsResetOrAdopt arms and disarms the flag).
+                    | (s.PendingSkillsResetAck ? SyncBody.Field.ForceSkillsReset : SyncBody.Field.None),
+            ForceSkillsReset = s.PendingSkillsResetAck ? false : null,
             // WPF stats["feature_day_log"] (ProfileSyncService.cs:1811), the one stat this head knows: the server
             // lifts it off the payload before its per-key stats merge, so a stats object with nothing else changes nothing.
             Stats = featureDayLog == null ? null : new Dictionary<string, object> { ["feature_day_log"] = featureDayLog },

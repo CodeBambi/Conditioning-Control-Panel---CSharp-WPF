@@ -29,6 +29,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <param name="accountChanged">A real sign-in/out: the lapse pass saves, as WPF's does.</param>
         internal void UpdateQuickLoginUI(bool accountChanged = false)
         {
+            // WPF MainWindow.Login.cs:128 / :368: the counter cache is per account.
+            if (accountChanged) App.V2Purchase?.Invalidate();
             try
             {
                 var s = CoreSettings.Current;

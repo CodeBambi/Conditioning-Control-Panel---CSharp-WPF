@@ -265,8 +265,9 @@
                             </Grid>
 
                             <!-- Flashes v2 (Back Room prizes). Collapsed while nothing v2 is owned; ownership
-                                 is PrizeOwnership's word, never a setting. Only the motion rows are here yet:
-                                 V2GetItRow, rounded corners, draggable, shatter and Jackpot Remix are not. -->
+                                 is PrizeOwnership's word, never a setting. The box also stays up while the
+                                 Get it row (the standalone purchase) has something to offer. Jackpot Remix
+                                 is not here. -->
                             <Border x:Name="BoxFlashV2" IsVisible="False" Margin="0,10,0,2"
                                     CornerRadius="10" Padding="12,8,12,6" BorderThickness="1"
                                     Background="#14FFE08A" BorderBrush="#33FFE08A"
@@ -283,6 +284,10 @@
                                                    FontWeight="SemiBold" Foreground="#FFE08A" Opacity="0.92"
                                                    VerticalAlignment="Center"/>
                                     </StackPanel>
+
+                                    <!-- The standalone way in (owner decision, 2026-09-19). It hides
+                                         itself once the prize lands. -->
+                                    <sessionLock:V2GetItRow x:Name="RowGetFlashesV2"/>
 
                                     <Grid x:Name="RowMotion" Height="36" Background="Transparent" IsVisible="False"
                                           ToolTip.Tip="{loc:Str tooltip_flash_motion}">
