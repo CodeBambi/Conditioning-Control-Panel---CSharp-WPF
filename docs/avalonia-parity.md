@@ -19,6 +19,8 @@ Status, lowest to highest:
 `--render-all` (RenderProof) only proves a view draws; it never makes a row `verified` on its own.
 Initial statuses were read from source on 2026-09-28 (stack tip #1765) and are not yet verified.
 
+Linux limits (X11 only, not on native Wayland, not built yet, fonts) are one list: `docs/avalonia-linux-exceptions.md`.
+
 Starting totals (2026-09-28): 362 rows: 59 missing, 247 stub, 56 wired, 0 verified.
 
 Notes carry what is stubbed or missing, platform-specific parts, existing evidence and, where it
