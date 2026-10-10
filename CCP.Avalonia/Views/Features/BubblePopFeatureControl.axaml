@@ -169,8 +169,8 @@
                             </Grid>
                             <!-- Bubbles v2 (Back Room prizes): its own box. The whole box collapses when
                                  no v2 grant is owned; the code-behind drives it from PrizeOwnership and
-                                 refreshes it when the grants move. WPF's V2GetItRow (the standalone
-                                 purchase) is an owner call and is not here. -->
+                                 refreshes it when the grants move. The box also stays up while the Get it
+                                 row (the standalone purchase) has something to offer. -->
                             <Border x:Name="V2Box" IsVisible="False" Margin="0,8,0,2"
                                     CornerRadius="10" Padding="12,8,12,8"
                                     Background="#14FFE08A" BorderBrush="#33FFE08A" BorderThickness="1">
@@ -185,6 +185,11 @@
                                                        Foreground="#FFE08A"/>
                                         </Border>
                                     </StackPanel>
+
+                                    <!-- The standalone way in (owner decision, 2026-09-19): the same
+                                         counter prize at the same price. It hides itself once the
+                                         prize lands and the rows below take over. -->
+                                    <sessionLock:V2GetItRow x:Name="RowGetBubblesV2"/>
 
                                     <Grid x:Name="MotionRow" Height="36" Background="Transparent"
                                           ToolTip.Tip="{loc:Str tooltip_bubble_motion}">
