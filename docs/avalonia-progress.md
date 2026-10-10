@@ -1718,3 +1718,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/rows-possession-lockdown: +278
 - views-tab-lockdown: blood-red theme + 600 ms activation flash + Video/BubbleCount Strict greys wired, restored on exit (10 fail-proofs; theme live; Bubble Count hold decided at Lockdown event like WPF, not on rack re-attach). Row still stub: Possession readout, Dose keeper.
 - shell-possession untouched: ~12.1k-line subsystem needs a slice plan (P33).
+
+## avalonia-port/rows-tab-navigation: +136
+- shell-tab-navigation: door accordion is gated on the rail like WPF (a shut rail opens no door; hover restores the chosen one; MotionLevel Off snaps the tween). NavDoorRailGateTests is fail-proven x4 (door switch touches only the new and previous door, like WPF :878), plus a live Keincheck check.
+- shell-window-chrome / theme-main-window / shell-main-window untouched (left for later lanes).
