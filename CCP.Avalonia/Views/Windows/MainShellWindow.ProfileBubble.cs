@@ -259,7 +259,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private static readonly Color ProfileBubbleGold = Color.FromRgb(0xFF, 0xD7, 0x00);
         private string? _profileBubbleAvatarUrl;
         private IBrush? _profileBubblePhotoBrush;
-        private DateTime _profileBubbleLastXpPulse;
+        private DateTime _profileBubbleLastXpPulse, _profileBubbleLastWobble, _profileBubbleLastShimmer;
+        internal Helpers.FxTrack.Run? ProfileBubbleWobbleRun { get; private set; }
+        internal Helpers.FxTrack.Run? ProfileBubbleShimmerRun { get; private set; }
 
         /// <summary>WPF InitializeProfileBubble's service half: the reaction events (static or app-lived,
         /// so they come off when the window closes, P41) and the first paint.</summary>
@@ -268,6 +270,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             Action<double, string> awarded = (_, _) => Dispatcher.UIThread.Post(OnBubbleXPChanged);
             Action<int> levelUp = _ => Dispatcher.UIThread.Post(OnBubbleLevelUp);
             EventHandler<Achievement> unlocked = (_, _) => Dispatcher.UIThread.Post(OnBubbleAchievementUnlocked);
+            // WPF OnBubbleFlashDisplayed / OnBubbleSubliminalDisplayed: a flash flicks the bubble, a subliminal dips it
+            Action flash = () => Dispatcher.UIThread.Post(OnBubbleFlashDisplayed);
+            Action subliminal = () => Dispatcher.UIThread.Post(OnBubbleSubliminalDisplayed);
+            CoreTubeEvents.FlashAboutToDisplay += flash;
+            CoreTubeEvents.SubliminalDisplayed += subliminal;
             var engine = App.Achievements;
             ProgressionBank.Awarded += awarded;
             ProgressionBank.LevelUp += levelUp;
@@ -276,6 +283,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             {
                 ProgressionBank.Awarded -= awarded;
                 ProgressionBank.LevelUp -= levelUp;
+                CoreTubeEvents.FlashAboutToDisplay -= flash;
+                CoreTubeEvents.SubliminalDisplayed -= subliminal;
                 if (engine != null) engine.Unlocked -= unlocked;
             };
             RefreshProfileBubble();
@@ -354,6 +363,44 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             FlashProfileBubbleGlow();
             PulseProfileBubble(1.18, 380);
             if (ProfileBubblePopupHost?.IsOpen == true) RefreshProfileMenu();
+        }
+
+        internal void OnBubbleFlashDisplayed()
+        {
+            if ((DateTime.UtcNow - _profileBubbleLastWobble).TotalMilliseconds < 2500) return;
+            _profileBubbleLastWobble = DateTime.UtcNow;
+            WobbleProfileBubble();
+        }
+
+        internal void OnBubbleSubliminalDisplayed()
+        {
+            if ((DateTime.UtcNow - _profileBubbleLastShimmer).TotalMilliseconds < 4000) return;
+            _profileBubbleLastShimmer = DateTime.UtcNow;
+            ShimmerProfileBubble();
+        }
+
+        /// <summary>WPF WobbleProfileBubble: a quick decaying tilt, -12 at 90 ms, 9 at 220, -5 at 340, level at 480.</summary>
+        private void WobbleProfileBubble()
+        {
+            if (!AmbientFxCanvas.Env.AllowTransitions || Named<Grid>("ProfileBubbleVisual") is not { } visual) return;
+            if (visual.RenderTransform is not TransformGroup group) return;
+            RotateTransform? tilt = null;
+            foreach (var t in group.Children) if (t is RotateTransform r) tilt = r;
+            if (tilt is null) return;
+            ProfileBubbleWobbleRun?.Finish();
+            ProfileBubbleWobbleRun = Helpers.FxTrack.Play(480,
+                ms => tilt.Angle = Helpers.FxTrack.Keys(ms, (0, 0, null), (90, -12, null), (220, 9, null), (340, -5, null), (480, 0, null)),
+                () => tilt.Angle = 0);
+        }
+
+        /// <summary>WPF ShimmerProfileBubble: opacity 1 -> 0.55 -> 1, 300 ms each way, sine in-out.</summary>
+        private void ShimmerProfileBubble()
+        {
+            if (!AmbientFxCanvas.Env.AllowTransitions || Named<Grid>("ProfileBubbleVisual") is not { } visual) return;
+            ProfileBubbleShimmerRun?.Finish();
+            ProfileBubbleShimmerRun = Helpers.FxTrack.Play(600,
+                ms => visual.Opacity = 1 - (0.45 * Helpers.FxTrack.SineInOut(ms < 300 ? ms / 300 : Math.Max(0, (600 - ms) / 300))),
+                () => visual.Opacity = 1);
         }
 
         /// <summary>1 -> peak -> 1 over <paramref name="durationMs"/>, QuadraticEaseOut, auto-reversed.</summary>

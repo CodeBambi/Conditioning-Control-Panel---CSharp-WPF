@@ -25,6 +25,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private static readonly Dictionary<string, Bitmap> QuestArtCache = new(StringComparer.OrdinalIgnoreCase);
         private static string? _questArtModId;
 
+        /// <summary>WPF ClearQuestArtCache: every decoded quest picture is forgotten; the next ask decodes again.</summary>
+        internal static void ClearQuestArtCache()
+        {
+            QuestArtCache.Clear();
+            _questArtModId = CoreMods.ActiveModId;
+        }
+
+        /// <summary>Test seam: how many pictures are decoded and held.</summary>
+        internal static int QuestArtCacheCount => QuestArtCache.Count;
+
         /// <summary>WPF GetQuestArt: mode-aware, cached, null when the quest has no usable image.</summary>
         internal static Bitmap? GetQuestArt(QuestDefinition def)
         {

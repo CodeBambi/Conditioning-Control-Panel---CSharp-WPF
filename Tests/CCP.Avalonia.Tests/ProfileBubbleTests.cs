@@ -212,4 +212,55 @@ public sealed class ProfileBubbleTests
         }
         return Task.CompletedTask;
     });
+
+    /// <summary>WPF WobbleProfileBubble / ShimmerProfileBubble: a flash flicks the bubble (2.5 s apart at
+    /// most), a subliminal dips it (4 s), and both end at rest. The look is owed a desk run.</summary>
+    [Fact]
+    public Task AFlashFlicksTheBubble_ASubliminalDipsIt_BothEndAtRest() => AvaloniaTestDispatcher.RunAsync(() =>
+    {
+        Setup();
+        var saved = CoreSettings.ServiceProvider;
+        var service = new SettingsService();
+        CoreSettings.ServiceProvider = () => service;
+        service.Current.MotionLevel = MotionLevel.Full;
+        ConditioningControlPanel.Avalonia.Helpers.FxTrack.ManualClock = true;
+        var shell = new MainShellWindow();
+        try
+        {
+            shell.Show();
+            Dispatcher.UIThread.RunJobs();
+            var visual = shell.FindControl<Grid>("ProfileBubbleVisual")!;
+            var tilt = ((TransformGroup)visual.RenderTransform!).Children.OfType<RotateTransform>().Single();
+
+            shell.OnBubbleFlashDisplayed();
+            var wobble = shell.ProfileBubbleWobbleRun!;
+            wobble.Seek(90);
+            Assert.Equal(-12, tilt.Angle, 3);
+            wobble.Seek(220);
+            Assert.Equal(9, tilt.Angle, 3);
+            wobble.Seek(340);
+            Assert.Equal(-5, tilt.Angle, 3);
+            shell.OnBubbleFlashDisplayed();                              // inside 2.5 s: no second flick
+            Assert.Same(wobble, shell.ProfileBubbleWobbleRun);
+            wobble.Finish();
+            Assert.Equal(0, tilt.Angle);
+
+            shell.OnBubbleSubliminalDisplayed();
+            var shimmer = shell.ProfileBubbleShimmerRun!;
+            shimmer.Seek(300);
+            Assert.Equal(0.55, visual.Opacity, 3);
+            shimmer.Seek(450);
+            Assert.InRange(visual.Opacity, 0.56, 0.99);
+            shimmer.Finish();
+            Assert.Equal(1, visual.Opacity);
+        }
+        finally
+        {
+            ConditioningControlPanel.Avalonia.Helpers.FxTrack.ManualClock = false;
+            shell.Close();
+            Dispatcher.UIThread.RunJobs();
+            CoreSettings.ServiceProvider = saved;
+        }
+        return Task.CompletedTask;
+    });
 }
