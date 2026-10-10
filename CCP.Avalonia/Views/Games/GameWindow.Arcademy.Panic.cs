@@ -51,6 +51,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
         /// Runs after the tier gate, as WPF orders them.</summary>
         internal static bool ArcademyLaunchAllowed()
         {
+            if (!ConditioningControlPanel.Services.Arcademy.ArcademyHostService.DoorAvailable)
+            {
+                Log.Information("[Game] arcademy: launch refused - the Arcademy door is closed in this build");
+                return false;
+            }
             if (CoreSettings.Current?.AudioOnlySession != true) return true;
             Log.Information("[Game] arcademy: launch refused - AudioOnlySession is active");
             try

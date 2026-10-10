@@ -18,6 +18,9 @@ namespace ConditioningControlPanel.Services.Arcademy
     {
         public const string ProductName = "The Arcademy";
 
+        /// <summary>WPF DoorAvailable: the door itself. A field, never a const, so the launch guard is real code.</summary>
+        public static bool DoorAvailable = true;
+
         /// <summary>See <see cref="ArcademyLocalMedia.AnimatedImageHint"/> (ccp-bugs#1086).</summary>
         internal const string AnimatedImageHint = ArcademyLocalMedia.AnimatedImageHint;
 
