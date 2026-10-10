@@ -1777,3 +1777,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/sync6-tonight-board-b: +651
 - Tonight Board: Waiting/Resume/Event providers on the Avalonia Home deck. Pure cards (git mv) and adapters are now in Core behind a `BillboardHead` seam both heads fill; tests are fail-proven.
 - Live/Board/Showcase, drawn art and animation polish are left for sync6-tonight-board-c (all 20 rows moved there).
+
+## avalonia-port/sync6-home-layout-b: +774
+- Home account strip + quick pills -> one line of hover bubbles (HoverBubbleBar, WPF 41288a884/acd51fcf9); drawer handle gains the Embers layer.
+- Rail icons left for nav-rail-b; Sparkle pill blocked on the wallet; banner FX/drum not started.
