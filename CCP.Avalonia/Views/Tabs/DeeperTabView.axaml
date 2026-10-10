@@ -402,8 +402,7 @@
                          on the other premium tabs. -->
                     <StackPanel Grid.Column="1" Orientation="Horizontal"
                                 VerticalAlignment="Center" Margin="0,0,16,0">
-                        <!-- Hidden: tours are not ported (no TutorialService on this head). -->
-                        <Button x:Name="BtnDeeperTutorial" IsVisible="False"
+                        <Button x:Name="BtnDeeperTutorial"
                                 Theme="{StaticResource DeeperRoundButton}"
                                 ToolTip.Tip="{loc:Str deeper_tab_tutorial_tooltip}"
                                 Click="BtnDeeperTutorial_Click"

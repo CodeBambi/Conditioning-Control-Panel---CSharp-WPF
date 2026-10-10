@@ -4,6 +4,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
         xmlns:fx="clr-namespace:ConditioningControlPanel.Avalonia.Controls"
+        xmlns:cmp="clr-namespace:ConditioningControlPanel.Avalonia.Views.Controls"
         x:Class="ConditioningControlPanel.Avalonia.Views.Windows.LauncherWindow"
         Title="CC Labs"
         Icon="avares://CCP.Avalonia/Resources/app.ico"
@@ -131,6 +132,12 @@
             <Setter Property="FontWeight" Value="SemiBold"/>
         </Style>
         <!-- LauncherLink's underline on hover (a ControlTheme may not hold a descendant selector). -->
+        <Style Selector="Button#ShortcutLink:pointerover TextBlock">
+            <Setter Property="TextDecorations" Value="Underline"/>
+        </Style>
+        <Style Selector="Button#WhatsNewLink:pointerover TextBlock">
+            <Setter Property="TextDecorations" Value="Underline"/>
+        </Style>
         <Style Selector="Button#StopLink:pointerover TextBlock">
             <Setter Property="TextDecorations" Value="Underline"/>
         </Style>
@@ -269,6 +276,16 @@
                                   StrokeLineCap="Round" IsVisible="False"/>
                         </Grid>
                     </Button>
+                    <!-- WPF LauncherWindow.xaml:466 "Media": source, niches, asset preset and the master volume for every room -->
+                    <Button x:Name="BtnGear" Theme="{StaticResource LauncherBarPill}" Margin="0,0,8,0"
+                            ToolTip.Tip="{loc:Str launcher_media_tooltip}" Click="BtnGear_Click">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#x25A3;" FontSize="12" Margin="0,0,7,0" VerticalAlignment="Center"
+                                       FontFamily="Segoe MDL2 Assets, Segoe UI Symbol, Segoe UI"
+                                       Foreground="{DynamicResource PanelAccentBrush}"/>
+                            <TextBlock Text="{loc:Str launcher_media_button}" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
                     <Button x:Name="BtnMinimize" Content="─" Width="46" Height="36"
                             Click="BtnMinimize_Click" Theme="{StaticResource WindowControlButton}"/>
                     <Button x:Name="BtnClose" Content="✕" Width="46" Height="36"
@@ -341,6 +358,11 @@
                         <Button x:Name="PanelCta" Theme="{StaticResource LauncherCta}" Click="PanelCta_Click">
                             <TextBlock x:Name="PanelCtaText" Text="{loc:Str launcher_panel_launch}"/>
                         </Button>
+                        <!-- WPF LauncherWindow.xaml:553 -->
+                        <Button x:Name="ShortcutLink" Theme="{StaticResource LauncherLink}"
+                                HorizontalAlignment="Center" Margin="0,12,0,0" Click="ShortcutLink_Click">
+                            <TextBlock x:Name="ShortcutLinkText" Text="{loc:Str launcher_add_shortcut}"/>
+                        </Button>
                     </StackPanel>
                 </Grid>
             </Border>
@@ -355,12 +377,21 @@
         </Grid>
 
         <!-- ================= bottom row ================= -->
-        <!-- ponytail: the friends chip and the What's New link (WPF left side) are not here yet. -->
+        <!-- WPF LauncherWindow.xaml:580: the friends chip and "What's new" on the left, the skip box on the right. -->
         <Border Grid.Row="2" BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="0,1,0,0" Margin="28,0,28,0">
-            <CheckBox x:Name="SkipToPanel" HorizontalAlignment="Right" VerticalAlignment="Center"
-                      Click="SkipToPanel_Click">
-                <TextBlock Text="{loc:Str launcher_skip_to_panel}" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}"/>
-            </CheckBox>
+            <Grid>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Left">
+                    <cmp:FriendsRailChip x:Name="FriendsChip" Margin="-8,0,10,0"/>
+                    <Button x:Name="WhatsNewLink" Theme="{StaticResource LauncherLink}" VerticalAlignment="Center"
+                            Click="WhatsNew_Click">
+                        <TextBlock Text="{loc:Str launcher_link_whats_new}"/>
+                    </Button>
+                </StackPanel>
+                <CheckBox x:Name="SkipToPanel" HorizontalAlignment="Right" VerticalAlignment="Center"
+                          Click="SkipToPanel_Click">
+                    <TextBlock Text="{loc:Str launcher_skip_to_panel}" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                </CheckBox>
+            </Grid>
         </Border>
 
         <!-- Lockdown veil (WPF LauncherWindow.xaml:597): the launcher waits, it never argues. Over every

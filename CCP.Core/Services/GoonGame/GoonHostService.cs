@@ -681,7 +681,7 @@ namespace ConditioningControlPanel.Services.GoonGame
                 request.Headers.Add("X-Client-Version", CoreReleaseContent.AppVersion);
                 using var response = await (http ?? Http).SendAsync(request, CancellationToken.None).ConfigureAwait(false);
                 var text = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                // not ported: MergedAccountRecovery.TryHandle (contract D) is not in Core yet.
+                global::ConditioningControlPanel.Services.MergedAccountRecovery.TryHandle((int)response.StatusCode, text);   // contract D
                 return ((int)response.StatusCode, text);
             }
             catch (Exception ex)

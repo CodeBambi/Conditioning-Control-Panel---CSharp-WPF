@@ -128,6 +128,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             HookOpenTables();
             HookFx();
             PaintSoundButton();
+            HookLinks();
+            HookFeel();
         }
 
         /// <summary>WPF OnShown; its FX half is FxOnShown (LauncherWindow.Fx.cs).</summary>
@@ -344,7 +346,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         /// <summary>WPF RefreshStatus: running since HH:mm + Stop, or idle; the CTA reads Open or Launch.
-        /// ponytail: WPF also refreshes at once on EngineStopped; here the 1 s tick catches it.</summary>
+        /// Runs on the 1 s tick and at once when the engine stops (LauncherWindow.Feel.cs).</summary>
         private bool? _ctaRunning;
 
         internal void RefreshStatus()
@@ -388,22 +390,24 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 TierBadge.Source = badge == null ? null : ModArt.TryLoad(badge, 64);
                 TierBadge.IsVisible = TierBadge.Source != null;
                 if (TierBadge.Source == null) TierBadgePopup.IsOpen = false;
+                else EnsureTierBadgeFx();   // LauncherWindow.Feel.cs: the 8 s shake
                 RefreshSpReadout();
             }
             catch (Exception ex) { Log.Debug(ex, "[Launcher] RefreshAccount failed"); }
         }
 
-        /// <summary>WPF RefreshSpReadout: the chip's Sparkle Points while signed in.
-        /// ponytail: WPF odometers the number up; it snaps here until the launcher-fx slice.</summary>
+        /// <summary>WPF RefreshSpReadout: the chip's Sparkle Points while signed in, counted up
+        /// (LauncherWindow.Feel.cs ShowSp).</summary>
         private void RefreshSpReadout()
         {
             int sp = CoreSettings.Current.SkillPoints;
             SpChip.IsVisible = sp >= 0 && CoreAccount.IsLoggedIn;
-            if (SpChip.IsVisible) SpReadout.Text = sp.ToString("N0");
+            if (SpChip.IsVisible) ShowSp(sp);
+            else _spShown = double.NaN;
         }
 
-        /// <summary>WPF TierBadge_MouseEnter/Leave: the big copy in a popup under the badge.
-        /// ponytail: WPF's 8 s wobble and the popup's pop-in scale are launcher-fx.</summary>
+        /// <summary>WPF TierBadge_MouseEnter/Leave: the big copy in a popup under the badge; the 8 s
+        /// shake and the pop-in are LauncherWindow.Feel.cs.</summary>
         private void TierBadge_PointerEntered(object? sender, PointerEventArgs e)
         {
             if (TierBadge.Source is not { } src) return;
@@ -411,12 +415,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             double bigWidth = src.Size.Height > 0 ? TierBadgeBig.Height * src.Size.Width / src.Size.Height : TierBadgeBig.Height;
             TierBadgePopup.HorizontalOffset = (TierBadge.Bounds.Width - bigWidth) / 2 - TierBadgeBig.Margin.Left;
             TierBadgePopup.IsOpen = true;
+            TierBadgeBigPopIn();
         }
 
         private void TierBadge_PointerExited(object? sender, PointerEventArgs e) => TierBadgePopup.IsOpen = false;
 
-        /// <summary>WPF RefreshStats: level, Sparkle Points, time under and the XP bar.
-        /// ponytail: WPF odometers the numbers and tweens the bar; they snap here until launcher-fx.</summary>
+        /// <summary>WPF RefreshStats: level, Sparkle Points, time under and the XP bar. The numbers
+        /// odometer and the bar tweens (LauncherWindow.Feel.cs ShowStats).</summary>
         internal void RefreshStats()
         {
             try
@@ -428,13 +433,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 try { need = ConditioningControlPanel.Services.XpCurve.GetXPForLevel(level, ConditioningControlPanel.Services.XpCurve.EpochOf(s)); } catch { }
                 double minutes = Math.Max(0, s.TotalConditioningMinutes);
 
-                StatLevel.Text = level.ToString("0");
-                StatSparkles.Text = Math.Max(0, s.SkillPoints).ToString("N0");
                 int hours = (int)(minutes / 60), mins = (int)(minutes % 60);
                 StatTime.Text = hours > 0 ? $"{hours}h {mins:00}m" : $"{mins}m";
 
                 double ratio = need > 0 ? Math.Clamp(xp / need, 0, 1) : 0;
-                XpFill.Width = XpTrack.Bounds.Width * ratio;
+                ShowStats(level, Math.Max(0, s.SkillPoints), XpTrack.Bounds.Width * ratio);
                 XpCaption.Text = Loc.GetF("launcher_stat_xp", ((int)xp).ToString("N0"), ((int)need).ToString("N0"));
             }
             catch (Exception ex) { Log.Debug(ex, "[Launcher] RefreshStats failed"); }
@@ -711,7 +714,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             else if (locked) plate.Children.Add(Pill("launcher_prime_pill", "🔒", Res("Tier2DiamondBorderBrush"),
                 new SolidColorBrush(Color.FromRgb(0x2A, 0x1C, 0x08)), 10));
             if (OpenTablesBadgeFor(card.Id, revealed && !needsAccount) is { } openBadge) plate.Children.Add(openBadge);   // LauncherWindow.OpenTables.cs
-            // ponytail: WPF's hover shortcut button needs LauncherShortcuts, which this head does not have yet.
+            if (revealed) plate.Children.Add(ShortcutButton(tile, card.Id));   // LauncherWindow.Links.cs
             if (card.IsNew && revealed) plate.Children.Add(Pill("exclusives_badge_new", null, Res("AccentGradientBrush"), Brushes.White,
                 needsAccount || locked ? 40 : 10));
             body.Children.Add(plate);

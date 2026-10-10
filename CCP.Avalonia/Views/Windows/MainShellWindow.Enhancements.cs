@@ -10,7 +10,7 @@
 //
 // ponytail: still missing, each a whole feature:
 //   (SkillCard_Click is live: Views/Tabs/EnhancementsTabView.Purchase.cs over Core SkillPurchase, page wave k2.
-//     Left out of it: the prestige sheen sweep, 401 auth recovery, the skill_unlock bark.)
+//     Left out of it: the prestige sheen sweep.)
 //   AddProSection + the Ditzy Data PRO panels (BuildProLifetimePanel, BuildSeasonRewindPanel,
 //     BuildBestieRecordsPanel, BuildBrainDrainPanel, the season/sparkline/heatmap charts).
 //   OnLuckyProc / EnsureLuckyToast / PlaceLuckyToast / CloseLuckyToast - nothing raises a lucky

@@ -216,7 +216,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         /// <summary>Play a chain. Cancels whatever was running; stops the idle beats for its duration.</summary>
         public void PlayChain(EmiChain? chain, Action? done = null, string? bodyFrameOverride = null)
         {
-            if (chain == null) return;
+            // WPF :1048: during the show only her own entrance chain may play.
+            if (chain == null || (PresentationActive && !(PresentationArriving && chain.Id == "wake"))) return;
             try
             {
                 var voice = EmiChains.FrameKey(bodyFrameOverride) ?? EmiChains.FrameKey(chain.BodyFrame);
@@ -319,7 +320,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         /// <summary>True when something is on screen that an idle beat must not interrupt.</summary>
         private bool Busy()
         {
-            if (_transiting || _player.IsLive || InputLocked) return true;
+            if (PresentationActive || _transiting || _player.IsLive || InputLocked) return true;
             bool glass = false;
             try { OnGlassLiveQuery(ref glass); }
             catch (Exception ex) { Log.Debug(ex, "[EmiDesk] glass-live seam threw"); }

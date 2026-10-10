@@ -22,6 +22,8 @@ namespace ConditioningControlPanel.Services
         private const string ServerUrl = "https://codebambi-proxy.vercel.app";
         private readonly HttpClient _http;
         private readonly Func<AppSettings?> _settings;
+        /// <summary>The 401 path (WPF HandleUnauthorizedAsync): true only when the session was recovered.</summary>
+        public Func<HttpResponseMessage, Task<bool>> Unauthorized { get; set; } = AuthRecovery.HandleUnauthorizedAsync;
 
         /// <param name="settings">Default: the head's settings.</param>
         /// <param name="handler">Test seam; null is the real network.</param>
@@ -29,6 +31,8 @@ namespace ConditioningControlPanel.Services
         {
             _settings = settings ?? (() => CoreSettings.HasProvider ? CoreSettings.Service?.Current : null);
             _http = V2AuthService.Configure(new HttpClient(handler ?? new ServerClockHandler()));
+            // A test transport means no real network: the recovery is the test's to hand in.
+            if (handler != null) Unauthorized = _ => Task.FromResult(false);
         }
 
         /// <summary>The wire date: invariant, so a Buddhist or Umm al-Qura system calendar never writes its own
@@ -53,18 +57,34 @@ namespace ConditioningControlPanel.Services
                 return (false, "Oopsie Insurance requires a cloud account. Please log in first.", null);
             try
             {
-                using var request = new HttpRequestMessage(HttpMethod.Post, $"{ServerUrl}/v2/user/use-oopsie");
-                var token = settings.AuthToken;
-                if (!string.IsNullOrEmpty(token)) request.Headers.Add("X-Auth-Token", token);
-                request.Content = new StringContent(
-                    JsonConvert.SerializeObject(new { unified_id = unifiedId, fix_date = WireDate(day) }), Encoding.UTF8, "application/json");
+                async Task<HttpResponseMessage> SendOnce()
+                {
+                    using var request = new HttpRequestMessage(HttpMethod.Post, $"{ServerUrl}/v2/user/use-oopsie");
+                    var token = settings.AuthToken;   // read per send: the retry carries the recovered token
+                    if (!string.IsNullOrEmpty(token)) request.Headers.Add("X-Auth-Token", token);
+                    request.Content = new StringContent(
+                        JsonConvert.SerializeObject(new { unified_id = unifiedId, fix_date = WireDate(day) }), Encoding.UTF8, "application/json");
+                    return await _http.SendAsync(request).ConfigureAwait(true);
+                }
 
-                using var response = await _http.SendAsync(request).ConfigureAwait(true);
+                using var first = await SendOnce().ConfigureAwait(true);
+                var response = first;
                 var json = await response.Content.ReadAsStringAsync().ConfigureAwait(true);
                 if (!response.IsSuccessStatusCode)
                 {
                     if (V2AuthService.MergedRecovery is { } merged && await merged(response, json).ConfigureAwait(true))
                         return (false, Loc.Get("account_merged_retry_hint"), null);
+                    // On 401, recover and retry once, only when the session was genuinely recovered (#879).
+                    if (await Unauthorized(response).ConfigureAwait(true) && !string.IsNullOrEmpty(settings.AuthToken)
+                        && string.Equals(settings.UnifiedId, unifiedId, StringComparison.Ordinal))
+                    {
+                        Log.Information("Oopsie insurance: retrying after auth token recovery");
+                        response = await SendOnce().ConfigureAwait(true);
+                        json = await response.Content.ReadAsStringAsync().ConfigureAwait(true);
+                    }
+                }
+                if (!response.IsSuccessStatusCode)
+                {
                     string? error = null;
                     try { error = JsonConvert.DeserializeObject<Reply>(json)?.Error; } catch { }
                     error ??= $"Server error: {response.StatusCode}";

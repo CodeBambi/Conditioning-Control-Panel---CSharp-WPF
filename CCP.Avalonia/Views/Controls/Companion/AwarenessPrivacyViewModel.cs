@@ -23,12 +23,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
     /// ON edge goes through <see cref="MainShellWindow.SetAwarenessEnabled"/> (entitlement, then the
     /// consent dialog). Nothing widens because a segment was pressed.
     ///
-    /// <para><b>The v2 observer and ledger are not on this head</b>, so WPF's own rule
-    /// (<c>IsLegacyPipeline = on &amp;&amp; !AwarenessObserver.IsEnabled</c>) reads as "legacy whenever
-    /// on": the warning band shows, the wire says "not reported" and the JSON stays empty. That band
-    /// over-warns here (the head's poll does enforce the deny list and incognito drop), which is the
-    /// safe direction (docs/avalonia-decisions.md, 2026-10-08). No ledger also means no known-apps
-    /// row; the seen-apps row is the window in front right now (no keyword-trigger ring here).</para>
+    /// <para><b>The v2 observer and ledger are on this head</b> (Platform/AwarenessHead.cs), so WPF's
+    /// own rule applies as written: <c>IsLegacyPipeline = on &amp;&amp; !AwarenessObserver.IsEnabled</c>.
+    /// The wire and its JSON read <see cref="AwarenessLive.LastFrame"/> through the cloud projection,
+    /// the known-apps row reads the ledger, and wipe / forget go through <see cref="AwarenessLive"/>.
+    /// The seen-apps row is still the window in front right now.</para>
     /// </summary>
     public sealed class AwarenessPrivacyViewModel : INotifyPropertyChanged
     {
@@ -115,18 +114,22 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         /// <summary>Hidden on this head: the dial's own consent already set AwarenessConsentShownV2, so
         /// re-asking shows nothing and the band would stay - a button that cannot switch the v2
         /// protections on (there is no v2 observer here) must not offer to. Show it when v2 lands.</summary>
-        public bool CanReviewConsent => false;
+        public bool CanReviewConsent => AwarenessConsentDialog.IsRequired(CoreSettings.Current);
 
         // ------------------------------- the wire -------------------------------
 
         public string WireLine { get => _wireLine; private set => Set(ref _wireLine, value); }
-        /// <summary>Never live here: the legacy pipeline writes no frame (WPF Sync's rule).</summary>
-        public bool IsWireLive => false;
+        /// <summary>WPF Sync: live only on the v2 observer, on and not paused. The legacy pipeline
+        /// writes no frame, so it is never styled as a live readout.</summary>
+        public bool IsWireLive => _isWireLive;
+        private bool _isWireLive;
+        private string _wireJson = string.Empty;
         public string WireCaption => Loc.Get(_isLegacyPipeline
             ? "companion_awareness_wire_caption_legacy" : "companion_awareness_wire_caption");
-        /// <summary>Empty: no projected frame exists on this head, and a reconstruction is not the wire.</summary>
-        public string WireJson => string.Empty;
-        public bool HasWireJson => false;
+        /// <summary>The cloud projection of the last frame that went out (WPF BuildWireJson). Empty on
+        /// the legacy pipeline: a reconstruction is not the wire.</summary>
+        public string WireJson => _wireJson;
+        public bool HasWireJson => !string.IsNullOrWhiteSpace(_wireJson);
         public string WireJsonEmptyCopy => Loc.Get("companion_awareness_wire_json_empty");
 
         public bool IsJsonExpanded
@@ -147,9 +150,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         public IReadOnlyList<AwarenessChip> SeenApps => _seen;
         public bool HasSeenApps => _seen.Count > 0;
         public string SeenAppsLabel => Loc.Get("companion_awareness_seen_label");
-        /// <summary>Empty: no activity ledger on this head, and the row is not invented.</summary>
-        public IReadOnlyList<AwarenessChip> KnownApps { get; } = Array.Empty<AwarenessChip>();
-        public bool HasKnownApps => false;
+        /// <summary>WPF RebuildKnown: the apps the ledger keeps counters on, each with its own forget.</summary>
+        public IReadOnlyList<AwarenessChip> KnownApps => _known;
+        public bool HasKnownApps => _known.Count > 0;
+        private readonly ObservableCollection<AwarenessChip> _known = new();
+        private readonly List<string> _knownKeys = new();
         public string KnownAppsLabel => Loc.Get("companion_awareness_known_label");
 
         /// <summary>True when an app is title-allow-listed; on asks which app, off empties the list.</summary>
@@ -186,6 +191,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
                 if (_retentionDays == value) return;
                 CoreSettings.Current.AwarenessRetentionDays = value;   // setter clamps to 7..90
                 CoreSettings.Save();
+                // Shortening the window bites now, not at the next start-up (WPF :266).
+                try { AwarenessLive.Ledger?.PruneRetention(DateTime.Now); }
+                catch (Exception ex) { Log.Debug("Awareness: retention prune failed: {E}", ex.Message); }
                 Log.Information("Awareness: retention set to {Days}d", CoreSettings.Current.AwarenessRetentionDays);
                 Sync();
             }
@@ -217,16 +225,22 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
                 var s = CoreSettings.Current;
                 bool on = s.AwarenessModeEnabled && s.AwarenessConsentGiven;
                 _isPaused = AwarenessPause.IsPaused();
-                _isLegacyPipeline = on;   // no AwarenessObserver on this head (see the class summary)
+                // Watching, but not through the v2 privacy layer (WPF :323): the legacy poll needs only
+                // two of IsEnabled's four flags.
+                _isLegacyPipeline = on && !AwarenessObserver.IsEnabled;
                 _retentionDays = s.AwarenessRetentionDays;
                 _intensity = !on ? AwarenessIntensity.Off
                     : (s.AwarenessTitleAllowList?.Count ?? 0) > 0 ? AwarenessIntensity.Everything
                     : AwarenessIntensity.BroadStrokes;
-                WireLine = Loc.Get(!on ? "companion_awareness_wire_closed"
-                    : _isPaused ? "companion_awareness_wire_paused"
-                    : "companion_awareness_wire_legacy");
+                _isWireLive = on && !_isPaused && !_isLegacyPipeline;
+                WireLine = BuildWireLine(on, _isPaused, _isLegacyPipeline);
+                _wireJson = _isLegacyPipeline ? string.Empty : BuildWireJson(on);
 
                 RebuildChips(s);
+                RebuildKnown();
+                foreach (var n in new[] { nameof(IsWireLive), nameof(WireJson), nameof(HasWireJson),
+                             nameof(HasKnownApps), nameof(CanReviewConsent) })
+                    Raise(n);
                 foreach (var n in new[] { nameof(IsPaused), nameof(PauseLabel), nameof(IsLegacyPipeline),
                              nameof(IncognitoCopy), nameof(WireCaption), nameof(RetentionDays), nameof(RetentionLabel),
                              nameof(Intensity), nameof(DialHint), nameof(AllowPageTitles), nameof(PageTitlesLabel),
@@ -263,6 +277,87 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
                 next.Add((current + "\u0001" + clean + "\u0001" + tip, () => new AwarenessChip(current, new RelayCommand(() => AddToDeny(clean)), tip)));
             }
             RefillIfChanged(_seen, _seenKeys, next);
+        }
+
+        /// <summary>WPF BuildWireLine: a one-line summary of the last frame that went out, under the same
+        /// projection rules as the JSON below it (the adult cluster shows its cluster id, nothing else).</summary>
+        internal static string BuildWireLine(bool on, bool paused, bool legacy)
+        {
+            if (!on) return Loc.Get("companion_awareness_wire_closed");
+            if (paused) return Loc.Get("companion_awareness_wire_paused");
+            if (legacy) return Loc.Get("companion_awareness_wire_legacy");
+
+            var frame = AwarenessLive.LastFrame;
+            if (frame == null) return Loc.Get("companion_awareness_wire_idle");
+
+            var category = frame.Category.ToString().ToLowerInvariant();
+            var dwell = TimeSpan.FromSeconds(Math.Max(0, frame.DwellSeconds));
+            if (frame.IsAdultCluster)
+                return FormatWire(category, AwarenessText.SanitizeId(frame.AppCluster), null, dwell);
+
+            var app = string.IsNullOrWhiteSpace(frame.ServiceName)
+                ? AwarenessText.SanitizeId(frame.AppId)
+                : AwarenessText.SanitizeDisplayName(frame.ServiceName);
+            var title = string.IsNullOrWhiteSpace(frame.PageTitleSanitized)
+                ? null
+                : AwarenessProjection.ScrubTitle(frame.PageTitleSanitized);
+            return FormatWire(category, app, string.IsNullOrWhiteSpace(title) ? null : title, dwell);
+        }
+
+        /// <summary>WPF FormatWire: "[ category · app · title · 4m ]".</summary>
+        internal static string FormatWire(string? category, string? app, string? title, TimeSpan duration)
+        {
+            var parts = new List<string>(4);
+            if (!string.IsNullOrWhiteSpace(category)) parts.Add(category!.Trim());
+            if (!string.IsNullOrWhiteSpace(app)) parts.Add(app!.Trim());
+            if (!string.IsNullOrWhiteSpace(title) &&
+                !string.Equals(title, app, StringComparison.OrdinalIgnoreCase)) parts.Add(title!.Trim());
+            parts.Add(ConditioningControlPanel.Services.AIService.FrameFormatter.Duration(duration));
+            return "[ " + string.Join(" \u00B7 ", parts) + " ]";
+        }
+
+        /// <summary>WPF BuildWireJson: the cloud projection itself, indented. Raw bytes when it will not parse.</summary>
+        internal static string BuildWireJson(bool on)
+        {
+            if (!on) return string.Empty;
+            var frame = AwarenessLive.LastFrame;
+            if (frame == null) return string.Empty;
+
+            var json = AwarenessProjection.BuildCloudProjection(frame);
+            if (string.IsNullOrWhiteSpace(json) || json == "{}") return string.Empty;
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(json);
+                return System.Text.Json.JsonSerializer.Serialize(doc.RootElement,
+                    new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+            }
+            catch (System.Text.Json.JsonException) { return json; }
+        }
+
+        private void RebuildKnown()
+        {
+            var next = new List<(string, Func<AwarenessChip>)>();
+            var ledger = AwarenessLive.Ledger;
+            if (ledger != null)
+            {
+                var ids = new List<string>(ledger.KnownAppIds);
+                ids.AddRange(ledger.RecentTransitions.Select(t => t.AppId));
+                var tip = Loc.Get("companion_awareness_forget_tip");
+                foreach (var id in ids.Where(id => !string.IsNullOrWhiteSpace(id)).Distinct(StringComparer.OrdinalIgnoreCase))
+                {
+                    if (next.Count >= MaxAppChips) break;
+                    var appId = id;
+                    next.Add((appId + "\u0001" + tip, () => new AwarenessChip(appId, new RelayCommand(() => ForgetApp(appId)), tip)));
+                }
+            }
+            RefillIfChanged(_known, _knownKeys, next);
+        }
+
+        private void ForgetApp(string appId)
+        {
+            try { AwarenessLive.Forget(appId); }
+            catch (Exception ex) { Log.Warning(ex, "Awareness: forget app failed"); }
+            Sync();
         }
 
         /// <summary>Refills a row only when its keys changed (WPF #1323: refilling every tick stalled the UI).</summary>
@@ -386,20 +481,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         }
 
         /// <summary>
-        /// Erases what this head stores about awareness: the activity-ledger file and its .tmp
-        /// sibling (WPF <c>AwarenessLive.WipeFilesDirectly</c>; this head writes no ledger, so they exist
-        /// only in a copied profile). The legacy poll keeps no history beyond the window in front, and
-        /// there is no projected frame or awareness memory here to clear. The two-step confirm ran first.
+        /// Erases everything awareness keeps: the activity ledger (memory and file), the recent-line
+        /// memory, the published frame and the pacing state (WPF <c>AwarenessLive.WipeEverything</c>).
+        /// The two-step confirm ran first.
         /// </summary>
         private void Wipe()
         {
-            var path = Path.Combine(CorePaths.UserData, "awareness_ledger.json");
-            foreach (var file in new[] { path, path + ".tmp" })
-            {
-                try { if (File.Exists(file)) File.Delete(file); }
-                catch (Exception ex) { Log.Warning(ex, "Awareness: failed to delete {File}", file); }
-            }
-            Log.Information("Awareness: everything she noticed has been erased");
+            // WPF Wipe: the live ledger, the ban-list memory, the published frame and the pacing state
+            // go through the one erasure in AwarenessLive (it deletes the files directly when no ledger
+            // was ever built).
+            try { AwarenessLive.WipeEverything(); }
+            catch (Exception ex) { Log.Warning(ex, "Awareness: wipe failed"); }
             Sync();
         }
 

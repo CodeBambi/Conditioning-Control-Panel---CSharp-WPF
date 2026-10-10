@@ -292,7 +292,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
         /// authority on it, GameMediaManifest: decodable extensions, unchecked assets honoured, size caps).</summary>
         internal static Func<IEnumerable<(string Rel, string Url, bool IsImage)>> PbpLibrary { get; set; } = () =>
         {
-            var m = GameMediaManifest.BuildLive();
+            var m = GameMediaManifest.BuildLocal();   // local disk only, as WPF EnumerateActive
             return m.Images.Select(e => (e.Name, e.Url, true)).Concat(m.Videos.Select(e => (e.Name, e.Url, false)));
         };
 
@@ -315,7 +315,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             {
                 var (status, body) = await PbpHostRules.SendAsync(PbpHttpClient(), baseUrl, call, token, CoreReleaseContent.AppVersion)
                     .ConfigureAwait(false);
-                // ponytail: WPF also runs MergedAccountRecovery.TryHandle(status, body) (contract D); it is not on this head yet.
+                global::ConditioningControlPanel.Services.MergedAccountRecovery.TryHandle(status, body);   // contract D (WPF PieceByPieceHostService:604)
                 PbpOnUi(() => Post(PbpHostRules.NetResult(call.Id, status, body)));
             });
         }

@@ -112,6 +112,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
                 ChkEnable.IsChecked = s.SpiralEnabled;
                 ChkRandomize.IsChecked = s.SpiralRandomize;
                 ChkSessionCornerGif.IsChecked = s.SessionCornerGifAllowed;
+                if (!SessionCornerGifPorted)
+                {
+                    ChkSessionCornerGif.IsEnabled = false;
+                    if (ChkSessionCornerGif.Parent is Control gifRow)
+                        gifRow.Bind(ToolTip.TipProperty, new global::Avalonia.Data.Binding("[exclusives_not_on_this_build]") { Source = ConditioningControlPanel.Localization.LocalizationManager.Instance });
+                }
                 SliderOpacity.Value = s.SpiralOpacity;
                 TxtOpacity.Text = $"{s.SpiralOpacity}%";
                 PopulateMonitors();
@@ -171,6 +177,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
         /// <summary>User master for the SESSION-scoped corner GIF. On WPF it is honoured LIVE - a
         /// session already on screen drops its corner overlay the moment this is unticked. The
         /// standalone Corner GIF slots are NOT touched: those are a separate surface.</summary>
+        internal const bool SessionCornerGifPorted = false;
+
         private void ChkSessionCornerGif_Changed(object? sender, RoutedEventArgs e)
         {
             if (_isLoading) return;
@@ -179,9 +187,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             if (s.SessionCornerGifAllowed == want) return;
             s.SessionCornerGifAllowed = want;
             CoreSettings.Save();
-            // ponytail: WPF then calls SessionEngine.Active.RefreshCornerGifPolicy()
-            // (ConditioningControlPanel/Services/Session/SessionEngine.cs), still in the WPF head,
-            // so the change lands on the next session rather than the running one.
+            // not ported: the session-scoped corner GIF itself. WPF SessionEngine raises its own corner
+            // overlay (ShowCornerGif / CanRaiseCornerGif / RefreshCornerGifPolicy, with the standalone
+            // slots standing down and a handback); SessionRunner on this head never raises one, so
+            // there is nothing for this switch to drop or bring back, live or on the next session.
+            // The row is greyed with the reason (SessionCornerGifPorted) until that lands.
         }
 
         private void SliderOpacity_Changed(object? sender, RangeBaseValueChangedEventArgs e)

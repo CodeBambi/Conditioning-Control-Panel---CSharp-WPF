@@ -22,9 +22,9 @@ namespace ConditioningControlPanel.Services
     /// survives a sync, which adopts the server's number (<see cref="SparklePoints.AfterBalanceRefusal"/>, #1268
     /// #1269 #1300).</para>
     ///
-    /// <para>ponytail: no 401 auth recovery (WPF HandleUnauthorizedAsync retries once on a recovered token; this
-    /// head has no recovery, so a 401 goes straight to the "session has expired" message); no Pink Rush check
-    /// timer on buying pink_rush (the timer is SkillTreeService's, not ported).</para>
+    /// <para>A 401 runs the recovery (<see cref="AuthRecovery"/>) and the purchase is retried ONCE on a recovered
+    /// token; only then does it read "session has expired". The Pink Rush check timer is the head's: it listens
+    /// to <see cref="SkillUnlocked"/>.</para>
     /// </summary>
     public sealed class SkillPurchase
     {
@@ -46,6 +46,8 @@ namespace ConditioningControlPanel.Services
         public Action<long>? LifetimeSpentReconciled { get; set; }
         /// <summary>WPF App.Settings.Save. Default: the Core settings save.</summary>
         public Action Save { get; set; } = () => { if (CoreSettings.HasProvider) CoreSettings.Save(); };
+        /// <summary>The 401 path (WPF HandleUnauthorizedAsync): true only when the session was recovered.</summary>
+        public Func<HttpResponseMessage, Task<bool>> Unauthorized { get; set; } = AuthRecovery.HandleUnauthorizedAsync;
 
         /// <summary>A skill was bought (WPF SkillTreeService.SkillUnlocked).</summary>
         public event EventHandler<string>? SkillUnlocked;
@@ -56,6 +58,8 @@ namespace ConditioningControlPanel.Services
         {
             _settings = settings ?? (() => CoreSettings.HasProvider ? CoreSettings.Service?.Current : null);
             _http = V2AuthService.Configure(new HttpClient(handler ?? new ServerClockHandler()));
+            // A test transport means no real network: the recovery is the test's to hand in.
+            if (handler != null) Unauthorized = _ => Task.FromResult(false);
         }
 
         /// <summary>WPF SkillTreeService.PurchaseSkillAsync.</summary>
@@ -128,12 +132,17 @@ namespace ConditioningControlPanel.Services
                     // Local points, so the server can reconcile (bubble pop points may not be synced yet).
                     skill_points = settings.SkillPoints,
                 });
-                using var request = new HttpRequestMessage(HttpMethod.Post, $"{ServerUrl}/v2/user/purchase-skill");
-                var token = settings.AuthToken;
-                if (!string.IsNullOrEmpty(token)) request.Headers.Add("X-Auth-Token", token);
-                request.Content = new StringContent(requestBody, Encoding.UTF8, "application/json");
+                async Task<HttpResponseMessage> SendOnce()
+                {
+                    using var request = new HttpRequestMessage(HttpMethod.Post, $"{ServerUrl}/v2/user/purchase-skill");
+                    var token = settings.AuthToken;   // read per send: the retry carries the recovered token
+                    if (!string.IsNullOrEmpty(token)) request.Headers.Add("X-Auth-Token", token);
+                    request.Content = new StringContent(requestBody, Encoding.UTF8, "application/json");
+                    return await _http.SendAsync(request).ConfigureAwait(true);
+                }
 
-                using var response = await _http.SendAsync(request).ConfigureAwait(true);
+                using var first = await SendOnce().ConfigureAwait(true);
+                var response = first;
                 var json = await response.Content.ReadAsStringAsync().ConfigureAwait(true);
 
                 // Signed out (or into another account) while this was in flight: the answer is not ours to apply.
@@ -145,9 +154,24 @@ namespace ConditioningControlPanel.Services
                     if (V2AuthService.MergedRecovery is { } merged && await merged(response, json).ConfigureAwait(true))
                         return (false, Loc.Get("account_merged_retry_hint"));
 
+                    // On 401, attempt auth recovery and retry once, but ONLY if the session was genuinely
+                    // recovered: the same POST with the same dead token only burns a round trip (#879).
+                    if (await Unauthorized(response).ConfigureAwait(true) && !string.IsNullOrEmpty(settings.AuthToken)
+                        && string.Equals(settings.UnifiedId, unifiedId, StringComparison.Ordinal))
+                    {
+                        Log.Information("Skill purchase: retrying after auth token recovery");
+                        response = await SendOnce().ConfigureAwait(true);
+                        json = await response.Content.ReadAsStringAsync().ConfigureAwait(true);
+                        if (!string.Equals(settings.UnifiedId, unifiedId, StringComparison.Ordinal))
+                            return (false, Loc.Get("skill_err_login_required"));
+                    }
+                }
+
+                if (!response.IsSuccessStatusCode)
+                {
                     if (response.StatusCode == HttpStatusCode.Unauthorized)
                     {
-                        Log.Warning("Skill purchase failed: auth token invalid/missing");
+                        Log.Warning("Skill purchase failed: auth token invalid/missing after recovery attempt");
                         return (false, $"Your session has expired. Open ⚙️ {Loc.Get("nav_door_settings")} → Account and sign in again to purchase skills.");
                     }
 

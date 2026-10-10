@@ -477,9 +477,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
 
         public CompanionHeaderViewModel(CompanionHeroCardViewModel hero)
         {
-            // The tutorial chip is hidden in the markup until the Companion tour (WPF
-            // BtnCompanionTutorial_Click) is ported; the command stays a no-op for the binding.
-            TutorialCommand = new RelayCommand(() => { });
+            // WPF BtnCompanionTutorial_Click (MainWindow.Settings.cs:665): StartTutorial(Companion).
+            TutorialCommand = new RelayCommand(() => CoreTutorial.Start("Companion"));
             OpenPatreonCommand = new RelayCommand(() => hero.Shell?.ShowTab("patreon"));
         }
 

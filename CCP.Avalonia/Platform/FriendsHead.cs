@@ -50,8 +50,8 @@ internal static class FriendsHead
     internal static FriendsService? Create(string? userDataDir, string? overrideUrl)
     {
         if (BaseUrl(userDataDir, overrideUrl) is not { } url) return null;
-        // ponytail: no Contract D hook (WPF MergedAccountRecovery.TryHandle is head-only); add it when that moves.
-        return new FriendsService(new FriendsApi(null, Identity, url), () => Identity()?.UnifiedId, AnyWindowActive);
+        return new FriendsService(new FriendsApi(null, Identity, url, global::ConditioningControlPanel.Services.MergedAccountRecovery.TryHandle),   // contract D
+            () => Identity()?.UnifiedId, AnyWindowActive);
     }
 
     /// <summary>WPF FriendsServiceApp.AnyAppWindowActive.</summary>

@@ -3,8 +3,9 @@
 // thread here, so a wedged UI thread can no longer lose the key itself; it can still sit on the queued
 // handler. This watches that handler from a background thread and, if it has not finished inside
 // 2 s, runs the thread-safe part of the stop off the UI thread.
-// ponytail: WPF also stops BrainDrain and the screen OCR here and queues the OCR restart; neither has
-// a twin on this head yet (keyword triggers / OCR are not ported). Add them when they land.
+// Screen OCR (WPF MainWindow.xaml.cs:1141 and :1173-1196): this fallback is the ONLY panic path that
+// stops the screen reader, and it queues the restart for when the UI thread drains. The designed panic
+// path leaves OCR, keyword highlights and the awareness observer running, and so does this head.
 
 using System;
 using System.Threading;
@@ -93,8 +94,18 @@ internal static class PanicWatchdog
         Step("mind wipe", () => CoreMindWipe.StopProvider?.Invoke());
         Step("brain drain", () => CoreBrainDrain.StopProvider?.Invoke());
         Step("unduck", () => LibVlcAudio.Instance?.ForceUnduck());
+        Step("screen OCR", ScreenOcrService.Stop);
+        Step("recovery queue", QueueRecovery);
         Log.Information("PANIC FALLBACK complete");
     }
+
+    /// <summary>Test seam: the UI-thread post used by the recovery.</summary>
+    internal static Action<Action> PostToUi { get; set; } = a => Dispatcher.UIThread.Post(a);
+
+    /// <summary>WPF QueuePanicFallbackRecovery: the off-thread teardown stopped the screen reader behind
+    /// the settings' back, so restart it under the real start conditions once the UI thread drains.
+    /// Sync() starts only when the switches and the access check still say so, and is idempotent.</summary>
+    private static void QueueRecovery() => PostToUi(() => Step("screen OCR restart", ScreenOcrService.Sync));
 
     private static void Step(string name, Action step)
     {

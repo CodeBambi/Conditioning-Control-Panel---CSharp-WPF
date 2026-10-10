@@ -101,6 +101,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
         /// <summary>Send her away. Safe to call when she is not out.</summary>
         public void Dismiss()
         {
+            // WPF :422: sending her away during the welcome show stops the show first.
+            try { if (_window?.PresentationActive == true) _window.StopPresentation(); }
+            catch (Exception ex) { Log.Debug(ex, "[EmiDesk] stopping the show on dismiss failed"); }
             try
             {
                 if (!Dispatcher.UIThread.CheckAccess())
@@ -132,6 +135,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
                 IsOut = false;
                 RaiseOutChanged();
             }
+        }
+
+        /// <summary>WPF :598 BeginPresentation: the welcome show borrows the real widget. Explicit demo
+        /// activation bypasses the desk preference (EmiDeskEnabled) and the mute prompt without changing
+        /// either; she stays out afterwards, as on WPF.</summary>
+        internal EmiDeskWindow? BeginPresentation()
+        {
+            var window = EnsureWindow();
+            if (window == null) return null;
+            _summonGen++;   // a summon parked behind the mute prompt must not finish over the show
+            if (!IsOut) window.RestorePlacement();
+            IsOut = true; RaiseOutChanged();
+            return window;
         }
 
         private EmiDeskWindow? EnsureWindow()

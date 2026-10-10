@@ -66,4 +66,31 @@ public sealed class PlayWallParityTests
         Assert.True(LauncherWindow.Destinations.ContainsKey("race"));
         Assert.Equal("dtrh/race.html", RaceWindow.Spec.Page);
     }
+
+    [Fact]
+    public void RacingCard_GoesToTheRaceHost_NeverToTheCounter()
+    {
+        // Signed out or trackless, the card must not take the launcher's mystery route (Back Room).
+        Assert.False(PlayTabView.RaceDoorOpen(signedIn: false, owns: _ => true));
+        Assert.False(PlayTabView.RaceDoorOpen(signedIn: true, owns: _ => false));
+        Assert.True(PlayTabView.RaceDoorOpen(signedIn: true, owns: id => id == "rt.original.02"));
+    }
+
+    [Fact]
+    public async Task FocusGazeSwitch_NeverStaysOn_AndSaysWhy()
+    {
+        await AvaloniaTestDispatcher.RunAsync(() =>
+        {
+            Boot();
+            var view = new PlayTabView();
+            var box = view.FindControl<CheckBox>("ChkPlayFocusGaze")!;
+            var line = view.FindControl<TextBlock>("TxtPlayFocusGazeStatus")!;
+            box.IsChecked = true;   // IsCheckedChanged runs the handler
+            Assert.False(box.IsChecked);
+            Assert.False(global::ConditioningControlPanel.CoreSettings.Current.FocusGazeEnabled);
+            Assert.Equal("off", view.FocusGazeChanged());
+            Assert.Equal("", line.Text);
+            return Task.CompletedTask;
+        });
+    }
 }

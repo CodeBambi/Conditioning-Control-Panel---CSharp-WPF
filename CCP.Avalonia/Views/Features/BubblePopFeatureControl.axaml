@@ -167,6 +167,70 @@
                                 <CheckBox Grid.Column="1" x:Name="ChkTriggers"
                                           Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
                             </Grid>
+                            <!-- Bubbles v2 (Back Room prizes): its own box. The whole box collapses when
+                                 no v2 grant is owned; the code-behind drives it from PrizeOwnership and
+                                 refreshes it when the grants move. WPF's V2GetItRow (the standalone
+                                 purchase) is an owner call and is not here. -->
+                            <Border x:Name="V2Box" IsVisible="False" Margin="0,8,0,2"
+                                    CornerRadius="10" Padding="12,8,12,8"
+                                    Background="#14FFE08A" BorderBrush="#33FFE08A" BorderThickness="1">
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                                        <TextBlock Text="{loc:Str label_bubbles_v2_box}" FontSize="12.5" FontWeight="SemiBold"
+                                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                        <Border Margin="7,0,0,0" Padding="6,2,7,3" CornerRadius="7" Background="#D91A1A2E"
+                                                BorderBrush="#FFE08A" BorderThickness="1"
+                                                VerticalAlignment="Center" IsHitTestVisible="False">
+                                            <TextBlock Text="{loc:Str badge_v2}" FontSize="9" FontWeight="Bold"
+                                                       Foreground="#FFE08A"/>
+                                        </Border>
+                                    </StackPanel>
+
+                                    <Grid x:Name="MotionRow" Height="36" Background="Transparent"
+                                          ToolTip.Tip="{loc:Str tooltip_bubble_motion}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{loc:Str setting_bubble_motion}" FontSize="13" FontWeight="SemiBold"
+                                                   Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                        <ComboBox Grid.Column="1" x:Name="CmbMotion" Width="150" sessionLock:SessionLock.Owned="True"
+                                                  VerticalAlignment="Center" Theme="{StaticResource DarkComboBoxStyle}"/>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Gaze interaction. Its own card, mirroring the Flashes page: a distinct
+                     capability with its own hardware prerequisite, not another bubble dial. -->
+                <Border Theme="{StaticResource SettingCardStyle}">
+                    <Grid>
+                        <Border Background="{StaticResource SectionHueStudioWashBrush}" CornerRadius="11"/>
+                        <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
+                                Background="{StaticResource SectionHueStudioBrush}"/>
+                        <StackPanel Margin="16,8,16,8">
+                            <TextBlock Text="{loc:Str label_gaze_interaction}" FontSize="13" FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextLightBrush}" Margin="0,2,0,4"/>
+
+                            <Grid Height="34" Background="Transparent" ToolTip.Tip="{loc:Str tooltip_bubble_gaze_pop}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str label_stare_to_pop}" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
+                                <CheckBox Grid.Column="1" x:Name="ChkBubbleGazePop"
+                                          Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
+                            </Grid>
+
+                            <!-- Shown only while the camera cannot actually feed the dwell engine. The
+                                 row above stays live either way: the toggle is a stored preference. -->
+                            <TextBlock x:Name="TxtBubbleGazeHint" IsVisible="False"
+                                       Text="{loc:Str label_gaze_needs_calibration}"
+                                       Foreground="{DynamicResource PinkBrush}" FontSize="11" FontStyle="Italic"
+                                       TextWrapping="Wrap" Margin="0,2,0,4"/>
                         </StackPanel>
                     </Grid>
                 </Border>
@@ -207,6 +271,9 @@
                                     <CheckBox x:Name="ChkTypeGlitch"     Tag="glitch"     Content="Glitch"      Foreground="White" Margin="0,0,16,8"/>
                                     <CheckBox x:Name="ChkTypeCascade"    Tag="htlink"     Content="Cascade"     Foreground="White" Margin="0,0,16,8"/>
                                     <CheckBox x:Name="ChkTypeVideo"      Tag="video"      Content="Video"       Foreground="White" Margin="0,0,16,8"/>
+                                    <CheckBox x:Name="ChkBrainDrainBubble" Content="{loc:Str setting_bubble_braindrain}"
+                                              Foreground="White" Margin="0,0,16,8" IsVisible="False"
+                                              ToolTip.Tip="{loc:Str tooltip_bubble_braindrain}"/>
                                 </WrapPanel>
                             </StackPanel>
                         </Grid>

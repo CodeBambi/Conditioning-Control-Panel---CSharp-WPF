@@ -158,6 +158,7 @@ public sealed class PanicSurfacesTests
         ["LockCardWindow"] = "phrase mic + cards: the 'lock-cards' surface (StopLockCards) closes every card",
         ["DevicesSettingsSection"] = "camera preview/calibration: the 'camera' surface stops WebcamTracker",
         ["BlinkTrainerTabView"] = "camera: the 'camera' and 'blink-trainer' surfaces",
+        ["SettingsTabView"] = "the Home browser card's webcam pill: the 'camera' surface stops WebcamTracker",
         ["LibVlcAudio"] = "the CoreAudio sink: Core services stop their clips on the 'engine' surface",
         ["MandatoryVideoOverlay"] = "Core video sink: the 'engine' surface (CoreEngine.Stop) closes it",
         ["FlashClipPlayer"] = "a flash's muted clip: the 'engine' surface (FlashOverlay.CloseAll) closes the window, which disposes it",

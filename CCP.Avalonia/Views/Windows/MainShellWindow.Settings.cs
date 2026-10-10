@@ -280,21 +280,42 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         //   Awareness => Awareness (plus the one-shot "open the Puppy preset editor when the tour
         //   finishes naturally" hook in MainWindow.Settings.cs:670)
         //   StartTutorial (the panel's big button) => FullTour
-        private void BtnStartTutorial_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => CloseTutorialOverlay();
-        private void BtnTutorialWhatMoved_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => CloseTutorialOverlay();
-        private void BtnTutorialGettingStarted_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => CloseTutorialOverlay();
-        private void BtnTutorialSettings_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => CloseTutorialOverlay();
-        private void BtnTutorialPresets_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => CloseTutorialOverlay();
-        private void BtnTutorialProgression_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => CloseTutorialOverlay();
-        private void BtnTutorialAchievements_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => CloseTutorialOverlay();
-        private void BtnTutorialCompanion_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => CloseTutorialOverlay();
-        private void BtnTutorialPatreon_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => CloseTutorialOverlay();
-        private void BtnTutorialAvatar_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => CloseTutorialOverlay();
-        private void BtnTutorialAwareness_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => CloseTutorialOverlay();
+        private void BtnStartTutorial_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => StartGuide("FullTour");
+        private void BtnTutorialWhatMoved_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => StartGuide("UpgradeTour");
+        private void BtnTutorialGettingStarted_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => StartGuide("GettingStarted");
+        private void BtnTutorialSettings_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => StartGuide("Settings");
+        private void BtnTutorialPresets_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => StartGuide("Presets");
+        private void BtnTutorialProgression_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => StartGuide("Progression");
+        private void BtnTutorialAchievements_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => StartGuide("Achievements");
+        private void BtnTutorialCompanion_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => StartGuide("Companion");
+        private void BtnTutorialPatreon_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => StartGuide("Patreon");
+        private void BtnTutorialAvatar_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => StartGuide("Avatar");
 
-        /// <summary>ponytail: closes the panel, then WPF opens Windows/ModCreatorWindow.xaml with
-        /// startWithTutorial:true. That window is not ported.</summary>
-        private void BtnTutorialModding_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => CloseTutorialOverlay();
+        /// <summary>WPF StartAwarenessTutorial (MainWindow.Settings.cs:670): the tour, and the Puppy
+        /// preset's editor when it is walked to the end. The tab's own Tutorial button carries that
+        /// one-shot, so the ? row goes through it.</summary>
+        private void BtnTutorialAwareness_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            CloseTutorialOverlay();
+            if (Named<Tabs.AwarenessTabView>("AwarenessTab") is { } tab) tab.StartTutorialFromHelp();
+            else CoreTutorial.Start("Awareness");
+        }
+
+        /// <summary>WPF BtnTutorialModding_Click: the Mod Creator, opened on its own tour.</summary>
+        private void BtnTutorialModding_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            CloseTutorialOverlay();
+            try { new ModCreatorWindow(startWithTutorial: true).Show(this); }
+            catch (Exception ex) { Serilog.Log.Warning(ex, "Help: could not open the Mod Creator tour"); }
+        }
+
+        /// <summary>WPF: collapse the ? panel, then MainWindow.StartTutorial(type). Tour names are the
+        /// WPF TutorialType names (CoreTutorial.Start).</summary>
+        internal void StartGuide(string tourName)
+        {
+            CloseTutorialOverlay();
+            CoreTutorial.Start(tourName);
+        }
 
         /// <summary>Close the help panel first, then open the owned report dialog, matching WPF.</summary>
         private void BtnTutorialReportBug_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)

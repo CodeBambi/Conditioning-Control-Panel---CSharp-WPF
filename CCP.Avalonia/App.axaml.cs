@@ -46,6 +46,31 @@ namespace ConditioningControlPanel.Avalonia
         internal static MediaHistoryService? MediaHistory { get; set; }
         /// <summary>THE FUSE (WPF App.DescentCountdown). Built before the shell so its spark can subscribe.</summary>
         internal static Services.Descent.DescentCountdownService? DescentCountdown { get; set; }
+        /// <summary>WPF App.DiscordRpc. Null until startup built it (and in every headless test).</summary>
+        internal static Services.DiscordRichPresenceService? DiscordRpc { get; set; }
+
+        /// <summary>The presence switch moved (either surface): the other one repaints from the setting.</summary>
+        internal static event Action? RichPresenceChanged;
+
+        /// <summary>
+        /// WPF ChkDiscordRichPresence_Changed's tail (MainWindow.AccountShell.cs:300-316): the setting is already
+        /// written by the surface that was clicked; this arms or drops the client and tells the other surface.
+        /// NEVER ARMS WITHOUT A LINKED DISCORD, whoever asks.
+        /// </summary>
+        internal static void ApplyRichPresence()
+        {
+            try
+            {
+                var s = CoreSettings.Current;
+                if (DiscordRpc is { } rpc) rpc.IsEnabled = s.DiscordRichPresenceEnabled && s.HasLinkedDiscord && !s.OfflineMode;
+            }
+            catch (Exception ex) { Serilog.Log.Debug("ApplyRichPresence: {E}", ex.Message); }
+            try { RichPresenceChanged?.Invoke(); }
+            catch (Exception ex) { Serilog.Log.Debug("RichPresenceChanged: {E}", ex.Message); }
+        }
+
+        /// <summary>WPF App.Descent: the read-only reader of the server's descent block (the vat, the spiral).</summary>
+        internal static Services.Descent.DescentService? Descent { get; set; }
 
         /// <summary>The Core quest board (WPF App.Quests), built by StartQuests before the shell.</summary>
         internal static QuestService? Quests { get; set; }
@@ -527,6 +552,16 @@ namespace ConditioningControlPanel.Avalonia
                         () => Achievements?.Progress?.UnlockedAchievements, () => Sessions?.IsRunning == true,
                         sanitizeCosmetics: Views.Windows.MainShellWindow.SanitizeOwnWardrobe)
                         { Countdown = DescentCountdown };
+                    // WPF App.Descent, with its three askers besides the Trainer Card: profile loaded, a sync
+                    // accepted (once a block has been seen) and the silent migration (lane z1).
+                    Descent ??= new Services.Descent.DescentService();
+                    // WPF App.xaml.cs:2490: built always, armed only if the user asked AND a Discord is linked
+                    // (an anonymous invite-code account never exposes itself by accident).
+                    DiscordRpc = new Services.DiscordRichPresenceService();
+                    ApplyRichPresence();
+                    sync.StageLadder = () => Descent?.Current?.Stage;
+                    sync.MigrationApplied = () => Descent?.NotifySurfaces("descent migration committed");
+                    sync.Accepted = () => { if (Descent?.HasSeenBlock == true) Descent.RequestRefresh("v2 sync accepted"); };
                     CoreProgression.AddXPProvider = ProgressionBank.Add;
                     // WPF App.SkillTree + ProfileSync.PurchaseSkillAsync: the Skill Tree's buy (k2).
                     SkillPurchase.Current = new SkillPurchase
@@ -534,6 +569,14 @@ namespace ConditioningControlPanel.Avalonia
                         SyncBeforeRetry = sync.SyncBeforeRetryAsync,
                         PointsSpent = cost => Achievements?.TrackSkillPointsSpent(cost),
                         LifetimeSpentReconciled = total => Achievements?.ReconcileLifetimePointsSpent(total),
+                    };
+                    // WPF SkillTreeService.PurchaseSkillAsync: SkillUnlocked feeds the bark's skill_unlock rule, and
+                    // buying Pink Rush starts its check timer at once (ApplySkillEffects case "pink_rush").
+                    SkillPurchase.Current.SkillUnlocked += (_, id) =>
+                    {
+                        CoreBark.NotifySkillUnlocked(id);
+                        if (id == Models.PinkRushRules.SkillId)
+                            global::Avalonia.Threading.Dispatcher.UIThread.Post(Views.Windows.PinkRushHost.Start);
                     };
                     ProgressionBank.LevelUp += level => sync.PushAsync($"level-up {level}");
                     ProgressionBank.Awarded += (amount, source) =>
@@ -688,11 +731,11 @@ namespace ConditioningControlPanel.Avalonia
                 // CCBill record file into a second tree. That is a fix to the class, in a later
                 // layer, not a seeding decision here.
 
-                // CoreTutorial stays unseeded, and that is the honest state rather than a gap:
-                // TutorialService and its twenty-two step lists are still in the WPF head, so this
-                // head has no tour to describe. Unseeded answers "not active, no step, 0 of 0", so
-                // TutorialOverlay draws nothing and every "bail while a tour is running" gate stays
-                // open. Seeding it with anything would put a tour on screen that nothing drives.
+                // Guided tours (WPF App.Tutorial): the head's TutorialService behind the CoreTutorial
+                // seam every page already calls, and a panic surface that ends a tour at once.
+                Tours.TutorialHead.Seed();
+                Tours.TutorialHead.HookPanic();
+                Views.Windows.WelcomeShow.FirstShowService.HookPanic();   // EMI's welcome show stops first on a panic
 
                 await step(0.75, "Loading achievements...");
                 // Achievements: the Core engine over the same achievements.json WPF uses, seeded the
@@ -743,6 +786,7 @@ namespace ConditioningControlPanel.Avalonia
                 StartPrograms();   // progression#1: WPF App.xaml.cs:2165, after Quests (verifier seam)
                 Platform.CompanionHead.Start();   // ai#5 + progression#47: companion switch, XP, drain, level-up
                 Platform.BarkHead.Start();        // ai#1: the bark engine, its seams and sources
+                Platform.AwarenessHead.Wire();    // WPF App.xaml.cs:2238: Awareness v2 (built idle; WindowAwareness.Start runs it)
 
                 // CoreProgram: the pack-video provider is seeded by StartContentPacks; the roadmap one
                 // stays unseeded - this head has no RoadmapService, so it answers "no roadmap".
@@ -935,6 +979,7 @@ namespace ConditioningControlPanel.Avalonia
             Views.Overlays.SubliminalOverlay.CloseAll();
             Views.Overlays.BouncingTextOverlay.Stop();
             Views.Overlays.SpiralOverlay.CloseAll();   // WPF StopEngine -> App.Overlay.Stop(); panic and exit too
+            Views.Overlays.BrainDrainOverlay.CloseAll();   // the Brain Drain haze (WPF StopBrainDrainBlur)
         }
 
         /// <summary>WPF App.OnAchievementUnlocked (App.xaml.cs:3815): one popup per unlock, shown at once.
@@ -1125,6 +1170,7 @@ namespace ConditioningControlPanel.Avalonia
             // WPF AchievementService.Dispose saves synchronously; only when dirty here, so an idle exit
             // never rewrites the file (or rotates its .bak) - it may be shared with the WPF head.
             try { if (Achievements is { IsDirty: true } a) a.Save(); } catch { /* the store logs write failures */ }
+            try { Platform.AwarenessHead.Shutdown(); } catch { /* WPF App.OnExit:5779; flushes the ledger */ }
             try { Quests?.Dispose(); } catch { /* WPF App.OnExit:6104; saves only when dirty */ }
             try { Programs?.Dispose(); } catch { /* WPF App.OnExit:6309; idempotent after StopPrograms */ }
             try { MediaHistory?.Dispose(); } catch { /* WPF App.OnExit:6231; flushes the final entries */ }
@@ -1146,6 +1192,7 @@ namespace ConditioningControlPanel.Avalonia
             try { Views.Windows.MainShellWindow.DisposeRoadmapIfCreated(); }
             catch { /* one service cannot prevent the head from exiting */ }
 
+            try { DiscordRpc?.Dispose(); } catch { /* shutting down */ }
             DescentCountdown?.Dispose();   // its pool timer outlives the dispatcher otherwise
             ConditioningControlPanel.Services.Companion.Asks.CompanionAskService.Instance.Stop();   // same
             _desktopDispatch?.Stop();

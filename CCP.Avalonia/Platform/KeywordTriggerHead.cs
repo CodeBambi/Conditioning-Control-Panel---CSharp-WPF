@@ -325,7 +325,9 @@ internal static class KeywordTriggerHead
                     // ponytail: no OverlayService.PulseOverlays twin on this head (studio lane).
                     break;
                 case KeywordVisualEffect.BrainDrain:
-                    // ponytail: BrainDrainMeltPayload needs the Brain Drain runtime (studio#3, wave B8).
+                    // WPF new BrainDrainMeltPayload().Fire(): ten seconds of haze on the user's own
+                    // blur dial, one drain at a time (BubbleOverlay.FireDrain is that payload).
+                    Overlay(host => BubbleOverlay.FireDrain(host));
                     break;
             }
         }
@@ -400,6 +402,15 @@ internal static class KeywordTriggerHead
             return;
         }
         tube.RunOnAvatar(() => tube.GigglePriority(line, playSound: true, aiGenerated: aiGenerated));
+        // One mouth (WPF KeywordTriggerService.cs:1792): a keyword comment lands in the arbiter's
+        // cooldown ledger, only while v2 is active.
+        try
+        {
+            if (ConditioningControlPanel.Services.Awareness.AwarenessV2Routing.IsActive)
+                ConditioningControlPanel.Services.Awareness.AwarenessV2Routing.Arbiter?.RecordExternalLine(
+                    ConditioningControlPanel.Services.Awareness.ReactionSource.Keyword);
+        }
+        catch (Exception ex) { Log.Debug("Keyword comment: arbiter report failed: {Error}", ex.Message); }
     });
 
     // ------------------------------------------------------------------ Chaster

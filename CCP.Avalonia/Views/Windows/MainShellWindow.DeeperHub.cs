@@ -154,7 +154,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             CoreBark.NotifyUiAction("deeper_tour");
             DismissDeeperWelcomeCard();
-            // ponytail: StartTutorial(TutorialType.Deeper) - no TutorialService on this head.
+            // WPF StartDeeperTabTutorial: the tab, then the tour.
+            ShowTab("deeper");
+            CoreTutorial.Start("Deeper");
         }
 
         internal void BtnDeeperWelcomeDemo_Click()

@@ -2700,6 +2700,11 @@
                                     </StackPanel>
                                 </Border>
 
+                                <!-- WPF MainWindow.xaml:2680 BtnFirstShowReplay: EMI's welcome show, any time. -->
+                                <Button x:Name="BtnFirstShowReplay" Content="{loc:Str first_show_replay}" Click="BtnFirstShowReplay_Click"
+                                        Theme="{StaticResource PinkButton}" FontSize="20" FontWeight="Bold"
+                                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Padding="22,16" Margin="0,0,0,8"/>
+
                                 <!-- What moved in 6.8 - FIRST row on purpose: for an upgrader this is the
                                      only question they have, and this row is the permanent re-run path for
                                      the tour the What's New dialog offers once. Copy is hardcoded English
