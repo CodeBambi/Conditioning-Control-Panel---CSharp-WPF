@@ -563,10 +563,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (_completedRepeats >= _requiredRepeats) CompleteCard();
         }
 
+        /// <summary>WPF LockCardService.NotifyCompleted :65: {n} = tries, the mistakes plus the one that
+        /// landed. A clean card has no number worth saying, so it carries no ctx and the one line that
+        /// asks for {n} is skipped by the engine.</summary>
+        internal static object? SolvedCtx(int mistakes) => mistakes > 0 ? new { n = mistakes + 1 } : null;
+
         private void CompleteCard()
         {
             var completionTime = (DateTime.Now - _startTime).TotalSeconds;
-            if (!_isTest) ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("lockCardSolved");   // WPF LockCardService.cs:65; no try count on this head, so no {n}
+            if (!_isTest) ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("lockCardSolved", SolvedCtx(_totalErrors));   // WPF LockCardService.cs:65
 
             // The XP award, WPF's body verbatim including the !_isTest gate and the strict 1.5x
             // multiplier. App.Progression is CoreProgression here; the WPF call is already a

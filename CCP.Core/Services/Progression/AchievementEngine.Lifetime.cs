@@ -263,6 +263,17 @@ internal sealed partial class AchievementEngine
         if (distinctTriggerTypes >= AchievementRules.OnRailsTriggerTypes) TryUnlock("on_rails");
     }
 
+    /// <summary>OnRemoteCommand (:548): commands taken in ONE remote session. Never saved as progress
+    /// toward anything else, so it does not arm the dirty flag.</summary>
+    public void TrackRemoteCommand()
+    {
+        Progress.RemoteCommandsThisSession++;
+        if (Progress.RemoteCommandsThisSession >= AchievementRules.PuppetStringsCommands) TryUnlockExclusive("puppet_strings");
+    }
+
+    /// <summary>OnRemoteSessionStarted / Ended (:532, :543): the count starts over.</summary>
+    public void ResetRemoteSession() => Progress.RemoteCommandsThisSession = 0;
+
     // ---- Core event wiring -----------------------------------------------------------------------
 
     private static Action<double, string>? _xpHandler;

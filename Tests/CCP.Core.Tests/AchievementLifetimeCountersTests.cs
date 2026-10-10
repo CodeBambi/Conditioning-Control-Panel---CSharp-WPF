@@ -228,6 +228,12 @@ public sealed class AchievementLifetimeCountersTests : IDisposable
         Assert.Equal(1, e.Progress.EnhancementsPlayed);
         Assert.True(e.Progress.IsUnlocked("going_deeper"));
         Assert.False(e.Progress.IsUnlocked("on_rails"));
+
+        e.TrackRemoteCommand();
+        e.TrackRemoteCommand();
+        Assert.Equal(2, e.Progress.RemoteCommandsThisSession);
+        e.ResetRemoteSession();
+        Assert.Equal(0, e.Progress.RemoteCommandsThisSession);   // one session's count, never carried over
     }
 
     [Fact]
