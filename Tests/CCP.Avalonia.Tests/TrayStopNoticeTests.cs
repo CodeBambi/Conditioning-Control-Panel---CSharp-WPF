@@ -65,6 +65,58 @@ public sealed class TrayStopNoticeTests
         }
     });
 
+    /// <summary>IA7 (WPF LeashPanicKeyWhilePanicOff): a refused tray stop parks a running leash task,
+    /// as the refused key and the refused safe word do. Strict Lock parks nothing; a stop that runs
+    /// leaves the park to the panic's own leash surface.</summary>
+    [Fact]
+    public void ARefusedTrayStopParksALeashTask_AsTheRefusedKeyDoes() => AvaloniaTestDispatcher.Run(() =>
+    {
+        EnsureApp();
+        var s = CoreSettings.Current;
+        bool panicWas = s.PanicKeyEnabled, strictWas = s.StrictLockEnabled;
+        var (noticeWas, leashedWas, parkWas) = (MainShellWindow.TrayNotice, MainShellWindow.RefusedStopLeashed, MainShellWindow.RefusedStopPark);
+        bool leashed = true;
+        int parks = 0;
+        MainShellWindow.TrayNotice = (_, _) => { };
+        MainShellWindow.RefusedStopLeashed = () => leashed;
+        MainShellWindow.RefusedStopPark = () => parks++;
+        try
+        {
+            s.PanicKeyEnabled = false;
+            s.StrictLockEnabled = false;
+            MainShellWindow.StopEverything();          // panic off: refused, the task parks
+            Assert.Equal(1, parks);
+
+            leashed = false;
+            MainShellWindow.StopEverything();          // no leash: nothing to park
+            Assert.Equal(1, parks);
+
+            leashed = true;
+            s.PanicKeyEnabled = true;
+            s.StrictLockEnabled = true;
+            MainShellWindow.StopEverything();          // Strict Lock refusal: as on the key, no park
+            Assert.Equal(1, parks);
+
+            s.StrictLockEnabled = false;
+            MainShellWindow.StopEverything();          // it runs: the panic's own leash surface parks, not this
+            Assert.Equal(1, parks);
+
+            Assert.True(MainShellWindow.ParkLeashOnRefusedStop(BlinkStopGate.Block.Lockdown));
+            Assert.Equal(2, parks);
+            Assert.False(MainShellWindow.ParkLeashOnRefusedStop(BlinkStopGate.Block.None));
+            Assert.False(MainShellWindow.ParkLeashOnRefusedStop(BlinkStopGate.Block.StrictLock));
+            Assert.False(MainShellWindow.ParkLeashOnRefusedStop(BlinkStopGate.Block.BlinkTrainer));
+            Assert.Equal(2, parks);
+        }
+        finally
+        {
+            (MainShellWindow.TrayNotice, MainShellWindow.RefusedStopLeashed, MainShellWindow.RefusedStopPark) = (noticeWas, leashedWas, parkWas);
+            s.PanicKeyEnabled = panicWas;
+            s.StrictLockEnabled = strictWas;
+            CoreSettings.SaveImmediate();
+        }
+    });
+
     [Fact]
     public void OnlyTheTwoRefusalsHaveALine()
     {

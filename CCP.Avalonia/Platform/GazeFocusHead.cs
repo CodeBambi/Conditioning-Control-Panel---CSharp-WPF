@@ -48,6 +48,25 @@ namespace ConditioningControlPanel.Avalonia.Platform
             set { if (_masterEnabled == value) return; _masterEnabled = value; EvaluateDesiredState(); }
         }
 
+        /// <summary>
+        /// IA10, the "Camera active" pill (WPF stops the service outright, MainWindow.LabTab.cs:482): the
+        /// Focus Gaze master goes off for good, saved intent included, so nothing re-arms it when another
+        /// feature restarts the tracker and the Play switch reads off. Only the player's own press on the
+        /// switch brings it back. The per-effect gaze options are their own switches and stay as set.
+        /// </summary>
+        internal void StandDownForGood()
+        {
+            try
+            {
+                var s = CoreSettings.Current;
+                if (s.FocusGazeEnabled) { s.FocusGazeEnabled = false; CoreSettings.Save(); }
+            }
+            catch (Exception ex) { Log.Debug("GazeFocus: saved intent not cleared: {Error}", ex.Message); }
+            _masterEnabled = false;
+            if (IsActive) Stop();
+            else { try { OnActiveChanged?.Invoke(false); } catch (Exception ex) { Diag.Swallowed(ex); } }   // the switch still has to repaint
+        }
+
         /// <summary>App start: follow the tracker and the consumer settings. UI thread.</summary>
         internal void Wire()
         {

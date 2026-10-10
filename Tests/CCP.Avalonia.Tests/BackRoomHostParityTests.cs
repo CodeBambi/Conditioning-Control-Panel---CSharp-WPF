@@ -362,6 +362,50 @@ public sealed class BackRoomHostWindowTests
         });
     }
 
+    private sealed class CountingFx : IBackRoomFx
+    {
+        public int Cancels;
+        public readonly List<string> Released = new();
+        public BackRoomFxAck Fire(string fxId, string station, IReadOnlyList<string> symbolKeys, BackRoomMediaDeal deal) =>
+            new(Array.Empty<string>(), Array.Empty<BackRoomFxSkip>());
+        public void ReleaseStation(string station) => Released.Add(station);
+        public void CancelAll() => Cancels++;
+    }
+
+    /// <summary>IB6: the room and a Breakout window share one fx head. Closing one never blanks the
+    /// other's host or cancels the other's effects; the last one out (and so a panic) stops everything.</summary>
+    [Fact]
+    public async Task TwoRoomWindows_ClosingOneLeavesTheOthersEffectsAndHost()
+    {
+        await AvaloniaTestDispatcher.RunAsync(() =>
+        {
+            EnsureApp();
+            var inner = new CountingFx();
+            var (room, breakout) = (new global::Avalonia.Controls.Border(), new global::Avalonia.Controls.Border());
+            var roomFx = BackRoomFxHead.Attach(room, inner);
+            var breakoutFx = BackRoomFxHead.Attach(breakout, inner);
+            try
+            {
+                Assert.Same(breakout, BackRoomFxHead.Host);            // the newest window hosts
+                roomFx.Fire("fx.x", "slot", Array.Empty<string>(), null!);
+                breakoutFx.Fire("fx.x", "breakout", Array.Empty<string>(), null!);
+
+                breakoutFx.CancelAll();                                  // Breakout closes first
+                BackRoomFxHead.Detach(breakout);
+                Assert.Equal(0, inner.Cancels);                         // the room's effects go on
+                Assert.Equal(new[] { "breakout" }, inner.Released);     // only its own holds drop
+                Assert.Same(room, BackRoomFxHead.Host);                 // and the room still has a host
+
+                roomFx.CancelAll();                                      // the last one out stops everything
+                BackRoomFxHead.Detach(room);
+                Assert.Equal(1, inner.Cancels);
+                Assert.Null(BackRoomFxHead.Host);
+            }
+            finally { BackRoomFxHead.Detach(room); BackRoomFxHead.Detach(breakout); }
+            return Task.CompletedTask;
+        });
+    }
+
     [Fact]
     public async Task AClosedRoom_HearsNoMoreSettings()
     {

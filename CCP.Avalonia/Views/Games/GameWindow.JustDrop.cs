@@ -74,15 +74,25 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             }
         }
 
+        private JustDropHandoffStamp? _justDropStamp;
+
+        /// <summary>The window's header rule: <paramref name="tokenFor"/> is the url half (null = no
+        /// credential for that url), <paramref name="stamp"/> spends it on the one start request.</summary>
+        internal static Func<Uri, (string Name, string Value)?> HandoffHeaderRule(JustDropHandoffStamp stamp, Func<Uri, string?> tokenFor) =>
+            uri => stamp.Take(uri, WebRequestKind.Unknown, tokenFor(uri)) is { Length: > 0 } token
+                ? (JustDropHostService.AuthHeaderName, token)
+                : null;
+
         /// <summary>The window's load (from <see cref="Load"/>): the handoff url, the header rule, the posture.</summary>
         private void LoadJustDrop()
         {
             bool replay = _justDropReplay;
-            // The credential rides ONE request: the handoff path on the site's own origin.
-            Web.RequestHeader = uri => JustDropHostService.AuthHeaderFor(uri) is { Length: > 0 } token
-                ? (JustDropHostService.AuthHeaderName, token)
-                : null;
             PageUrl = new Uri(JustDropHostService.BuildStartUrl(_justDropNext));
+            // The credential rides ONE request: the start url this host navigates to, once, and never
+            // again in this window's life (WPF stamps Document requests only; the adapter here names
+            // no resource kind, so a page fetch or a frame asking for the handoff url gets nothing).
+            _justDropStamp ??= new JustDropHandoffStamp(PageUrl);
+            Web.RequestHeader = HandoffHeaderRule(_justDropStamp, JustDropHostService.AuthHeaderFor);
             Web.Navigate(PageUrl);
             Log.Information("[Game] justdrop: launched ({Kind})", replay ? "replay" : "shop");   // never the url: it names the account
             Closed += (_, _) => JustDropOrdersService.NoteDrawerChanged();   // WPF JustDropHostService.cs:309: the shelf repaints

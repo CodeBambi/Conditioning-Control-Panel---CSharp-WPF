@@ -125,8 +125,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         internal static void StopEverything()
         {
             Serilog.Log.Information("Tray: Stop everything");
-            if (RefuseStopUnderLockdown()) return;   // WPF refuses every Stop under Lockdown (StartStop.cs:45)
+            // IA7: decided BEFORE the Lockdown refusal runs (it returns early with its own dialog).
             var block = TrayStopBlock();
+            ParkLeashOnRefusedStop(block);
+            if (RefuseStopUnderLockdown()) return;   // WPF refuses every Stop under Lockdown (StartStop.cs:45)
             if (block != ConditioningControlPanel.Services.Safety.BlinkStopGate.Block.None)
             {
                 Serilog.Log.Information("Tray: Stop everything refused ({Reason})", block);
@@ -153,6 +155,27 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         internal static Action<string, string> TrayNotice = (title, body) => Platform.OsNotifications.Show(title, body);
 
         /// <summary>Why the tray stop is refused right now; None when the panic key would run too.</summary>
+        /// <summary>Test seams for <see cref="ParkLeashOnRefusedStop"/>: is a leash on, and the park itself.</summary>
+        internal static Func<bool> RefusedStopLeashed = () => Platform.LeashHead.IsLeashed;
+        internal static Action RefusedStopPark = () => Platform.LeashTaskHost.OnPanicPress(panicRuns: false);
+
+        /// <summary>IA7, WPF LeashPanicKeyWhilePanicOff: a stop the panic cannot run (Lockdown holding it,
+        /// or the panic key switched off) still PARKS a running leash task, exactly as the refused key
+        /// (Platform/Win32Input.cs OnPanicPress) and the refused safe word (VoicePanic) do. Nothing else
+        /// stops, no setting changes; a Strict Lock refusal parks nothing, as on the key.</summary>
+        internal static bool ParkLeashOnRefusedStop(ConditioningControlPanel.Services.Safety.BlinkStopGate.Block block)
+        {
+            if (block is not (ConditioningControlPanel.Services.Safety.BlinkStopGate.Block.Lockdown
+                    or ConditioningControlPanel.Services.Safety.BlinkStopGate.Block.NoEscape)) return false;
+            try
+            {
+                if (!RefusedStopLeashed()) return false;
+                RefusedStopPark();
+                return true;
+            }
+            catch (Exception ex) { Serilog.Log.Debug("Tray: leash park on a refused stop failed: {E}", ex.Message); return false; }
+        }
+
         internal static ConditioningControlPanel.Services.Safety.BlinkStopGate.Block TrayStopBlock()
         {
             var s = CoreSettings.Current;

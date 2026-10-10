@@ -77,7 +77,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// nothing is still reading the tracker while it tears down, then the Blink Trainer, then the camera.</summary>
         internal static async System.Threading.Tasks.Task StopCameraConsumersAsync()
         {
-            try { GazeFocusHead.Instance.Stop(); } catch (Exception ex) { Log.Debug("Camera pill: Focus Gaze stop failed: {Error}", ex.Message); }
+            // IA10: the master and its saved intent go off too, or the next feature to start the tracker re-arms it.
+            try { GazeFocusHead.Instance.StandDownForGood(); } catch (Exception ex) { Log.Debug("Camera pill: Focus Gaze stop failed: {Error}", ex.Message); }
             try { Overlays.BlinkTrainerSession.Stop(); } catch { }
             try { await WebcamTracker.Instance.StopAsync(); }
             catch (Exception ex) { Log.Debug("WebcamActivePill_Click stop failed: {Error}", ex.Message); }

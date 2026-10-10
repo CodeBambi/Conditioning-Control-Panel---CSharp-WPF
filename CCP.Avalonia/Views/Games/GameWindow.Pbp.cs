@@ -247,14 +247,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                     => !string.IsNullOrEmpty(dir) && Directory.Exists(dir) ? Directory.GetFiles(dir).Select(Path.GetFileName)! : null;
                 var s = CoreSettings.Current;
                 bool subAudio = s.SubAudioAudible && ModAudioPolicy.UsesSharedSubAudio(CoreMods.ActiveModId);
+                // IB3, WPF WhisperFolders: the two fallback hosts are routes on the asset server (the
+                // request gate, never a folder mapping). Recorded clips only: the Bambi sub_audio clips
+                // for the mods the policy allows, else the neutral Circe words; no clip = silence.
+                RegisterPbpWhisperHosts(WebAssetServer.Shared);
                 var clips = PbpWhisperClips.Build(
                     Names(Path.Combine(CorePaths.EffectiveAssets, PbpWhisperClips.BrainDrainFolder)),
-                    subAudio, null, null);
-                // SEAM(shared WebAssetServer): WPF maps two more virtual hosts for the fallback clips
-                // (ccp.subaudio = Resources/sub_audio, ccp.words = the neutral Circe words). The loopback
-                // server serves only the page root and ccp.assets, so with no brain drain clips of the
-                // player's own the list is empty and the page stays silent (never synthetic speech).
-                if (clips.Count == 0) Log.Debug("PieceByPiece: no brain drain clips; fallback whisper hosts are not served on this head");
+                    subAudio, subAudio ? Names(PbpSubAudioDir) : null, Names(PbpWordsDir()));
                 return clips.Select(PbpPageUrl).Where(u => u != null).Select(u => u!).ToList();
             }
             catch (Exception ex)
@@ -264,14 +263,44 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             }
         }
 
-        /// <summary>A WPF <c>https://ccp.assets/&lt;rel&gt;</c> url as this head serves it (the loopback
-        /// server's ccp.assets prefix, same origin as the page). Null for a host this head cannot serve.</summary>
-        internal static string? PbpPageUrl(string wpfUrl)
+        private static string PbpSubAudioDir => Path.Combine(AppContext.BaseDirectory, "Resources", "sub_audio");
+
+        /// <summary>The neutral Circe words (Core SubliminalWhisper.WordsRoot, WPF BackRoomVoice.WordsRoot).</summary>
+        private static string? PbpWordsDir()
         {
+            try { return SubliminalWhisper.WordsRoot(); }
+            catch (Exception ex) { Log.Debug("PieceByPiece: no words folder: {E}", ex.Message); return null; }
+        }
+
+        /// <summary>WPF PieceByPieceHostService.WhisperFolders as routes on the asset server, read per
+        /// request: <c>ccp.subaudio</c> is refused at the route for a mod <see cref="ModAudioPolicy"/> does
+        /// not allow (the same rule Arcademy registers), <c>ccp.words</c> is the neutral Circe clips.</summary>
+        internal static void RegisterPbpWhisperHosts(WebAssetServer server)
+        {
+            server.Hosts[PbpWhisperClips.SubAudioHost] = () => ModAudioPolicy.UsesSharedSubAudio(CoreMods.ActiveModId) ? PbpSubAudioDir : null;
+            server.Hosts[PbpWhisperClips.WordsHost] = PbpWordsDir;
+        }
+
+        /// <summary>A WPF <c>https://ccp.assets/&lt;rel&gt;</c> url as this head serves it (the loopback
+        /// server's ccp.assets prefix, same origin as the page), or a whisper clip on one of the two
+        /// registered fallback hosts. Null for a host this head cannot serve.</summary>
+        internal static string? PbpPageUrl(string wpfUrl) => PbpPageUrl(wpfUrl, WebAssetServer.Shared);
+
+        internal static string? PbpPageUrl(string wpfUrl, WebAssetServer server)
+        {
+            foreach (var host in new[] { PbpWhisperClips.SubAudioHost, PbpWhisperClips.WordsHost })
+            {
+                var prefix = "https://" + host + "/";
+                if (!wpfUrl.StartsWith(prefix, StringComparison.Ordinal)) continue;
+                if (!server.Hosts.ContainsKey(host)) return null;
+                var name = Uri.UnescapeDataString(wpfUrl[prefix.Length..]);
+                // One plain clip name, as the route itself insists.
+                return name.Length > 0 && name == Path.GetFileName(name) && PbpWhisperClips.IsClip(name) ? server.HostUrl(host, name) : null;
+            }
             const string assets = "https://" + PbpWhisperClips.AssetsHost + "/";
             if (!wpfUrl.StartsWith(assets, StringComparison.Ordinal)) return null;
             var rel = string.Join('/', wpfUrl[assets.Length..].Split('/').Select(Uri.UnescapeDataString));
-            return WebAssetServer.Shared.AssetUrl(rel);
+            return server.AssetUrl(rel);
         }
 
         // ============================ the player's own library ============================

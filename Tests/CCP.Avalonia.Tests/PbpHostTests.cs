@@ -366,14 +366,40 @@ public sealed class PbpHostTests
         });
     }
 
+    /// <summary>IB3: the whisper fallback hosts are routes on the asset server (the request gate), one
+    /// plain clip name each; a host that is not registered is never handed to the page.</summary>
+    [Fact]
+    public void WhisperFallbackHosts_AreServedOnlyOnceRegistered_OnePlainClipNameEach()
+    {
+        var web = System.IO.Directory.CreateTempSubdirectory("ccp-pbp-whisper-").FullName;
+        try
+        {
+            using var server = new ConditioningControlPanel.Avalonia.Platform.WebAssetServer(web);
+            Assert.Null(GameWindow.PbpPageUrl("https://ccp.words/hello.mp3", server));
+            Assert.Null(GameWindow.PbpPageUrl("https://ccp.subaudio/x.mp3", server));
+
+            GameWindow.RegisterPbpWhisperHosts(server);
+            Assert.EndsWith("/ccp.words/hello.mp3", GameWindow.PbpPageUrl("https://ccp.words/hello.mp3", server));
+            Assert.EndsWith("/ccp.subaudio/good%20girl.mp3", GameWindow.PbpPageUrl("https://ccp.subaudio/good%20girl.mp3", server));
+            Assert.Null(GameWindow.PbpPageUrl("https://ccp.words/..%2Fsecret.mp3", server));     // one plain name
+            Assert.Null(GameWindow.PbpPageUrl("https://ccp.words/sub/hello.mp3", server));
+            Assert.Null(GameWindow.PbpPageUrl("https://ccp.words/settings.json", server));       // clips only
+            Assert.Null(GameWindow.PbpPageUrl("https://ccp.words.evil.example/hello.mp3", server));
+
+            // The gate answers for the two names, and a file that is not there is refused.
+            Assert.True(server.IsVirtual(new Uri("https://ccp.words/hello.mp3")));
+            Assert.Null(server.ResolveVirtual(new Uri("https://ccp.words/no-such-clip-k26.mp3"), out _, out _));
+            Assert.Null(server.ResolveVirtual(new Uri("https://ccp.words/..%2F..%2Fsettings.json"), out _, out _));
+        }
+        finally { try { System.IO.Directory.Delete(web, true); } catch { } }
+    }
+
     [Fact]
     public async Task PageUrl_OnlyCcpAssetsIsServed_AndTheRelativePathSurvivesEscaping()
     {
         await AvaloniaTestDispatcher.RunAsync(() =>
         {
             EnsureApp();
-            Assert.Null(GameWindow.PbpPageUrl("https://ccp.words/hello.mp3"));
-            Assert.Null(GameWindow.PbpPageUrl("https://ccp.subaudio/x.mp3"));
             Assert.Null(GameWindow.PbpPageUrl("https://evil.example/a.jpg"));
             var url = GameWindow.PbpPageUrl("https://ccp.assets/braindrain/my%20clip.mp3");
             Assert.NotNull(url);
