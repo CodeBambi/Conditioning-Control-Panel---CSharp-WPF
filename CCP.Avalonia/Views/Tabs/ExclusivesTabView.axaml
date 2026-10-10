@@ -126,10 +126,10 @@
                                            Margin="0,0,18,0"/>
                             </Border>
                             <StackPanel VerticalAlignment="Center" Margin="18,0,0,0">
-                                <TextBlock Text="{loc:Str exclusives_vault_title}"
+                                <TextBlock Text="{loc:Str premium_page_title}"
                                            FontWeight="Bold"
                                            FontSize="17" Foreground="{StaticResource TextLightBrush}"/>
-                                <TextBlock Text="{loc:Str exclusives_vault_sub}"
+                                <TextBlock Text="{loc:Str premium_page_sub}"
                                            FontSize="11.5" Foreground="{StaticResource TextMutedBrush}"
                                            Margin="0,1,0,0" MaxWidth="620" HorizontalAlignment="Left"
                                            TextTrimming="CharacterEllipsis"/>
@@ -302,24 +302,8 @@
                         </Grid>
                     </Border>
 
-                    <!-- Collection label -->
-                    <Grid Margin="2,0,2,12" ColumnDefinitions="Auto,*,Auto">
-                        <TextBlock Grid.Column="0" Text="{loc:Str exclusives_collection}"
-                                   FontWeight="Medium"
-                                   FontSize="16" Foreground="{StaticResource TextLightBrush}"/>
-                        <Rectangle Grid.Column="1" Height="1" Margin="14,0"
-                                   VerticalAlignment="Center">
-                            <Rectangle.Fill>
-                                <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
-                                    <GradientStop Color="#80FFC94E" Offset="0"/>
-                                    <GradientStop Color="#00FFC94E" Offset="1"/>
-                                </LinearGradientBrush>
-                            </Rectangle.Fill>
-                        </Rectangle>
-                        <TextBlock Grid.Column="2" Text="{loc:Str exclusives_more_soon}"
-                                   Foreground="{StaticResource TextMutedBrush}" FontSize="11"
-                                   VerticalAlignment="Center"/>
-                    </Grid>
+                    <!-- Collection label: dropped since polish 12 (WPF collapses it); the shelf carries
+                         its own Basic / Prime / Free headers (ExclusiveGroupRow). -->
 
                     <!-- The shelf. WPF builds these children in MainWindow.Exclusives.cs from
                          ExclusiveFeature.All; here the same WrapPanel is an ItemsControl's panel
@@ -329,12 +313,14 @@
                     <ItemsControl x:Name="ExclusivesShelf">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
-                                <WrapPanel Orientation="Horizontal" ItemWidth="352" ItemHeight="216"/>
+                                <WrapPanel Orientation="Horizontal"/>
                             </ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.DataTemplates>
                             <DataTemplate DataType="tabs:ExclusiveCardRow">
                                 <Border Name="ExCard" Margin="0,0,16,16"
+                                        Width="{Binding $parent[tabs:ExclusivesTabView].CardWidth}"
+                                        Height="{Binding $parent[tabs:ExclusivesTabView].CardHeight}"
                                         fx:TierFxBorder.Tier="{Binding Tier}" fx:TierFxBorder.RimThickness="3"
                                         Loaded="FxPart_Loaded" Unloaded="FxPart_Unloaded"
                                         CornerRadius="12"
@@ -463,59 +449,30 @@
                                   </Grid>
                                 </Border>
                             </DataTemplate>
-                            <!-- WPF BuildComingSoonCard: same geometry, dark silhouette, breathing "?",
-                                 SOON badge, arrow cursor, no navigation. -->
-                            <DataTemplate DataType="tabs:ExclusiveTeaserRow">
-                                <Border Margin="0,0,16,16" CornerRadius="12" Background="#141126"
-                                        BorderBrush="#33B478FF" BorderThickness="1">
-                                    <Border ClipToBounds="True" CornerRadius="12">
-                                        <Border.Background>
-                                            <RadialGradientBrush>
-                                                <GradientStop Color="#5C2A1E46" Offset="0"/>
-                                                <GradientStop Color="#FF110E20" Offset="1"/>
-                                            </RadialGradientBrush>
-                                        </Border.Background>
-                                        <Grid>
-                                            <TextBlock Name="TeaserMark" Text="?" FontSize="64" FontWeight="SemiBold"
-                                                       Foreground="{Binding MarkBrush}"
-                                                       HorizontalAlignment="Center" VerticalAlignment="Center"
-                                                       Margin="0,0,0,34"
-                                                       Loaded="FxPart_Loaded" Unloaded="FxPart_Unloaded"/>
-                                            <Border VerticalAlignment="Bottom" Padding="12,26,12,10">
-                                                <Border.Background>
-                                                    <LinearGradientBrush StartPoint="50%,0%" EndPoint="50%,100%">
-                                                        <GradientStop Color="#000C0A18" Offset="0"/>
-                                                        <GradientStop Color="#E00C0A18" Offset="0.55"/>
-                                                        <GradientStop Color="#F20C0A18" Offset="1"/>
-                                                    </LinearGradientBrush>
-                                                </Border.Background>
-                                                <StackPanel>
-                                                    <TextBlock Text="{Binding Title}" FontWeight="SemiBold"
-                                                               FontSize="15" Foreground="White">
-                                                        <TextBlock.Effect>
-                                                            <DropShadowEffect Color="#FF69B4" BlurRadius="10"
-                                                                              OffsetX="0" OffsetY="0" Opacity="0.7"/>
-                                                        </TextBlock.Effect>
-                                                    </TextBlock>
-                                                    <TextBlock Text="{Binding Tagline}" Foreground="#9A93B8"
-                                                               FontSize="11" TextWrapping="Wrap"
-                                                               TextTrimming="CharacterEllipsis" MaxHeight="30"
-                                                               Margin="0,2,0,0"/>
-                                                </StackPanel>
-                                            </Border>
-                                            <Border HorizontalAlignment="Left" VerticalAlignment="Top"
-                                                    Margin="8,8,0,0" CornerRadius="10" Padding="8,2">
-                                                <Border.Background>
-                                                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
-                                                        <GradientStop Color="#FF69B4" Offset="0"/>
-                                                        <GradientStop Color="#B478FF" Offset="1"/>
-                                                    </LinearGradientBrush>
-                                                </Border.Background>
-                                                <TextBlock Text="{Binding Soon}" Foreground="White"
-                                                           FontSize="9" FontWeight="Bold"/>
-                                            </Border>
-                                        </Grid>
-                                    </Border>
+                            <!-- WPF VaultGroupHead (polish 12): tier sign, the plan's name and one line,
+                                 "n of m yours", a hairline in the plan's colour. FitShelf gives it the row. -->
+                            <DataTemplate DataType="tabs:ExclusiveGroupRow">
+                                <Border Name="GroupHead" Padding="2,0,2,10" Margin="{Binding Margin}"
+                                        Width="{Binding $parent[tabs:ExclusivesTabView].GroupHeadWidth}"
+                                        BorderBrush="{Binding Rule}" BorderThickness="0,0,0,1.5"
+                                        AutomationProperties.Name="{Binding Title}">
+                                    <Grid ColumnDefinitions="Auto,*,Auto">
+                                        <Image Source="{Binding Sign}" IsVisible="{Binding HasSign}" Height="44"
+                                               Stretch="Uniform" Margin="0,0,14,0" VerticalAlignment="Center"
+                                               RenderOptions.BitmapInterpolationMode="HighQuality"/>
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding Title}"
+                                                       FontSize="22" FontWeight="SemiBold" Foreground="{Binding HueBrush}"/>
+                                            <TextBlock Text="{Binding Sub}" FontSize="12.5" Foreground="#C8E6E0F5"
+                                                       TextWrapping="Wrap" Margin="0,1,0,0"/>
+                                        </StackPanel>
+                                        <Border Grid.Column="2" Padding="10,4" CornerRadius="10" BorderThickness="1"
+                                                Background="{Binding PillBackground}" BorderBrush="{Binding PillBorder}"
+                                                VerticalAlignment="Center">
+                                            <TextBlock Name="GroupCount" Text="{Binding Count}" FontSize="12"
+                                                       FontWeight="SemiBold" Foreground="{Binding HueBrush}"/>
+                                        </Border>
+                                    </Grid>
                                 </Border>
                             </DataTemplate>
                         </ItemsControl.DataTemplates>

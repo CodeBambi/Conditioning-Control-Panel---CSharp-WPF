@@ -121,7 +121,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         internal void OpenInvitesCard()
         {
             if (LockdownActive) return;
-            ShowTab("exclusives");
+            ShowTab("premium");
             DispatcherTimer.RunOnce(async () =>
             {
                 try

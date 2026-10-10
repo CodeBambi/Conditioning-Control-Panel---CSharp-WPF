@@ -94,7 +94,7 @@ public sealed class DashboardFoldBillboardTests
             Click((RadioButton)C<StackPanel>("BillboardDots").Children[4]);   // "exclusives", a Tab card
             Assert.Equal(4, shell.BillboardIndex);
             Click(C<Button>("BillboardCard"));
-            Assert.Equal("exclusives", shell.CurrentTab);
+            Assert.Equal("premium", shell.CurrentTab);
             shell.ShowTab("settings");
             Click(C<Button>("BillboardNext"));                                 // "support", a Link card
             Click(C<Button>("BillboardCard"));
