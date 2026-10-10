@@ -201,7 +201,7 @@ public sealed class DashboardFoldBillboardTests
         {
             var code = File.ReadAllText(Path.Combine(RepoRoot(), rel));
             code = Regex.Replace(code, @"//[^\n]*|/\*.*?\*/|""(?:\\.|[^""\\])*""", "", RegexOptions.Singleline);
-            Assert.DoesNotMatch(@"Sfx|Audio|Sound|Chime|NAudio|Play\(", code);
+            Assert.DoesNotMatch(@"Sfx|Audio|Sound|Chime|NAudio|(?<![A-Za-z])Play\(", code);   // a Play( call; Core ArtShouldPlay( is a rule, not a sound
         }
     }
 

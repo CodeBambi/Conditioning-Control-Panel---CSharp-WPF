@@ -48,7 +48,7 @@ namespace ConditioningControlPanel.Services.Billboard.Showcase
         private int _fetching;
 
         public ShowcaseProvider()
-            : this(new ShowcaseCache(Path.Combine(App.UserDataPath, "showcase"), new Uri(ManifestUrl)), LocText, () => DateTime.UtcNow)
+            : this(new ShowcaseCache(Path.Combine(CorePaths.UserData, "showcase"), new Uri(ManifestUrl)), LocText, () => DateTime.UtcNow)
         {
         }
 
@@ -195,7 +195,7 @@ namespace ConditioningControlPanel.Services.Billboard.Showcase
 
         private void RaiseChanged()
         {
-            void Raise() { try { Changed?.Invoke(this, EventArgs.Empty); } catch (Exception ex) { App.Logger?.Warning("Showcase Changed handler threw: {Message}", ex.Message); } }
+            void Raise() { try { Changed?.Invoke(this, EventArgs.Empty); } catch (Exception ex) { Serilog.Log.Warning("Showcase Changed handler threw: {Message}", ex.Message); } }
             if (_ui != null) _ui.Post(_ => Raise(), null);
             else Raise();
         }

@@ -1828,3 +1828,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/no-desktop-notify-in-tests: +73
 - OsNotifications no longer talks to D-Bus in a CCP_USERDATA_DIR sandbox (only `--notify-check` opts in); Sink/BusAttempts seams.
 - RemoteControlShellTests asserts the join notification via the Sink; sandbox no-bus test; both fail-proven.
+
+## avalonia-port/sync6-tonight-board-c: +431
+- Premium showcase on the Tonight Board: Core showcase provider (git mv), head art registry and lifecycle, muted ClipArtView. The art is released on shell close (P68).
+- Ledger row 104 is ported. Board stays silent, Live is blocked on Lobby, and drawn art needs a slice plan.
