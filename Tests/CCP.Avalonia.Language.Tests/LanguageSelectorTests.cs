@@ -442,6 +442,8 @@ public sealed class LanguageSelectorTests
         // Opening Presets notes it in the dashboard's RECENT rail (a real save, WPF NoteDestinationOpened);
         // already at the head here, so the visit below is not a write.
         settings.Current.RailRecent.Add("tab.presets");
+        // Opening a section page remembers its last tab (a real save, WPF SyncSectionChrome); already so.
+        settings.Current.NavLastTabBySection = "{\"studio\":\"presets\"}";
         settings.SaveImmediate();
         return File.ReadAllText(settingsPath);
     }

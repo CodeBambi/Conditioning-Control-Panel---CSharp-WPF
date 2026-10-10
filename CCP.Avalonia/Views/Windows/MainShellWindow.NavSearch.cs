@@ -1,5 +1,6 @@
 // PORTED from ConditioningControlPanel/MainWindow/MainWindow.WhatMoved.cs and the palette's
-// shell hooks in MainWindow.SectionChrome.cs (OpenLibraryLauncher :275, GlowNavKey :313) - main
+// shell hook in MainWindow.SectionChrome.cs (GlowNavKey :313; OpenLibraryLauncher lives in
+// MainShellWindow.SectionChrome.cs) - main
 // sync #6 lane sync6-nav-search (WPF c2f9dec36, 2847168cc, c7873ed42, 2eeb3da32, 7fbdbe019).
 
 using System;
@@ -20,22 +21,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         /// <summary>WPF GlowNavKey (SectionChrome.cs:313): the palette's door to the private partial.</summary>
         internal void GlowNavKey(string key) => GlowNavTarget(key);
-
-        /// <summary>WPF OpenLibraryLauncher (SectionChrome.cs:275): the Library's four launchers
-        /// through the handler their rail row called, so a palette row or a pinned favourite does
-        /// not depend on a button being drawn. False for an unknown key.</summary>
-        internal bool OpenLibraryLauncher(string key)
-        {
-            var e = new global::Avalonia.Interactivity.RoutedEventArgs();
-            switch (key)
-            {
-                case "mods": BtnManageMods_Click(this, e); return true;
-                case "catalogue": BtnCatalogue_Click(this, e); return true;
-                case "phrases": BtnManagePhrases_Click(this, e); return true;
-                case "medialog": BtnNavMediaLog_Click(this, e); return true;
-                default: return false;
-            }
-        }
 
         /// <summary>WPF OfferWhatMovedIfNeeded (WhatMoved.cs:27), called once from the first-run
         /// fork. A fresh install spends the flag silently; an upgrade queues the card through the

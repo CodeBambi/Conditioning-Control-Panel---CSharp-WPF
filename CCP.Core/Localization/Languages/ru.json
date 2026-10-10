@@ -2059,6 +2059,7 @@
   "tooltip_exit_the_application_completely": "Закрыть приложение.",
   "label_remote_controlled": "УДАЛЁННОЕ УПРАВЛЕНИЕ",
   "label_someone_else_is_controlling_your_app": "Кто-то другой управляет твоим приложением",
+  "label_controller_may_be_idle": "Контроллер, возможно, неактивен...",
   "label_no_active_session": "Нет активной сессии",
   "btn_end_session": "Завершить сессию",
   "label_drop_to_import": "Перетащи для импорта",
@@ -7604,5 +7605,13 @@
   "kwt_effect_image_flash": "Вспышка изображения",
   "kwt_effect_overlay_pulse": "Пульс оверлея",
   "kwt_effect_mind_wipe": "Mind Wipe",
-  "kwt_effect_bubbles": "Пузыри"
+  "kwt_effect_bubbles": "Пузыри",
+  "label_asset_preset_default_0": "Пресет {0}",
+  "msg_asset_preset_saved_0": "Пресет «{0}» сохранён!\n\nВключено: {1} изображений, {2} видео.\nОтключено файлов: {3}.",
+  "msg_asset_preset_updated_0": "Пресет «{0}» обновлён!\n\nВключено: {1} изображений, {2} видео.\nОтключено файлов: {3}.",
+  "msg_update_asset_preset_confirm_0": "Обновить пресет «{0}» текущим выбором?",
+  "title_no_preset_selected": "Пресет не выбран",
+  "title_cannot_update_default": "Нельзя обновить стандартный",
+  "title_cannot_delete_default": "Нельзя удалить стандартный",
+  "title_update_preset": "Обновить пресет"
 }

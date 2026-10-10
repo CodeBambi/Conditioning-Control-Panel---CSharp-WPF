@@ -1,4 +1,8 @@
+using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
@@ -7,6 +11,7 @@ using Avalonia.Interactivity;
 using Avalonia.Threading;
 using CCP.Avalonia.Testing;
 using ConditioningControlPanel;
+using ConditioningControlPanel.Avalonia.Controls.Billboard;
 using ConditioningControlPanel.Avalonia.Views.Tabs;
 using ConditioningControlPanel.Avalonia.Views.Windows;
 using ConditioningControlPanel.Localization;
@@ -40,6 +45,9 @@ public sealed class DashboardFoldBillboardTests
         s.OfflineMode = false;
         var opened = new List<string>();
         MainShellWindow.BillboardOpenUrl = opened.Add;
+        var clock = new SteppedClock();
+        BillboardCardHost.Time = clock;
+        s.BillboardSnoozedUntil.Clear();
 
         var shell = new MainShellWindow();
         try
@@ -52,53 +60,59 @@ public sealed class DashboardFoldBillboardTests
             var column = C<Grid>("BrowserColumn");
             var body = C<Border>("BrowserFoldBody");
             var billboard = C<Border>("DashBillboard");
-            string Title() => C<TextBlock>("BillboardTitle").Text!;
+            BillboardCardHost Board() => shell.BillboardHost!;
+            void Step(double seconds) { clock.Now += (long)(seconds * TimeSpan.TicksPerSecond); Board().HoldTick(); }
 
-            // Launch folded (the default): header only, billboard in the freed row, no clock at Motion Off.
+            // Launch folded (the default): header only, the Tonight Board in the freed row, still at Motion Off.
             Assert.False(body.IsVisible);
             Assert.True(billboard.IsVisible);
             Assert.Equal("▾", C<TextBlock>("TxtFoldBrowser").Text);
             Assert.True(column.RowDefinitions[0].Height.IsAuto);
             Assert.True(column.RowDefinitions[1].Height.IsStar);
             Assert.Equal(Loc.Get("tooltip_browser_unfold"), ToolTip.GetTip(C<Button>("BtnFoldBrowser")));
-            Assert.Equal(Loc.Get(LegacyBillboard.CardAt(0).TitleKey), Title());
-            Assert.NotNull(C<Image>("BillboardCover").Source);   // the poster resource is linked
-            Assert.Equal(LegacyBillboard.Roster.Count, C<StackPanel>("BillboardDots").Children.Count);
-            Assert.False(shell.BillboardClockRunning);
+            Assert.Same(Board(), C<Grid>("BillboardHostSlot").Children[0]);
+            // Free tier, house and tips only: the pinned Discord card and one rotating house card.
+            Assert.Equal(new[] { "house.discord", "house.webapp" }, Board().Deck.Cards.Select(c => c.Spec.Id));
+            Assert.Equal("house.discord", Board().CurrentCard!.Spec.Id);
+            Assert.Equal(2, Board().ChipButtons.Count);
+            Assert.Equal(Loc.Get("billboard_discord_title"), ToolTip.GetTip((Button)Board().ChipButtons[0]));
+            Assert.False(Board().HoldRunning);
 
-            // Motion back to Full: the clock arms; a tick advances one slide.
+            // Motion back to Full: the hold runs; 12 s on the stepped clock moves the deck on.
             s.MotionLevel = MotionLevel.Full;
             global::ConditioningControlPanel.Avalonia.Controls.AmbientFxCanvas.Env.RaiseMotionGateChanged();
-            Assert.True(shell.BillboardClockRunning);
-            shell.BillboardTick();
-            Assert.Equal(1, shell.BillboardIndex);
-            Assert.Equal(Loc.Get(LegacyBillboard.CardAt(1).TitleKey), Title());
-            Assert.True(((RadioButton)C<StackPanel>("BillboardDots").Children[1]).IsChecked);
+            Assert.True(Board().HoldRunning);
+            Step(6);
+            Assert.Equal(0, Board().Deck.Index);
+            Assert.InRange(Board().HoldProgress, 0.49, 0.51);
+            Step(6);
+            Assert.Equal("house.webapp", Board().CurrentCard!.Spec.Id);
 
-            // Another tab: the clock stops (P01); Home again: it re-arms.
+            // Another tab: the hold stops where it stands (P01); Home again: it runs on.
+            Step(3);
             shell.ShowTab("quests");
             Dispatcher.UIThread.RunJobs();
-            Assert.False(shell.BillboardClockRunning);
+            Assert.False(Board().HoldRunning);
+            Step(30);
             shell.ShowTab("settings");
             Dispatcher.UIThread.RunJobs();
-            Assert.True(shell.BillboardClockRunning);
+            Assert.True(Board().HoldRunning);
+            Assert.InRange(Board().HoldProgress, 0.24, 0.26);
 
-            // Pause: no clock and a tick is refused; manual navigation still works.
-            Click(C<Button>("BillboardPause"));
-            Assert.False(shell.BillboardClockRunning);
-            Assert.Equal("▶", C<TextBlock>("TxtBillboardPause").Text);
-            shell.BillboardTick();
-            Assert.Equal(1, shell.BillboardIndex);
-            Click(C<Button>("BillboardPrevious"));
-            Assert.Equal(0, shell.BillboardIndex);
-            Click((RadioButton)C<StackPanel>("BillboardDots").Children[4]);   // "exclusives", a Tab card
-            Assert.Equal(4, shell.BillboardIndex);
-            Click(C<Button>("BillboardCard"));
-            Assert.Equal("exclusives", shell.CurrentTab);
-            shell.ShowTab("settings");
-            Click(C<Button>("BillboardNext"));                                 // "support", a Link card
-            Click(C<Button>("BillboardCard"));
-            Assert.Equal(new[] { LegacyBillboard.PatreonUrl }, opened);
+            // A dot picks its card; the card's button opens its link through the one opener.
+            s.MotionLevel = MotionLevel.Off;
+            global::ConditioningControlPanel.Avalonia.Controls.AmbientFxCanvas.Env.RaiseMotionGateChanged();
+            Assert.False(Board().HoldRunning);
+            Click((Button)Board().ChipButtons[0]);
+            Assert.Equal("house.discord", Board().CurrentCard!.Spec.Id);
+            Click(Board().Cta);
+            Assert.Equal(new[] { DiscordLinks.Invite }, opened);
+
+            // The snooze x: the card leaves for a week (saved), the toast names it.
+            Click(Board().SnoozeButton);
+            Assert.True(s.BillboardSnoozedUntil.ContainsKey("house.discord"));
+            Assert.Equal(string.Format(Loc.Get("billboard_deck_snoozed"), Loc.Get("billboard_discord_title")), Board().ToastText);
+            Assert.DoesNotContain(Board().Deck.Cards, c => c.Spec.Id == "house.discord");
 
             // The chevron writes the preference: open card, billboard gone, clock stopped. Motion Off
             // so the fold settles at once (at Full the 180 ms ease keeps the body hidden until it lands).
@@ -108,7 +122,10 @@ public sealed class DashboardFoldBillboardTests
             Assert.False(s.DashboardBrowserCollapsed);
             Assert.True(body.IsVisible);
             Assert.False(billboard.IsVisible);
-            Assert.False(shell.BillboardClockRunning);
+            s.MotionLevel = MotionLevel.Full;   // the board is hidden: no hold even at Full motion
+            global::ConditioningControlPanel.Avalonia.Controls.AmbientFxCanvas.Env.RaiseMotionGateChanged();
+            Assert.False(Board().HoldRunning);
+            s.MotionLevel = MotionLevel.Off;
             Assert.Equal("▴", C<TextBlock>("TxtFoldBrowser").Text);
             Assert.True(column.RowDefinitions[0].Height.IsStar);
             Assert.Equal(0, column.RowDefinitions[1].Height.Value);
@@ -129,6 +146,8 @@ public sealed class DashboardFoldBillboardTests
             shell.Close();
             Dispatcher.UIThread.RunJobs();
             MainShellWindow.BillboardOpenUrl = oldOpen;
+            BillboardCardHost.Time = TimeProvider.System;
+            s.BillboardSnoozedUntil.Clear();
             s.DashboardBrowserCollapsed = true;
             s.MotionLevel = MotionLevel.Full;
             CoreSettings.ServiceProvider = old;
@@ -155,14 +174,14 @@ public sealed class DashboardFoldBillboardTests
         var shell = new MainShellWindow();
         try
         {
-            Assert.False(shell.BillboardClockRunning);   // not on screen yet
+            Assert.False(shell.BillboardHost?.HoldRunning ?? false);   // not on screen yet
             shell.Show();
             Dispatcher.UIThread.RunJobs();
             Assert.True(shell.FindControl<SettingsTabView>("SettingsTab")!.FindControl<Border>("DashBillboard")!.IsEffectivelyVisible);
-            Assert.True(shell.BillboardClockRunning);
+            Assert.True(shell.BillboardHost!.HoldRunning);
             shell.Close();
             Dispatcher.UIThread.RunJobs();
-            Assert.False(shell.BillboardClockRunning);
+            Assert.False(shell.BillboardHost.HoldRunning);
         }
         finally
         {
@@ -172,4 +191,31 @@ public sealed class DashboardFoldBillboardTests
         }
         return Task.CompletedTask;
     });
+
+    /// <summary>WPF c0c67ff47 (BoardSilentTests): the Tonight Board plays no sound. The host and its
+    /// shell partial reach no audio at all (comments and strings stripped, P23).</summary>
+    [Fact]
+    public void TheTonightBoardPlaysNoSound()
+    {
+        foreach (var rel in new[] { "CCP.Avalonia/Controls/Billboard/BillboardCardHost.cs", "CCP.Avalonia/Views/Windows/MainShellWindow.DashboardBillboard.cs" })
+        {
+            var code = File.ReadAllText(Path.Combine(RepoRoot(), rel));
+            code = Regex.Replace(code, @"//[^\n]*|/\*.*?\*/|""(?:\\.|[^""\\])*""", "", RegexOptions.Singleline);
+            Assert.DoesNotMatch(@"Sfx|Audio|Sound|Chime|NAudio|Play\(", code);
+        }
+    }
+
+    private static string RepoRoot()
+    {
+        var d = new DirectoryInfo(AppContext.BaseDirectory);
+        while (d != null && !File.Exists(Path.Combine(d.FullName, "ConditioningControlPanel.sln"))) d = d.Parent;
+        return d!.FullName;
+    }
+
+    private sealed class SteppedClock : TimeProvider
+    {
+        public long Now;
+        public override long GetTimestamp() => Now;
+        public override long TimestampFrequency => TimeSpan.TicksPerSecond;
+    }
 }
