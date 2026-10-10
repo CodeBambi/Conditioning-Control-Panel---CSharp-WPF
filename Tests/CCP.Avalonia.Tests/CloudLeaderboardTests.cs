@@ -133,7 +133,7 @@ public sealed partial class AccountSeedTests
                 var tab = new LeaderboardTabView();
                 T F<T>(string n) where T : Control => tab.FindControl<T>(n)!;
                 Assert.Empty(wire.Seen);                                    // nothing before the tab is shown
-                await tab.RefreshLeaderboardAsync();
+                await tab.SetLeaderboardMode(false);                        // the monthly board (a fresh tab opens on All-Time)
 
                 Assert.Equal(Loc.GetF("lb_online_and_total", 2, 1234), F<TextBlock>("TxtLeaderboardStatus").Text);
                 Assert.Equal(new[] { "u2", "u1", "u3" }, ((IEnumerable<LeaderboardRow>)F<ItemsControl>("PodiumHost").ItemsSource!).Select(r => r.UnifiedId));
@@ -177,20 +177,26 @@ public sealed partial class AccountSeedTests
                         .UseSkia().UseHeadless(new global::Avalonia.Headless.AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
                         .SetupWithoutStarting();
                 var tab = new LeaderboardTabView();
-                var first = tab.RefreshLeaderboardAsync();        // monthly, held at the gate
+                // Seasons are retired (WPF feda9c907): a fresh tab opens on All-Time, titled as such.
+                Assert.True(tab.IsAllTimeMode);
+                Assert.Equal(Loc.Get("lb_all_time_title"), tab.FindControl<TextBlock>("TxtLeaderboardSeason")!.Text);
+                var first = tab.RefreshLeaderboardAsync();        // all-time, held at the gate
                 Assert.True(tab.RefreshLeaderboardAsync().IsCompleted); // WPF IsRefreshing: a second press does nothing
                 Assert.Single(wire.Seen);
+                Assert.Contains("season=all-time", wire.Seen[0]);
 
-                tab.SetLeaderboardMode(true);                     // switched mid-fetch; its own refresh is dropped too
+                _ = tab.SetLeaderboardMode(false);                // switched mid-fetch; its own refresh is dropped too
                 Assert.Single(wire.Seen);
+                Assert.Equal(Loc.Get("social_lb_month_title"), tab.FindControl<TextBlock>("TxtLeaderboardSeason")!.Text);
+                Assert.Equal(Loc.Get("social_lb_month_sub"), tab.FindControl<TextBlock>("TxtLeaderboardSubtitle")!.Text);
                 wire.Gate.SetResult();
                 await first;
 
-                Assert.Equal(2, wire.Seen.Count);                 // the monthly slice was dropped, all-time fetched
-                Assert.Contains("season=all-time", wire.Seen[1]);
+                Assert.Equal(2, wire.Seen.Count);                 // the all-time slice was dropped, monthly fetched
+                Assert.DoesNotContain("season=all-time", wire.Seen[1]); // monthly asks for the calendar month
                 var podium = ((IEnumerable<LeaderboardRow>)tab.FindControl<ItemsControl>("PodiumHost")!.ItemsSource!).ToList();
-                Assert.Equal(new[] { "u2", "u7", "u1" }, podium.Select(r => r.UnifiedId)); // all-time order, #1 centred
-                Assert.All(podium, r => Assert.True(r.IsAllTimeView));
+                Assert.Equal(new[] { "u2", "u1", "u3" }, podium.Select(r => r.UnifiedId)); // monthly order, #1 centred
+                Assert.All(podium, r => Assert.False(r.IsAllTimeView));
             });
         }
         finally
