@@ -1808,3 +1808,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/sync6-launcher-badges: +106
 - Launcher whole-card launch + once-per-window grow to seat every tile row (WPF 7.1.5 d0001dd5e); 2 fail-proven tests.
 - Badge hue/seen-dim folded to shell-nav-rail and win-launcher Lobby fold (no surface yet).
+
+## avalonia-port/sync6-companion-pages: +134
+- Companion Personality/Permissions/Links pills open the Companion tab scrolled to their zone (zone pills until the v2 page lands; decision B+C).
+- Rows 5681c132a/f3a00a9dc stay needs-port, folded into views-companion-v2-conversation; CompanionZonePillsTests fail-proven.
