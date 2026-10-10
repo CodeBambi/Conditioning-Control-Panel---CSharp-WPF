@@ -17,7 +17,7 @@ namespace CCP.Avalonia.Tests;
 
 /// <summary>dialogs-program-enroll: the enrollment ceremony collects exactly what WPF
 /// ProgramEnrollDialog.xaml.cs collects (contract phrase gate, Strict only when offered, boundary and
-/// nudge hours, Escape/Cancel refuse). The dialog persists nothing; no shell caller exists yet.</summary>
+/// nudge hours, Escape/Cancel refuse). The dialog persists nothing; MainShellWindow.EnrollProgramAsync enrolls on true.</summary>
 public sealed class ProgramEnrollDialogTests
 {
     private static void Setup()

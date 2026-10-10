@@ -17,14 +17,13 @@ using AvApp = ConditioningControlPanel.Avalonia.App;
 namespace ConditioningControlPanel.Avalonia.Views.Tabs
 {
     /// <summary>
-    /// The READ-ONLY run view: an existing enrollment from <see cref="AvApp.Programs"/> (built with
-    /// ProgramService.CreateReadOnly, CHECKPOINT A) drawn the way WPF MainWindow.ProgramsTab.cs:539-1450
-    /// and :1978-1998 draw it. Nothing here writes, rolls over, credits a task or starts a session:
-    /// the lifecycle buttons are hidden in the XAML, the ritual/mantra doors stay closed, and because
-    /// no rollover runs on this head the day is labelled "last saved" whenever the program clock has
-    /// moved past it (<see cref="IsSnapshotStale"/>), computed for display only.
-    /// ponytail: ignition FX, day/task pops, node breathe and the live session row are programs
-    /// slices 3 and 5 (~/ccp-port/briefs/programs-run-plan.md).
+    /// The run view: the enrollment in <see cref="AvApp.Programs"/> drawn the way WPF
+    /// MainWindow.ProgramsTab.cs:539-1450 and :1978-1998 draw it. Programs 3a: Withdraw and today's
+    /// session are live (greyed while the service IsReadOnly); Pause/Resume, Restart, Dismiss and the
+    /// ritual/mantra doors are 3b. A day the program clock has moved past without a rollover (a
+    /// read-only service, or the minute poll not yet run) is labelled "last saved" (<see cref="IsSnapshotStale"/>).
+    /// ponytail: ignition FX, day/task pops, node breathe and the live session clock are programs
+    /// slice 5 (~/ccp-port/briefs/programs-run-plan.md).
     /// </summary>
     public partial class ProgramsTabView
     {
@@ -72,6 +71,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         {
             if (VisualRoot is not null) RefreshPrograms();
         });
+
+        private void OnProgramSessionChanged() => OnProgramChanged(null, EventArgs.Empty);
 
         /// <summary>WPF :509-516: a hidden tab only remembers that it is stale; showing it flushes.</summary>
         protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
@@ -129,7 +130,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 Find<StackPanel>("ProgramsLapsedPanel").IsVisible = lapsed;
                 Find<StackPanel>("ProgramsGraduatedPanel").IsVisible = graduated;
                 Find<StackPanel>("ProgramsRunPanel").IsVisible = run;
-                Find<Border>("RunReadOnlyNote").IsVisible = !browse;
+                // A newer build's file: nothing here may write it, so every lifecycle door greys.
+                var readOnly = svc?.IsReadOnly == true;
+                Find<Border>("RunReadOnlyNote").IsVisible = !browse && readOnly;
+                Find<Button>("BtnProgramWithdraw").IsEnabled = !readOnly;
+                Find<Button>("BtnProgramLapsedWithdraw").IsEnabled = !readOnly;
             }
         }
 
@@ -183,6 +188,31 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
 
             BuildDayStrip(program, enrollment, accent, stale);
             BuildTodayPanel(svc, program, enrollment, accent, stale);
+        }
+
+        /// <summary>WPF UpdateProgramSessionRow :1451-1585, button and glyph states. Repainted on every
+        /// refresh and on a session start/end (ProgramEngineBridge.SessionChanged), never per tick (P07).
+        /// ponytail: the live clock, progress bar and sheen while our session runs are programs slice 5.</summary>
+        private void UpdateSessionRow(ProgramService svc, ProgramEnrollment enrollment, ProgramDayRecord record,
+                                      IBrush accent, IBrush muted)
+        {
+            var runner = AvApp.Sessions;
+            var running = runner?.IsRunning == true;
+            var ours = running && svc.IsProgramSession(runner!.CurrentSession);
+            var (key, enabled, tip) =
+                ours ? ("programs_session_in_progress", false, "programs_session_stop_hint")
+                : record.SessionCompleted ? ("programs_session_done", false, null)
+                : running ? ("programs_session_other_running", false, "programs_session_other_running_hint")
+                : ("btn_program_start_session", enrollment.State != ProgramEnrollmentState.Paused, (string?)null);
+            var glyph = Find<TextBlock>("TxtTodaySessionGlyph");
+            glyph.Text = ours ? "◉" : record.SessionCompleted ? "✓" : "○";
+            glyph.Foreground = ours || record.SessionCompleted ? accent : muted;
+            var button = Find<Button>("BtnStartTodaySession");
+            button.IsEnabled = enabled && !svc.IsReadOnly;
+            ToolTip.SetTip(button, tip == null ? null : Loc.Get(tip));
+            // P09: choose the key in code and bind it, so a language switch keeps the state's text.
+            Find<TextBlock>("TxtStartTodaySession").Bind(TextBlock.TextProperty,
+                (global::Avalonia.Data.Binding)new Localization.StrExtension(key).ProvideValue(null!));
         }
 
         // ---- reward track (WPF BuildProgramDayStrip :794-939) ----
@@ -321,12 +351,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             ToolTip.SetTip(Find<Border>("TodayRewardChip"), day.RewardDescription);
             Find<Border>("TodayCompleteBanner").IsVisible = record.DayCompleted;
 
-            // Session slot, idle states only (WPF UpdateProgramSessionRow :1555-1568): nothing runs here.
             var minutes = record.IsReturnDay ? ProgramService.ReturnDayMinutes(day.SessionMinutes) : day.SessionMinutes;
             Find<TextBlock>("TxtTodaySessionMinutes").Text = Loc.GetF("programs_session_minutes", minutes);
-            var glyph = Find<TextBlock>("TxtTodaySessionGlyph");
-            glyph.Text = record.SessionCompleted ? "✓" : "○";
-            glyph.Foreground = record.SessionCompleted ? accent : muted;
+            UpdateSessionRow(svc, enrollment, record, accent, muted);
 
             var ambient = day.Ambient;
             var showAmbient = ambient != null &&
