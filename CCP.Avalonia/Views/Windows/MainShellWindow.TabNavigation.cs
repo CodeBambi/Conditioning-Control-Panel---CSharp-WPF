@@ -96,6 +96,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             ["shelistening"] = "SheListeningTab", ["gradedintake"] = "GradedIntakeTab",
             ["appsettings"] = "AppSettingsTab",  ["spiral"] = "SpiralTab",
             ["exclusives"] = "ExclusivesTab", ["chaster"] = "ChasterTab",
+            ["friends"] = "FriendsTab",          ["leash"] = "LeashTab",
             // Nav rework zone pills (WPF MainWindow.TabNavigation.cs:521/572/666): places inside a page.
             ["playeyes"] = "PlayTab", ["playsessions"] = "PlayTab", ["folders"] = "AssetsTab", ["ramp"] = "StudioTab",
         };
@@ -126,7 +127,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             ("studio",      "studio",      new[] { "studio", "presets", "haptics", "ramp" },                              "DoorPanelStudio"),
             ("companion",   "companion",   new[] { "companion", "bambitakeover", "shelistening", "awareness" },   "DoorPanelCompanion"),
             ("play",        "play",        new[] { "play", "lab", "playeyes", "playsessions", "deeper", "exclusives", "gradedintake", "lockdown", "blinktrainer", "remotecontrol", "availablesubjects" }, "DoorPanelPlay"),
-            ("you",         "discord",     new[] { "discord", "spiral", "quests", "achievements", "enhancements", "programs", "leaderboard" }, "DoorPanelYou"),
+            ("you",         "discord",     new[] { "discord", "spiral", "quests", "achievements", "enhancements", "programs", "leaderboard", "friends", "leash" }, "DoorPanelYou"),
             ("library",     "assets",      new[] { "assets", "folders" },                                                    "DoorPanelLibrary"),
             ("appsettings", "appsettings", new[] { "appsettings" },                                               null),
         };
@@ -222,6 +223,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
                     // WPF MainWindow.TabNavigation.cs:429: every show re-fetches the board (read-only).
                     case "leaderboard": _ = Named<Tabs.LeaderboardTabView>("LeaderboardTab")?.RefreshLeaderboardAsync(); break;
+                    // WPF MainWindow.SocialTabs.cs: subscribe and ask for a fresh list (the page folds itself on hide).
+                    case "friends": Named<Tabs.FriendsTabView>("FriendsTab")?.OnShown(); break;
 
                     // WPF MainWindow.Exclusives.cs RefreshExclusivesTab "on tab show": gates can move between visits.
                     case "exclusives": RefreshExclusivesTab(); break;
@@ -253,7 +256,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// <summary>WPF MaybeShowFeatureIntro (MainWindow.TabNavigation.cs:1094): through the
         /// startup ladder, so a quiet window turns the card into an Inbox row. ponytail: no
         /// FirstShowService on this head, so WPF's first-show early return has nothing to read.</summary>
-        private void MaybeShowFeatureIntro(string key, string? doorTab = null)
+        internal void MaybeShowFeatureIntro(string key, string? doorTab = null)
         {
             try { FeatureIntroPopup.ShowWhenStartupSettles(key, this, NavDoorForTab(doorTab ?? key)); }
             catch (Exception ex) { Serilog.Log.Warning(ex, "Feature intro hook failed for {Key}", key); }
@@ -400,6 +403,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private void BtnQuests_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => ShowTab("quests");
         private void BtnPrograms_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => ShowTab("programs");
         private void BtnEnhancements_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => ShowTab("enhancements");
+        private void BtnNavFriends_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => ShowTab("friends");
+        private void BtnNavLeash_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => ShowTab("leash");
         private void BtnNavStudio_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => ShowTab("studio");
         private void BtnNavHaptics_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => ShowTab("haptics");
         private void BtnNavPlay_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => ShowTab("play");

@@ -69,6 +69,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 Closed += (_, _) => LocalizationManager.Instance.LanguageChanged -= onLanguage;
             }
             RefreshFavoritesRail();
+            SettingsPage?.ApplyFavoritesDrawerSetting();
         }
 
         /// <summary>WPF RefreshFavoritesRail (:121): rebuilds both chip stacks from settings.</summary>
@@ -271,12 +272,20 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             var s = CoreSettings.Current;
             if (s == null) return;
-            bool changed = FavoritesRailRule.IsPinned(s.RailFavorites, id)
+            bool wasPinned = FavoritesRailRule.IsPinned(s.RailFavorites, id);
+            bool changed = wasPinned
                 ? FavoritesRailRule.Unpin(s.RailFavorites, id)
                 : FavoritesRailRule.TryPin(s.RailFavorites, id);
             if (!changed) return;
             CoreSettings.Save();
             RefreshFavoritesRail();
+            // WPF TogglePinned (11552cadf): the column is a drawer, closed by default, so a new
+            // favorite slides it out for a moment.
+            if (!wasPinned)
+            {
+                try { SettingsPage?.PeekFavoritesDrawer(id); }
+                catch (Exception ex) { Log.Debug("PeekFavoritesDrawer({Id}): {E}", id, ex.Message); }
+            }
         }
 
         /// <summary>WPF WireFavoritePinMenus (:411): a pin menu on every rail row, door header and

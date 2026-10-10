@@ -819,6 +819,16 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
   `ProgramServiceStartupTests`, `LockdownVeilTests`, `ProgramsRunViewTests`, `PanicSurfacesTests`. Fail-proofs:
   ~/ccp-port/evidence/review-programs-run-3a/fail-proofs.log.
 
+## 2026-10-09: the media-source consent gates network media, awaited (avalonia-port/sync6-media-picker)
+- WPF parity (MainWindow.Assets.cs:2350-2400): switching the media source to Reddit or Both asks once, and
+  `MediaSource` is written only after Yes. WPF's MessageBox is synchronous; this head's MessageDialog is async, so
+  the picker puts the chips back on the old source BEFORE awaiting, ignores further source clicks while the ask is
+  open, and on Cancel/close changes nothing. Someone who already accepted the For You card is not asked again
+  (`HasRemoteMediaConsent`), as on WPF. The second button is the dialog's localized Cancel: there is no "No" key.
+- Every change re-deals online channels (`FypOnlineCoordinator.ResetAllChannels`) and saves. WPF's pool
+  invalidation has no target here: no flash/video service on this head consumes online media yet (open gap in
+  parity rows shell-assets / views-tab-assets); intake is the only consumer.
+- Tests: `Tests/CCP.Avalonia.Tests/AssetsMediaPickerTests.cs` (consent faked, probe faked; no network).
 ## 2026-10-10: roadmap.json atomic save and corrupt-file backup (avalonia-port/roadmap-atomic-save)
 - Source: oracle-deep, ~/ccp-port/evidence/oracle/programs-roadmap-seed.md (Q1 "Two existing protections"). Core-only, so
   WPF gets it too.

@@ -183,7 +183,7 @@ public sealed partial class AccountSeedTests
                 // Offline, a card with no board of its own searches the Leaderboard tab's last ranked page (WPF's cache).
                 var w2 = new global::ConditioningControlPanel.Avalonia.Views.Windows.MainShellWindow();
                 w2.Show();
-                await w2.Named<LeaderboardTabView>("LeaderboardTab")!.RefreshLeaderboardAsync();
+                await w2.Named<LeaderboardTabView>("LeaderboardTab")!.SetLeaderboardMode(false); // the monthly board (opens on All-Time)
                 s.OfflineMode = true;
                 var seen = wire.Seen.Count;
                 await w2.ProfilePage!.OpenProfileAsync("Nyx");
