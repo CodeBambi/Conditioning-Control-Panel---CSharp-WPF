@@ -38,6 +38,7 @@ Kind of limit:
 | Typed keyword triggers | X11 and XWayland windows only. No dead keys, no input methods. | fundamental (Wayland), not built (composition) |
 | Do-not-disturb list, awareness (foreground app, title, fullscreen) | X11 and XWayland windows only. A native Wayland window reads as "no foreground". | fundamental |
 | Idle time, typing-burst guess | X11 only, needs `libXss`. Under XWayland the idle counter only sees input that went to X windows. | fundamental (Wayland), needs a run |
+| Natasha's red flash (dealt only to a player who is at the desk) | Dealt on an X11 desk since 10 Oct 2026: "at the desk" is the XScreenSaver idle counter (`libXss`, `Platform/InputIdleProbe.cs`). No `libXss`, no display, or a Wayland session without XWayland reads as unknown, and unknown is never dealt. Under XWayland the counter misses input given to native Wayland windows, so the flash is dealt less often there, never more. Passive XP's idle pause still has no Linux probe on purpose (an over-reading counter would withhold XP). | fundamental (Wayland only), needs a run |
 | Hiding overlays from screen capture | Not available. Windows only (`SetWindowDisplayAffinity`). | fundamental |
 | Camera shortcut from any app | Not available. Works only while the app has focus. | not built |
 | Icon glyphs (Segoe MDL2 Assets) | Missing. Nav pills and hover bubbles fall back (text only, or an emoji). Other glyph-only buttons draw an empty box or nothing. | not built |
