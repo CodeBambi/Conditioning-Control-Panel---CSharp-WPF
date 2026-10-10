@@ -8,12 +8,143 @@ namespace ConditioningControlPanel.Services
     /// WPF RemoteControlService.ExecuteCommand's dispatch table for the features Core drives. Runs on the
     /// UI thread (RemoteRelay marshals). Returns null when the verb ran, else the refusal the controller
     /// sees: a verb with no surface on this head says so rather than reporting "ok" and doing nothing.
-    /// ponytail: pink filter, spiral, opacity, HypnoTube, autonomy, mind wipe, Melt (start/stop_brain_drain),
-    /// wallpaper and the session verbs have no Core entry point yet; they refuse until their services move.
+    /// Verbs that need a window (pink filter, spiral, the Melt haze, a lock card now, Takeover, the session
+    /// verbs) go through <see cref="Head"/>; with no head they refuse. No tier or waiver check here: WPF
+    /// has none on the receiving side either (the relay only hands a session the verbs of its tier).
+    /// ponytail: play_hypnotube (the controller supplies a url: owner call) and wallpaper (no service on
+    /// this head yet) still refuse.
     /// </summary>
     public static class RemoteCommands
     {
         public const string NotOnThisBuild = "not on this build";
+        public const string NoOverlayHere = "no overlay on this display";
+
+        /// <summary>What the desktop head does for the verbs Core cannot (MainShellWindow.RemoteVerbs.cs).
+        /// Every member runs on the UI thread. A string result is the refusal the controller sees, null = done.</summary>
+        public interface IRemoteHead
+        {
+            /// <summary>"pink" or "spiral": bring it in line with the settings and <see cref="OverlayHold"/>.
+            /// True when it is on screen (or still loading) afterwards.</summary>
+            bool RefreshOverlay(string which);
+            /// <summary>Bring the Melt haze in line; a reason when this system cannot draw it.</summary>
+            string? RefreshBrainDrain();
+            string? ShowLockCard();
+            /// <summary>WPF LockCardWindow.ForceCloseAll + BubbleCountWindow.ForceCloseAll.</summary>
+            void CloseCards();
+            string? SetAutonomy(bool on);
+            /// <summary>WPF CancelActivePulses; <paramref name="restart"/> = Stop, then Start again if the
+            /// subject's own switch is on (a controller never switches Takeover off for good, #299).</summary>
+            void CancelAutonomyPulses(bool restart);
+            /// <summary>start_session / pause_session / resume_session / stop_session.</summary>
+            string? Session(string verb, JObject? p);
+            /// <summary>WPF IsSessionRemoteStarted: the run on screen is the one a controller started.</summary>
+            bool SessionIsRemoteStarted { get; }
+        }
+
+        public static volatile IRemoteHead? Head;
+
+        /// <summary>WPF EnsureOverlayRunning (OverlayService.BypassLevelCheck + Start): while it holds, the
+        /// pink filter, the spiral and the Melt haze show with the engine off. Set by the controller's
+        /// overlay verbs; dropped by every stop path, the controller leaving and panic.</summary>
+        public static bool OverlayHold { get; private set; }
+
+        // What the controller switched on that was off before: handed back when it leaves.
+        private static bool _remotePink, _remoteSpiral, _remoteBrainDrain;
+
+        private static string? Overlay(string which, bool on)
+        {
+            if (Head is not { } head) return NotOnThisBuild;
+            var s = CoreSettings.Current;
+            var pink = which == "pink";
+            var was = pink ? s.PinkFilterEnabled : s.SpiralEnabled;
+            var holdWas = OverlayHold;
+            if (pink) s.PinkFilterEnabled = on; else s.SpiralEnabled = on;
+            if (on) OverlayHold = true;
+            var showing = head.RefreshOverlay(which);
+            if (on && !showing)
+            {
+                // Nothing reached the screen: the subject's settings stay as they were, and the controller is told.
+                if (pink) s.PinkFilterEnabled = was; else s.SpiralEnabled = was;
+                OverlayHold = holdWas;
+                head.RefreshOverlay(which);
+                return NoOverlayHere;
+            }
+            if (pink) _remotePink = on && (!was || _remotePink); else _remoteSpiral = on && (!was || _remoteSpiral);
+            CoreSettings.Save();
+            return null;
+        }
+
+        private static string? OverlayOpacity(string which, JObject? p)
+        {
+            if (Head is not { } head) return NotOnThisBuild;
+            if (p == null) return null;                      // WPF: no params is a no-op
+            var s = CoreSettings.Current;
+            int value;
+            try { value = p["value"]?.Value<int>() ?? 25; } catch { return "bad params"; }
+            // WPF EasedOpacity.Ask: clamp to 0..max (pink 50, spiral 100). Easy is not on this head, so factor 1.
+            if (which == "pink") s.PinkFilterOpacity = Math.Clamp(value, 0, 50); else s.SpiralOpacity = Math.Clamp(value, 0, 100);
+            OverlayHold = true;
+            head.RefreshOverlay(which);
+            CoreSettings.Save();
+            return null;
+        }
+
+        private static string? BrainDrain(bool on)
+        {
+            if (Head is not { } head) return NotOnThisBuild;
+            var s = CoreSettings.Current;
+            if (!on)
+            {
+                _remoteBrainDrain = false;
+                s.BrainDrainEnabled = false;
+                CoreBrainDrain.Stop();
+                head.RefreshBrainDrain();
+                CoreSettings.Save();
+                return null;
+            }
+            var (was, holdWas) = (s.BrainDrainEnabled, OverlayHold);
+            s.BrainDrainEnabled = true;
+            OverlayHold = true;
+            if (head.RefreshBrainDrain() is { } why)
+            {
+                (s.BrainDrainEnabled, OverlayHold) = (was, holdWas);
+                head.RefreshBrainDrain();
+                return why;
+            }
+            if (!was) _remoteBrainDrain = true;
+            CoreBrainDrain.Start();
+            CoreSettings.Save();
+            return null;
+        }
+
+        /// <summary>The hold drops and all three overlays re-read the settings. UI thread.</summary>
+        private static void DropOverlayHold()
+        {
+            OverlayHold = false;
+            if (Head is not { } head) return;
+            try { head.RefreshOverlay("pink"); head.RefreshOverlay("spiral"); head.RefreshBrainDrain(); }
+            catch (Exception ex) { Serilog.Log.Warning(ex, "[RemoteControl] overlay refresh failed"); }
+        }
+
+        /// <summary>The controller left or idled out: what it put on the screen comes down, whatever
+        /// StopEffectsOnRemoteDisconnect says (that switch is about the loops the subject can stop from the
+        /// panel; a full-screen overlay with the engine off and nobody driving is not left up). An overlay
+        /// the subject had on themselves keeps its setting and follows their engine again. UI thread.</summary>
+        public static void ControllerLeft()
+        {
+            var s = CoreSettings.Current;
+            var changed = _remotePink || _remoteSpiral || _remoteBrainDrain;
+            if (_remotePink) s.PinkFilterEnabled = false;
+            if (_remoteSpiral) s.SpiralEnabled = false;
+            if (_remoteBrainDrain) { s.BrainDrainEnabled = false; CoreBrainDrain.Stop(); }
+            (_remotePink, _remoteSpiral, _remoteBrainDrain) = (false, false, false);
+            DropOverlayHold();
+            if (changed) CoreSettings.Save();
+        }
+
+        /// <summary>Panic, on the UI thread (PanicSurfaces "remote-overlays"): the hold drops, so nothing a
+        /// controller put up outlives the press; the settings stay for the session-end path to hand back.</summary>
+        public static void PanicDropOverlays() => DropOverlayHold();
 
         /// <summary>The command log / notification label key per verb (WPF MainWindow.xaml.cs CommandLabels);
         /// anything else shows as the verb with spaces.</summary>
@@ -82,6 +213,22 @@ namespace ConditioningControlPanel.Services
                 case "trigger_video": return CoreEngine.Video?.Trigger() == true ? null : CoreEngine.Video == null ? NotOnThisBuild : "a video is already playing";
                 case "start_video": if (CoreEngine.Video == null) return NotOnThisBuild; CoreEngine.Video.Start(); return null;
                 case "stop_video": CoreEngine.Video?.Stop(); return null;
+                case "show_pink_filter": return Overlay("pink", true);
+                case "stop_pink_filter": return Overlay("pink", false);
+                case "show_spiral": return Overlay("spiral", true);
+                case "stop_spiral": return Overlay("spiral", false);
+                case "set_pink_opacity": return OverlayOpacity("pink", p);
+                case "set_spiral_opacity": return OverlayOpacity("spiral", p);
+                case "start_brain_drain": return BrainDrain(true);
+                case "stop_brain_drain": return BrainDrain(false);
+                case "start_autonomy": return Head is { } ha ? ha.SetAutonomy(true) : NotOnThisBuild;
+                case "stop_autonomy": return Head is { } hb ? hb.SetAutonomy(false) : NotOnThisBuild;
+                case "trigger_lock_card": return Head is { } hc ? hc.ShowLockCard() : NotOnThisBuild;
+                case "start_session":
+                case "pause_session":
+                case "resume_session":
+                case "stop_session":
+                    return Head is { } hs ? hs.Session(action, p) : NotOnThisBuild;
                 case "trigger_bubble_count": if (CoreEngine.BubbleCount == null) return NotOnThisBuild; CoreEngine.BubbleCount.Trigger(forceTest: true); return null;
                 case "start_lock_card": s.LockCardEnabled = true; LockCardScheduler.Instance.Start(); return null;
                 case "stop_lock_card": LockCardScheduler.Instance.Stop(); return null;
@@ -126,15 +273,30 @@ namespace ConditioningControlPanel.Services
             try { CoreHaptics.Service?.PanicStop(); } catch { }
             CoreAudio.Unduck();
             CoreMindWipe.Stop();   // WPF App.MindWipe?.Stop() on both stop paths
+            CoreBrainDrain.Stop(); // WPF App.BrainDrain?.Stop() on both stop paths
+            var head = Head;
+            try { head?.CancelAutonomyPulses(restart: force); } catch (Exception ex) { Serilog.Log.Warning(ex, "[RemoteControl] takeover stop failed"); }
+            // WPF: the session and engine go only on a panic or when the controller started this run (#878).
+            var remoteRun = false;
+            try { remoteRun = head?.SessionIsRemoteStarted == true; } catch { }
+            if (force || remoteRun) { try { head?.Session("stop_session", null); } catch (Exception ex) { Serilog.Log.Warning(ex, "[RemoteControl] session stop failed"); } }
             if (force) CoreEngine.Stop();
             else
             {
                 CoreFlash.Stop(); CoreSubliminal.Stop(); CoreBubbles.Stop(); CoreBouncingText.Stop();
                 CoreEngine.Video?.Stop(); CoreEngine.BubbleCount?.Stop(); LockCardScheduler.Instance.Stop();
             }
+            try { head?.CloseCards(); } catch (Exception ex) { Serilog.Log.Warning(ex, "[RemoteControl] card close failed"); }
             // As WPF, Lockdown or not: this only reduces restraint, and LockdownService.Deactivate restores
             // the pre-lockdown values when the timer ends.
             var s = CoreSettings.Current;
+            // WPF "turn off overlays": pink and spiral off, Melt handed back if the controller switched it on.
+            var overlays = s.PinkFilterEnabled || s.SpiralEnabled || _remoteBrainDrain;
+            s.PinkFilterEnabled = false;
+            s.SpiralEnabled = false;
+            if (_remoteBrainDrain) s.BrainDrainEnabled = false;
+            (_remotePink, _remoteSpiral, _remoteBrainDrain) = (false, false, false);
+            DropOverlayHold();
             if (s.StrictLockEnabled || !s.PanicKeyEnabled)
             {
                 s.StrictLockEnabled = false;
@@ -142,6 +304,7 @@ namespace ConditioningControlPanel.Services
                 CoreSettings.Save();
                 SyncPanicUi();
             }
+            else if (overlays) CoreSettings.Save();
         }
 
         private static void SyncPanicUi() { try { LockdownService.PanicKeyUiSync?.Invoke(); } catch { } }

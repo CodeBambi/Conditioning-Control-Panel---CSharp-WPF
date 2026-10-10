@@ -39,6 +39,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // WPF PanicStopEverySurface (:1992): the toys go to zero, bypassing throttles and gates.
             new("haptics", _ => CoreHaptics.Service?.PanicStop()),
             new("remote-haptics", _ => RemoteCommands.StopHaptics()),   // decisions 2026-10-08
+            new("remote-overlays", _ => RemoteCommands.PanicDropOverlays()),   // a controller-held pink filter, spiral or haze never outlives a panic
             new("takeover", sh => sh?.StopAutonomyForPanic()),           // WPF KillAllAudio -> Autonomy.Stop
             // WPF RunPanicStopTail StopEngine/StopAdHocEffects: pauses a running session; OnEngineStopped
             // then ends Takeover pulses, desktop overlays (subliminal/whisper, mind wipe, spiral, video,
