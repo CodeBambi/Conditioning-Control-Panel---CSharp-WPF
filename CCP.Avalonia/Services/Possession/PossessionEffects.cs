@@ -14,6 +14,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Data;
 using Avalonia.Input;
 using Avalonia.Media;
@@ -59,6 +60,37 @@ internal abstract class PossessionEffectBase : IPossessionEffect
     public virtual IReadOnlyList<PossessionRole> Roles => _noRoles;
     public bool IsLive { get; private set; }
 
+    // The possessed outline (WPF EmberAttribution.Possess): a thin ember frame on the adorner layer
+    // for as long as the victim is haunted, so the user can tell a ghost from a bug. It follows the
+    // control's transform, takes no input and has no Effect and no animation (photosafe as it is).
+    private static readonly IBrush EmberOutline = new SolidColorBrush(Color.FromArgb(191, 0xFF, 0x8A, 0x5C)).ToImmutable();
+    private Border? _outline;
+    protected virtual bool OutlineOnApply => Roles.Count > 0;
+    internal bool HasOutline => _outline?.Parent != null;
+
+    private void ShowOutline(Control c)
+    {
+        try
+        {
+            if (AdornerLayer.GetAdornerLayer(c) is not { } layer) return;
+            _outline = new Border
+            {
+                BorderBrush = EmberOutline, BorderThickness = new Thickness(1.5), CornerRadius = new CornerRadius(6),
+                Margin = new Thickness(-3), IsHitTestVisible = false, Focusable = false,
+            };
+            AdornerLayer.SetAdornedElement(_outline, c);
+            layer.Children.Add(_outline);
+        }
+        catch (Exception ex) { Log.Debug("Possession {Id}: outline failed: {E}", Id, ex.Message); _outline = null; }
+    }
+
+    private void DropOutline()
+    {
+        try { (_outline?.Parent as Panel)?.Children.Remove(_outline!); }
+        catch (Exception ex) { Log.Debug("Possession {Id}: outline drop failed: {E}", Id, ex.Message); }
+        _outline = null;
+    }
+
     /// <summary>Overlays in place right now (tests: nothing is left behind).</summary>
     internal int OverlayCount => _overlays.Count;
 
@@ -90,7 +122,11 @@ internal abstract class PossessionEffectBase : IPossessionEffect
         Victim = target?.Element as Control;
         Cts = new CancellationTokenSource();
         IsLive = true;
-        try { ApplyCore(ctx, target); }
+        try
+        {
+            ApplyCore(ctx, target);
+            if (IsLive && OutlineOnApply && Victim is { } victim) ShowOutline(victim);
+        }
         catch (Exception ex)
         {
             Log.Warning("Possession {Id}: apply failed: {E}", Id, ex.Message);
@@ -133,6 +169,7 @@ internal abstract class PossessionEffectBase : IPossessionEffect
         }
         _overlays.Clear();
         _leases.Clear();
+        DropOutline();
         try { Cts?.Dispose(); } catch { }
         Cts = null;
         Lease = null;
@@ -401,6 +438,7 @@ internal sealed class MeltEffect : PossessionEffectBase
 {
     private static readonly PossessionRole[] _roles = { PossessionRole.Card, PossessionRole.Button };
     private const double MeltMs = 900, FirmMs = 600;
+    protected override bool OutlineOnApply => false;   // WPF: melt marks its victim only under the pointer
     private EventHandler<PointerEventArgs>? _enter, _leave;
     private Control? _hooked;
 

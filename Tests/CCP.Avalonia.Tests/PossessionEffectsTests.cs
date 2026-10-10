@@ -177,10 +177,12 @@ public sealed class PossessionEffectsTests
             Assert.Equal('h', label.Text![0]);
             Assert.Equal("hello there".Length, label.Text.Length);
             Assert.False(typo.CanApply(Ctx(host), lt));                // never double-booked
+            Assert.True(typo.HasOutline);                               // the ember frame says: a ghost, not a bug
             var undo = typo.UndoAsync(TimeSpan.Zero);
             Assert.True(undo.IsCompletedSuccessfully);                  // synchronous: panic relies on it
             Assert.Equal("hello there", label.Text);
             Assert.False(typo.IsLive);
+            Assert.False(typo.HasOutline);
             Assert.Equal(0, typo.OverlayCount);
             Assert.True(typo.UndoAsync(TimeSpan.Zero).IsCompletedSuccessfully);   // safe twice
 
