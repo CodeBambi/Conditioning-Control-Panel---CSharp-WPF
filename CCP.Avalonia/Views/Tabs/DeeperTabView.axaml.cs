@@ -48,6 +48,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         {
             base.OnAttachedToVisualTree(e);
             CoreMods.ModChanged += OnModChanged;
+            Platform.WebcamTracker.Instance.StateChanged += RefreshTrackerButton;   // X15
+            RefreshTrackerButton();
             ApplyFeatureArt();
             if (Owner is { } shell) shell.InitializeDeeperHub();
             else ViewModel?.ReloadLibrary();
@@ -56,8 +58,20 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
         {
             CoreMods.ModChanged -= OnModChanged;
+            Platform.WebcamTracker.Instance.StateChanged -= RefreshTrackerButton;
             base.OnDetachedFromVisualTree(e);
         }
+
+        /// <summary>WPF MainWindow.BlinkTrainer.cs:375 RefreshBlinkTrainerTrackerButton: the Deeper hub's
+        /// Start / Stop button follows the tracker, whoever started or stopped it (WPF hardcodes the label).</summary>
+        internal void RefreshTrackerButton()
+        {
+            if (!Dispatcher.UIThread.CheckAccess()) { Dispatcher.UIThread.Post(RefreshTrackerButton); return; }
+            BtnDeeperWebcamStartStopTracker.Content = TrackerLabel(TrackerRunning());
+        }
+
+        internal static Func<bool> TrackerRunning = () => Platform.WebcamTracker.Instance.IsRunning;
+        internal static string TrackerLabel(bool running) => running ? "Stop tracker" : "Start tracker";
 
         /// <summary>ModChanged can be raised off the UI thread, so the repaint is marshalled.</summary>
         private void OnModChanged(object? sender, ModPackage mod) =>

@@ -72,7 +72,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             Autonomy.CanPerform = CanPerformAutonomy;
             // WPF CanTakeAction: never over a fullscreen interaction (InteractionQueue.IsBusy).
             Autonomy.IsBusy = () => CoreEngine.Video?.IsPlaying == true || LockCardWindow.IsAnyOpen()
-                                    || BubbleCountWindow.IsAnyOpen();
+                                    || BubbleCountWindow.IsAnyOpen() || PopQuizWindow.IsAnyOpen();
             Autonomy.Perform = (a, _) => Dispatcher.UIThread.Post(() => PerformAutonomy(a));
             Autonomy.EnabledChanged += (_, on) => Dispatcher.UIThread.Post(() =>
             {
@@ -259,10 +259,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             if (!AutonomyScheduler.HasEntitlement)
             {
-                Log.Warning("Autonomy Mode enabled but Patreon access missing - service will not start");
-                _ = MessageDialog.ShowAsync(this, "Patreon Required",
-                    "Autonomy Mode requires Patreon access.\n\n" +
-                    "The setting has been saved, but the feature will not activate until you have Patreon access.");
+                Log.Warning("Autonomy Mode enabled but premium access missing - service will not start");
+                // WPF MainWindow.Autonomy.cs:96 says "Patreon Required" in hardcoded English. The tiers are
+                // Basic and Prime, so this is the tier gate's own translated line instead (X6).
+                var takeover = ConditioningControlPanel.Localization.Loc.Get("tab_takeover");
+                _ = MessageDialog.ShowAsync(this, takeover,
+                    ConditioningControlPanel.Localization.Loc.GetF("tiergate_denied_premium", takeover));
                 Autonomy.Stop();
                 UpdateAutonomyButtonState(false);
                 return true;
@@ -277,7 +279,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             if (Autonomy.IsEnabled) { Autonomy.TestTrigger(); return; }
             var reason = !AutonomyScheduler.HasEntitlement
-                ? "Bambi Takeover requires Patreon access."
+                ? ConditioningControlPanel.Localization.Loc.GetF("tiergate_denied_premium", ConditioningControlPanel.Localization.Loc.Get("tab_takeover"))
                 : "Click the green \"Start\" button to enable it, then press Test again.";
             _ = MessageDialog.ShowAsync(this, "Autonomy Not Running", $"Autonomy Mode isn't running yet.\n\n{reason}");
         }
