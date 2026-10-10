@@ -130,15 +130,15 @@
                            Text="{loc:Str mic_consent_how_used}"/>
 
                 <TextBlock Theme="{StaticResource DlgBody}" Margin="14,8,0,0">
-                    <Run FontWeight="Bold">• Only when she asks (default)</Run>
+                    <Run FontWeight="Bold" Text="{loc:Str mic_consent_use1_title}"/>
                     <LineBreak/>
-                    <Run>The mic opens for a few seconds right after she prompts you, then closes again. It is not listening the rest of the time.</Run>
+                    <Run Text="{loc:Str mic_consent_use1_body}"/>
                 </TextBlock>
 
                 <TextBlock Theme="{StaticResource DlgBody}" Margin="14,12,0,0">
-                    <Run FontWeight="Bold">• Always-on wake word (separate opt-in)</Run>
+                    <Run FontWeight="Bold" Text="{loc:Str mic_consent_use2_title}"/>
                     <LineBreak/>
-                    <Run>A &quot;Hey Bambi&quot;-style trigger that keeps the mic open is available later as its own setting - it is NOT enabled by this consent.</Run>
+                    <Run Text="{loc:Str mic_consent_use2_body}"/>
                 </TextBlock>
 
                 <TextBlock Theme="{StaticResource DlgBody}" Margin="0,28,0,0" Foreground="#9090A8" FontStyle="Italic"
@@ -156,40 +156,40 @@
                     <StackPanel>
                         <TextBlock Theme="{StaticResource DlgPromise}">
                             <Run FontWeight="Bold" Foreground="{StaticResource PinkBrush}">• </Run>
-                            <Run>Audio is </Run>
-                            <Run FontWeight="Bold">never transmitted</Run>
-                            <Run> - not to our server, not to Patreon, not to any third party.</Run>
+                            <Run Text="{loc:Str mic_consent_p1_a}"/>
+                            <Run FontWeight="Bold" Text="{loc:Str mic_consent_p1_b}"/>
+                            <Run Text="{loc:Str consent_p_not_to}"/>
                         </TextBlock>
                         <TextBlock Theme="{StaticResource DlgPromise}">
                             <Run FontWeight="Bold" Foreground="{StaticResource PinkBrush}">• </Run>
-                            <Run>Audio is processed in memory and </Run>
-                            <Run FontWeight="Bold">immediately discarded. </Run>
-                            <Run>No recording, no clip, no file is ever written to disk.</Run>
+                            <Run Text="{loc:Str mic_consent_p2_a}"/>
+                            <Run FontWeight="Bold" Text="{loc:Str mic_consent_p2_b}"/>
+                            <Run Text="{loc:Str mic_consent_p2_c}"/>
                         </TextBlock>
                         <TextBlock Theme="{StaticResource DlgPromise}">
                             <Run FontWeight="Bold" Foreground="{StaticResource PinkBrush}">• </Run>
-                            <Run>Only a </Run>
-                            <Run FontWeight="Bold">match score </Run>
-                            <Run>(did you say the phrase, and how loud) is used - never the raw audio.</Run>
+                            <Run Text="{loc:Str mic_consent_p3_a}"/>
+                            <Run FontWeight="Bold" Text="{loc:Str mic_consent_p3_b}"/>
+                            <Run Text="{loc:Str mic_consent_p3_c}"/>
                         </TextBlock>
                         <TextBlock Theme="{StaticResource DlgPromise}">
                             <Run FontWeight="Bold" Foreground="{StaticResource PinkBrush}">• </Run>
-                            <Run>Recognition runs </Run>
-                            <Run FontWeight="Bold">offline </Run>
-                            <Run>with a model bundled in the app. </Run>
-                            <Run FontWeight="Bold">No internet connection is used or required.</Run>
+                            <Run Text="{loc:Str mic_consent_p4_a}"/>
+                            <Run FontWeight="Bold" Text="{loc:Str consent_p_offline}"/>
+                            <Run Text="{loc:Str mic_consent_p4_c}"/>
+                            <Run FontWeight="Bold" Text="{loc:Str consent_p_no_internet}"/>
                         </TextBlock>
                         <TextBlock Theme="{StaticResource DlgPromise}">
                             <Run FontWeight="Bold" Foreground="{StaticResource PinkBrush}">• </Run>
-                            <Run>By default the mic opens </Run>
-                            <Run FontWeight="Bold">only during a prompt</Run>
-                            <Run>, for a few seconds - not continuously.</Run>
+                            <Run Text="{loc:Str mic_consent_p5_a}"/>
+                            <Run FontWeight="Bold" Text="{loc:Str mic_consent_p5_b}"/>
+                            <Run Text="{loc:Str mic_consent_p5_c}"/>
                         </TextBlock>
                         <TextBlock Theme="{StaticResource DlgPromise}">
                             <Run FontWeight="Bold" Foreground="{StaticResource PinkBrush}">• </Run>
-                            <Run>You can disable this </Run>
-                            <Run FontWeight="Bold">instantly </Run>
-                            <Run>with the panic key, the in-app toggle, or by closing the app.</Run>
+                            <Run Text="{loc:Str consent_p_disable_a}"/>
+                            <Run FontWeight="Bold" Text="{loc:Str consent_p_disable_b}"/>
+                            <Run Text="{loc:Str consent_p_disable_c}"/>
                         </TextBlock>
                     </StackPanel>
                 </Border>

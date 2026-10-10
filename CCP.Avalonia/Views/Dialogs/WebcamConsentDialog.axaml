@@ -131,15 +131,15 @@
                            Text="{loc:Str webcam_consent_what_you_get}"/>
 
                 <TextBlock Theme="{StaticResource DlgBody}" Margin="14,8,0,0">
-                    <Run FontWeight="Bold">• Webcam Triggers</Run>
+                    <Run FontWeight="Bold" Text="{loc:Str webcam_consent_get1_title}"/>
                     <LineBreak/>
-                    <Run>Blink, look at a spot for a while, or open your mouth - each can drive a flash, subliminal, or other effect.</Run>
+                    <Run Text="{loc:Str webcam_consent_get1_body}"/>
                 </TextBlock>
 
                 <TextBlock Theme="{StaticResource DlgBody}" Margin="14,12,0,0">
-                    <Run FontWeight="Bold">• Focus Training</Run>
+                    <Run FontWeight="Bold" Text="{loc:Str webcam_consent_get2_title}"/>
                     <LineBreak/>
-                    <Run>A split-screen video game. Look at the "correct" side, get rewarded with XP and reinforcement.</Run>
+                    <Run Text="{loc:Str webcam_consent_get2_body}"/>
                 </TextBlock>
 
                 <TextBlock Theme="{StaticResource DlgBody}" Margin="0,28,0,0" Foreground="#9090A8" FontStyle="Italic"
@@ -157,45 +157,45 @@
                     <StackPanel>
                         <TextBlock Theme="{StaticResource DlgPromise}">
                             <Run FontWeight="Bold" Foreground="{StaticResource PinkBrush}">• </Run>
-                            <Run>Frames are </Run>
-                            <Run FontWeight="Bold">never transmitted</Run>
-                            <Run> - not to our server, not to Patreon, not to any third party.</Run>
+                            <Run Text="{loc:Str webcam_consent_p1_a}"/>
+                            <Run FontWeight="Bold" Text="{loc:Str webcam_consent_p1_b}"/>
+                            <Run Text="{loc:Str consent_p_not_to}"/>
                         </TextBlock>
                         <TextBlock Theme="{StaticResource DlgPromise}">
                             <Run FontWeight="Bold" Foreground="{StaticResource PinkBrush}">• </Run>
-                            <Run>Frames are processed in memory and </Run>
-                            <Run FontWeight="Bold">immediately discarded. </Run>
-                            <Run>No video, no images, no snapshots are ever written to disk.</Run>
+                            <Run Text="{loc:Str webcam_consent_p2_a}"/>
+                            <Run FontWeight="Bold" Text="{loc:Str webcam_consent_p2_b}"/>
+                            <Run Text="{loc:Str webcam_consent_p2_c}"/>
                         </TextBlock>
                         <TextBlock Theme="{StaticResource DlgPromise}">
                             <Run FontWeight="Bold" Foreground="{StaticResource PinkBrush}">• </Run>
-                            <Run>Only </Run>
-                            <Run FontWeight="Bold">numbers </Run>
-                            <Run>(eye-open ratio, gaze coordinates, mouth-open ratio) flow between components - never pictures.</Run>
+                            <Run Text="{loc:Str webcam_consent_p3_a}"/>
+                            <Run FontWeight="Bold" Text="{loc:Str webcam_consent_p3_b}"/>
+                            <Run Text="{loc:Str webcam_consent_p3_c}"/>
                         </TextBlock>
                         <TextBlock Theme="{StaticResource DlgPromise}">
                             <Run FontWeight="Bold" Foreground="{StaticResource PinkBrush}">• </Run>
-                            <Run>All AI tracking runs </Run>
-                            <Run FontWeight="Bold">offline </Run>
-                            <Run>with models bundled in the app. </Run>
-                            <Run FontWeight="Bold">No internet connection is used or required.</Run>
+                            <Run Text="{loc:Str webcam_consent_p4_a}"/>
+                            <Run FontWeight="Bold" Text="{loc:Str consent_p_offline}"/>
+                            <Run Text="{loc:Str webcam_consent_p4_c}"/>
+                            <Run FontWeight="Bold" Text="{loc:Str consent_p_no_internet}"/>
                         </TextBlock>
                         <TextBlock Theme="{StaticResource DlgPromise}">
                             <Run FontWeight="Bold" Foreground="{StaticResource PinkBrush}">• </Run>
-                            <Run FontWeight="Bold">Audio is never captured. </Run>
-                            <Run>The webcam microphone is not accessed.</Run>
+                            <Run FontWeight="Bold" Text="{loc:Str webcam_consent_p5_a}"/>
+                            <Run Text="{loc:Str webcam_consent_p5_b}"/>
                         </TextBlock>
                         <TextBlock Theme="{StaticResource DlgPromise}">
                             <Run FontWeight="Bold" Foreground="{StaticResource PinkBrush}">• </Run>
-                            <Run>The webcam light is </Run>
-                            <Run FontWeight="Bold">on whenever this feature is active</Run>
-                            <Run>, controlled by Windows itself - we cannot hide it.</Run>
+                            <Run Text="{loc:Str webcam_consent_p6_a}"/>
+                            <Run FontWeight="Bold" Text="{loc:Str webcam_consent_p6_b}"/>
+                            <Run Text="{loc:Str webcam_consent_p6_c}"/>
                         </TextBlock>
                         <TextBlock Theme="{StaticResource DlgPromise}">
                             <Run FontWeight="Bold" Foreground="{StaticResource PinkBrush}">• </Run>
-                            <Run>You can disable this </Run>
-                            <Run FontWeight="Bold">instantly </Run>
-                            <Run>with the panic key, the in-app toggle, or by closing the app.</Run>
+                            <Run Text="{loc:Str consent_p_disable_a}"/>
+                            <Run FontWeight="Bold" Text="{loc:Str consent_p_disable_b}"/>
+                            <Run Text="{loc:Str consent_p_disable_c}"/>
                         </TextBlock>
                     </StackPanel>
                 </Border>
