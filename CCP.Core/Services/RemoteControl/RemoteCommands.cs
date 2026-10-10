@@ -326,7 +326,8 @@ namespace ConditioningControlPanel.Services
                     CoreMindWipe.Start(s.MindWipeFrequency, s.MindWipeVolume / 100.0);
                     return null;
                 case "stop_mind_wipe": CoreMindWipe.Stop(); return null;
-                case "enable_strict_lock": s.StrictLockEnabled = true; CoreSettings.Save(); return null;
+                // No enable_strict_lock case, on purpose (owner, 2026-10-10): RemoteCommandGate refuses it for
+                // every controller on every tier, and if it ever got here it falls to the default refusal.
                 case "disable_strict_lock": s.StrictLockEnabled = false; CoreSettings.Save(); return null;
                 case "enable_panic": s.PanicKeyEnabled = true; CoreSettings.Save(); SyncPanicUi(); return null;
                 case "trigger_panic": StopEffects(force: true); return null;

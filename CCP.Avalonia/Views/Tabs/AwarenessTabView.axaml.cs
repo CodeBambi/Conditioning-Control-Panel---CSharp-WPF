@@ -131,6 +131,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             // Tabs are shown and hidden rather than rebuilt, so re-read on every show: the master
             // switch is [JsonIgnore] session state and the app list can be edited elsewhere.
             AttachedToVisualTree += (_, _) => SyncAwarenessTabUi();
+            // Owner, 2026-10-10: a panic press switches keyword triggers off. While this tab is in the tree
+            // its switches follow at once (off the tree, the attach above repaints them).
+            Action onPanicOff = OnKeywordTriggersSwitchedOffByPanic;
+            AttachedToVisualTree += (_, _) => Views.Windows.PanicSurfaces.KeywordTriggersSwitchedOff += onPanicOff;
+            DetachedFromVisualTree += (_, _) => Views.Windows.PanicSurfaces.KeywordTriggersSwitchedOff -= onPanicOff;
             PropertyChanged += (_, e) =>
             {
                 if (e.Property == IsVisibleProperty && IsVisible) SyncAwarenessTabUi();
@@ -206,9 +211,28 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             }
         }
 
+        /// <summary>A panic press switched keyword triggers off (PanicSurfaces.SwitchOffKeywordTriggers):
+        /// repaint the switches from the settings, never write.</summary>
+        private void OnKeywordTriggersSwitchedOffByPanic()
+        {
+            SyncAwarenessTabUi();
+            KeywordPanel?.SyncFromSettings();
+        }
+
+        /// <summary>"Switched off by a panic press." Shown while a switch the panic turned off is still
+        /// off: the master (this run) or the saved screen read. Turning that switch back on clears it.</summary>
+        internal void RefreshPanicNotice()
+        {
+            var s = CoreSettings.Current;
+            var master = Views.Windows.PanicSurfaces.KeywordMasterOffByPanic && !s.KeywordTriggersEnabled;
+            var screen = s.KeywordTriggersOffByPanic && !s.ScreenOcrEnabled;
+            TxtAwarenessPanicNotice.IsVisible = master || screen;
+        }
+
         /// <summary>The dot and the Live/Off label beside the master switch.</summary>
         private void UpdateStatusIndicator(bool on)
         {
+            RefreshPanicNotice();
             var pink = this.FindResource("PinkBrush") as IBrush;
             AwarenessStatusDot.Fill = on ? pink ?? Brushes.HotPink : OffDot;
             TxtAwarenessStatus.Text = on ? "Live" : "Off";
@@ -243,6 +267,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 }
 
                 CoreSettings.Current.KeywordTriggersEnabled = on;
+                if (on) Views.Windows.PanicSurfaces.KeywordMasterOffByPanic = false;   // the user turned it back on
 
                 // WPF :416-427: the master starts and stops the sources. Typed keys ride the panic
                 // key's hook on Windows (it reads this flag on every key); the screen reader's timer
@@ -291,7 +316,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                     ConditioningControlPanel.Localization.Loc.Get("msg_screen_ocr_patreon_only"));
                 return;
             }
+            // The user turned the screen read back on after a panic switched it off: the notice has done its job.
+            if (!_isLoading && ChkAwarenessOcr.IsChecked == true) CoreSettings.Current.KeywordTriggersOffByPanic = false;
             WriteFlag(v => CoreSettings.Current.ScreenOcrEnabled = v, ChkAwarenessOcr, "ScreenOcrEnabled");
+            if (!_isLoading) RefreshPanicNotice();
             // WPF :462-468: start when on (and the master is on), stop when off.
             if (!_isLoading) Platform.ScreenOcrService.Sync();
             if (!_isLoading) KeywordPanel?.SyncFromSettings();   // WPF :475 SyncKeywordRescuePanelUi

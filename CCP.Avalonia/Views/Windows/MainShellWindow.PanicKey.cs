@@ -87,6 +87,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 && SettingsPaletteWindow.TryConsumeEscape();
             var rung = PanicPolicy.Decide(lockCardOpen, paletteClaimed, PanicPolicy.OverrideEnabled(s));
             Serilog.Log.Information("Panic key pressed ({Rung})", rung);
+            // Owner, 2026-10-10: every accepted press switches keyword triggers off until the user turns them
+            // back on, the rungs that return early included (lock card, grace pause). An Escape the settings
+            // palette claimed is not a panic (PanicPolicy: no stop pass), so it changes nothing.
+            if (rung != PanicPolicy.Rung.DismissSettingsPalette) PanicSurfaces.SwitchOffKeywordTriggers();
             if (rung == PanicPolicy.Rung.DismissLockCard) { StopLockCards(); StopCameraForPanic(); }
             if (!PanicPolicy.StopsSurfaces(rung)) return;
             // WPF MainWindow.xaml.cs:1709: close the game surface that owns the screen, then the normal

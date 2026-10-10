@@ -11,7 +11,8 @@ using Xunit;
 namespace CCP.Avalonia.Tests;
 
 /// <summary>HC1: every panic route arms Circe's ten-minute Chaster safety hold (WPF MainWindow.xaml.cs:1589).
-/// HC2: the tray's Stop everything is never more permissive than the panic key (hard rule 6).</summary>
+/// HC2: the tray's Stop everything is never more permissive than the panic key (hard rule 6).
+/// Owner, 2026-10-10: the spoken safe word answers to the same rule.</summary>
 [Collection(RunsAloneCollection.Name)]
 public sealed class PanicSafetyHoldTests
 {
@@ -78,6 +79,45 @@ public sealed class PanicSafetyHoldTests
         MainShellWindow.StopEverything();
         Assert.Empty(stopped);
         Assert.Equal(0, armed());   // a refused stop is not a way out, so it arms nothing
+    });
+
+    [Theory]
+    [InlineData(false, false)]   // panic key switched off
+    [InlineData(true, true)]     // Strict Lock
+    [InlineData(false, true)]
+    public void TheSafeWordIsRefusedWheneverThePanicKeyWouldBe(bool panicKeyOn, bool strict) => WithShell((shell, armed, stopped) =>
+    {
+        var s = CoreSettings.Current;
+        (s.PanicKeyEnabled, s.StrictLockEnabled) = (panicKeyOn, strict);
+        Assert.NotEqual(BlinkStopGate.Block.None, MainShellWindow.VoiceStopBlock());
+        Assert.Equal(MainShellWindow.TrayStopBlock(), MainShellWindow.VoiceStopBlock());   // one rule, not a copy
+        shell.VoicePanic();
+        Assert.Empty(stopped);
+        Assert.Equal(0, armed());   // refused: nothing stopped, no Chaster safety hold
+    });
+
+    [Fact]
+    public void TheSafeWordIsRefusedUnderLockdown() => WithShell((shell, armed, stopped) =>
+    {
+        using var ld = ConditioningControlPanel.Services.LockdownService.Current = new ConditioningControlPanel.Services.LockdownService();
+        try
+        {
+            ld.Activate(TimeSpan.FromMinutes(30));
+            Assert.Equal(BlinkStopGate.Block.Lockdown, MainShellWindow.VoiceStopBlock());
+            shell.VoicePanic();
+            Assert.Empty(stopped);
+            Assert.Equal(0, armed());
+        }
+        finally { ConditioningControlPanel.Services.LockdownService.Current = null; }
+    });
+
+    [Fact]
+    public void TheSafeWordRunsWhenThePanicKeyWould() => WithShell((shell, armed, stopped) =>
+    {
+        Assert.Equal(BlinkStopGate.Block.None, MainShellWindow.VoiceStopBlock());
+        shell.VoicePanic();
+        Assert.Single(stopped);
+        Assert.Equal(1, armed());
     });
 
     [Fact]

@@ -3484,6 +3484,7 @@
   "awareness_tour_tip": "Recorre el motor de Awareness: fuentes, tiempos de espera, presets y el editor.",
   "awareness_master_title": "Motor de Awareness - Interruptor principal",
   "awareness_master_desc": "Enciende o apaga todo el sistema de Awareness. Encendido: las fuentes activas (OCR + teclado) envían palabras al motor de disparadores y las palabras clave que coinciden lanzan sus acciones en tiempo real. Apagado: nada detecta nada. Los presets instalados siguen en disco, pero no hacen nada.",
+  "awareness_off_by_panic": "Apagado por una pulsación de pánico.",
   "awareness_packs_hint": "Packs de un clic. Haz clic en una tarjeta para ver o instalar.",
   "awareness_word_cooldown_desc": "Independiente de la \"espera entre efectos\" de arriba: otra palabra aún puede dispararse en esta ventana. 15 s por defecto. Hasta una hora.",
   "awareness_ocr_desc": "Escanea tu pantalla cada pocos segundos con reconocimiento óptico de caracteres y envía las palabras detectadas al motor de disparadores. Así el companion nota el texto en otras apps: Discord, navegadores, visores de imágenes, interfaces de juegos, todo lo visible.",

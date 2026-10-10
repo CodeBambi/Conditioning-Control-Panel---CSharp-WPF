@@ -171,6 +171,13 @@
 
                     <StackPanel Grid.Column="0">
 
+                        <!-- Owner, 2026-10-10: a panic press switches keyword triggers off until the user
+                             turns them back on. This says why the switches read off (RefreshPanicNotice). -->
+                        <TextBlock x:Name="TxtAwarenessPanicNotice" IsVisible="False"
+                                   Text="{loc:Str awareness_off_by_panic}"
+                                   FontSize="11.5" FontStyle="Italic" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource TextMutedBrush}" Margin="4,0,0,8"/>
+
                         <!-- ==================== LIVE PULSE ====================
                              The heartbeat of the tab: amber wash + edge bar so it reads as the
                              one live surface on the page. Rows are built imperatively in

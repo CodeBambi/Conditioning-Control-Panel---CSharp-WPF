@@ -4254,6 +4254,7 @@
   "awareness_tour_tip": "了解感知引擎：来源、冷却、预设和编辑器。",
   "awareness_master_title": "感知引擎 - 总开关",
   "awareness_master_desc": "打开或关闭整个感知系统。开：已启用的信号来源 (OCR + 键盘) 把词语送入触发引擎，匹配的关键词实时执行动作。关：不检测任何内容。已安装的预设留在磁盘上，但不起作用。",
+  "awareness_off_by_panic": "已被紧急键关闭。",
   "awareness_packs_hint": "一键预设包。点击卡片预览或安装。",
   "awareness_word_cooldown_desc": "与上面的“效果间冷却”无关：在此时间内其他词语仍可触发。默认 15 秒。最长一小时。",
   "awareness_ocr_desc": "每隔几秒用文字识别扫描屏幕，并把识别到的词语送入触发引擎。陪伴角色就是这样注意到其他应用里的文字：Discord、浏览器、图片查看器、游戏界面，一切可见内容。",

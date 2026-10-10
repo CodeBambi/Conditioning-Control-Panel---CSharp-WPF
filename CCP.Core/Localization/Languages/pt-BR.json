@@ -3484,6 +3484,7 @@
   "awareness_tour_tip": "Um passeio pelo motor Awareness: fontes, intervalos, presets e o editor.",
   "awareness_master_title": "Motor Awareness - Chave geral",
   "awareness_master_desc": "Liga ou desliga todo o sistema Awareness. Ligado: as fontes ativas (OCR + teclado) enviam palavras ao motor de gatilhos e as palavras-chave encontradas disparam suas ações em tempo real. Desligado: nada detecta nada. Os presets instalados ficam no disco, mas não fazem nada.",
+  "awareness_off_by_panic": "Desligado por um toque na tecla de pânico.",
   "awareness_packs_hint": "Pacotes em um clique. Clique em um cartão para ver ou instalar.",
   "awareness_word_cooldown_desc": "Independente do \"intervalo entre efeitos\" acima: outra palavra ainda pode disparar nesta janela. Padrão de 15 s. Até uma hora.",
   "awareness_ocr_desc": "Lê sua tela a cada poucos segundos com reconhecimento óptico de caracteres e envia as palavras detectadas ao motor de gatilhos. É assim que o companion nota texto em outros apps: Discord, navegadores, visualizadores de imagens, interfaces de jogos, tudo o que estiver visível.",

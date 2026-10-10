@@ -4545,6 +4545,7 @@
   "awareness_tour_tip": "Un giro nel motore Awareness: sorgenti, attese, preset e l'editor.",
   "awareness_master_title": "Motore Awareness - Interruttore generale",
   "awareness_master_desc": "Accende o spegne tutto il sistema Awareness. Acceso: le sorgenti attive (OCR + tastiera) passano le parole al motore dei trigger e le parole chiave trovate lanciano le loro azioni in tempo reale. Spento: niente rileva niente. I preset installati restano su disco, ma non fanno nulla.",
+  "awareness_off_by_panic": "Spento dal tasto panico.",
   "awareness_packs_hint": "Pacchetti in un clic. Clicca una scheda per l'anteprima o l'installazione.",
   "awareness_word_cooldown_desc": "Indipendente dall'\"attesa tra effetti\" qui sopra: un'altra parola può comunque scattare in questa finestra. 15 s di base. Fino a un'ora.",
   "awareness_ocr_desc": "Scansiona lo schermo ogni pochi secondi con il riconoscimento ottico dei caratteri e passa le parole trovate al motore dei trigger. Così il companion nota il testo nelle altre app: Discord, browser, visualizzatori di immagini, interfacce di gioco, tutto ciò che è visibile.",

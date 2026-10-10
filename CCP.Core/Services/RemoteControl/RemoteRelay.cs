@@ -55,7 +55,7 @@ namespace ConditioningControlPanel.Services
         private DateTime _lastStatusPush = DateTime.MinValue, _statusBackoffUntil = DateTime.MinValue;
         private string _lastStatus = "ok";
         private string? _lastReason;
-        private bool _remoteSetStrictLock, _pollBackedOff;
+        private bool _pollBackedOff;
         private DateTime _lastControllerCommand = DateTime.MinValue;
         public const double HotPollSeconds = 1.0, HotWindowSeconds = 60.0, ConnectedHeartbeatSeconds = 5.0;   // WPF Screen.cs (d39969827)
 
@@ -236,7 +236,7 @@ namespace ConditioningControlPanel.Services
             _loop = null;
             (IsActive, SessionCode, ConnectPin, Tier, ControllerIdle, _idleSince, _autoDisconnected) = (false, null, null, null, false, null, false);
             LastEndedUtc = DateTime.UtcNow;
-            (_remoteSetStrictLock, _pollBackedOff, _lastControllerCommand) = (false, false, DateTime.MinValue);
+            (_pollBackedOff, _lastControllerCommand) = (false, DateTime.MinValue);
             (_lastOptInTags, _lastOptInStatus) = (null, null);
             // StopAsync and the poll loop land here off the UI thread, and the stops close windows: run
             // them on the UI like ControllerLeft, posted if a stalled UI cancels the Invoke.
@@ -351,8 +351,9 @@ namespace ConditioningControlPanel.Services
 
         // WPF HandleControllerDisconnectCleanup: default leaves effects running; the opt-in stops them.
         // A remote haptic never outlives its controller, and what could trap the subject is handed back
-        // (WPF 71cfc4185 ReleaseRemoteSafetyState, ccp-bugs #1340): panic key on, the controller's own
-        // strict lock off; a strict lock the subject set stays.
+        // (WPF 71cfc4185 ReleaseRemoteSafetyState, ccp-bugs #1340): panic key on. Strict Lock is never a
+        // controller's to switch on (owner, 2026-10-10: RemoteCommandGate), so there is no "controller's
+        // strict lock" to hand back; a strict lock the subject set stays.
         // Runs through the same UI dispatch as commands (and so PanicKeyUiSync, which Avalonia leaves unset,
         // is on the UI thread), after bumping the leave generation that refuses anything still in flight.
         private void ControllerLeft()
@@ -371,13 +372,12 @@ namespace ConditioningControlPanel.Services
             try { RemoteCommands.ControllerLeft(); } catch (Exception ex) { Log.Warning(ex, "[RemoteControl] overlay release failed"); }
             var s = CoreSettings.Current;
             var changed = false;
-            if (_remoteSetStrictLock) { _remoteSetStrictLock = false; if (s.StrictLockEnabled) { s.StrictLockEnabled = false; changed = true; } }
             if (!s.PanicKeyEnabled) { s.PanicKeyEnabled = true; changed = true; }
             if (changed)
             {
                 CoreSettings.Save();
                 try { LockdownService.PanicKeyUiSync?.Invoke(); } catch { }
-                Log.Information("[RemoteControl] Controller left: panic key back on, controller's strict lock released");
+                Log.Information("[RemoteControl] Controller left: panic key back on");
             }
             if (CoreSettings.Current.StopEffectsOnRemoteDisconnect)
                 try { _stopEffects(false); } catch (Exception ex) { Log.Warning(ex, "[RemoteControl] stop effects failed"); }
@@ -403,6 +403,12 @@ namespace ConditioningControlPanel.Services
                 Log.Information("[RemoteControl] start_session asked for strict lock; dropped, the account is leashed");
             }
             reason ??= RemoteCommandGate.Screen(action, LockdownService.Current?.IsActive == true);
+            // Owner, 2026-10-10: a session start never carries strict lock, leashed or not, on any tier.
+            if (reason == null && RemoteCommandGate.DropsStrictLockFlag(action, parameters))
+            {
+                parameters = RemoteCommandGate.WithoutStrictLock(parameters);
+                Log.Information("[RemoteControl] {Action} named strict_lock; dropped, a controller never sets it", action);
+            }
             if (reason == null)
             {
                 Log.Information("[RemoteControl] Executing: {Action}", action);
@@ -410,14 +416,7 @@ namespace ConditioningControlPanel.Services
                 {
                     if (gen.Leave != Volatile.Read(ref _leaveGeneration)) return "the controller left";
                     if (gen.Panic != RemoteCommands.PanicGeneration) return "stopped by panic";
-                    var strictBefore = CoreSettings.Current.StrictLockEnabled;
-                    try
-                    {
-                        var refusal = _execute(action, parameters);
-                        // Set here, in the dispatched call, so even a late-landing switch-on is the controller's.
-                        if (refusal == null && action == "enable_strict_lock" && !strictBefore) _remoteSetStrictLock = true;
-                        return refusal;
-                    }
+                    try { return _execute(action, parameters); }
                     catch (Exception ex) { Log.Error(ex, "[RemoteControl] Error executing command: {Action}", action); return "error"; }
                 }, TimeSpan.FromSeconds(10));
                 reason = done ? refused : "timed out";
@@ -571,16 +570,40 @@ namespace ConditioningControlPanel.Services
 
     /// <summary>
     /// Escape integrity (docs/avalonia-decisions.md, 2026-09-30): a controller may never remove the
-    /// subject's last means of escape. disable_panic is always refused (WPF saved it); under Lockdown
-    /// enable_strict_lock is refused. Verbs that only reduce restraint run as on WPF and never touch the
-    /// Lockdown timer; Lockdown restores the pre-lockdown settings when it ends. Strict lock stays the
-    /// same setting, so every strict surface keeps its own fall-open.
+    /// subject's last means of escape. disable_panic is always refused (WPF saved it).
+    ///
+    /// <para>Owner, 2026-10-10: Strict Lock from a remote controller is refused on the client, for every
+    /// controller, on every tier, always (Lockdown or not, leashed or not). enable_strict_lock has no
+    /// execute case at all (RemoteCommands.Execute), and a start_session's strict_lock flag is dropped
+    /// before the head sees it. This is what the waiver promises ("A controller cannot ... turn Strict
+    /// Lock on"). Verbs that only reduce restraint run as on WPF and never touch the Lockdown timer;
+    /// Lockdown restores the pre-lockdown settings when it ends.</para>
     /// </summary>
     public static class RemoteCommandGate
     {
+        public const string PanicStays = "the panic key stays on";   // WPF 719ed9ca5 wording
+        public const string StrictLockIsLocal = "strict lock is never a remote switch";
+
+        /// <summary>Why this verb is refused before it can run; null lets it through. The answer never
+        /// depends on the tier, the controller or <paramref name="lockdownActive"/> (kept so a Lockdown
+        /// rule has its seat; no verb reads it today).</summary>
         public static string? Screen(string action, bool lockdownActive) =>
-            action == "disable_panic" ? "the panic key stays on"   // WPF 719ed9ca5 wording
-            : lockdownActive && action == "enable_strict_lock" ? "not during Lockdown"
+            action == "disable_panic" ? PanicStays
+            : action == "enable_strict_lock" ? StrictLockIsLocal
             : null;
+
+        /// <summary>True when a command (start_session) names strict_lock at all, whatever the value: the key is dropped
+        /// for everyone, so no spelling of "true" can reach a head.</summary>
+        public static bool DropsStrictLockFlag(string action, JObject? parameters) =>
+            parameters?.ContainsKey("strict_lock") == true;   // start_session is the only sender today; any verb loses it
+
+        /// <summary>A copy of the parameters with no strict_lock key at all (the sender's object is untouched).</summary>
+        public static JObject? WithoutStrictLock(JObject? parameters)
+        {
+            if (parameters == null) return null;
+            var copy = (JObject)parameters.DeepClone();
+            copy.Remove("strict_lock");
+            return copy;
+        }
     }
 }

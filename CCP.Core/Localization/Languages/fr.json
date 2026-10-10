@@ -3484,6 +3484,7 @@
   "awareness_tour_tip": "Parcourt le moteur Awareness : sources, délais, préréglages et l'éditeur.",
   "awareness_master_title": "Moteur Awareness - Interrupteur principal",
   "awareness_master_desc": "Active ou coupe tout le système Awareness. Activé : les sources actives (OCR + clavier) envoient des mots au moteur de déclencheurs et les mots-clés reconnus lancent leurs actions en temps réel. Coupé : rien ne détecte rien. Les préréglages installés restent sur le disque, sans effet.",
+  "awareness_off_by_panic": "Coupé par un appui sur panique.",
   "awareness_packs_hint": "Packs en un clic. Clique sur une carte pour l'aperçu ou l'installation.",
   "awareness_word_cooldown_desc": "Indépendant du \"délai entre effets\" ci-dessus : un autre mot peut encore se déclencher pendant cette fenêtre. 15 s par défaut. Jusqu'à une heure.",
   "awareness_ocr_desc": "Analyse ton écran toutes les quelques secondes par reconnaissance de caractères et envoie les mots détectés au moteur de déclencheurs. C'est ainsi que le compagnon remarque le texte dans d'autres applis : Discord, navigateurs, visionneuses d'images, interfaces de jeu, tout ce qui est visible.",
