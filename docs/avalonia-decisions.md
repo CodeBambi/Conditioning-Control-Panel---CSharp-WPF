@@ -818,3 +818,33 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
 - Tests: `Tests/CCP.Core.Tests/ProgramRunLifecycleTests.cs`, `Tests/CCP.Avalonia.Tests/ProgramsRunLifecycleTests.cs`,
   `ProgramServiceStartupTests`, `LockdownVeilTests`, `ProgramsRunViewTests`, `PanicSurfacesTests`. Fail-proofs:
   ~/ccp-port/evidence/review-programs-run-3a/fail-proofs.log.
+
+## 2026-10-09: the media-source consent gates network media, awaited (avalonia-port/sync6-media-picker)
+- WPF parity (MainWindow.Assets.cs:2350-2400): switching the media source to Reddit or Both asks once, and
+  `MediaSource` is written only after Yes. WPF's MessageBox is synchronous; this head's MessageDialog is async, so
+  the picker puts the chips back on the old source BEFORE awaiting, ignores further source clicks while the ask is
+  open, and on Cancel/close changes nothing. Someone who already accepted the For You card is not asked again
+  (`HasRemoteMediaConsent`), as on WPF. The second button is the dialog's localized Cancel: there is no "No" key.
+- Every change re-deals online channels (`FypOnlineCoordinator.ResetAllChannels`) and saves. WPF's pool
+  invalidation has no target here: no flash/video service on this head consumes online media yet (open gap in
+  parity rows shell-assets / views-tab-assets); intake is the only consumer.
+- Tests: `Tests/CCP.Avalonia.Tests/AssetsMediaPickerTests.cs` (consent faked, probe faked; no network).
+## 2026-10-10: roadmap.json atomic save and corrupt-file backup (avalonia-port/roadmap-atomic-save)
+- Source: oracle-deep, ~/ccp-port/evidence/oracle/programs-roadmap-seed.md (Q1 "Two existing protections"). Core-only, so
+  WPF gets it too.
+- Decision:
+  - `RoadmapService.Save()` writes `roadmap.json.tmp` then `File.Move(tmp, path, overwrite: true)`. Same serializer, same
+    options (`WriteIndented = true`), same UTF-8 without BOM: the bytes on disk are unchanged. No format change.
+  - `LoadProgress` copies an unreadable file to `roadmap.json.corrupt-<yyyyMMdd_HHmmss>` (local time, never overwrites an
+    existing backup) and logs a warning before falling back to defaults. Before this, the next StartStep/SubmitPhoto saved
+    the defaults over the user's whole roadmap.
+  - Internal ctor `RoadmapService(progressPath, diaryFolderPath)`; the public ctor chains to it, so tests use temp dirs.
+  - If the unreadable file cannot be backed up either (e.g. locked or no read permission), saving is off for the session,
+    so the defaults never replace the only copy. The temp file is written through a FileStream and `Flush(true)` before
+    the rename, so the rename cannot publish data that has not reached the disk yet.
+- Not covered: a file that parses as JSON `null` still yields defaults without a backup (not a parse failure, matches
+  before). A failed Move can leave a stale `roadmap.json.tmp`; the next save overwrites it. Backups are never pruned.
+  The flush-to-disk is asserted only by reading the code, not fail-proven (a power cut cannot be observed in a test).
+- Tests: `Tests/CCP.Core.Tests/RoadmapServiceAtomicSaveTests.cs` (4 tests; the unreadable-file test returns early (passes without asserting) on Windows
+  and when running as root). Fail-proofs (break, red, restore) are logged at
+  ~/ccp-port/evidence/review-roadmap-atomic-save/fail-proofs.log.
