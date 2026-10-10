@@ -56,7 +56,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                 () => TierGate.DemandLab(Loc.Get("launcher_game_dtrh_title"), "dtrh")),
             // WPF ArcademyHostService.cs:175 DemandLab.
             ["arcademy"] = new("arcademy", "launcher_game_arcademy_title", "arcademy/index.html",
-                () => TierGate.DemandLab(Loc.Get("launcher_game_arcademy_title"))),
+                () => TierGate.DemandLab(Loc.Get("launcher_game_arcademy_title")) && ArcademyLaunchAllowed()),
         };
 
         /// <summary>WPF LauncherCatalogue.NeedsAccount: a signed-out click is refused (the launcher
@@ -220,6 +220,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             lock (Open) all = Open.ToArray();
             foreach (var w in all)
             {
+                if (w.Spec.Id == "arcademy" && w.ArcademyPanicPress(DateTime.UtcNow)) continue;   // WPF ladder: press 1 freezes, press 2 closes
                 try { w.Close(); }
                 catch (Exception ex) { Log.Warning(ex, "[Game] panic close of {Id} failed", w.Spec.Id); }
             }

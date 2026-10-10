@@ -980,6 +980,17 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
         /// the WPF predicate rather than the old hard-coded false; with no mod layer up both are
         /// false and the detached layout stays detached, exactly as before.
         /// </summary>
+        private static bool MidnightGlassWanted()
+        {
+            try
+            {
+                if (CoreModArt.HasOverride("tube.png") || CoreModArt.HasOverride("tube2.png")) return false;
+                if (CoreSettings.Current?.TubeMidnightGlass != true) return false;
+                return ConditioningControlPanel.Services.Arcademy.ArcademyHostService.WalletOwnsSku(ConditioningControlPanel.Services.Arcademy.ArcademyEconomy.SkuTubeMidnight);
+            }
+            catch { return false; }   // a cosmetic never gets to break the tube
+        }
+
         private static bool ModOverridesAttachedTubeOnly()
             => CoreModArt.HasOverride("tube.png") && !CoreModArt.HasOverride("tube2.png");
 
@@ -1005,7 +1016,8 @@ namespace ConditioningControlPanel.Avalonia.Views.AvatarTube
             {
                 if (useAlternative && ModOverridesAttachedTubeOnly()) useAlternative = false;
                 var name = useAlternative ? "tube2.png" : "tube.png";
-                var art = ModArt.TryLoad(name);
+                // WPF MidnightGlassWanted (Windowing.cs:2040): no mod tube, the player asked for it, the Prize Counter sold it. A miss falls back to standard.
+                var art = (MidnightGlassWanted() ? ModArt.TryLoad(useAlternative ? "tube2_midnight.png" : "tube_midnight.png") : null) ?? ModArt.TryLoad(name);
                 if (art != null) _imgTubeFrame.Source = art;
                 Log.Information("Tube style changed to: {Style}", name);
                 RefreshTubeArtOverhang();

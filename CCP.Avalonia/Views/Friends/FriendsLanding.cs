@@ -56,8 +56,8 @@ internal static class FriendsLanding
     // SEAM(g3): the Goon host lane sets GoonJoin to its launch door (WPF GoonGame.GoonHostService.Launch(true,
     // joinCode): the game opens straight on the join screen with the code, null = no code came with it) and
     // GoonIsActive to its IsActive probe. Until then a Goon invite's Join says "the Goon Game did not open".
-    internal static Action<string?>? GoonJoin { get; set; }
-    internal static Func<bool> GoonIsActive { get; set; } = () => false;
+    internal static Action<string?>? GoonJoin { get; set; } = code => global::ConditioningControlPanel.Avalonia.Views.Games.GameWindow.LaunchGoon(code);
+    internal static Func<bool> GoonIsActive { get; set; } = () => global::ConditioningControlPanel.Services.GoonGame.GoonHostService.IsActive;
 
     /// <summary>The Back Room door (WPF BackRoomHostService.Launch). Swappable for the suite.</summary>
     internal static Action OpenBackRoom { get; set; } = () =>
