@@ -98,6 +98,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             ["shelistening"] = "SheListeningTab", ["gradedintake"] = "GradedIntakeTab",
             ["appsettings"] = "AppSettingsTab",  ["spiral"] = "SpiralTab",
             ["exclusives"] = "ExclusivesTab", ["chaster"] = "ChasterTab",
+            ["friends"] = "FriendsTab",          ["leash"] = "LeashTab",
         };
 
         /// <summary>Keys that open a window or a service rather than a tab. ShowTab leaves the
@@ -126,7 +127,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             ("studio",      "studio",      new[] { "studio", "presets", "haptics" },                              "DoorPanelStudio"),
             ("companion",   "companion",   new[] { "companion", "bambitakeover", "shelistening", "awareness" },   "DoorPanelCompanion"),
             ("play",        "play",        new[] { "play", "lab", "deeper", "exclusives", "gradedintake", "lockdown", "blinktrainer", "remotecontrol", "availablesubjects" }, "DoorPanelPlay"),
-            ("you",         "discord",     new[] { "discord", "spiral", "quests", "achievements", "enhancements", "programs", "leaderboard" }, "DoorPanelYou"),
+            ("you",         "discord",     new[] { "discord", "spiral", "quests", "achievements", "enhancements", "programs", "leaderboard", "friends", "leash" }, "DoorPanelYou"),
             ("library",     "assets",      new[] { "assets" },                                                    "DoorPanelLibrary"),
             ("appsettings", "appsettings", new[] { "appsettings" },                                               null),
         };
@@ -219,6 +220,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
                     // WPF MainWindow.TabNavigation.cs:429: every show re-fetches the board (read-only).
                     case "leaderboard": _ = Named<Tabs.LeaderboardTabView>("LeaderboardTab")?.RefreshLeaderboardAsync(); break;
+                    // WPF MainWindow.SocialTabs.cs: subscribe and ask for a fresh list (the page folds itself on hide).
+                    case "friends": Named<Tabs.FriendsTabView>("FriendsTab")?.OnShown(); break;
 
                     // WPF MainWindow.Exclusives.cs RefreshExclusivesTab "on tab show": gates can move between visits.
                     case "exclusives": RefreshExclusivesTab(); break;
@@ -369,6 +372,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private void BtnQuests_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => ShowTab("quests");
         private void BtnPrograms_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => ShowTab("programs");
         private void BtnEnhancements_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => ShowTab("enhancements");
+        private void BtnNavFriends_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => ShowTab("friends");
+        private void BtnNavLeash_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => ShowTab("leash");
         private void BtnNavStudio_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => ShowTab("studio");
         private void BtnNavHaptics_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => ShowTab("haptics");
         private void BtnNavPlay_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e) => ShowTab("play");

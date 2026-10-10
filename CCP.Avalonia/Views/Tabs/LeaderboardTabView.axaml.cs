@@ -20,9 +20,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     /// <summary>
     /// PORTED from ConditioningControlPanel/Views/Tabs/LeaderboardTabView.xaml.cs.
     ///
-    /// What survived unchanged: the season countdown (it is pure wall-clock arithmetic and touches
-    /// no service), the Level-column relabel for the All-Time board, and the timer's start/stop
-    /// discipline so a hidden or unloaded tab cannot keep a dead visual tree alive.
+    /// What survived unchanged: the Level-column relabel for the All-Time board. The season
+    /// countdown is gone, as on WPF (feda9c907): the header names the board instead.
     ///
     /// What is restored: everything the toolbar does to rows already in hand.
     /// <see cref="RebuildLeaderboardView"/> is MainWindow.Leaderboard.cs's method of the same
@@ -31,7 +30,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     /// to it. None of that needed a service on WPF either: it is view logic over
     /// <c>_leaderboardRanked</c>, which here is the fetched board (<see cref="RefreshLeaderboardAsync"/>, read-only).
     ///
-    /// What is still stubbed: the Discord DM, the season recap and the row double-click. Each is named at its call site.
+    /// What is still stubbed: the Discord DM and the row double-click. Each is named at its call site.
     ///
     /// Dropped: LstLeaderboard_PreviewMouseWheel and its ScrollViewer/row-pitch measuring. Its
     /// whole reason was that WPF's VirtualizingPanel.ScrollUnit=Pixel - forced on so "Jump to me"
@@ -43,13 +42,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     /// </summary>
     public partial class LeaderboardTabView : UserControl
     {
-        /// <summary>
-        /// Ticks the season countdown in the header. One minute is plenty for a
-        /// "2d 14h" readout, and the timer is stopped whenever the tab is hidden or
-        /// unloaded so it can't keep a dead visual tree alive.
-        /// </summary>
-        private DispatcherTimer? _seasonTimer;
-
         private readonly TextBlock _txtSeason;
         private readonly TextBlock _txtSubtitle;
         private readonly TextBlock _hdrLevelSeasonal;
@@ -112,8 +104,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                 if (header.Tag is string key && SortKeys.Contains(key))
                     header.Click += (_, _) => { _sortKey = key; RebuildLeaderboardView(); };
 
-            this.FindControl<Button>("BtnLeaderboardMonthly")!.Click += (_, _) => SetLeaderboardMode(false);
-            this.FindControl<Button>("BtnLeaderboardAllTime")!.Click += (_, _) => SetLeaderboardMode(true);
+            this.FindControl<Button>("BtnLeaderboardMonthly")!.Click += (_, _) => _ = SetLeaderboardMode(false);
+            this.FindControl<Button>("BtnLeaderboardAllTime")!.Click += (_, _) => _ = SetLeaderboardMode(true);
             this.FindControl<Button>("BtnJumpToMe")!.Click += BtnJumpToMe_Click;
             // WPF LeaderboardTabView.xaml.cs:235 forwards to the window, which owns the re-view.
             this.FindControl<Button>("BtnViewSeasonRecap")!.Click += (s, e) =>
@@ -135,9 +127,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             ShowTrophyStats = true;
 
             Loaded += OnLeaderboardTabLoaded;
-            Unloaded += OnLeaderboardTabUnloaded;
             PropertyChanged += OnLeaderboardTabPropertyChanged;
 
+            RefreshSeasonHeader();
+            ApplyModeLabels();
             RebuildLeaderboardView();
         }
 
@@ -156,16 +149,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             set => SetValue(ShowTrophyStatsProperty, value);
         }
 
-        /// <summary>True while the All-Time board is showing (no season countdown).</summary>
-        internal bool IsAllTimeMode { get; private set; }
+        /// <summary>True while the All-Time board is showing. Seasons are retired (owner, 2026-09-24),
+        /// so a fresh panel opens on All-Time; Monthly stays one click away (WPF LeaderboardDefaultMode).</summary>
+        internal bool IsAllTimeMode { get; private set; } = true;
 
         /// <summary>
         /// Switch boards and re-fetch (the two boards are different server slices), resetting the sort to rank so the
         /// podium and the bands line up with the ranks (MainWindow.Leaderboard.cs:778 BtnLeaderboardMode_Click).
         /// </summary>
-        internal void SetLeaderboardMode(bool isAllTime)
+        internal Task SetLeaderboardMode(bool isAllTime)
         {
-            if (IsAllTimeMode == isAllTime) return;
+            if (IsAllTimeMode == isAllTime) return Task.CompletedTask;
             IsAllTimeMode = isAllTime;
             foreach (var row in _ranked) row.IsAllTimeView = isAllTime;
             _sortKey = "rank";
@@ -173,7 +167,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             RefreshSeasonHeader();
             ApplyModeLabels();
             RebuildLeaderboardView();
-            _ = RefreshLeaderboardAsync();
+            return RefreshLeaderboardAsync();
         }
 
         /// <summary>
@@ -230,115 +224,35 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         }
 
         // ------------------------------------------------------------------
-        // Season countdown
+        // Header title (seasons are retired, owner 2026-09-24, WPF feda9c907:
+        // no season name, no countdown, no recap button; the board says which board it is)
         // ------------------------------------------------------------------
 
         private void OnLeaderboardTabLoaded(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
         {
+            UpdateModeButtons();
             RefreshSeasonHeader();
             ApplyModeLabels();
-            if (IsVisible) StartSeasonTimer();
         }
-
-        private void OnLeaderboardTabUnloaded(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
-            => StopSeasonTimer();
 
         /// <summary>WPF's IsVisibleChanged; Avalonia reports it through the property-changed feed.</summary>
         private void OnLeaderboardTabPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
         {
-            if (e.Property != IsVisibleProperty) return;
-
-            if (IsVisible)
-            {
-                RefreshSeasonHeader();
-                StartSeasonTimer();
-            }
-            else
-            {
-                StopSeasonTimer();
-            }
+            if (e.Property == IsVisibleProperty && IsVisible) RefreshSeasonHeader();
         }
 
-        private void StartSeasonTimer()
-        {
-            if (_seasonTimer != null) { _seasonTimer.Start(); return; }
+        /// <summary>The two header lines for the board that is showing (WPF LeaderboardTabView.HeaderText).</summary>
+        internal static (string Title, string Sub) HeaderText(bool isAllTime) => isAllTime
+            ? (Loc.Get("lb_all_time_title"), Loc.Get("lb_all_time_sub"))
+            : (Loc.Get("social_lb_month_title"), Loc.Get("social_lb_month_sub"));
 
-            _seasonTimer = new DispatcherTimer(TimeSpan.FromMinutes(1), DispatcherPriority.Background,
-                                               (_, _) => RefreshSeasonHeader());
-            _seasonTimer.Start();
-        }
-
-        private void StopSeasonTimer()
-        {
-            if (_seasonTimer == null) return;
-            _seasonTimer.Stop();
-            _seasonTimer = null;
-        }
-
-        /// <summary>
-        /// THE DAY MONTHLY SEASONS STOPPED EXISTING: 2026-09-01 UTC. Copied from
-        /// Services/Descent/DescentMigration.cs (DescentEpochs.SeasonsEndUtc), which is still in
-        /// the WPF head. It is a date literal, not a service, and dropping the guard instead would
-        /// re-introduce exactly the bug it exists to stop - a countdown promising a season end that
-        /// can never arrive.
-        /// ponytail: local copy of DescentEpochs.SeasonsEndUtc -
-        /// ConditioningControlPanel/Services/Descent/DescentMigration.cs, still head-side and not
-        /// in Core in any form. Delete this literal when that type reaches Core.
-        /// </summary>
-        private static readonly DateTime SeasonsEndUtc = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc);
-
-        private static bool SeasonsHaveEnded => DateTime.UtcNow >= SeasonsEndUtc;
-
-        /// <summary>
-        /// Repaint the season name + countdown. Derived entirely locally: the board's season key
-        /// is DateTime.UtcNow.ToString("yyyy-MM"), so the season ends at the first instant of the
-        /// next UTC month. No server call.
-        /// </summary>
+        /// <summary>Repaints the header title for the active board. The name is kept for its
+        /// callers; there is no season left in it.</summary>
         internal void RefreshSeasonHeader()
         {
-            // The Descent branch below collapses the subtitle outright; restore it up front so a
-            // mode switch can never leave it collapsed against a line that does have text.
-            _txtSubtitle.IsVisible = true;
-
-            if (IsAllTimeMode)
-            {
-                _txtSeason.Text = Loc.Get("lb_all_time_title");
-                _txtSubtitle.Text = Loc.Get("lb_all_time_sub");
-                return;
-            }
-
-            // ponytail: WPF prefers App.QuestDefinitions.SeasonTitle and falls back to
-            // section_seasons when it is blank - that service is
-            // CCP.Core/Services/Progression/QuestDefinitionService.cs, in Core but not yet
-            // constructed on this head. The fallback is what shows here.
-            _txtSeason.Text = Loc.Get("section_seasons");
-
-            if (SeasonsHaveEnded)
-            {
-                _txtSubtitle.Text = string.Empty;
-                _txtSubtitle.IsVisible = false;
-                return;
-            }
-
-            var now = DateTime.UtcNow;
-            var seasonEnd = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc).AddMonths(1);
-            var left = seasonEnd - now;
-
-            if (left <= TimeSpan.Zero)
-            {
-                _txtSubtitle.Text = Loc.Get("lb_season_ended");
-                return;
-            }
-
-            string span;
-            if (left.TotalDays >= 1)
-                span = Loc.GetF("lb_time_dh", (int)left.TotalDays, left.Hours);
-            else if (left.TotalHours >= 1)
-                span = Loc.GetF("lb_time_hm", (int)left.TotalHours, left.Minutes);
-            else
-                span = Loc.GetF("lb_time_m", Math.Max(1, (int)left.TotalMinutes));
-
-            _txtSubtitle.Text = Loc.GetF("lb_season_ends_in", span);
+            var (title, sub) = HeaderText(IsAllTimeMode);
+            _txtSeason.Text = title;
+            _txtSubtitle.Text = sub;
         }
 
         // ------------------------------------------------------------------

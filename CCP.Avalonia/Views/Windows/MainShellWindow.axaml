@@ -1202,6 +1202,22 @@
                                         <TextBlock Text="{loc:Str tab_leaderboard}" VerticalAlignment="Center"/>
                                     </StackPanel>
                                 </Button>
+                                <!-- Social > Friends / Social > Leash (WPF ca2997d30): temporary home under You;
+                                     sync6-nav-rail moves them to the Social door. -->
+                                <Button x:Name="BtnNavFriends" Tag="Friends" Theme="{StaticResource NavEntryButton}"
+                                        Click="BtnNavFriends_Click" ToolTip.Tip="{loc:Str nav_tab_friends}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Tag="navrailstatic" Text="💞" FontSize="14" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                        <TextBlock Text="{loc:Str nav_tab_friends}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                                <Button x:Name="BtnNavLeash" Tag="Leash" Theme="{StaticResource NavEntryButton}"
+                                        Click="BtnNavLeash_Click" ToolTip.Tip="{loc:Str nav_tab_leash}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Tag="navrailstatic" Text="🔗" FontSize="14" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                        <TextBlock Text="{loc:Str nav_tab_leash}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
                             </StackPanel>
                         </Border>
 
@@ -2583,6 +2599,10 @@
 
                 <!-- Leaderboard Tab -->
                 <views:LeaderboardTabView x:Name="LeaderboardTab" Margin="10,5,10,10" IsVisible="False" />
+
+                <!-- Social > Friends and Social > Leash pages (WPF ca2997d30) -->
+                <views:FriendsTabView x:Name="FriendsTab" IsVisible="False" />
+                <views:LeashTabView x:Name="LeashTab" IsVisible="False" />
 
                 <!-- Assets & Packs Tab -->
                 <views:AssetsTabView x:Name="AssetsTab" Margin="10,5,10,10" IsVisible="False" />
