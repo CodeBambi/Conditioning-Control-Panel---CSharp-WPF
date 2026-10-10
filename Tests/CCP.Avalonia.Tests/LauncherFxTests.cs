@@ -114,7 +114,7 @@ public sealed class LauncherFxTests
         Assert.Equal(1.02, ((TransformGroup)tile.RenderTransform!).Children.OfType<ScaleTransform>().Single().ScaleX, 3);
 
         // Play hides at once: no beat is held without motion.
-        tile.GetVisualDescendants().OfType<Button>().First().RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        tile.GetVisualDescendants().OfType<Button>().First(b => !Equals(b.Tag, "tile-shortcut")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         Dispatcher.UIThread.RunJobs();
         Assert.False(launcher.IsVisible);
         Assert.True(shell.IsVisible);
@@ -153,7 +153,7 @@ public sealed class LauncherFxTests
         Assert.Contains("launcher-open", cues);
         Step(launcher, 0.4);                             // the fade-in lands
         var card = launcher.FindControl<Border>("PanelCard")!;
-        Tile(launcher).GetVisualDescendants().OfType<Button>().First().RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Tile(launcher).GetVisualDescendants().OfType<Button>().First(b => !Equals(b.Tag, "tile-shortcut")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         Assert.Contains("launcher-launch", cues);
         Assert.True(launcher.IsVisible);                 // held for the beat
 
@@ -293,7 +293,7 @@ public sealed class LauncherFxTests
     [Fact]
     public void Close_DropsAPendingExit() => Run(MotionLevel.Full, (shell, launcher, _) =>
     {
-        Tile(launcher).GetVisualDescendants().OfType<Button>().First().RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Tile(launcher).GetVisualDescendants().OfType<Button>().First(b => !Equals(b.Tag, "tile-shortcut")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         Assert.True(launcher.IsVisible);                 // held for the beat
         launcher.Close();
         Dispatcher.UIThread.RunJobs();

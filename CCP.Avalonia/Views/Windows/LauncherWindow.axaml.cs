@@ -128,6 +128,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             HookOpenTables();
             HookFx();
             PaintSoundButton();
+            HookLinks();
         }
 
         /// <summary>WPF OnShown; its FX half is FxOnShown (LauncherWindow.Fx.cs).</summary>
@@ -711,7 +712,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             else if (locked) plate.Children.Add(Pill("launcher_prime_pill", "🔒", Res("Tier2DiamondBorderBrush"),
                 new SolidColorBrush(Color.FromRgb(0x2A, 0x1C, 0x08)), 10));
             if (OpenTablesBadgeFor(card.Id, revealed && !needsAccount) is { } openBadge) plate.Children.Add(openBadge);   // LauncherWindow.OpenTables.cs
-            // ponytail: WPF's hover shortcut button needs LauncherShortcuts, which this head does not have yet.
+            if (revealed) plate.Children.Add(ShortcutButton(tile, card.Id));   // LauncherWindow.Links.cs
             if (card.IsNew && revealed) plate.Children.Add(Pill("exclusives_badge_new", null, Res("AccentGradientBrush"), Brushes.White,
                 needsAccount || locked ? 40 : 10));
             body.Children.Add(plate);
