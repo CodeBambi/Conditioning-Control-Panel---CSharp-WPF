@@ -36,8 +36,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
     /// WPF's vout heal, but on the same shared LibVLC (docs/avalonia-decisions.md). Ambient bubbles
     /// are paused by the Core scheduler.
     /// ponytail: missing against WPF - the off-thread UI-wedge watchdog and the LibVLC retire/quarantine
-    /// (a Stop that hangs in native code still hangs the UI thread), the gaze attention input and
-    /// no-activate z-order. The toy-button input is <see cref="ToyPressed"/>; the remote-media offer
+    /// (a Stop that hangs in native code still hangs the UI thread) and no-activate z-order. The gaze
+    /// attention input is <see cref="GazeTargets"/>, read by Platform/GazeFocusHead. The toy-button input is <see cref="ToyPressed"/>; the remote-media offer
     /// after the "no videos" dialog is <see cref="Platform.RemoteMediaOffer"/>.
     /// </summary>
     internal sealed class MandatoryVideoOverlay : IMandatoryVideoHost
@@ -624,11 +624,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                     e.Handled = true;
                     Hit(t);
                 };
+                t.Click = () => Hit(t);   // the gaze dwell's road in (GazeTargets)
                 batch.Add(t);
                 _targets.Add(t);
                 ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("attentionCheckShown");   // WPF VideoService.cs:5844: a HOLD, released when no target is left
             }
-            // Whichever route gets here (mouse, toy button) runs the same idempotent pipeline.
+            // Whichever route gets here (mouse, toy button, gaze dwell) runs the same idempotent pipeline.
             void Hit(Target t)
             {
                 if (caught) return;
@@ -696,6 +697,30 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             }
         }
 
+        /// <summary>WPF VideoService.GetGazeTargets + IAttentionTarget.GetGazeBounds: the live attention targets
+        /// in screen pixels, each with the click a gaze dwell performs (WPF GazeClick: the same idempotent Hit as
+        /// the mouse). Empty while the grace pause is up. The VideoGazeClickEnabled gate is the caller's
+        /// (Platform/GazeFocusHead).</summary>
+        internal IReadOnlyList<(object Key, double X, double Y, double W, double H, Action Click)> GazeTargets()
+        {
+            var list = new List<(object, double, double, double, double, Action)>();
+            if (_gracePaused || _closing) return list;
+            foreach (var t in _targets)
+            {
+                try
+                {
+                    if (t.Click is not { } click || TopLevel.GetTopLevel(t.Root) is not { } top) continue;
+                    var at = t.Root.PointToScreen(default);
+                    double rs = top.RenderScaling > 0 ? top.RenderScaling : 1;
+                    double w = t.Root.Bounds.Width > 0 ? t.Root.Bounds.Width : t.Root.Width, h = t.Root.Bounds.Height > 0 ? t.Root.Bounds.Height : t.Root.Height;
+                    if (double.IsNaN(w) || double.IsNaN(h)) continue;   // not measured yet
+                    list.Add((t, at.X, at.Y, w * rs, h * rs, click));
+                }
+                catch (Exception ex) { Log.Debug("Attention gaze bounds: {E}", ex.Message); }
+            }
+            return list;
+        }
+
         internal static void PlayPop()
         {
             var path = Path.Combine(AppContext.BaseDirectory, "Resources", "sounds", "bubbles", new[] { "Pop.mp3", "Pop2.mp3", "Pop3.mp3" }[Random.Shared.Next(3)]);
@@ -709,6 +734,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             internal const double Speed = 187.5, Outline = 7.5;
             public readonly Border Root;
             public readonly double Due;
+            /// <summary>The hit a click performs, for the routes that are not a pointer (gaze dwell).</summary>
+            public Action? Click;
             private readonly Canvas _layer;
             private double _x, _y, _vx, _vy, _minX, _minY, _maxX, _maxY;
             private readonly double _w, _h;
