@@ -187,19 +187,22 @@ namespace ConditioningControlPanel.Avalonia
 
             // WPF's single-instance gate: a second launch hands its surface (or none) to the running app
             // and exits; the primary routes it (WPF RouteSurfaceHandoff / LauncherHost.OnBareRelaunch).
-            using var instance = Platform.SingleInstance.Claim(Platform.SingleInstance.SandboxSuffix(), payload =>
-                global::Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
-                {
-                    var w = (global::Avalonia.Application.Current?.ApplicationLifetime as
-                        global::Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.MainWindow;
-                    if (w is Views.Windows.MainShellWindow shell) Views.Windows.LauncherWindow.RouteHandoff(shell, payload);
-                    else w?.Activate();
-                }).GetTask(), Services.Launcher.LauncherHandoff.Encode(args));
+            // "Open with CCP" (WPF App.xaml.cs:1427): --play / --edit <file>. A second launch writes
+            // WPF's handoff file before it signals, so either head's primary can read it.
+            var (fileAction, filePath) = Services.Launcher.FileOpenHandoff.ParseArgs(args);
+            string? handoff = Services.Launcher.LauncherHandoff.Encode(args);
+            if (fileAction != null && filePath != null) handoff = Platform.WpfInstanceBridge.HandoffFileMarker;
+            using var instance = Platform.SingleInstance.Claim(Platform.SingleInstance.SandboxSuffix(), App.RouteSecondLaunch, handoff,
+                beforeAsking: fileAction != null && filePath != null
+                    ? () => Services.Launcher.FileOpenHandoff.Write(ConditioningControlPanel.CorePaths.UserData, fileAction, filePath)
+                    : null);
             if (instance is null)
             {
                 Serilog.Log.Information("Another instance is running; asked it to show its window");
                 return 0;
             }
+            // This launch is the primary: it opens the file itself once the shell is up (App.axaml.cs).
+            App.PendingFileOpen = fileAction != null && filePath != null ? (fileAction, filePath) : null;
 
             var app = BuildAvaloniaApp();
 #if DEBUG

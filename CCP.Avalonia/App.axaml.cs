@@ -921,6 +921,8 @@ namespace ConditioningControlPanel.Avalonia
                 });
                 // WPF App.xaml.cs:4858: pending-outcome report + background update check.
                 Dispatcher.UIThread.Post(async () => await Platform.AppUpdater.StartupAsync(shell));
+                // Single-instance handoffs: this launch's own --play / --edit, and the end of the startup phase.
+                OnShellReadyForHandoffs(shell);
             }
         }
 
