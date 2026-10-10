@@ -27,7 +27,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
 
         private readonly object _gate = new();
         private readonly Action<WriteableBitmap> _show;
-        private readonly int _width, _height;
+        private readonly int _width, _height, _frameGapMs;
         private readonly MediaPlayer _player;
         private readonly Media _media;
         private IntPtr _buffer;
@@ -38,11 +38,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         private volatile bool _disposed;
 
         /// <summary>WPF FlashClipPlayer.Start: null when there is no path, no libvlc, or 8 already play.</summary>
-        internal static FlashClipPlayer? Start(LibVLC? vlc, string? path, int width, int height, Action<WriteableBitmap> show, double speed = 1)
+        internal static FlashClipPlayer? Start(LibVLC? vlc, string? path, int width, int height, Action<WriteableBitmap> show, double speed = 1,
+            int longSideMax = LongSideMax, int frameGapMs = 66)
         {
             if (string.IsNullOrEmpty(path) || vlc == null) return null;
             if (Interlocked.Increment(ref _alive) > MaxAlive) { Interlocked.Decrement(ref _alive); return null; }
-            try { return new FlashClipPlayer(vlc, path, width, height, show, speed); }
+            try { return new FlashClipPlayer(vlc, path, width, height, show, speed, longSideMax, frameGapMs); }
             catch (Exception ex)
             {
                 Interlocked.Decrement(ref _alive);
@@ -52,19 +53,20 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         }
 
         /// <summary>The decode size: the flash's size scaled so its long side is at most 480 px.</summary>
-        internal static (int W, int H) DecodeSize(int width, int height)
+        internal static (int W, int H) DecodeSize(int width, int height, int longSideMax = LongSideMax)
         {
-            var scale = Math.Min(1, (double)LongSideMax / Math.Max(1, Math.Max(width, height)));
+            var scale = Math.Min(1, (double)longSideMax / Math.Max(1, Math.Max(width, height)));
             return (Math.Max(2, (int)(width * scale)), Math.Max(2, (int)(height * scale)));
         }
 
         /// <summary>WPF SetRate clamp.</summary>
         internal static float Rate(double speed) => (float)Math.Clamp(speed, .25, 4);
 
-        private FlashClipPlayer(LibVLC vlc, string path, int width, int height, Action<WriteableBitmap> show, double speed)
+        private FlashClipPlayer(LibVLC vlc, string path, int width, int height, Action<WriteableBitmap> show, double speed, int longSideMax, int frameGapMs)
         {
             _show = show;
-            (_width, _height) = DecodeSize(width, height);
+            _frameGapMs = Math.Max(16, frameGapMs);
+            (_width, _height) = DecodeSize(width, height, longSideMax);
             _buffer = Marshal.AllocHGlobal(_width * _height * 4);
             _player = new MediaPlayer(vlc) { EnableHardwareDecoding = false };
             _media = new Media(vlc, path, FromType.FromPath);
@@ -92,7 +94,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
 
         private void Display(IntPtr opaque, IntPtr picture)
         {
-            if (_disposed || Environment.TickCount64 - _lastFrame < 66) return;
+            if (_disposed || Environment.TickCount64 - _lastFrame < _frameGapMs) return;
             _lastFrame = Environment.TickCount64;
             lock (_gate)
             {

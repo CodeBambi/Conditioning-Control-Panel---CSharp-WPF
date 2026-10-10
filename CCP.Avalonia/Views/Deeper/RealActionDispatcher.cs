@@ -24,8 +24,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
     /// <remarks>
     /// On this head the effects are the overlay windows under Views/Overlays, reached through the
     /// shell's effect door (portal panic bind first). An action with no twin here is logged once
-    /// per bind and does nothing: spiral overlay bands (the port's spiral follows the user's
-    /// settings only), the voice prompt (speak) and screen shake.
+    /// per bind and does nothing: the voice prompt (speak).
     /// </remarks>
     internal sealed class RealActionDispatcher : IActionDispatcher, IEnhancementRunCleanup
     {
@@ -70,7 +69,47 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             lock (_bandGate) { any = _overlayBandKind.Values.Any(IsDrain); _overlayBandKind.Clear(); }
             if (any) BrainDrainOverlay.EndTimed();
             SyncPinkHold(null);
+            SyncSpiralHold(null);
+            ScreenShake.Stop();   // engine stop and panic: every window at rest now
         });
+
+        /// <summary>The shake (tests swap it).</summary>
+        internal static Action<double, int> ShakeDoor = (intensity, ms) => ScreenShake.Shake(intensity, ms);
+
+        private void SyncHold(string kind, double? opacity)
+        {
+            if (kind == OverlayKinds.Spiral) SyncSpiralHold(opacity); else SyncPinkHold(opacity);
+        }
+
+        /// <summary>The spiral follows the open spiral bands, as the tint does below: up at the band's
+        /// opacity while one is tracked (WPF ShowOverlaySustained / ShowOverlayTimed "spiral", #1051: the
+        /// authored opacity, not the user's slider), back to the user's own switch when the last closes.</summary>
+        private void SyncSpiralHold(double? opacity)
+        {
+            bool any;
+            lock (_bandGate) any = _overlayBandKind.Values.Any(k => k == OverlayKinds.Spiral);
+            if (!any)
+            {
+                if (!SpiralOverlay.IsHeldBy(SpiralOverlay.DeeperOwner)) return;
+                SpiralRelease(HostProvider());
+                return;
+            }
+            if (opacity.HasValue) _spiralBandOpacity = Math.Clamp(opacity.Value, 0, 1);
+            var held = _spiralBandOpacity;
+            Overlay(host =>
+            {
+                bool still;
+                lock (_bandGate) still = _overlayBandKind.Values.Any(k => k == OverlayKinds.Spiral);
+                if (still) SpiralHold(host, held);
+            });
+        }
+
+        private double _spiralBandOpacity = 1;
+
+        /// <summary>The spiral's hold and release (tests swap them to run without a screen).</summary>
+        internal static Action<Window, double> SpiralHold = (host, opacity) =>
+            SpiralOverlay.Hold(host, SpiralOverlay.DeeperOwner, new SpiralHold(opacity));
+        internal static Action<Window?> SpiralRelease = host => SpiralOverlay.Release(SpiralOverlay.DeeperOwner, host);
 
         /// <summary>The pink tint follows the open pink bands: up at <paramref name="opacity"/> while
         /// one is tracked, handed back to the user's own switch when the last one closes. Stops and
@@ -153,7 +192,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
                         break;
 
                     case ScreenShakeAction shake:
-                        LogNoTwin("screen_shake");
+                        ShakeDoor(shake.Intensity, shake.DurationMs);   // WPF App.ScreenShake.Shake
                         break;
 
                     case SetIntensityAction:
@@ -309,22 +348,22 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
 
         /// <summary>WPF ShowOverlaySustained / HideOverlaySustained / SetSustainedOverlayOpacity /
         /// ShowOverlayTimed for the pink filter, on the tint's band hold.</summary>
-        private void DispatchPinkBand(TriggerEffectAction effect) => OnUi(() =>
+        private void DispatchHoldBand(TriggerEffectAction effect, string kind) => OnUi(() =>
         {
             switch (effect.Phase)
             {
                 case EffectPhase.Start:
-                    lock (_bandGate) _overlayBandKind[effect.EffectId ?? "pink"] = OverlayKinds.PinkFilter;
-                    SyncPinkHold(effect.Opacity);
+                    lock (_bandGate) _overlayBandKind[effect.EffectId ?? kind] = kind;
+                    SyncHold(kind, effect.Opacity);
                     break;
 
                 case EffectPhase.Stop:
-                    lock (_bandGate) _overlayBandKind.Remove(effect.EffectId ?? "pink");
-                    SyncPinkHold(null);
+                    lock (_bandGate) _overlayBandKind.Remove(effect.EffectId ?? kind);
+                    SyncHold(kind, null);
                     break;
 
                 case EffectPhase.Update:
-                    SyncPinkHold(effect.Opacity);
+                    SyncHold(kind, effect.Opacity);
                     break;
 
                 case EffectPhase.Restart:
@@ -334,14 +373,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
                 default:
                 {
                     var id = "oneshot:" + Guid.NewGuid().ToString("N");
-                    lock (_bandGate) _overlayBandKind[id] = OverlayKinds.PinkFilter;
-                    SyncPinkHold(effect.Opacity);
+                    lock (_bandGate) _overlayBandKind[id] = kind;
+                    SyncHold(kind, effect.Opacity);
                     var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(Math.Max(50, effect.DurationMs)) };
                     timer.Tick += (_, _) =>
                     {
                         timer.Stop();
                         lock (_bandGate) _overlayBandKind.Remove(id);
-                        SyncPinkHold(null);
+                        SyncHold(kind, null);
                     };
                     timer.Start();
                     break;
@@ -356,13 +395,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             var kind = effect.OverlayKind ?? OverlayKinds.PinkFilter;
             if (kind == OverlayKinds.PinkFilter)
             {
-                DispatchPinkBand(effect);
+                DispatchHoldBand(effect, kind);
+                return;
+            }
+            if (kind == OverlayKinds.Spiral)
+            {
+                // The spiral's hold: up for the band at the authored opacity, the user's switch untouched.
+                DispatchHoldBand(effect, kind);
                 return;
             }
             if (!IsDrain(kind))
             {
-                // The port's spiral follows the user's own switch; nothing shows it for a band
-                // without writing that setting, which a Deeper file must not do.
                 LogNoTwin("overlay " + kind);
                 return;
             }
