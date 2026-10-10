@@ -818,3 +818,16 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
 - Tests: `Tests/CCP.Core.Tests/ProgramRunLifecycleTests.cs`, `Tests/CCP.Avalonia.Tests/ProgramsRunLifecycleTests.cs`,
   `ProgramServiceStartupTests`, `LockdownVeilTests`, `ProgramsRunViewTests`, `PanicSurfacesTests`. Fail-proofs:
   ~/ccp-port/evidence/review-programs-run-3a/fail-proofs.log.
+
+## 2026-10-10: Companion > Personality / Permissions / Links without a v2 page (avalonia-port/sync6-companion-pages)
+- Question: WPF `5681c132a` gives the three Companion pills real pages that ADOPT the live room zones, because v2 collapses
+  the room. This head has no v2 ConversationPage: its Companion tab is the full room, so adopting would strip the visible
+  room; `CompanionPickerCard` is not ported either.
+- Options: A) port the three pages + KnowledgeLinksEditor, with an Avalonia-only seam handing the zones back to the room
+  when the Companion tab shows; B) zone pills that open the Companion tab scrolled to the zone (like playeyes/folders/ramp);
+  C) leave the rows needs-port until views-companion-v2-conversation lands.
+- Choice: B + C. Decided by: supervisor (ponytail: no throwaway seam; reparenting live zones is fragile).
+- Applied: `personality`/`permissions`/`companionlinks` map to CompanionTab; OnTabShown scrolls to PersonalityZone /
+  PermissionsZone / Workshop HER LIBRARY. Rows `5681c132a`, `f3a00a9dc` stay needs-port (folded into
+  views-companion-v2-conversation). The f3a00a9dc wheel relay is n/a here (Avalonia chains wheel notches natively).
+- Test: `Tests/CCP.Avalonia.Tests/CompanionZonePillsTests.cs` (each of the three reveals fail-proven).
