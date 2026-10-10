@@ -2059,6 +2059,7 @@
   "tooltip_exit_the_application_completely": "アプリを終了します。",
   "label_remote_controlled": "リモート制御中",
   "label_someone_else_is_controlling_your_app": "他の人があなたのアプリを制御しています",
+  "label_controller_may_be_idle": "コントローラーは離席中かもしれません...",
   "label_no_active_session": "アクティブなセッションなし",
   "btn_end_session": "セッション終了",
   "label_drop_to_import": "ドロップでインポート",
@@ -7604,5 +7605,13 @@
   "kwt_effect_image_flash": "画像フラッシュ",
   "kwt_effect_overlay_pulse": "オーバーレイパルス",
   "kwt_effect_mind_wipe": "マインドワイプ",
-  "kwt_effect_bubbles": "バブル"
+  "kwt_effect_bubbles": "バブル",
+  "label_asset_preset_default_0": "プリセット {0}",
+  "msg_asset_preset_saved_0": "プリセット「{0}」を保存しました！\n\n画像 {1} 件、動画 {2} 件が有効。\n{3} 件のアセットが無効。",
+  "msg_asset_preset_updated_0": "プリセット「{0}」を更新しました！\n\n画像 {1} 件、動画 {2} 件が有効。\n{3} 件のアセットが無効。",
+  "msg_update_asset_preset_confirm_0": "プリセット「{0}」を現在の選択で更新しますか？",
+  "title_no_preset_selected": "プリセットが選択されていません",
+  "title_cannot_update_default": "デフォルトは更新できません",
+  "title_cannot_delete_default": "デフォルトは削除できません",
+  "title_update_preset": "プリセットを更新"
 }

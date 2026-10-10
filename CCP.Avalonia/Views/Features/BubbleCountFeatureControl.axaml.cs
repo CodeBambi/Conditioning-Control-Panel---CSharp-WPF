@@ -38,6 +38,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             SliderFreq.ValueChanged += SliderFreq_Changed;
             CmbDifficulty.SelectionChanged += CmbDifficulty_Changed;
             ChkStrict.IsCheckedChanged += ChkStrict_Changed;
+            // WPF Lab.cs:649-656 / 733-739: greyed only when ticked (Lockdown does not force it on).
+            Windows.MainShellWindow.HoldWhileLockdown(ChkStrict,
+                () => ConditioningControlPanel.Services.LockdownStrictHold.HoldsNow && CoreSettings.Current.BubbleCountStrictLock);
             BtnTest.Click += BtnTest_Click;
 
             Loaded += (_, _) => RebindToCurrentSettings();

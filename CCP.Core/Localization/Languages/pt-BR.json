@@ -2059,6 +2059,7 @@
   "tooltip_exit_the_application_completely": "Fecha o aplicativo.",
   "label_remote_controlled": "CONTROLADO REMOTAMENTE",
   "label_someone_else_is_controlling_your_app": "Outra pessoa está controlando seu app",
+  "label_controller_may_be_idle": "O controlador pode estar inativo...",
   "label_no_active_session": "Nenhuma sessão ativa",
   "btn_end_session": "Encerrar Sessão",
   "label_drop_to_import": "Solte para Importar",
@@ -7604,5 +7605,13 @@
   "kwt_effect_image_flash": "Flash de imagem",
   "kwt_effect_overlay_pulse": "Pulso de overlay",
   "kwt_effect_mind_wipe": "Mind Wipe",
-  "kwt_effect_bubbles": "Bolhas"
+  "kwt_effect_bubbles": "Bolhas",
+  "label_asset_preset_default_0": "Predefinição {0}",
+  "msg_asset_preset_saved_0": "Predefinição '{0}' salva!\n\n{1} imagens, {2} vídeos ativados.\n{3} arquivos desativados.",
+  "msg_asset_preset_updated_0": "Predefinição '{0}' atualizada!\n\n{1} imagens, {2} vídeos ativados.\n{3} arquivos desativados.",
+  "msg_update_asset_preset_confirm_0": "Atualizar a predefinição '{0}' com a seleção atual?",
+  "title_no_preset_selected": "Nenhuma predefinição selecionada",
+  "title_cannot_update_default": "Não é possível atualizar o padrão",
+  "title_cannot_delete_default": "Não é possível excluir o padrão",
+  "title_update_preset": "Atualizar predefinição"
 }

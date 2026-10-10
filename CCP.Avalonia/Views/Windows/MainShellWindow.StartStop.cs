@@ -28,6 +28,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         private async void BtnStart_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
         {
+            if (RemoteControllerConnected) return;   // WPF StartStop.cs:43: a controller drives
             if ((CoreEngine.IsRunning || App.Sessions?.IsRunning == true) && RefuseStopUnderLockdown()) return;
             // WPF MainWindow.StartStop.cs:58: a running session asks first; declining keeps everything on.
             if (App.Sessions?.IsRunning == true)
@@ -113,8 +114,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         /// <summary>WPF UpdateStartButton: red ■ Stop while running, the accent ▶ Start otherwise.</summary>
-        internal void UpdateStartButton()
+        internal void UpdateStartButton(bool force = false)
         {
+            if (!force && RemoteControllerConnected) return;   // WPF :941 keeps the remote label
             var running = CoreEngine.IsRunning;
             if (Named<Button>("BtnStart") is { } b)
             {
