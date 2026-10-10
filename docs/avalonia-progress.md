@@ -1692,3 +1692,10 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/programs-run-3a: +738
 - Linux now writes programs.json: full ProgramService (timers, startup rollover, Dispose flush), Enroll (first_week only), Withdraw and today's session through a SessionRunner bridge; a newer-schema file is read-only on both heads.
 - A panic ends a program session; Lockdown refuses each lifecycle control. Pause/Restart/Dismiss/Ritual/Mantras are left for 3b.
+
+## avalonia-port/rows-companion-room: +400
+- Make-her-yours (Z4) now uses the real personality data: preset chips, the Slut Mode toggle (both behind the explicit-content gate), Reset, and the prompt-editor links; it re-reads when the tab is shown.
+- New test `CompanionPersonalityZoneTests`, fail-proven by 6 breaks; v2 hides the interview card and the spice toggle snaps back after Cancel; the three rows stay stub, each with its missing list.
+
+## avalonia-port/main-20261009: +47588
+- Main sync #6: WPF main 11d7c3afc merged (releases 7.1.0-7.1.5); delta ledger docs/avalonia-main-sync-20261009.md (8 ported-by-merge, 132 needs-port in 15 sync6-* lanes, 8 n/a).
