@@ -72,7 +72,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             internal double Blur;
             internal Color Tint;
             internal DropShadowEffect? Glow;
-            internal CancellationTokenSource? Clock;
+            internal global::ConditioningControlPanel.Avalonia.Helpers.BeatLoop? Clock;
         }
 
         /// <summary>Window focus + not minimised: the ambient gate every loop in this file passes
@@ -243,20 +243,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 };
                 dot.Effect = req.Glow;
 
-                req.Clock = new CancellationTokenSource();
-                var anim = new Animation
-                {
-                    Duration = TimeSpan.FromSeconds(StatusPulseSeconds),
-                    IterationCount = IterationCount.Infinite,
-                    PlaybackDirection = PlaybackDirection.Alternate,
-                    Easing = new SineEaseInOut(),
-                    Children =
-                    {
-                        new KeyFrame { Cue = new Cue(0d), Setters = { new Setter(DropShadowEffect.OpacityProperty, StatusPulseMinOpacity) } },
-                        new KeyFrame { Cue = new Cue(1d), Setters = { new Setter(DropShadowEffect.OpacityProperty, StatusPulseMaxOpacity) } },
-                    },
-                };
-                _ = anim.RunAsync(req.Glow, req.Clock.Token);
+                // On the window's shared 30 fps beat (Helpers/BeatLoop), not an infinite Animation:
+                // an animated Effect property kept the WHOLE window composing at 60 Hz (ledger X7).
+                // Same breath: min -> max -> min over 2 x StatusPulseSeconds, sine in-out.
+                var glow = req.Glow;
+                req.Clock = new global::ConditioningControlPanel.Avalonia.Helpers.BeatLoop(dot, t =>
+                    glow.Opacity = Math.Clamp(StatusPulseMinOpacity + (StatusPulseMaxOpacity - StatusPulseMinOpacity)
+                        * global::ConditioningControlPanel.Avalonia.Helpers.BeatLoop.Breath(t, StatusPulseSeconds), 0, 1));
+                req.Clock.Start();
             }
             catch (Exception ex) { Log.Debug("ApplyStatusPulse: {E}", ex.Message); }
         }
@@ -266,7 +260,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             var clock = req.Clock;
             if (clock == null) return;
             req.Clock = null;
-            try { clock.Cancel(); clock.Dispose(); } catch { }
+            try { clock.Stop(); } catch { }
         }
 
         // ---- the four tabs' entry points -------------------------------------------
