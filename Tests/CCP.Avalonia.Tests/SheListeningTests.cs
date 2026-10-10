@@ -53,7 +53,7 @@ public sealed class SheListeningTests
                 Master();
                 Assert.True(s.SpeechWakeWordEnabled);
                 Assert.Equal(ConditioningControlPanel.Localization.Loc.Get("shelisten_status_on_title"), tab.SL_StatusTitle.Text);
-                Assert.Equal("The mic is open. Call her, then say a command.", tab.SL_StatusSub.Text);
+                Assert.Equal(Loc.Get("shelisten_status_on_sub"), tab.SL_StatusSub.Text);
                 Assert.NotEqual(Loc.Get("set2_chip_off"), tab.TxtSL_WakeWordChip.Text);
                 // WPF UpdateMicPill / SetSheListeningStatusPulse: the pill lights and the disc breathes.
                 var pill = shell.FindControl<Border>("MicActivePill")!;
