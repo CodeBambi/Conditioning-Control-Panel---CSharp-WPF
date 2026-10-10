@@ -87,6 +87,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 case "dtrh":
                 case "arcademy": LaunchCardGame(key); break;
                 case "gazeminigame": Named<Tabs.PlayTabView>("PlayTab")?.OpenGazeMinigame(); break;
+                case "focusgaze":   // WPF OpenFocusGazeSwitch: a switch on the Play wall, not a window
+                    ShowTab("play");
+                    global::Avalonia.Threading.Dispatcher.UIThread.Post(() => Named<Tabs.PlayTabView>("PlayTab")?.ShowFocusGazeSwitch());
+                    break;
                 default: ShowTab(key); break;
             }
         }

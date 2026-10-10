@@ -47,7 +47,7 @@ public sealed class CameraShortcutTests
 
                 MainShellWindow.ApplyCameraShortcutTo(window);
                 MainShellWindow.ApplyCameraShortcutTo(window);   // never stacks
-                var binding = Assert.Single(window.KeyBindings.Where(b => ReferenceEquals(b.Command, MainShellWindow.ToggleCameraCommand)));
+                var binding = Assert.Single(window.KeyBindings, b => ReferenceEquals(b.Command, MainShellWindow.ToggleCameraCommand));
                 Assert.Equal(new KeyGesture(Key.M, KeyModifiers.Control | KeyModifiers.Shift), binding.Gesture);
                 binding.Command!.Execute(null);
                 window.Close();

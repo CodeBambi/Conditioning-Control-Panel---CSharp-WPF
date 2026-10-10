@@ -75,22 +75,5 @@ public sealed class PlayWallParityTests
         Assert.False(PlayTabView.RaceDoorOpen(signedIn: true, owns: _ => false));
         Assert.True(PlayTabView.RaceDoorOpen(signedIn: true, owns: id => id == "rt.original.02"));
     }
-
-    [Fact]
-    public async Task FocusGazeSwitch_NeverStaysOn_AndSaysWhy()
-    {
-        await AvaloniaTestDispatcher.RunAsync(() =>
-        {
-            Boot();
-            var view = new PlayTabView();
-            var box = view.FindControl<CheckBox>("ChkPlayFocusGaze")!;
-            var line = view.FindControl<TextBlock>("TxtPlayFocusGazeStatus")!;
-            box.IsChecked = true;   // IsCheckedChanged runs the handler
-            Assert.False(box.IsChecked);
-            Assert.False(global::ConditioningControlPanel.CoreSettings.Current.FocusGazeEnabled);
-            Assert.Equal("off", view.FocusGazeChanged());
-            Assert.Equal("", line.Text);
-            return Task.CompletedTask;
-        });
-    }
+    // The Focus Gaze switch is live since lane u1: FocusGazeSwitchTests.
 }
