@@ -604,7 +604,7 @@ public class SpiralRoomTests
         Assert.Contains("case \"spiral\":", nav, StringComparison.Ordinal);
         Assert.Contains("SpiralTab.OnTabShown()", nav, StringComparison.Ordinal);
         // The You section lists it, hidden unless fog era (nav rework: NavSections is the map).
-        Assert.Equal("you", ConditioningControlPanel.Services.UI.NavSections.SectionForTab("spiral"));
+        Assert.Equal("you", ConditioningControlPanel.Nav.NavSections.SectionForTab("spiral"));
         Assert.Contains("BtnNavSpiral",
             AppFile("Services", "TutorialService.cs"), StringComparison.Ordinal);
     }

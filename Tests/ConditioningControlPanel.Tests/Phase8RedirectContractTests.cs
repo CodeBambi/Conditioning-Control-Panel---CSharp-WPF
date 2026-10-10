@@ -111,7 +111,7 @@ public class Phase8RedirectContractTests
                         StringComparison.Ordinal);
         // Nav rework (2026-10-06): the section table is the one map; ChromeFx paints the section
         // row through RefreshSectionRail, so its own tab map is gone.
-        Assert.Equal("home", ConditioningControlPanel.Services.UI.NavSections.SectionForTab("progression"));
+        Assert.Equal("home", ConditioningControlPanel.Nav.NavSections.SectionForTab("progression"));
     }
 
     [Fact]

@@ -27,7 +27,7 @@ namespace ConditioningControlPanel.Controls.Billboard
         /// <summary>The house thud, cubic-bezier(.2,1.5,.4,1).</summary>
         public static CubicBezierEase Thud()
         {
-            var c = Services.DashboardBillboard.ThudCurve;
+            var c = DashboardBillboard.ThudCurve;
             var e = new CubicBezierEase(c.X1, c.Y1, c.X2, c.Y2);
             e.Freeze();
             return e;

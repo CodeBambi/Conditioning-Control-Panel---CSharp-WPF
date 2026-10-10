@@ -11,7 +11,7 @@ namespace ConditioningControlPanel.Services
     public static class ChromeFxNav
     {
         /// <summary>
-        /// Tab keys in nav order, derived from <see cref="ConditioningControlPanel.Services.UI.NavSections"/>
+        /// Tab keys in nav order, derived from <see cref="ConditioningControlPanel.Nav.NavSections"/>
         /// (nav rework 2026-10-06): each section's Tab and Zone keys in pill order, hidden pages
         /// included (they still get a slide direction), windows and launchers left out (they have
         /// no tab transition), and the Settings gear as its page key "appsettings", last. The
@@ -25,16 +25,16 @@ namespace ConditioningControlPanel.Services
         private static string[] BuildNavOrder()
         {
             var keys = new List<string>();
-            foreach (var section in ConditioningControlPanel.Services.UI.NavSections.Order)
+            foreach (var section in ConditioningControlPanel.Nav.NavSections.Order)
             {
-                if (section.Key == ConditioningControlPanel.Services.UI.NavSections.Settings)
+                if (section.Key == ConditioningControlPanel.Nav.NavSections.Settings)
                 {
                     keys.Add(section.DefaultTab);   // "appsettings": its pills are Settings zones
                     continue;
                 }
                 foreach (var t in section.Tabs)
-                    if (t.Key != "spiral" && t.Kind is ConditioningControlPanel.Services.UI.NavTabKind.Tab
-                               or ConditioningControlPanel.Services.UI.NavTabKind.Zone)
+                    if (t.Key != "spiral" && t.Kind is ConditioningControlPanel.Nav.NavTabKind.Tab
+                               or ConditioningControlPanel.Nav.NavTabKind.Zone)
                         keys.Add(t.Key);
             }
             // "spiral" stays APPENDED: it is an airspace tab (never slides) and SpiralRoomTests

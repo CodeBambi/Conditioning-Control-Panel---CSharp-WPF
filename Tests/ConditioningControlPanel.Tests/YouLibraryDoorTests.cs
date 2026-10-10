@@ -91,9 +91,9 @@ public class YouLibraryDoorTests
         // opens through the one existing handler (the strip calls it). No rail row remains.
         Assert.DoesNotContain("x:Name=\"" + buttonName + "\"", MainWindowXaml());
         var key = labelKey.Substring("yl7_nav_".Length);
-        var tab = ConditioningControlPanel.Services.UI.NavSections.Find("library")!.Tabs.SingleOrDefault(t => t.Key == key);
+        var tab = ConditioningControlPanel.Nav.NavSections.Find("library")!.Tabs.SingleOrDefault(t => t.Key == key);
         Assert.True(tab != null, key + " is not a Library tab in NavSections");
-        Assert.Equal(ConditioningControlPanel.Services.UI.NavTabKind.Launcher, tab!.Kind);
+        Assert.Equal(ConditioningControlPanel.Nav.NavTabKind.Launcher, tab!.Kind);
         Assert.Equal(labelKey, tab.LabelKey);
         Assert.True(Language("en.json").ContainsKey(tipKey), tipKey + " is gone from en.json");
 
@@ -106,7 +106,7 @@ public class YouLibraryDoorTests
     public void AssetsStaysTheLibraryDoorsFirstRow()
     {
         // The Library row opens Assets, and Assets is the strip's first pill.
-        var lib = ConditioningControlPanel.Services.UI.NavSections.Find("library")!;
+        var lib = ConditioningControlPanel.Nav.NavSections.Find("library")!;
         Assert.Equal("assets", lib.DefaultTab);
         Assert.Equal("assets", lib.Tabs.First().Key);
     }
@@ -118,10 +118,10 @@ public class YouLibraryDoorTests
         // pointing at nothing. These four open a dialog, a website, a dialog and a window.
         // Nav rework (2026-10-06): NavSections is the map; the four are Launcher tabs, which
         // the strip opens through OpenLibraryLauncher and ShowTab never sees.
-        var lib = ConditioningControlPanel.Services.UI.NavSections.Find("library")!;
+        var lib = ConditioningControlPanel.Nav.NavSections.Find("library")!;
         Assert.Equal("assets", lib.DefaultTab);
         foreach (var key in new[] { "mods", "catalogue", "phrases", "medialog" })
-            Assert.Equal(ConditioningControlPanel.Services.UI.NavTabKind.Launcher, lib.Tabs.Single(t => t.Key == key).Kind);
+            Assert.Equal(ConditioningControlPanel.Nav.NavTabKind.Launcher, lib.Tabs.Single(t => t.Key == key).Kind);
     }
 
     [Fact]

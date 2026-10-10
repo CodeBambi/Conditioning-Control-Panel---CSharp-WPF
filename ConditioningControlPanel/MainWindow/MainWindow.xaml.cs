@@ -3477,7 +3477,7 @@ namespace ConditioningControlPanel
                     // axis on its own squashed the panel whenever only one axis overflowed, which the
                     // 1954x1179 default does on every 1080p desk (height first). Both axes shrink by
                     // the same factor; a window that already fits is left alone.
-                    var (fitW, fitH) = Services.UI.WindowFitRule.Fit(Width, Height, screenWidth, screenHeight);
+                    var (fitW, fitH) = WindowFitRule.Fit(Width, Height, screenWidth, screenHeight);
                     if (Math.Abs(fitW - Width) > 0.5) Width = fitW;
                     if (Math.Abs(fitH - Height) > 0.5) Height = fitH;
 

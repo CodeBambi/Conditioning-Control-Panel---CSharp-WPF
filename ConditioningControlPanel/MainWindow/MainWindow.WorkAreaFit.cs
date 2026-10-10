@@ -155,7 +155,7 @@ namespace ConditioningControlPanel
                 var h = Math.Max(1, r.Bottom - r.Top);
                 // Uniform: both axes shrink by one factor so the Stretch="Fill" canvas keeps its
                 // aspect (WindowFitRule). A window that fits is untouched.
-                var (newW, newH) = Services.UI.WindowFitRule.FitPx(w, h, wa.Width, wa.Height);
+                var (newW, newH) = WindowFitRule.FitPx(w, h, wa.Width, wa.Height);
                 var newL = r.Left;
                 var newT = r.Top;
                 if (newL + newW > wa.Right) newL = wa.Right - newW;

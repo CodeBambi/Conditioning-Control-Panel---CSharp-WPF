@@ -56,8 +56,8 @@ public class ModManagerEntryTests
 
         // Nav rework (2026-10-06): the rail row left; Library > Mods is a launcher pill in the
         // section table, and the dialog keeps its one handler.
-        Assert.Contains(ConditioningControlPanel.Services.UI.NavSections.Find("library")!.Tabs,
-            t => t.Key == "mods" && t.Kind == ConditioningControlPanel.Services.UI.NavTabKind.Launcher);
+        Assert.Contains(ConditioningControlPanel.Nav.NavSections.Find("library")!.Tabs,
+            t => t.Key == "mods" && t.Kind == ConditioningControlPanel.Nav.NavTabKind.Launcher);
 
         // No partial still reaches for the pill by name. Agent worktrees under .claude are other
         // branches' checkouts and are excluded, as in HeaderBannerTests.
