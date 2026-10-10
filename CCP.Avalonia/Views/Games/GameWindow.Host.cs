@@ -37,6 +37,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             if (Spec.Id == PbpId) OpenPbp();   // chess host (GameWindow.Pbp.cs); it unhooks itself on Closed
             if (Spec.Id == "arcademy") OpenArcademy();
             if (Spec.Id == "dtrh") OpenDtrhHost();
+            if (Spec.Id == LoomId) OpenLoom();
         }
 
         private void OnGameClosed()
@@ -44,6 +45,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             StopHeartbeatWatch();
             try { CloseBackRoom(); } catch (Exception ex) { Log.Debug("[Game] backroom close: {E}", ex.Message); }
             try { CloseDtrh(); } catch (Exception ex) { Log.Debug("[Game] dtrh close: {E}", ex.Message); }
+            CloseLoom();
         }
 
         /// <summary>Each game's own frames (WPF *HostService.OnPageMessage). True = claimed.</summary>
@@ -56,6 +58,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             if (Spec.Id == "goon" && HandleGoon(o)) return true;
             if (Spec.Id == "arcademy" && HandleArcademy(o)) return true;
             if (Spec.Id == FypId && HandleFyp(o)) return true;
+            if (Spec.Id == LoomId && HandleLoom(o)) return true;
             if (Spec.Id == JustDropId) return HandleJustDrop(o);
             return false;
         }
