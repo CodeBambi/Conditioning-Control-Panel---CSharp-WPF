@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Platform;
 using Avalonia.Threading;
+using ConditioningControlPanel.Services;
 using Serilog;
 using Tmds.DBus.Protocol;
 
@@ -29,6 +31,13 @@ internal static class OsNotifications
     private static readonly Dictionary<uint, Action> _clicks = new();
     private static bool _droppedLogged;
 
+    /// <summary>Test seam: when set, every notification goes here instead of D-Bus and counts as not delivered
+    /// (so <see cref="Decide"/> still picks toast/drop). Tests assert "a notification was requested" with it.</summary>
+    internal static Action<string, string>? Sink;
+
+    /// <summary>Notify calls that actually reached for the session bus (test seam: a sandbox keeps it at 0).</summary>
+    internal static int BusAttempts;
+
     /// <summary>The fallback decision, pure so it is testable headless.</summary>
     internal static Route Decide(bool osDelivered, bool windowVisible) =>
         osDelivered ? Route.Os : windowVisible ? Route.Toast : Route.Drop;
@@ -37,10 +46,11 @@ internal static class OsNotifications
     /// clicks the OS notification (the toast fallback, like a WPF balloon, has no click).</summary>
     internal static void Show(string title, string body, Action? onClick = null) => _ = ShowAsync(title, body, onClick);
 
-    private static async Task ShowAsync(string title, string body, Action? onClick)
+    internal static async Task ShowAsync(string title, string body, Action? onClick)
     {
         uint id = 0;
-        if (OperatingSystem.IsLinux())
+        if (Sink is { } sink) sink(title, body);
+        else if (OperatingSystem.IsLinux())
         {
             try { id = await NotifyAsync(title, body, onClick != null); }
             catch (Exception ex) { Log.Debug("OS notification failed: {Error}", ex.Message); }
@@ -99,9 +109,14 @@ internal static class OsNotifications
         return bus;
     }
 
-    /// <summary>Notify; returns the server's id (0 never comes back from a real server).</summary>
-    internal static async Task<uint> NotifyAsync(string title, string body, bool clickable)
+    /// <summary>Notify; returns the server's id (0 never comes back from a real server).
+
+    /// A CCP_USERDATA_DIR sandbox (<see cref="SandboxNet.Active"/>: tests, kc, render-all) never reaches the user's
+    /// desktop: it returns 0 (not delivered) unless <paramref name="live"/> - only `--notify-check`, the deliberate probe.</summary>
+    internal static async Task<uint> NotifyAsync(string title, string body, bool clickable, bool live = false)
     {
+        if (SandboxNet.Active && !live) return 0;
+        Interlocked.Increment(ref BusAttempts);
         var bus = await BusAsync();
         var w = bus.GetMessageWriter();
         w.WriteMethodCallHeader(destination: Dest, path: ObjPath, @interface: Dest, member: "Notify", signature: "susssasa{sv}i");
@@ -136,7 +151,7 @@ internal static class OsNotifications
     /// <summary>`--notify-check`: Notify, print the id, CloseNotification it. Exit 0 = live round trip.</summary>
     internal static async Task<int> CheckAsync()
     {
-        var id = await NotifyAsync("Conditioning Control Panel", "notify-check", false);
+        var id = await NotifyAsync("Conditioning Control Panel", "notify-check", false, live: true);
         Console.WriteLine($"Notify returned id {id}");
         if (id == 0) return 1;
         var bus = await BusAsync();

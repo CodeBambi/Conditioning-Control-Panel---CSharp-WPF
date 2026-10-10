@@ -102,6 +102,13 @@ still left the ubuntu job green — CI could not have caught a seam regression. 
 proof.* Any assertion added to any of these runners must be verified to actually fail when the thing
 it asserts is broken — break it once on purpose and watch the exit code.
 
+**Test hygiene: nothing a test or sandbox does may reach the user's desktop.** A test once put a real
+"Someone just connected to your remote session." notification on the developer's desktop (FakeRelay join ->
+`OsNotifications` -> session D-Bus). Every desktop side effect (notifications, browser/xdg-open, keyring) checks the one
+sandbox signal, `SandboxNet.Active` (CCP_USERDATA_DIR), and offers a test seam (`OsNotifications.Sink`,
+`ExternalOpener.Shell`); a deliberate live probe (`--notify-check`) opts in explicitly. Add the gate and the seam with any
+new desktop-facing call.
+
 The Windows test suite cannot execute on Linux (`win-x64` testhost). Compile-verify locally; CI runs
 it on `windows-latest`.
 

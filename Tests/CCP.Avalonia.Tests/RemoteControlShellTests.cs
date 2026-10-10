@@ -56,6 +56,9 @@ public sealed class RemoteControlShellTests
                 .UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
                 .SetupWithoutStarting();
         var (oldRelay, oldTime, oldProvider) = (RemoteControlTabView.Relay, MainShellWindow.RemoteOverlayTime, CoreSettings.ServiceProvider);
+        var oldSink = global::ConditioningControlPanel.Avalonia.Platform.OsNotifications.Sink;
+        var notified = new List<string>();
+        global::ConditioningControlPanel.Avalonia.Platform.OsNotifications.Sink = (t, b) => { lock (notified) notified.Add($"{t}|{b}"); };
         var service = new SettingsService();
         CoreSettings.ServiceProvider = () => service;
         var f = new FakeRelay();
@@ -79,6 +82,10 @@ public sealed class RemoteControlShellTests
             f.Poll = "{\"controller_connected\":true}";
             await relay.PollOnceAsync();
             Dispatcher.UIThread.RunJobs();
+
+            // WPF NotifyRemoteControllerJoined (:1481): the join raises the OS notification (via the seam, never D-Bus).
+            lock (notified)
+                Assert.Equal(new[] { $"{Loc.Get("title_remote_controller_joined")}|{Loc.Get("msg_remote_controller_joined")}" }, notified);
 
             // Overlay up with code + PIN; Start disabled, green, "REMOTE CONNECTED" (WPF StartStop.cs:992).
             Assert.True(overlay.IsVisible);
@@ -157,6 +164,7 @@ public sealed class RemoteControlShellTests
             shell?.Close();
             relay.Dispose();
             (RemoteControlTabView.Relay, MainShellWindow.RemoteOverlayTime, CoreSettings.ServiceProvider) = (oldRelay, oldTime, oldProvider);
+            global::ConditioningControlPanel.Avalonia.Platform.OsNotifications.Sink = oldSink;
         }
     });
 
