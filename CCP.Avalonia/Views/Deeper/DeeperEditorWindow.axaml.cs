@@ -108,9 +108,32 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         private bool _isDirty;
         private bool _suppressDirty;
 
-        // ponytail: the waveform peaks still need a decoder (WPF AudioWaveformCache, NAudio). Local
+        // The waveform peaks come from DeeperWaveform (LibVLC transcode, cached per file). Local
         // audio PLAYBACK is real (_localAudio); remote AND local video poll the page's media element.
         private double[]? _waveformPeaks;
+        private System.Threading.CancellationTokenSource? _waveCts;
+
+        /// <summary>Tests: the peaks the strip is drawn from (null until decoded).</summary>
+        internal double[]? WaveformPeaks => _waveformPeaks;
+
+        /// <summary>WPF InitializeAudioAsync's AudioWaveformCache.LoadAsync (:1197), off the UI thread. A swap of
+        /// the clip or the window closing cancels it; a result for another clip is dropped.</summary>
+        private async Task LoadWaveformAsync(string path)
+        {
+            try { _waveCts?.Cancel(); } catch { }
+            var cts = _waveCts = new System.Threading.CancellationTokenSource();
+            try
+            {
+                var data = await DeeperWaveform.LoadAsync(path, cts.Token);
+                if (data == null || cts.IsCancellationRequested || !ReferenceEquals(_waveCts, cts) || _playbackDisposed) return;
+                if (!string.Equals(_enhancement.MediaSource, path, StringComparison.Ordinal)) return;
+                _waveformPeaks = Array.ConvertAll(data.Peaks, p => (double)p);
+                // Drawn once per load, resize or zoom into a cached bitmap, never per frame.
+                WaveformPath.CacheMode ??= new BitmapCache();
+                UpdateWaveformPath();
+            }
+            catch (Exception ex) { Log.Debug("DeeperEditor: waveform decode failed: {Error}", ex.Message); }
+        }
         private IDeeperLocalAudio? _localAudio;
 
         /// <summary>Open editors (UI thread): the panic sweep and the player's one-editor-per-file
@@ -953,15 +976,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
         }
 
         /// <summary>WPF DeeperEditorWindow.xaml.cs:1189. Playback, duration, seek and end-of-clip
-        /// are real through <see cref="DeeperLocalAudio"/>. ponytail: the waveform peak extractor
-        /// (AudioWaveformCache) is not; wiring peaks in later is one assignment to
-        /// <c>_waveformPeaks</c>.</summary>
+        /// are real through <see cref="DeeperLocalAudio"/>; the peaks are <see cref="LoadWaveformAsync"/>.</summary>
         private async Task InitializeAudioAsync(string path)
         {
             BrowserPreview.IsVisible = false;
             VideoPreview.IsVisible = false;
             PreviewPlaceholder.IsVisible = false;
             WaveformCanvas.IsVisible = true;
+            _ = LoadWaveformAsync(path);
 
             IDeeperLocalAudio? audio = null;
             try { audio = await DeeperLocalAudio.Open(path); }
@@ -3173,6 +3195,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             _playbackDisposed = true;
             DisposeLocalAudio();
             _isPlaying = false;
+            try { _waveCts?.Cancel(); } catch { }
             _waveformPeaks = null;
         }
 

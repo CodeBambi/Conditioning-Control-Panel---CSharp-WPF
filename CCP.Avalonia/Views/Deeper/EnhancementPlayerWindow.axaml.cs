@@ -220,6 +220,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             // SystemDecorations="None" plus a hand-drawn bar, which would cost this resizable
             // window its native move/resize/maximize for a colour. Left native and untinted.
             Closed += (_, _) => { try { (Owner as Window)?.Activate(); } catch { } };
+            Closed += (_, _) => { try { _waveCts?.Cancel(); } catch { } };   // the peak decode stops with the window
 
             _statusPill = this.FindControl<Border>("StatusPill")!;
             _statusPillText = this.FindControl<TextBlock>("StatusPillText")!;
@@ -654,14 +655,38 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             // WPF stopped playback, decoded peaks, called Play, then set TxtTotal / the play glyph /
             // deeper_player_status_playing. The transport is the editor's (DeeperLocalAudio, the
             // process's shared LibVLC); OpenAudioAsync plays it once it is open.
-            // ponytail: no waveform - AudioWaveformCache decoded peaks with NAudio and LibVLC has
-            // no sample tap here, so the scrub strip seeks without a drawn wave.
+            // The peaks come from DeeperWaveform (LibVLC transcode off the UI thread, cached per file).
             _txtAudioPath.Text = path;
             _txtStatus.Text = Loc.Get("deeper_player_status_loading_audio");
             ShowMediaPaneFor(MediaTypes.Audio);
             _peaks = null;
             _waveformPath.Data = null;
             OpenAudioAsync(path);
+            _ = LoadWaveformAsync(path);
+        }
+
+        private System.Threading.CancellationTokenSource? _waveCts;
+
+        /// <summary>Tests: the peaks the strip is drawn from (null until decoded).</summary>
+        internal float[]? WaveformPeaks => _peaks;
+
+        /// <summary>WPF LoadWaveformAsync (:665). Decoded on a worker; a newer load or the window closing
+        /// cancels it, and a result for a file that is no longer the loaded one is dropped.</summary>
+        private async Task LoadWaveformAsync(string path)
+        {
+            try { _waveCts?.Cancel(); } catch { }
+            var cts = _waveCts = new System.Threading.CancellationTokenSource();
+            try
+            {
+                var data = await DeeperWaveform.LoadAsync(path, cts.Token);
+                if (cts.IsCancellationRequested || !ReferenceEquals(_waveCts, cts)) return;
+                if (!string.Equals(_txtAudioPath.Text, path, StringComparison.Ordinal)) return;
+                _peaks = data?.Peaks;
+                // Drawn once per load or resize into a cached bitmap, never per frame.
+                _waveformPath.CacheMode ??= new BitmapCache();
+                RenderWaveform();
+            }
+            catch (Exception ex) { Log.Debug("EnhancementPlayer: waveform decode failed: {Error}", ex.Message); }
         }
 
         /// <summary>
