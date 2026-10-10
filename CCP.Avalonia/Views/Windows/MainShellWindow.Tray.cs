@@ -118,13 +118,32 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             }
         }
 
-        /// <summary>The panic item: WPF StopEngine (a running session is paused, as the panic key does).
-        /// Saved flags stay as the user set them.</summary>
+        /// <summary>The tray's panic item (WPF's tray has none). Hard rule 6: never more permissive than the
+        /// panic key, so it answers to the same rule the 6-blink stop does (Core BlinkStopGate): refused
+        /// under Lockdown (with the WPF Stop message), with the panic key switched off and under Strict Lock.
+        /// Cut leash, the item above it, is never gated. Saved flags stay as the user set them.</summary>
         internal static void StopEverything()
         {
             Serilog.Log.Information("Tray: Stop everything");
             if (RefuseStopUnderLockdown()) return;   // WPF refuses every Stop under Lockdown (StartStop.cs:45)
-            PanicSurfaces.StopAll("tray");   // decision C: the only panic control on Windows, camera included
+            var block = TrayStopBlock();
+            if (block != ConditioningControlPanel.Services.Safety.BlinkStopGate.Block.None)
+            {
+                Serilog.Log.Information("Tray: Stop everything refused ({Reason})", block);
+                return;
+            }
+            PanicSurfaces.StopAll("tray");   // the same stop pass as the key, camera included (decision C)
+        }
+
+        /// <summary>Why the tray stop is refused right now; None when the panic key would run too.</summary>
+        internal static ConditioningControlPanel.Services.Safety.BlinkStopGate.Block TrayStopBlock()
+        {
+            var s = CoreSettings.Current;
+            return ConditioningControlPanel.Services.Safety.BlinkStopGate.Check(
+                blinkTrainerRunning: false,
+                lockdownActive: LockdownActive,
+                panicKeyEnabled: s.PanicKeyEnabled,
+                strictLockEnabled: s.StrictLockEnabled);
         }
 
         /// <summary>TrayIconService.ShowWindow + MainWindow's OnShowRequested (ShowAvatarTube).</summary>

@@ -75,6 +75,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // or the race is that game's pause (a second Escape within 2 s is a full panic). A pause is not
             // a panic, so it arms nothing and stops nothing.
             if (Games.GameWindow.TryKeepEscapeAsPause(s.PanicKey, CoreEngine.IsRunning, LockCardWindow.IsAnyOpen(), DateTime.UtcNow)) return;
+            // WPF :1589: armed up here because the rungs below return early (lock card, palette, grace pause).
+            PanicSurfaces.ArmSafetyHold();
             IntakeHostWindow.StopMicsForPanic();   // every press, before the lock-card stop or the capture abort reads as silence
             CancelPendingAi();   // every press, even one a lock card or the palette consumes
 

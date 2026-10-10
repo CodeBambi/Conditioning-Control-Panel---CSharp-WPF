@@ -7,9 +7,9 @@
 // press does) parks the runner and closes the video window at once; the rest of the ladder then takes
 // down lock cards and the engine. A cut (LeashHead.CutDone) or the leash ending cancels the task and
 // closes the window.
-// Head differences: no session-from-remote on this head (RemoteCommands refuses session verbs), so a
-// pink / detention task cannot start a session (StartSession answers false and the runner reports it
-// could not continue); the port's Deeper player raises no completion event, so a catalogue watch in
+// A pink / detention task starts its session through the shell's session start, the same one the remote's
+// start_session verb uses (WPF StartSessionFromRemote). Never a strict lock.
+// Head differences: the port's Deeper player raises no completion event, so a catalogue watch in
 // it never finishes by itself; the video clock is sampled by a script poll (SampleWatch reads the last
 // poll) instead of WPF's BrowserVideoTimeSource.
 using System;
@@ -193,18 +193,79 @@ internal sealed class LeashTaskHost : ILeashTaskHost, IDisposable
 
     // ---- sessions ----
 
-    public bool SessionRunning => CoreEngine.IsRunning;
+    public bool SessionRunning => Sessions()?.IsRunning == true;   // WPF App.IsSessionRunning
 
-    /// <summary>OWED on this head: WPF starts a leash_pink / leash_detention session through
-    /// StartSessionFromRemote, which this head does not have. False = the runner reports it.</summary>
+    /// <summary>Test seams: the session runner, and the start (default: the shell's StartSession, the one
+    /// the remote's start_session verb uses).</summary>
+    internal static Func<global::ConditioningControlPanel.Services.SessionRunner?> Sessions { get; set; } = () => App.Sessions;
+    internal static Func<global::ConditioningControlPanel.Models.Session, bool> StartSessionOnShell { get; set; } = session =>
+    {
+        if (MainShellWindow.Current is not { } shell) return false;
+        shell.StartSession(session);
+        return true;
+    };
+
+    /// <summary>WPF AppLeashTaskHost.StartSession (StartSessionFromRemote): a leash_pink / leash_detention
+    /// session. False when the player is already in a session (the runner counts that one instead) or
+    /// there is nothing to start it on.</summary>
     public bool StartSession(PunishKind kind, int minutes)
     {
-        Serilog.Log.Information("Leash session ({Kind}, {Min} min): no session-from-remote on this head", kind, minutes);
-        return false;
+        if (Sessions() is not { } runner || runner.IsRunning) return false;
+        try { return StartSessionOnShell(BuildSession(kind, minutes)); }
+        catch (Exception ex) { Serilog.Log.Warning("Leash session failed: {E}", ex.Message); return false; }
     }
 
-    /// <summary>Nothing to stop: this head never starts a leash session (see StartSession).</summary>
-    public void StopSession() { }
+    /// <summary>WPF MainWindow.StopLeashSession: stops the running session only when it is the leash's own
+    /// (ids leash_pink / leash_detention). Anything else is left alone.</summary>
+    public void StopSession()
+    {
+        try
+        {
+            if (Sessions() is not { IsRunning: true } runner) return;
+            var id = runner.CurrentSession?.Id;
+            if (id == null || !id.StartsWith("leash_", StringComparison.Ordinal)) return;
+            Serilog.Log.Information("Leash: panic press stops the leash's own session ({Id})", id);
+            runner.Stop(completed: false);
+            if (CoreEngine.IsRunning) MainShellWindow.StopEngine();   // WPF StopEngineAndSession
+        }
+        catch (Exception ex) { Serilog.Log.Warning("Leash session stop failed: {E}", ex.Message); }
+    }
+
+    /// <summary>WPF AppLeashTaskHost.BuildSession: the player's own effects, like the remote's generic
+    /// session, and for a pink session the pink filter from start to end. No strict lock, ever.</summary>
+    internal static global::ConditioningControlPanel.Models.Session BuildSession(PunishKind kind, int minutes)
+    {
+        var cur = CoreSettings.Current;
+        var pink = kind == PunishKind.Pink;
+        return new global::ConditioningControlPanel.Models.Session
+        {
+            Id = pink ? "leash_pink" : "leash_detention",
+            Name = pink ? "Pink session" : "Detention",
+            DurationMinutes = Math.Clamp(minutes, 1, 60),
+            Difficulty = global::ConditioningControlPanel.Models.SessionDifficulty.Easy,
+            BonusXP = 0,
+            Settings = new global::ConditioningControlPanel.Models.SessionSettings
+            {
+                FlashEnabled = cur?.FlashEnabled ?? true,
+                FlashPerHour = cur?.FlashFrequency ?? 10,
+                FlashOpacity = cur?.FlashOpacity ?? 100,
+                FlashImages = cur?.SimultaneousImages ?? 1,
+                FlashClickable = cur?.FlashClickable ?? false,
+                FlashAudioEnabled = cur?.FlashAudioEnabled ?? false,
+                SubliminalEnabled = cur?.SubliminalEnabled ?? true,
+                SubliminalPerMin = cur?.SubliminalFrequency ?? 5,
+                SubliminalOpacity = cur?.SubliminalOpacity ?? 100,
+                SubliminalFrames = cur?.SubliminalDuration ?? 5,
+                MandatoryVideosEnabled = false,
+                BubblesEnabled = cur?.BubblesEnabled ?? false,
+                PinkFilterEnabled = pink,
+                PinkFilterStartMinute = 0,
+                PinkFilterEndMinute = -1,
+                PinkFilterStartOpacity = 25,
+                PinkFilterEndOpacity = 25,
+            },
+        };
+    }
 
     // ---- bubbles ----
 

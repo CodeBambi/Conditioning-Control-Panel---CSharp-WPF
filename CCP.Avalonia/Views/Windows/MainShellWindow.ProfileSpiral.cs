@@ -4,14 +4,11 @@
 // row in the account menu. Both show only while the server has shipped this account a descent block
 // and the migration is not withholding the spiral; both paint a SpiralGlyph from that block.
 //
-// SEAM(descent): the port has no DescentService yet (WPF App.Descent: Current + BlockChanged) and no
-// DescentMigrationService.SpiralWithheld. The painters below are complete and read the two providers
-// here; whoever lands the service sets them at startup and calls OnSpiralBlockChanged from its
-// BlockChanged. Until then the block is null, which is WPF's own "outside the rollout" state: both
-// doors stay hidden, exactly as WPF hides them.
+// WireProfileSpiral (App startup, once DescentService is built) feeds the block provider and repaints both
+// doors on BlockChanged. The withheld provider stays unset: the migration ceremony is retired (auto-restore),
+// so nothing withholds the spiral on this head. With no block the doors stay hidden, as WPF hides them.
 //
-// Not ported: WireProfileSpiral / UnwireProfileSpiral (they subscribe to that service's event), and
-// nothing calls RefreshSpiralGlyphMotion yet (SEAM(f-shell): the motion level change in Settings
+// Not ported: nothing calls RefreshSpiralGlyphMotion yet (SEAM(f-shell): the motion level change in Settings
 // should, as WPF CmbMotionLevel_SelectionChanged does; SpiralGlyph already re-reads it on show/hide).
 
 using System;
@@ -40,6 +37,26 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private static bool SpiralWithheld()
         {
             try { return ProfileSpiralWithheld?.Invoke() == true; } catch { return true; }
+        }
+
+        /// <summary>The Spiral Room reads the same two answers the doors do.</summary>
+        internal static bool HasSpiralBlock => SpiralBlock() is not null;
+        internal static bool SpiralIsWithheld => SpiralWithheld();
+
+        private static DescentService? _spiralWiredTo;
+
+        /// <summary>WPF WireProfileSpiral: App.Descent's block feeds both doors, and a block that arrives or
+        /// is withdrawn repaints them on the live shell. Once per service.</summary>
+        internal static void WireProfileSpiral(DescentService? descent)
+        {
+            if (descent is null || ReferenceEquals(_spiralWiredTo, descent)) return;
+            _spiralWiredTo = descent;
+            ProfileSpiralBlock = () => descent.Current;
+            descent.BlockChanged += (_, _) => global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                try { Current?.OnSpiralBlockChanged(); }
+                catch (Exception ex) { Log.Debug("OnSpiralBlockChanged: {E}", ex.Message); }
+            });
         }
 
         /// <summary>WPF OnSpiralBlockChanged: a block that arrives or is withdrawn repaints both doors.</summary>
