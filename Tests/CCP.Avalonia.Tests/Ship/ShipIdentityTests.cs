@@ -136,4 +136,26 @@ public sealed class ShipIdentityTests
         Assert.True(exited, "the head did not take WPF's ack as a live primary");
         Assert.Equal((LauncherHandoff.Action, "game:race"), seen);         // the surface rode WPF's file
     }
+
+    [Fact]
+    public void TheInstallerLaysTheHeadDownUnderWpfsExeName()
+    {
+        var iss = File.ReadAllText(Path.Combine(RepoRoot(), "installer.iss"));
+        // One AppId for both heads: Setup finds the WPF install by it and upgrades in place.
+        Assert.Contains("AppId={{A7B9C3D1-E5F2-4A8B-9C1D-2E3F4A5B6C7D}", iss);
+        Assert.Contains("#define HeadExeName \"" + AppIdentity.BuildExeName + "\"", iss);
+        Assert.Contains("#define MyAppExeName \"" + AppIdentity.InstalledExeName + "\"", iss);
+        Assert.Contains("Source: \"{#PublishDir}\\{#HeadExeName}\"; DestDir: \"{app}\"; DestName: \"{#MyAppExeName}\"", iss);
+        // Never a second copy under the build name.
+        Assert.Contains("Excludes: \"" + AppIdentity.BuildExeName + ",*.pdb", iss);
+        // The build script takes the version from Version.props and never signs or uploads.
+        var bat = File.ReadAllText(Path.Combine(RepoRoot(), "build-installer-avalonia.bat"));
+        Assert.Contains("Version.props", bat);
+        Assert.Contains("/DAvaloniaHead /DMyAppVersion=%VERSION%", bat);
+        Assert.DoesNotContain("set VERSION=7", bat);
+        Assert.DoesNotContain("gh release", bat);
+        // .iss and .bat stay CRLF (Inno and cmd both mind).
+        Assert.DoesNotContain("\n", iss.Replace("\r\n", ""));
+        Assert.DoesNotContain("\n", bat.Replace("\r\n", ""));
+    }
 }

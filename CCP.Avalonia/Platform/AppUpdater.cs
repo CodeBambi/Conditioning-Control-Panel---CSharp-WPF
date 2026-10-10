@@ -384,7 +384,7 @@ namespace ConditioningControlPanel.Avalonia.Platform
             var installPath = RunningInstallDir()
                 ?? (string.IsNullOrEmpty(registry) ? Path.GetDirectoryName(Environment.ProcessPath) : registry);
             var appExe = !string.IsNullOrEmpty(installPath)
-                ? Path.Combine(installPath, "ConditioningControlPanel.exe")
+                ? Path.Combine(installPath, AppIdentity.InstalledExeName)
                 : Environment.ProcessPath ?? "";
             var logPath = Path.Combine(UserData, "logs", "update-helper.log");
             var elevate = NeedsElevation(installPath);
