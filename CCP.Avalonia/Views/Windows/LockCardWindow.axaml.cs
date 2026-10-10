@@ -701,9 +701,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 }
                 else
                 {
-                    // Refused. The gate is live, so repaint the hint now that the user has told us
-                    // they are looking for the exit.
-                    RefreshEscHint();
+                    // Refused. The gate is live, so repaint the hint on EVERY card (WPF repaints
+                    // the mirrors too) now that the user has told us they are looking for the exit.
+                    foreach (var w in new List<LockCardWindow>(_allWindows))
+                    {
+                        try { w.RefreshEscHint(); } catch { }
+                    }
                 }
             }
 
