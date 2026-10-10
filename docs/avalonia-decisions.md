@@ -868,3 +868,18 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
   Awareness tab repaints and shows `awareness_off_by_panic` until the user switches back on. Tests:
   `PanicKeywordOffTests`.
 - The Lockdown dose keeper ships as on WPF, default on, pending one desk run. No code change.
+
+## 2026-10-10: cloud settings backup wired on Avalonia (parity lane k25, replaces the 2026-10-09 "stays unwired" entry)
+- The card on Settings > Account & Plans is live: `CCP.Core/Services/Settings/CloudSettingsBackup.cs` (same two routes and
+  body as WPF: `POST /v2/user/backup-settings`, `POST /v2/user/settings-backup`) and
+  `AccountSettingsSection.CloudBackup.cs`. Manual only: no automatic upload after a save and no startup restore prompt.
+- Cross-OS answer to the 2026-10-09 worry: `CustomAssetsPath` never rides a backup and this machine's value wins on a
+  restore; the per-file asset lists are relative paths, and an empty list in a restore keeps this machine's own.
+- Never in a backup: identity and progression, entitlement windows (by their JSON names too, which WPF's strip misses),
+  every `Chaster*` setting, anything named Token / ApiKey / Secret / Password / Webhook / Credential, presence sharing,
+  the mod personality picks, `LastSeenUtc`, `KeywordTriggersOffByPanic`. A backup that carries one anyway is stripped on
+  decode.
+- Safety floor on restore (port addition, WPF has none): no `*StrictLock*` flag can go from off to on, the panic key can
+  not go from on to off, and the screen read stays off while `KeywordTriggersOffByPanic` is set here.
+- Back Room options ride the backup like any other AppSettings value (as on WPF); they are still not part of profile sync.
+- Tests: `CloudSettingsBackupTests` (Core), `CloudBackupCardTests` (head).

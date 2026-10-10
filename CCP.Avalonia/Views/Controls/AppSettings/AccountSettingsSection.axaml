@@ -236,7 +236,7 @@
             </Grid>
         </Border>
 
-        <!-- Starts hidden; shown only with a cloud identity. -->
+        <!-- Starts hidden; shown only with a cloud identity (AccountSettingsSection.CloudBackup.cs). -->
         <Border x:Name="CloudSettingsBackupSection" Background="{DynamicResource DarkerBgBrush}" CornerRadius="12" Padding="0" Margin="0,0,0,12"
                 BorderBrush="{StaticResource SectionHueAccountBorderBrush}" BorderThickness="1" IsVisible="False">
             <Grid>
@@ -258,7 +258,7 @@
                                 FontWeight="Bold" FontSize="12"
                                 Cursor="Hand"
                                 Click="BtnBackupSettingsNow_Click">
-                            <TextBlock Text="{loc:Str btn_backup_now}"/>
+                            <TextBlock x:Name="TxtBtnBackupNow" Text="{loc:Str btn_backup_now}"/>
                         </Button>
                         <Button x:Name="BtnRestoreSettings"
                                 Background="Transparent" Foreground="{DynamicResource SecondaryBrush}"
@@ -266,7 +266,7 @@
                                 FontWeight="Bold" FontSize="12"
                                 Cursor="Hand"
                                 Click="BtnRestoreSettings_Click">
-                            <TextBlock Text="{loc:Str btn_restore_from_cloud}"/>
+                            <TextBlock x:Name="TxtBtnRestore" Text="{loc:Str btn_restore_from_cloud}"/>
                         </Button>
                     </StackPanel>
                 </StackPanel>

@@ -1673,6 +1673,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             // Stop the tick timer first so no UI work is queued onto a dying window — and because
             // --render-all opens and closes every view in one process, a timer left running would
             // accumulate one live 100ms tick per view.
+            CreditDeeperMinutes(false);   // the last partial minute of play (permanent_resident)
             try { _uiTimer?.Stop(); } catch { }
             try { if (_uiTimer != null) _uiTimer.Tick -= UiTimer_Tick; } catch { }
             _uiTimer = null;

@@ -113,8 +113,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
                 SetVisible("TxtPatreonReconnectHint", row.ShowsHint);
                 SetVisible("BtnLinkDiscord", hasUnifiedId && !hasLinkedDiscord);
 
-                // WPF shows backup + data privacy with a cloud identity. Backup has no service here
-                // (social#3): its buttons would be dead, so only the data privacy card opens.
+                // WPF shows backup + data privacy with a cloud identity; signed out, both are shut.
+                SetVisible("CloudSettingsBackupSection", hasUnifiedId);
                 SetVisible("DataPrivacySection", hasUnifiedId);
             }
             catch (Exception ex)
