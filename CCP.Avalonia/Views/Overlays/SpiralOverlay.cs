@@ -30,7 +30,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
     /// stop/start. A frame tick only swaps <c>Image.Source</c> on each window: no decode, no bitmap
     /// allocation. The timer exists only while windows are up, so nothing ticks while stopped.</para>
     /// </summary>
-    internal static class SpiralOverlay
+    internal static partial class SpiralOverlay
     {
         /// <summary>Headless tests have no X11 window to make click-through; this lets them drive the
         /// real show/animate/close path. Never set outside tests.</summary>
@@ -129,24 +129,35 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         public static void Refresh(Visual host)
         {
             var s = CoreSettings.Current;
-            if (!s.SpiralEnabled || !ShouldShow()) { _runPick = null; CloseAll(); return; }   // the next start rolls a fresh spiral
+            var hold = ActiveHold;   // a caller's band: up whatever the user's own switch says
+            if (!(s.SpiralEnabled || hold != null) || !ShouldShow()) { _runPick = null; CloseAll(); return; }   // the next start rolls a fresh spiral
 
-            var path = SourcePath();
+            var path = hold?.Path ?? SourcePath();
             if (_framesKey != path)
             {
                 CloseAll();
-                BeginDecode(TopLevel.GetTopLevel(host) ?? host, path);
-                return;
+                if (!IsVideo(path))
+                {
+                    _video = false;
+                    BeginDecode(TopLevel.GetTopLevel(host) ?? host, path);
+                    return;
+                }
+                // A video spiral has no frames to decode: it plays straight into the windows below.
+                foreach (var old in _frames) old.Dispose();
+                (_frames, _framesKey, _index, _video) = (new List<Bitmap>(), path, 0, true);
             }
-            if (_frames.Count == 0) { CloseAll(); return; }   // undecodable: logged once by the decode
+            if (_frames.Count == 0 && !_video) { CloseAll(); return; }   // undecodable: logged once by the decode
 
             var screens = ScreenList.Enumerate(host);
             var primary = -1;
             for (var i = 0; i < screens.Count; i++) if (screens[i].IsPrimary) { primary = i; break; }
-            var want = PinkFilterOverlay.ResolveScreenIndices(s.SpiralTargetMonitor, s.DualMonitorEnabled, screens.Count, primary);
-            var opacity = PaintedOpacity;
+            var want = hold?.AllScreens == true
+                ? Enumerable.Range(0, screens.Count).ToArray()
+                : PinkFilterOverlay.ResolveScreenIndices(s.SpiralTargetMonitor, s.DualMonitorEnabled, screens.Count, primary);
+            var opacity = hold != null ? Math.Clamp(hold.Opacity, 0, 1) : PaintedOpacity;
+            var slow = hold?.Slow == true;
 
-            if (Windows.Count > 0 && want.SequenceEqual(_shownOn))
+            if (Windows.Count > 0 && want.SequenceEqual(_shownOn) && slow == _shownSlow)
             {
                 foreach (var w in Windows) w.Spiral.Opacity = opacity;   // WPF UpdateSpiralOpacity
                 return;
@@ -163,7 +174,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             foreach (var i in want)
             {
                 var w = new SpiralOverlayWindow();
-                w.Spiral.Source = _frames[_index % _frames.Count];
+                if (_frames.Count > 0) w.Spiral.Source = _frames[_index % _frames.Count];
                 w.Spiral.Opacity = opacity;
                 // Click-through and override-redirect (with the geometry) before Show, the order
                 // FlashOverlay/SubliminalOverlay use: a stale WM replay cannot mis-size it, and a
@@ -181,10 +192,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                 Windows.Add(w);
             }
             _shownOn = want;
+            _shownSlow = slow;
             QuestMinutes.Follow(Windows.Count > 0);
+            if (_video && Windows.Count > 0) StartVideo(path, slow);
             if (_frames.Count > 1 && Windows.Count > 0)
             {
-                _timer = new DispatcherTimer(DispatcherPriority.Render) { Interval = _delay };
+                // Reduced motion (a Back Room hold): the weave at half speed, never a still.
+                _timer = new DispatcherTimer(DispatcherPriority.Render) { Interval = slow ? _delay + _delay : _delay };
                 _timer.Tick += (_, _) => Tick();
                 _timer.Start();
             }
@@ -205,6 +219,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         {
             _timer?.Stop();
             _timer = null;
+            StopVideo();
             foreach (var w in Windows)
             {
                 try { w.Close(); }
@@ -223,7 +238,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         /// <summary>Same gate as the pink tint (WPF RefreshOverlays returns early unless the engine runs):
         /// a running engine or session, not paused. Unseeded (renders, tests) means the card owns it.</summary>
         private static bool ShouldShow()
-            => global::ConditioningControlPanel.Services.RemoteCommands.OverlayHold || App.Sessions?.IsPaused != true
+            => ActiveHold != null || global::ConditioningControlPanel.Services.RemoteCommands.OverlayHold || App.Sessions?.IsPaused != true
                && (CoreSession.IsEngineRunningProvider is null || CoreSession.IsEngineRunning || App.Sessions?.IsRunning == true);
 
         private static void BeginDecode(Visual host, string path)
