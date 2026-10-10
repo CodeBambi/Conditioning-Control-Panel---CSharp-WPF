@@ -65,6 +65,7 @@ Kind of limit:
 | Awareness: now playing | MPRIS over the session D-Bus, 3 s poll. | A player that does not speak MPRIS is not seen (some Flatpak sandboxes hide the bus name; some browsers need a setting). If the session bus restarts, the watcher stays off until the app restarts. | needs a run | `Platform/MprisMediaWatcher.cs` |
 | Awareness: microphone in use | Nothing on Linux (the answer is "unknown"). Windows sweeps the capture endpoints for an active session, cached 5 s, as WPF. | On Linux the meeting guard never trips from the microphone; the fullscreen, typing and CCP-surface gates still apply. Linux would read PulseAudio / PipeWire source-outputs (`pactl list source-outputs`). | not built on Linux | `Platform/MicrophoneInUseProbe.cs` (`PlatformSweep` returns null off Windows) |
 | OS reduced motion | GNOME: `gsettings enable-animations`. | Other desktops: reads as "animations on". | not built (KDE has its own key) | `Controls/Fx/OsReducedMotion.cs` |
+| Alt+Tab during a running engine (the "Player 2 Disconnected" badge asks for a Gamer Girl session with no Alt+Tab) | Windows: Tab with Alt held, seen by the panic key's own non-consuming hook, as WPF. | Linux: not watched (the window manager takes Alt+Tab before any client sees it, and a raw-key watch for it is not built). It reads as unknown and is never counted against the player, so the badge is earned by finishing the session. | not built | `Platform/AchievementAutosave.cs` |
 
 ## Overlays and windows
 

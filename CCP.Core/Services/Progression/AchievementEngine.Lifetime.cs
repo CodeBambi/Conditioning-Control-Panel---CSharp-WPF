@@ -274,17 +274,121 @@ internal sealed partial class AchievementEngine
     /// <summary>OnRemoteSessionStarted / Ended (:532, :543): the count starts over.</summary>
     public void ResetRemoteSession() => Progress.RemoteCommandsThisSession = 0;
 
+    /// <summary>OnRemoteSessionStarted (:531): the relay opened a session. The command count starts
+    /// over and the patron badge for handing over control is tried (the exclusive gate decides).</summary>
+    public void TrackRemoteSessionStarted()
+    {
+        Progress.RemoteCommandsThisSession = 0;
+        TryUnlockExclusive("hand_over_control");
+    }
+
+    /// <summary>OnTutorialEvent "FileSaved" (:441): the Deeper editor saved an enhancement.
+    /// <paramref name="ruleCount"/> is the saved file's rule count (each rule has a trigger); null when
+    /// the file could not be read back, which still counts the build.</summary>
+    public void TrackEnhancementBuilt(int? ruleCount)
+    {
+        Progress.EnhancementsBuilt++;
+        _isDirty = true;
+        TryUnlock("not_a_video_editor");
+        if (ruleCount >= AchievementRules.MadScientistRules) TryUnlock("mad_scientist");
+    }
+
+    /// <summary>
+    /// BackfillCompanionChatCount (:319), once ever: the chat count is raised (never lowered) to what
+    /// the brain's own records show. Each argument is one source's count, or null when that read
+    /// threw. With no readable source the latch stays open and the next launch tries again.
+    /// Returns true when the latch was set by this call.
+    /// </summary>
+    public bool BackfillCompanionChat(int? restoredTurns, int? relationshipTurns)
+    {
+        if (Progress.CompanionChatBackfilled) return false;
+        if (restoredTurns == null && relationshipTurns == null) return false;
+        Progress.CompanionChatBackfilled = true;
+        var evidence = Math.Max(restoredTurns ?? 0, relationshipTurns ?? 0);
+        if (evidence > Progress.CompanionMessages) Progress.CompanionMessages = evidence;
+        _isDirty = true;
+        if (Progress.CompanionMessages > 0) TryUnlock("pleased_to_meet_you");
+        if (Progress.CompanionMessages >= AchievementRules.PillowTalkMessages) TryUnlock("pillow_talk");
+        return true;
+    }
+
+    /// <summary>The two reads of the WPF backfill over a live brain (null = no source yet: try again
+    /// next launch). A memory that is not a MemoryStore is a real answer: no such record.</summary>
+    public bool BackfillCompanionChat(Companion.Brain.CompanionBrain? brain)
+    {
+        if (brain == null || Progress.CompanionChatBackfilled) return false;
+        int? turns = null, relationship = null;
+        try { turns = System.Linq.Enumerable.Count(brain.Session.Turns, t => t != null && t.Kind == Companion.Brain.TurnKind.UserChat); }
+        catch (Exception ex) { Log.Debug("chat backfill: turn log read failed: {E}", ex.Message); }
+        try
+        {
+            relationship = brain.Memory is Companion.Brain.MemoryStore store
+                ? System.Linq.Enumerable.Sum(store.Relationships.Values, r => r?.ChatTurnsTotal ?? 0)
+                : 0;
+        }
+        catch (Exception ex) { Log.Debug("chat backfill: relationship read failed: {E}", ex.Message); }
+        return BackfillCompanionChat(turns, relationship);
+    }
+
     // ---- Core event wiring -----------------------------------------------------------------------
 
     private static Action<double, string>? _xpHandler;
     private static EventHandler<ModPackage>? _modHandler;
+    private static EventHandler<string>? _tutorialHandler;
+    private static System.ComponentModel.PropertyChangedEventHandler? _comboHandler;
+    private static AppSettings? _comboSettings;
+    private static SettingsService? _comboService;
+    private static Action? _replacedHandler;
+
+    /// <summary>How a Core event reaches the engine: the head sets its UI post (the counters are UI
+    /// state, as on WPF where every handler runs on the dispatcher). Default = inline (tests).</summary>
+    internal static volatile Action<Action> UiPost = a => a();
+
+    /// <summary>Run <paramref name="act"/> on the running engine through <see cref="UiPost"/>. Never throws.</summary>
+    internal static void OnCurrent(Action<AchievementEngine> act, string what)
+    {
+        try
+        {
+            UiPost(() =>
+            {
+                try { if (Current is { } e) act(e); }
+                catch (Exception ex) { Log.Debug(ex, "achievement {What}", what); }
+            });
+        }
+        catch (Exception ex) { Log.Debug(ex, "achievement {What} post", what); }
+    }
+
+    /// <summary>The six settings the two combination badges read (WPF checked them every second; here
+    /// the check runs when one of them changes, when the settings object is swapped, and at attach).</summary>
+    internal static readonly string[] ComboSettingNames =
+    {
+        nameof(AppSettings.BubblesEnabled), nameof(AppSettings.BouncingTextEnabled), nameof(AppSettings.SpiralEnabled),
+        nameof(AppSettings.StrictLockEnabled), nameof(AppSettings.PanicKeyEnabled), nameof(AppSettings.PinkFilterEnabled),
+    };
+
+    private static void WatchComboSettings()
+    {
+        if (_comboSettings != null && _comboHandler != null) _comboSettings.PropertyChanged -= _comboHandler;
+        _comboSettings = null;
+        if (Current == null || _comboHandler == null) return;
+        _comboSettings = CoreSettings.Current;
+        _comboSettings.PropertyChanged += _comboHandler;
+        OnCurrent(e => e.CheckSettingCombos(CoreSettings.Current), "combo check");
+    }
 
     /// <summary>Make <paramref name="engine"/> the running one and hook the Core events it counts from
-    /// (XP banked, mod switched). Idempotent; null detaches (tests, shutdown).</summary>
+    /// (XP banked, mod switched, an enhancement saved by the editor, the combination settings).
+    /// Idempotent; null detaches (tests, shutdown).</summary>
     internal static void Attach(AchievementEngine? engine)
     {
         if (_xpHandler != null) { ProgressionBank.Awarded -= _xpHandler; _xpHandler = null; }
         if (_modHandler != null) { CoreMods.ModChanged -= _modHandler; _modHandler = null; }
+        if (_tutorialHandler != null) { CoreTutorialEvents.Event -= _tutorialHandler; _tutorialHandler = null; }
+        if (_comboSettings != null && _comboHandler != null) _comboSettings.PropertyChanged -= _comboHandler;
+        (_comboSettings, _comboHandler) = (null, null);
+        if (_comboService != null && _replacedHandler != null) _comboService.CurrentReplaced -= _replacedHandler;
+        _replacedHandler = null;
+        _comboService = null;
         Current = engine;
         if (engine == null) return;
         _xpHandler = (amount, _) => { try { engine.TrackXPEarned(amount); } catch (Exception ex) { Log.Debug(ex, "achievement xp total"); } };
@@ -293,7 +397,30 @@ internal sealed partial class AchievementEngine
             try { if (mod != null) engine.TrackModActivated(mod.Id, mod.IsBuiltIn); }
             catch (Exception ex) { Log.Debug(ex, "achievement mod count"); }
         };
+        // WPF GamificationBridge.OnTutorialEvent: the editor's save signal plus the saved file's rule count.
+        _tutorialHandler = (_, name) =>
+        {
+            if (name != "FileSaved") return;
+            int? rules = null;
+            try
+            {
+                var path = CoreTutorialEvents.LastSavedEnhancementPath;
+                if (!string.IsNullOrEmpty(path)) rules = Deeper.EnhancementSerializer.LoadFromFile(path!)?.Rules?.Count;
+            }
+            catch (Exception ex) { Log.Debug("achievement: saved enhancement could not be read back: {E}", ex.Message); }
+            OnCurrent(e => e.TrackEnhancementBuilt(rules), "enhancement built");
+        };
+        _comboHandler = (_, e) =>
+        {
+            if (e.PropertyName == null || Array.IndexOf(ComboSettingNames, e.PropertyName) >= 0)
+                OnCurrent(x => x.CheckSettingCombos(CoreSettings.Current), "combo check");
+        };
         ProgressionBank.Awarded += _xpHandler;
         CoreMods.ModChanged += _modHandler;
+        CoreTutorialEvents.Event += _tutorialHandler;
+        _replacedHandler = WatchComboSettings;
+        _comboService = CoreSettings.Service;
+        if (_comboService != null) _comboService.CurrentReplaced += _replacedHandler;
+        WatchComboSettings();
     }
 }

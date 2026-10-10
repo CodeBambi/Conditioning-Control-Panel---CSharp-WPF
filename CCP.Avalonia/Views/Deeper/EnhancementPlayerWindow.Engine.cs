@@ -108,6 +108,28 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
                 _lastRaisedSec = _currentSec;
                 _timeSource!.Raise(_currentSec);
             }
+
+            CreditDeeperMinutes(_host.IsActivelyPlaying);
+        }
+
+        // WPF AchievementService.cs:493: Deeper time counts only while an enhancement is actively
+        // playing (permanent_resident, 600 minutes). Measured on a monotonic clock between two playing
+        // ticks (6 s ceiling, WPF's sanity bound) and handed to the engine a whole minute at a time,
+        // with the remainder on pause and on close.
+        private readonly global::ConditioningControlPanel.Services.RunningTimeCredit _deeperCredit = new(TimeSpan.FromSeconds(6));
+        private readonly System.Diagnostics.Stopwatch _deeperClock = System.Diagnostics.Stopwatch.StartNew();
+        private double _deeperPendingMinutes;
+
+        internal void CreditDeeperMinutes(bool playing) => CreditDeeperMinutes(playing, _deeperClock.Elapsed);
+
+        internal void CreditDeeperMinutes(bool playing, TimeSpan now)
+        {
+            _deeperPendingMinutes += _deeperCredit.Sample(playing, now);
+            if (_deeperPendingMinutes <= 0 || (playing && _deeperPendingMinutes < 1.0)) return;
+            var minutes = _deeperPendingMinutes;
+            _deeperPendingMinutes = 0;
+            try { App.Achievements?.TrackDeeperMinutes(minutes); }
+            catch (Exception ex) { Serilog.Log.Debug(ex, "deeper minutes"); }
         }
 
         private bool MediaReady => _isVideoMode ? _videoNavigated : _audio != null;

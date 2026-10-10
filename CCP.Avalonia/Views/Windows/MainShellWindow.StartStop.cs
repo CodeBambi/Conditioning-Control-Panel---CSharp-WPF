@@ -35,10 +35,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             {
                 Serilog.Log.Information("Start button: asking to stop the running session");
                 await ConfirmStopSession("dialog_stop_session_title", "dialog_stop_session_body");
-                if (!App.Sessions.IsRunning) { NoteSchedulerManualStop(); StopEngine(); }
+                if (!App.Sessions.IsRunning) { NoteSchedulerManualStop(); Platform.AchievementAutosave.NoteManualStop(); StopEngine(); }
                 return;
             }
-            if (CoreEngine.IsRunning) { Serilog.Log.Information("Start button: stopping the engine"); NoteSchedulerManualStop(); StopEngine(); }
+            if (CoreEngine.IsRunning) { Serilog.Log.Information("Start button: stopping the engine"); NoteSchedulerManualStop(); Platform.AchievementAutosave.NoteManualStop(); StopEngine(); }
             else { Scheduler.NoteManualStart(); StartEngine(); }   // WPF StartStop.cs:111
         }
 
