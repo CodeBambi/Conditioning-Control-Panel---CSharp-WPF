@@ -47,6 +47,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             ChkTriggers.IsCheckedChanged += ChkTriggers_Changed;
             SliderTriggerChance.ValueChanged += SliderTriggerChance_Changed;
             foreach (var box in TriggerTypeBoxes()) box.IsCheckedChanged += TriggerType_Changed;
+            ChkBubbleGazePop.IsCheckedChanged += ChkBubbleGazePop_Changed;
+            ChkBrainDrainBubble.IsCheckedChanged += ChkBrainDrainBubble_Changed;
+            CmbMotion.SelectionChanged += CmbMotion_Changed;
 
             LoadFromSettings();
 
@@ -75,6 +78,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             if (CoreSettings.Service is { } svc) svc.CurrentReplaced += OnCurrentReplaced;
             CoreMods.ModChanged += OnModChanged;
             Overlays.BubbleOverlay.XpBudgetChanged += UpdateAmbientXpBudgetLine;   // WPF AmbientXpBudgetChanged
+            Platform.PrizeOwnership.Changed += OnGrantsChanged;
             RebindToCurrentSettings();
         }
 
@@ -83,6 +87,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             if (CoreSettings.Service is { } svc) svc.CurrentReplaced -= OnCurrentReplaced;
             CoreMods.ModChanged -= OnModChanged;
             Overlays.BubbleOverlay.XpBudgetChanged -= UpdateAmbientXpBudgetLine;
+            Platform.PrizeOwnership.Changed -= OnGrantsChanged;
             Unhook();
             base.OnDetachedFromVisualTree(e);
         }
@@ -145,6 +150,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
                 var ids = s.BubbleTriggerVariants ?? new List<string>();
                 foreach (var box in TriggerTypeBoxes())
                     box.IsChecked = box.Tag is string id && ids.Contains(id);
+                ChkBubbleGazePop.IsChecked = s.BubbleGazePopEnabled;
+                ChkBrainDrainBubble.IsChecked = s.BubbleBrainDrainEnabled;
+                RebuildMotionPicker();
+                UpdateGazeHint();
                 UpdateAmbientXpBudgetLine();
             }
             finally { _isLoading = false; }
@@ -168,6 +177,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
                 e.PropertyName == nameof(AppSettings.BubblesSize) ||
                 e.PropertyName == nameof(AppSettings.BubbleSpeedBoost) ||
                 e.PropertyName == nameof(AppSettings.BubbleGazePopEnabled) ||
+                e.PropertyName == nameof(AppSettings.BubbleMotionStyle) ||
+                e.PropertyName == nameof(AppSettings.BubbleBrainDrainEnabled) ||
                 e.PropertyName == nameof(AppSettings.BubbleTriggersEnabled) ||
                 e.PropertyName == nameof(AppSettings.BubbleTriggerChance) ||
                 e.PropertyName == nameof(AppSettings.BubbleTriggerVariants))
@@ -276,10 +287,107 @@ namespace ConditioningControlPanel.Avalonia.Views.Features
             CoreSettings.Save();
         }
 
-        // ponytail: WPF also carries the "stare to pop" row here - ChkBubbleGazePop_Changed
-        // (BubbleGazePopEnabled, which is in Core) plus TxtBubbleGazeHint, whose visibility asks
-        // App.Webcam.IsRunning / .Calibration and Services.WebcamTrackingService.IsConsentCurrent()
-        // in the WPF head. Neither control exists in this port's .axaml, so there is nothing to
-        // wire until that card is ported.
+        // ---- Stare to pop (WPF ChkBubbleGazePop_Changed + UpdateGazeHint) -----------------------
+
+        /// <summary>The camera can feed a dwell right now: running, on a stored calibration. A seam
+        /// for tests.</summary>
+        internal static Func<bool> GazeReady = () =>
+            Platform.WebcamTracker.Instance is { IsRunning: true, Calibration: not null };
+
+        /// <summary>"Stare to pop" is a stored preference; it does nothing until the camera runs on
+        /// a stored calibration. Without this line the toggle reads as broken, so the row stays live
+        /// and gains a hint rather than being hidden or disabled (WPF UpdateGazeHint).</summary>
+        private void UpdateGazeHint()
+        {
+            try { TxtBubbleGazeHint.IsVisible = !GazeReady(); }
+            catch { TxtBubbleGazeHint.IsVisible = true; }
+        }
+
+        /// <summary>The bubble twin of the Flashes page's switch: writes the preference. The dwell
+        /// reads it through <see cref="Overlays.BubbleOverlay.GazeTargets"/>.</summary>
+        private void ChkBubbleGazePop_Changed(object? sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            CoreSettings.Current.BubbleGazePopEnabled = ChkBubbleGazePop.IsChecked ?? false;
+            CoreSettings.Save();
+            UpdateGazeHint();
+        }
+
+        // ---- Bubbles v2 motion picker (WPF BubblePopFeatureControl.xaml.cs RebuildMotionPicker) ----
+
+        /// <summary>Grants can change off the UI thread (a sync); the rebuild is posted.</summary>
+        private void OnGrantsChanged() => Dispatcher.UIThread.Post(() =>
+        {
+            var was = _isLoading;
+            _isLoading = true;
+            try { RebuildMotionPicker(); }
+            finally { _isLoading = was; }
+        });
+
+        private static readonly global::Avalonia.Media.IBrush V2Brush =
+            new global::Avalonia.Media.SolidColorBrush(global::Avalonia.Media.Color.Parse("#FFE08A"));
+
+        /// <summary>Float up always; Rain / Spiral In only when owned (each wearing a v2 pill); Mix
+        /// once any v2 style is owned. With nothing owned the whole box stays collapsed: a one-item
+        /// picker is configuration with no capability behind it. The Brain Drain bubble arrives
+        /// with the same prizes. Callers hold <c>_isLoading</c>.</summary>
+        private void RebuildMotionPicker()
+        {
+            bool rain = Platform.PrizeOwnership.IsGranted(AmbientBubbleMotion.RainGrant);
+            bool spiral = Platform.PrizeOwnership.IsGranted(AmbientBubbleMotion.SpiralInGrant);
+            ChkBrainDrainBubble.IsVisible = rain || spiral;
+            MotionRow.IsVisible = rain || spiral;
+            V2Box.IsVisible = rain || spiral;   // WPF also keeps it up for the Get it row (owner call, not built)
+
+            CmbMotion.Items.Clear();
+            CmbMotion.Items.Add(MotionItem(BubbleMotionStyle.FloatUp, "bubble_motion_float_up", v2: false));
+            if (rain) CmbMotion.Items.Add(MotionItem(BubbleMotionStyle.Rain, "bubble_motion_rain", v2: true));
+            if (spiral) CmbMotion.Items.Add(MotionItem(BubbleMotionStyle.SpiralIn, "bubble_motion_spiral_in", v2: true));
+            if (rain || spiral) CmbMotion.Items.Add(MotionItem(BubbleMotionStyle.Mix, "bubble_motion_mix", v2: false));
+
+            // An unowned (absent) style shows as Float up; the setting is left alone.
+            var style = CoreSettings.Current.BubbleMotionStyle;
+            ComboBoxItem? pick = null;
+            foreach (var item in CmbMotion.Items)
+                if (item is ComboBoxItem { Tag: BubbleMotionStyle tag } cbi && tag == style) pick = cbi;
+            CmbMotion.SelectedItem = pick ?? CmbMotion.Items[0];
+        }
+
+        private static ComboBoxItem MotionItem(BubbleMotionStyle style, string key, bool v2)
+        {
+            var row = new StackPanel { Orientation = global::Avalonia.Layout.Orientation.Horizontal };
+            row.Children.Add(new TextBlock { Text = Loc.Get(key), VerticalAlignment = global::Avalonia.Layout.VerticalAlignment.Center });
+            if (v2)
+                row.Children.Add(new Border
+                {
+                    Margin = new Thickness(7, 0, 0, 0), Padding = new Thickness(5, 1, 6, 2), CornerRadius = new CornerRadius(7),
+                    Background = new global::Avalonia.Media.SolidColorBrush(global::Avalonia.Media.Color.FromArgb(0xD9, 0x1A, 0x1A, 0x2E)),
+                    BorderBrush = V2Brush, BorderThickness = new Thickness(1), IsHitTestVisible = false,
+                    VerticalAlignment = global::Avalonia.Layout.VerticalAlignment.Center,
+                    Child = new TextBlock { Text = Loc.Get("badge_v2"), Foreground = V2Brush, FontSize = 9, FontWeight = global::Avalonia.Media.FontWeight.Bold },
+                });
+            return new ComboBoxItem { Content = row, Tag = style };
+        }
+
+        /// <summary>WPF CmbMotion_Changed: the style is read at each spawn, so the next bubble wears it.</summary>
+        private void CmbMotion_Changed(object? sender, SelectionChangedEventArgs e)
+        {
+            if (_isLoading) return;
+            if (CmbMotion.SelectedItem is not ComboBoxItem { Tag: BubbleMotionStyle style }) return;
+            var s = CoreSettings.Current;
+            if (s.BubbleMotionStyle == style) return;
+            s.BubbleMotionStyle = style;
+            CoreSettings.Save();
+        }
+
+        /// <summary>The Brain Drain bubble (Bubbles v2). Default ON, so owning the prize is the only
+        /// opt-in; this row is the way back out. It grants nothing by itself: the roll also asks the
+        /// grants every time (<see cref="Services.Chaos.BrainDrainBubble.RollPool"/>).</summary>
+        private void ChkBrainDrainBubble_Changed(object? sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            CoreSettings.Current.BubbleBrainDrainEnabled = ChkBrainDrainBubble.IsChecked ?? false;
+            CoreSettings.Save();
+        }
     }
 }

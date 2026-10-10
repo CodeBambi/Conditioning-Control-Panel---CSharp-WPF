@@ -54,6 +54,38 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         /// <summary>The haze is on screen now (WPF OverlayService.BrainDrainVisualUp).</summary>
         internal static bool IsShowing => Windows.Count > 0;
 
+        // A timed drain (WPF OverlayService.ShowOverlayTimed "braindrain" / "braindrain_melt"): held
+        // up for its duration whatever the base feature says, then it lifts by itself.
+        private static (int Intensity, bool Melt)? _timed;
+        private static DispatcherTimer? _timedTimer;
+
+        /// <summary>A timed drain is still in flight (WPF TimedBrainDrainActive).</summary>
+        internal static bool TimedActive => _timed is not null;
+
+        /// <summary>WPF ShowOverlayTimed: the haze for <paramref name="ms"/>, then down again unless
+        /// the base feature wants it. False when nothing could be shown.</summary>
+        internal static bool ShowTimed(Visual host, int intensity, bool melt, int ms)
+        {
+            if (BrainDrainVisualPolicy.IsSilent(intensity)) return false;
+            _timedTimer?.Stop();
+            _timed = (intensity, melt);
+            Refresh(host);
+            if (!IsShowing) { _timed = null; return false; }
+            _timedTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(Math.Max(1, ms)) };
+            _timedTimer.Tick += (_, _) => EndTimed();
+            _timedTimer.Start();
+            return true;
+        }
+
+        internal static void EndTimed()
+        {
+            _timedTimer?.Stop();
+            _timedTimer = null;
+            if (_timed is null) return;
+            _timed = null;
+            RefreshFromSetting();
+        }
+
         /// <summary>The strength the windows draw at right now (tests).</summary>
         internal static int CurrentIntensity { get; private set; }
 
@@ -72,10 +104,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             var s = CoreSettings.Current;
             Follow(s);
 
-            if ((!IsSupported && !SkipPlatformChecksForTest) || _refused
-                || !BrainDrainVisualPolicy.WantsBlur(s.BrainDrainEnabled, s.BrainDrainBlurStrength) || !ShouldShow())
+            var baseWants = BrainDrainVisualPolicy.WantsBlur(s.BrainDrainEnabled, s.BrainDrainBlurStrength);
+            if ((!IsSupported && !SkipPlatformChecksForTest) || _refused || (!baseWants && _timed is null) || !ShouldShow())
             {
-                CloseAll();
+                CloseWindows();
                 return;
             }
 
@@ -86,8 +118,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             var bounds = want.Select(i => screens[i].Bounds).ToArray();
             if (bounds.Length == 0) { CloseAll(); return; }
 
-            var intensity = s.BrainDrainBlurStrength;
-            var melt = s.BrainDrainMeltEnabled;
+            // The user's own loop wins: a timed drain only decides while the base feature is quiet.
+            var intensity = baseWants ? s.BrainDrainBlurStrength : _timed!.Value.Intensity;
+            var melt = baseWants ? s.BrainDrainMeltEnabled : _timed!.Value.Melt;
 
             // Same monitors, same variant: move the dial in place (WPF UpdateBrainDrainBlurOpacity).
             if (Windows.Count > 0 && _pump is { } live && live.Melt == melt && bounds.SequenceEqual(_shownOn))
@@ -98,7 +131,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                 return;
             }
 
-            CloseAll();
+            CloseWindows();
             _host = host;
 
             var interval = TimeSpan.FromMilliseconds(1000.0 / BrainDrainLayerRules.Fps(s.BrainDrainHighRefresh));
@@ -111,7 +144,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                 var w = new BrainDrainOverlayWindow(_pump, screens[i].Bounds, interval);
                 w.PlaceOn(screens[i]);
                 w.Show();
-                if (!SkipPlatformChecksForTest && !Accept(w)) { CloseAll(); return; }
+                if (!SkipPlatformChecksForTest && !Accept(w)) { CloseWindows(); return; }
                 Windows.Add(w);
             }
             _shownOn = bounds;
@@ -133,6 +166,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         /// <summary>Takes the haze down: the engine stop, a pause, a panic and the shell closing.
         /// Never blocks: the capture thread frees its own handles.</summary>
         public static void CloseAll()
+        {
+            _timedTimer?.Stop();
+            _timedTimer = null;
+            _timed = null;
+            CloseWindows();
+        }
+
+        private static void CloseWindows()
         {
             _keepClearTimer?.Stop();
             _keepClearTimer = null;

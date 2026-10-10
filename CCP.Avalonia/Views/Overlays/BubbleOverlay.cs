@@ -30,9 +30,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
     /// <para>Hot path is allocation-free: one cached frame delegate, one Render pass over the
     /// field with struct transforms, a reused rect buffer for the input region.</para>
     ///
-    /// <para>ponytail: plain FloatUp bubbles only. Not here yet: trigger/effect bubbles
-    /// (ChaosBubbleVariants and payloads are head-side), Bubbles v2 motions (Rain/Spiral In) and
-    /// Brain Drain/Magnet, Natasha's red bubble, the avatar egg, gaze pops, the lucky gold glow and
+    /// <para>Bubbles v2 is here: the Rain and Spiral In motions (owned styles only) and the Brain
+    /// Drain bubble. Not here yet: the other trigger/effect bubbles (ChaosBubbleVariants and
+    /// payloads are head-side), Natasha's red bubble, the avatar egg, the gaze dwell engine (the
+    /// seam is <see cref="GazeTargets"/> / <see cref="GazePop"/>), the lucky gold glow and
     /// sparkles, pop haptics, mod pop-sound overrides, Discord presence, and the achievement
     /// (no AchievementService on this head; quests are credited).</para>
     /// </summary>
@@ -138,8 +139,58 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             // Outside sessions, bubbles are always clickable (no UI toggle exists for the setting).
             var clickable = !CoreSession.IsSessionRunning || s.BubblesClickable;
             var mod = (CoreMods.ActiveModTokenProvider?.Invoke() as ModManifest)?.BubbleScale;
-            Field.Bubbles.Add(AmbientBubble.Spawn(Field.Random, i, a.X, a.Y, a.Width, a.Height, Windows[i].Scaling, s, mod, clickable));
+            // Bubbles v2: ownership is PrizeOwnership's word at every spawn, never a setting, so a
+            // synced profile carrying an unowned style simply floats up (WPF RollForSpawn).
+            bool rain = PrizeOwnership.IsGranted(AmbientBubbleMotion.RainGrant), spiral = PrizeOwnership.IsGranted(AmbientBubbleMotion.SpiralInGrant);
+            var motion = AmbientBubbleMotion.Resolve(s.BubbleMotionStyle, rain, spiral, s.MotionLevel, Field.Random.NextDouble());
+            Field.Bubbles.Add(Field.RollDrainBubble(s, rain || spiral)
+                ? AmbientBubble.SpawnDrain(Field.Random, i, a.X, a.Y, a.Width, a.Height, Windows[i].Scaling, s, mod, clickable, motion, s.MotionLevel)
+                : AmbientBubble.Spawn(Field.Random, i, a.X, a.Y, a.Width, a.Height, Windows[i].Scaling, s, mod, clickable, motion, s.MotionLevel));
             RequestFrame();
+        }
+
+        // ---- Gaze seam (WPF BubbleService.GetGazeTargets / the dwell's pop) ----
+
+        /// <summary>Bubbles a gaze dwell may target; empty unless "Stare to pop" is on.</summary>
+        internal static IReadOnlyList<AmbientBubble> GazeTargets()
+        {
+            if (!_running || !CoreSettings.Current.BubbleGazePopEnabled) return Array.Empty<AmbientBubble>();
+            return Field.Bubbles.Where(b => b.Clickable && !b.Popping).ToList();
+        }
+
+        /// <summary>A gaze dwell completed on <paramref name="b"/>: the same pop as a click (the
+        /// player caused it, so it pays and counts exactly like one).</summary>
+        internal static void GazePop(AmbientBubble b)
+        {
+            if (!CoreSettings.Current.BubbleGazePopEnabled || b.Popping || !b.Clickable) return;
+            Pop(b);
+        }
+
+        /// <summary>The surface the drain bubble's haze is asked through (tests swap it).</summary>
+        internal static Func<int, bool, int, bool> ShowTimedDrain = (strength, melt, ms) =>
+            Windows.Count > 0 && BrainDrainOverlay.ShowTimed(Windows[0], strength, melt, ms);
+
+        /// <summary>WPF BrainDrainMeltPayload.Fire: the pop drains the screen for ten seconds on the
+        /// user's own blur dial. One drain at a time: the user's own loop wins outright, a dial at 0
+        /// means no picture, and either way the pop has already paid.</summary>
+        internal static bool FireDrain()
+        {
+            var s = CoreSettings.Current;
+            bool userDrainUp = CoreBrainDrain.IsRunning || BrainDrainOverlay.IsShowing;
+            if (!ConditioningControlPanel.Services.Chaos.BrainDrainBubble.ShouldPlayOverlay(BrainDrainOverlay.TimedActive, userDrainUp))
+            {
+                Log.Information("Bubble: brain drain pop paid XP only - a drain is already up");
+                return false;
+            }
+            var strength = s.BrainDrainBlurStrength;
+            if (BrainDrainVisualPolicy.IsSilent(strength))
+            {
+                Log.Information("Bubble: brain drain pop paid XP only - the blur dial is at 0");
+                return false;
+            }
+            var melt = ConditioningControlPanel.Services.Chaos.BrainDrainBubble.OverlayKindFor(s.MotionLevel)
+                       == ConditioningControlPanel.Services.Chaos.BrainDrainBubble.MeltKind;
+            return ShowTimedDrain(strength, melt, ConditioningControlPanel.Services.Chaos.BrainDrainBubble.OverlayMs);
         }
 
         /// <summary>WPF StartAnimationDriver/StopAnimationTimerIfIdle: one chain, parked while empty.</summary>
@@ -170,6 +221,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             try { App.Achievements?.TrackBubblePopped(); } catch (Exception ex) { Log.Debug("bubble count: {E}", ex.Message); }   // WPF AchievementService.TrackBubblePopped: count, pop_the_thought, 1 SP per 100
             try { App.Quests?.TrackBubblePopped(); } catch (Exception ex) { Log.Debug("bubble quest credit: {E}", ex.Message); }
             _ = CoreHaptics.Service?.BubblePopAsync();   // WPF BubbleService.cs:1089
+            if (b.IsDrain) { try { FireDrain(); } catch (Exception ex) { Log.Debug("Bubble: brain drain pop failed: {E}", ex.Message); } }
         }
 
         internal static void OnFrame(TimeSpan now)
@@ -212,6 +264,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             GradientStops = { new GradientStop(Color.FromArgb(180, 200, 220, 255), 0), new GradientStop(Color.FromArgb(80, 255, 255, 255), 1) },
         };
         private static readonly IPen FallbackPen = new Pen(Brushes.White, 2);
+        /// <summary>WPF BrainDrainBubble.TintR/G/B: the violet wash that marks the drain bubble.</summary>
+        private static readonly IBrush DrainTint = new SolidColorBrush(Color.FromArgb(0x8C,
+            ConditioningControlPanel.Services.Chaos.BrainDrainBubble.TintR,
+            ConditioningControlPanel.Services.Chaos.BrainDrainBubble.TintG,
+            ConditioningControlPanel.Services.Chaos.BrainDrainBubble.TintB));
 
         internal readonly int Index;
         internal readonly PixelRect Bounds;
@@ -309,10 +366,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                     var m = Matrix.CreateTranslation(-cx, -cy) * Matrix.CreateRotation(b.Angle * Math.PI / 180)
                           * Matrix.CreateScale(s, s) * Matrix.CreateTranslation(cx, cy);
                     using (dc.PushTransform(m))
-                    using (dc.PushOpacity(Math.Clamp(b.Fade, 0, 1)))
+                    using (dc.PushOpacity(b.DrawOpacity))
                     {
                         if (img != null) dc.DrawImage(img, new Rect(cx - size / 2, cy - size / 2, size, size));
                         else dc.DrawEllipse(FallbackFill, FallbackPen, new Point(cx, cy), size / 2 - 5, size / 2 - 5);
+                        if (b.IsDrain) dc.DrawEllipse(DrainTint, null, new Point(cx, cy), size / 2 - 5, size / 2 - 5);
                     }
                 }
             }
