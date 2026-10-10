@@ -73,7 +73,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
 
                 var cta = Find<Button>(content, _ => true);
                 var fx = new PremiumGateFx(gate, fog,
-                    Find<Control>(content, c => c is Image || (c is TextBlock t && t.Text == "🔒")), cta);
+                    Find<Control>(content, IsPadlock), cta);
                 Attached.Add(gate, fx);
                 // The CTA is unmeasured when the gate flips visible (WPF queued a retry); its first
                 // arrange re-runs the attach instead.
@@ -194,6 +194,11 @@ namespace ConditioningControlPanel.Avalonia.Controls
             if (cta != null && _ctaSheen == null && _running && cta.IsEffectivelyVisible && cta.Bounds.Width > 1)
                 _ctaSheen = CardSheenAdorner.Attach(cta, CtaCornerRadius);
         }
+
+        /// <summary>The gate's padlock: its art Image, a 🔒 TextBlock, or (Fluent icons) an
+        /// IconGlyph LockClosed - a converted gate must keep its glow.</summary>
+        internal static bool IsPadlock(Control c) =>
+            c is Image || (c is TextBlock t && t.Text == "🔒") || (c is IconGlyph g && g.Kind == IconKind.LockClosed);
 
         /// <summary>First matching descendant in the LOGICAL tree (populated before first render).</summary>
         private static T? Find<T>(Control root, Func<T, bool> match) where T : class

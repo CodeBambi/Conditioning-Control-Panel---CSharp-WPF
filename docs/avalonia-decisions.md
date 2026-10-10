@@ -877,3 +877,15 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
 ## 2026-10-10: Vault gate card/PayPal checkout link (avalonia-port/sync6-gate-pay)
 - Mirrors WPF 750e76812 exactly (supervisor-approved, P44): same URL `https://app.cclabs.app/subscribe?plan={basic|prime}&from=panel`,
   same copy (`vaultgate_or_card`), opened only through ExternalOpener on a user click; tests use a fake launcher, never a real URL.
+## 2026-10-10: Fluent UI System Icons replace glyphs and icon-emoji (avalonia-port/icons-infra, lane L0a)
+- User decision: every icon in CCP.Avalonia is a Fluent UI System Icon; WPF and the Core language files are unchanged.
+  Design: ~/ccp-port/evidence/oracle/fluent-icons.md (oracle-deep); package API: ~/ccp-port/evidence/icons/package-api.md.
+- Package `FluentIcons.Avalonia` 2.1.343 (MIT, ~5 MB, built for Avalonia 12.0; proven on 12.1.2 headless by
+  IconGlyphRenderTests), wrapped in one control `fx:IconGlyph`; only `Controls/Icons/*` names `FluentIcons.*`
+  (`IconKind`/`IconVariant` global aliases), so a bundled-font fallback edits one folder.
+- Defaults (supervisor-approved): an in-house extension glyph for the spiral only (bubbles = Fluent BubbleMultiple);
+  EmiDesk pixel art kept; Chaster uses Key (the padlock means premium); user/custom session and preset icons stay
+  emoji (content); typographic stand-ins (✕ ✓ ▾ › ●) in scope except prose, bullets and PasswordChar.
+- Semantic brushes (`Theme/Icons.axaml`) carry the colour emoji used to (tier gold/violet, success, warn, danger,
+  gold, gem, fire; hearts use the live PinkBrush), >= 3:1 on SurfaceBg/PanelBg/DarkerBg. Parity rows of converted
+  surfaces read "divergent by decision: fluent-icons 2026-10-10".
