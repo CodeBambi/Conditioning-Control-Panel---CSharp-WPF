@@ -1855,6 +1855,9 @@
                      Bug Report lives in the title bar (BtnTitleBarBugReport) - the copy that
                      used to sit here was a duplicate and was removed for the bubble. -->
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <!-- THE PREMIUM SPARK (WPF MainWindow.xaml:1237, polish 12): 54 x 42 card held to the
+                         34 px row by -4 px margins. Controls/PremiumSpark.cs, MainShellWindow.PremiumSpark.cs. -->
+                    <fx:PremiumSpark x:Name="HeaderPremiumSpark" Margin="0,-4,12,-4" VerticalAlignment="Center"/>
                     <ComboBox x:Name="CmbPresets" Width="160" Margin="0,0,10,0" IsVisible="False"
                               SelectionChanged="CmbPresets_SelectionChanged"
                               ToolTip.Tip="{loc:Str tooltip_select_a_preset_configuration}">
