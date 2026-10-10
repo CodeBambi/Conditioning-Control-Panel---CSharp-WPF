@@ -81,16 +81,24 @@ public sealed class HoverBubbleBarTests
                 var cat = B("VelvetBtnCatalogue");
                 double slot = sys.Bounds.Width;
                 Assert.InRange(slot, HoverBubbleBar.BubbleSize, HoverBubbleBar.BubbleSize + 1.5);
-                bar.Expand(sys, animate: false);
+                // Real pointer input (P04): the PointerEntered wiring opens the label.
+                Point Centre(Button b) => b.TranslatePoint(new Point(b.Bounds.Width - 6, b.Bounds.Height / 2), w)!.Value;
+                w.CaptureRenderedFrame();   // headless hit testing reads the last rendered frame
+                w.MouseMove(Centre(sys));
                 Dispatcher.UIThread.RunJobs();
                 Assert.True(bar.IsExpanded(sys));
                 Assert.True(bar.LabelWidthOf(sys) > 0);
                 Assert.Equal(slot, sys.Bounds.Width, 1);
                 Assert.False(sys.ClipToBounds);   // the open plate overhangs the slot to the left
-                bar.Expand(cat, animate: false);
+                w.CaptureRenderedFrame();
+                w.MouseMove(Centre(cat));
+                Dispatcher.UIThread.RunJobs();
+                Assert.True(bar.IsExpanded(cat));
                 Assert.False(bar.IsExpanded(sys));
                 Assert.Equal(0, bar.LabelWidthOf(sys));
-                bar.Collapse(cat, animate: false);
+                w.CaptureRenderedFrame();
+                w.MouseMove(new Point(2, 2));   // leaving collapses it
+                Dispatcher.UIThread.RunJobs();
                 Assert.False(bar.IsExpanded(cat));
 
                 // The Rich Presence switch is lit only while checked.
