@@ -176,4 +176,32 @@ public sealed class EmiOffersTests : IDisposable
             CoreSession.IsSessionRunningProvider = null;
         }
     }
+    [Fact]
+    public void TheBubbleRampSaysEachRealStepOnce()
+    {
+        var runner = new SessionRunner(new SessionLogService());
+        var session = new Session
+        {
+            Id = "k13-ramp", Name = "Ramp", DurationMinutes = 30,
+            Settings = new SessionSettings { BubblesEnabled = true, BubblesStartMinute = 1, BubblesFrequency = 3 },
+        };
+        var before = CoreSettings.Current.BubblesFrequency;
+        try
+        {
+            runner.Start(session);
+            runner.Tick(TimeSpan.FromMinutes(3));
+            runner.Tick(TimeSpan.FromMinutes(6.5));
+            runner.Tick(TimeSpan.FromMinutes(7));
+            runner.Tick(TimeSpan.FromMinutes(11.5));
+            var steps = _heard.FindAll(h => h.Id == "rampStepUp").ConvertAll(h => EmiLineEngine.ToCtx(h.Ctx)["n"]);
+            Assert.Equal(new object?[] { 1, 2 }, steps);
+        }
+        finally
+        {
+            runner.Stop();
+            CoreEngine.Stop();
+            CoreSession.IsSessionRunningProvider = null;
+            CoreSettings.Current.BubblesFrequency = before;
+        }
+    }
 }

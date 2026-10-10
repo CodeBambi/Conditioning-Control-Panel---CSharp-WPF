@@ -94,6 +94,7 @@ namespace ConditioningControlPanel.Services
             PinkOpacity = null;
             ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("sessionStarted", new { target = session.Name?.ToLowerInvariant(), minutes = (int)session.DurationMinutes });   // WPF SessionEngine.cs:267
             _emiSaidHalfway = _emiSaidLastMinute = false;
+            _emiRampStep = 0;
             _pausedElapsed = _lastElapsed = TimeSpan.Zero;
             PinkStartMinute = RandomizedStart(session.Settings.PinkFilterEnabled, session.Settings.PinkFilterStartMinute, _random);
             _startTime = DateTime.Now;
@@ -277,6 +278,15 @@ namespace ConditioningControlPanel.Services
         }
 
         private bool _emiSaidHalfway, _emiSaidLastMinute;
+        private int _emiRampStep;
+
+        /// <summary>The one genuine integer step in the ramp machinery: she never claims a number that is not real.</summary>
+        private void EmiRampStep(int steps)
+        {
+            if (steps <= _emiRampStep) return;
+            _emiRampStep = steps;
+            ConditioningControlPanel.Services.EmiDesk.EmiDeskBus.Fire("rampStepUp", new { n = steps });
+        }
 
         /// <summary>WPF SessionEngine.cs:637-655: the two beats inside a run, each once, off the engine clock.</summary>
         private void EmiSessionBeats(double totalMinutes, double elapsedMinutes)

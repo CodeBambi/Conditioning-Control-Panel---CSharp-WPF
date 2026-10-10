@@ -13,12 +13,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
     /// her opener is chosen by population (new, returning, updated) instead of by summon order. The
     /// machine, its once-ever latch and the offer cap are Core <c>EmiKnock.cs</c>.
     ///
-    /// <para>SEAM(k4): nothing calls <see cref="TryKnock"/> yet. WPF calls it from the shell once the
-    /// startup ladder is idle (MainWindow.xaml.cs:4215-4238, with the "what's new" version it saw
-    /// before the marquee stamped the new one). Until that one line lands she never knocks.
-    /// SEAM(dock): EmiDock listens to KnockRequested for the chip's three pulses (WPF EmiDock.xaml.cs:231).
-    /// not ported: the walk offer on the opener (asks), so the knock's first contact is her
-    /// introduction line without the tour chips.</para>
+    /// <para>Called from the shell once startup settles (MainShellWindow.EmiKnock.cs, WPF
+    /// MainWindow.xaml.cs:4215-4238); EmiDock pulses on <see cref="KnockRequested"/>. Her opener deals
+    /// its walk offer through the engine like any other ask (EmiDeskWindow.Ask.cs).</para>
     /// </summary>
     internal sealed partial class EmiDeskService
     {
