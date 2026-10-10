@@ -154,11 +154,29 @@ public sealed class WebAssetServer : IDisposable
     /// null = the prefix is not served.</summary>
     public Func<string?>? AssetsRoot { get; init; }
 
+    /// <summary>More virtual hosts, each a flat folder of audio clips or gifs (WPF's <c>ccp.subaudio</c>,
+    /// <c>ccp.modaudio</c>, <c>ccp.spirals</c> mappings): url prefix -> folder, read per request; null = not served.</summary>
+    public System.Collections.Concurrent.ConcurrentDictionary<string, Func<string?>> Hosts { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>The URL of one file on a <see cref="Hosts"/> prefix (same origin as the page, so the token cookie covers it).</summary>
+    public string HostUrl(string host, string fileName) => $"http://127.0.0.1:{Port}/{host}/" + Uri.EscapeDataString(fileName);
+
+    static string? ResolveHosted(string? folder, string name)
+    {
+        if (string.IsNullOrEmpty(folder) || name.Length == 0 || name.StartsWith('.') || name.IndexOfAny(new[] { '/', (char)92, (char)0 }) >= 0) return null;
+        if (Path.GetExtension(name).ToLowerInvariant() is not (".mp3" or ".wav" or ".ogg" or ".gif")) return null;
+        var root = Path.GetFullPath(folder).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        var full = Path.GetFullPath(Path.Combine(root, name));
+        return Inside(full, root) && File.Exists(full) ? full : null;
+    }
+
     /// <summary>The file a URL path names, or null if it is missing or lies outside its root, symlinks followed.</summary>
     internal string? ResolveFile(string urlPath)
     {
         var rel = Uri.UnescapeDataString(urlPath).TrimStart('/');
         var root = _root;
+        int hostCut = rel.IndexOf('/');
+        if (hostCut > 0 && Hosts.TryGetValue(rel[..hostCut], out var hosted)) return ResolveHosted(hosted(), rel[(hostCut + 1)..]);
         bool asset = rel.StartsWith(AssetsPrefix, StringComparison.Ordinal);
         if (asset)
         {

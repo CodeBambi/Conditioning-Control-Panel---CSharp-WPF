@@ -85,15 +85,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                     OnArcademyAnnexStats();
                     return true;
                 case "assets-request":
+                    EnsureArcademy();
+                    OnArcademyAssetsRequest(o);
+                    return true;
                 case "local-sample-request":
-                    // Not ported (remote + local media batches). WPF answers a closed gate with an empty
-                    // batch rather than silence, because silence leaves the page spinning: same here.
-                    Log.Information("[Game] arcademy: '{T}' not ported yet - answered empty", (string?)o["type"]);
-                    Post(new { type = "assets", reqId = (string?)o["reqId"] ?? "", urls = Array.Empty<object>(), done = true });
+                    EnsureArcademy();
+                    OnArcademyLocalSampleRequest(o);
                     return true;
                 case "probe-sub":
-                    Log.Information("[Game] arcademy: 'probe-sub' not ported yet - answered offline");
-                    Post(new { type = "sub-probe", reqId = (string?)o["reqId"] ?? "", name = (string?)o["name"] ?? "", ok = false, videoCount = (int?)null, stillOnly = false, error = "offline" });
+                    EnsureArcademy();
+                    OnArcademyProbeSub(o);
                     return true;
                 case "share-image":
                     Log.Information("[Game] arcademy: 'share-image' not ported yet - answered not copied");
@@ -128,6 +129,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             }
             if (_arcAttached) return;
             _arcAttached = true;
+            try { RegisterArcademyHosts(Platform.WebAssetServer.Shared); } catch (Exception ex) { Log.Debug("[Game] arcademy hosts: {E}", ex.Message); }
             try { ArcademySyncService.Attach(_arcMeta, PostArcademyMetaIfLive); } catch (Exception ex) { Log.Debug("[Game] arcademy sync attach: {E}", ex.Message); }
             try { ArcademyWalletSyncService.Attach(_arcMeta, PostArcademyMetaIfLive); } catch (Exception ex) { Log.Debug("[Game] arcademy wallet attach: {E}", ex.Message); }
             try { ArcademyPresenceService.Attach(OnArcademyPresence); } catch (Exception ex) { Log.Debug("[Game] arcademy presence attach: {E}", ex.Message); }
@@ -149,6 +151,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             try { _arcMeta?.FlushSave(); } catch (Exception ex) { Log.Warning("[Game] arcademy meta flush: {E}", ex.Message); }
             _arcMeta = null;
             _arcClassActive = false;
+            ClearArcademyMedia();
         }
 
         /// <summary>A mirror moved the store on a background thread (cards or wallet): re-push the blob.</summary>

@@ -63,9 +63,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                 performanceMode = s?.PerformanceMode ?? false,
                 reducedMotion = ArcademyMotionLevel() != 2,
                 words = phrases,
-                // Recorded clips only: the phrase clips live on WPF's ccp.subaudio / ccp.modaudio hosts,
-                // which the port's asset server does not map yet, so a phrase with no reachable clip stays silent.
-                triggers = phrases.Select(text => (object)new { text, audio = (string?)null }).ToArray(),
+                // Recorded clips only, on the asset server's ccp.subaudio / ccp.modaudio routes; a phrase
+                // with no clip (or a mod the audio policy keeps off the Bambi clips) stays a text row.
+                triggers = BuildArcademyTriggers(phrases),
                 houseTriggers = BuildArcademyHouseTriggers(),
                 utcDateSeed = DateTime.UtcNow.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
                 localDate = now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
@@ -406,11 +406,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
         private static JObject BuildArcademySettingsBag(AppSettings? s)
         {
             var bag = ArcParseObject(s?.ArcademySettingsJson) ?? new JObject();
+            // Each wrapped on its own, so one bad folder cannot cost the page its whole settings bag.
             bag["localAssets"] = new JObject { ["gifs"] = new JArray(), ["stills"] = new JArray() };
+            try { bag["localAssets"] = BuildArcademyLocalAssets(); }
+            catch (Exception ex) { Log.Debug("[Game] arcademy bag local assets: {E}", ex.Message); }
             bag["localFolders"] = new JArray();
-            // WPF lists the Loom's saved spirals as https://ccp.spirals/ urls. The port's asset server has
-            // no spirals host yet, so the list goes out empty (the page keeps its bundled set).
+            try { bag["localFolders"] = ArcademyLocalMedia.BuildLocalFolders(ArcAssetsRoot, s?.DisabledAssetPaths); }
+            catch (Exception ex) { Log.Debug("[Game] arcademy bag folders: {E}", ex.Message); }
+            // The Loom's saved spirals on the asset server's ccp.spirals route (the page appends them to its bundled set).
             bag["loomSpirals"] = new JArray();
+            try { bag["loomSpirals"] = BuildArcademyLoomSpirals(); }
+            catch (Exception ex) { Log.Debug("[Game] arcademy bag loom: {E}", ex.Message); }
             try
             {
                 var catalog = new JArray();
