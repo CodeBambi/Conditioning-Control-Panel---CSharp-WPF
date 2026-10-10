@@ -92,7 +92,7 @@ public sealed class PossessionEffectsTests
             // The law is asked again at each effect's door: a hand-built target cannot get past it.
             var host = new PossessionHost();
             var effects = MainShellWindow.PossessionHeadEffects();
-            Assert.Equal(new[] { "nudge", "typo", "breathe", "drift", "rewrite", "melt", "glyphrot", "xpdrain", "crack", "retitle", "glitchportrait" }, effects.Select(e => e.Id).ToArray());
+            Assert.Equal(new[] { "nudge", "typo", "breathe", "drift", "rewrite", "toast", "melt", "glyphrot", "xpdrain", "crack", "retitle", "glitchportrait" }, effects.Select(e => e.Id).ToArray());
             // Photosafe: the one flicker in the deck says so (the deck skips it) and refuses by itself too.
             var flicker = Assert.Single(effects, e => e.UsesFlicker);
             Assert.Equal("glitchportrait", flicker.Id);
@@ -487,6 +487,53 @@ public sealed class PossessionEffectsTests
             (s.LockdownPossessionEnabled, s.LockdownPossessionIntroSeen) = saved;
             CoreSettings.SaveImmediate();
         }
+    });
+
+    [Fact]
+    public void TheFalseToastTakesNoInput_NeverCoversAControl_AndIsGoneInTheCall() => AvaloniaTestDispatcher.Run(() =>
+    {
+        EnsureApp();
+        var exit = new Button { Name = "BtnEmergencyExit", Content = "Emergency Exit", Width = 200, Height = 40,
+            HorizontalAlignment = global::Avalonia.Layout.HorizontalAlignment.Right, VerticalAlignment = global::Avalonia.Layout.VerticalAlignment.Bottom };
+        var win = new Window { Width = 900, Height = 600, Content = new Grid { Children = { exit } } };
+        win.Show();
+        Dispatcher.UIThread.RunJobs();
+        var host = new PossessionHost();
+        try
+        {
+            var toast = new ToastEffect { Window = () => win };
+            Assert.Empty(toast.Roles);
+            Assert.False(toast.UsesFlicker);
+            Assert.True(toast.CanApply(Ctx(host), null));
+            toast.ApplyAsync(Ctx(host), null, default).GetAwaiter().GetResult();
+            var face = Assert.IsType<Border>(toast.Toast);
+            Assert.False(face.IsHitTestVisible);
+            Assert.False(face.Focusable);
+            Assert.NotNull(face.Parent);
+            // The exit sits in the bottom right corner, so the toast went somewhere else.
+            var exitRect = new Rect(exit.Bounds.Size).TransformToAABB(exit.TransformToVisual(win)!.Value);
+            Assert.False(toast.ToastRect.Intersects(exitRect));
+            Assert.True(toast.ToastRect.X < 100);                       // bottom left, the next corner
+            Assert.True(exit.IsEffectivelyEnabled && exit.IsHitTestVisible);
+
+            Assert.True(toast.UndoAsync(TimeSpan.Zero).IsCompletedSuccessfully);
+            Assert.Null(toast.Toast);
+            Assert.Null(face.Parent);
+            Assert.False(toast.IsLive);
+
+            // No corner free of controls: no toast at all.
+            var grid = (Grid)win.Content!;
+            foreach (var (hx, vy) in new[] { (0, 0), (0, 2), (2, 0) })
+                grid.Children.Add(new Button { Content = "x", Width = 200, Height = 40,
+                    HorizontalAlignment = (global::Avalonia.Layout.HorizontalAlignment)(hx == 0 ? 1 : 3),
+                    VerticalAlignment = (global::Avalonia.Layout.VerticalAlignment)(vy == 0 ? 1 : 3) });
+            Dispatcher.UIThread.RunJobs();
+            Assert.Null(ToastEffect.FreeCorner(win));
+            Assert.False(toast.CanApply(Ctx(host), null));
+
+            Assert.False(new ToastEffect { Window = () => null }.CanApply(Ctx(host), null));
+        }
+        finally { win.Close(); }
     });
 
     [Fact]
