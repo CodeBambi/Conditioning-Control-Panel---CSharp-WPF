@@ -3,7 +3,7 @@
      verb labels -> $parent[UserControl] bindings; the dismiss hover trigger -> a :pointerover style;
      every button is a TextBlock inside a Template so '_' is never an access key. -->
 <UserControl xmlns="https://github.com/avaloniaui"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:startup="clr-namespace:ConditioningControlPanel.Services.Startup;assembly=CCP.Core"
              xmlns:local="clr-namespace:ConditioningControlPanel.Avalonia.Views.Controls"
              x:Class="ConditioningControlPanel.Avalonia.Views.Controls.InboxFlyout"
@@ -21,11 +21,11 @@
             Width="340" MaxHeight="420">
         <Grid RowDefinitions="Auto,*">
             <Border Grid.Row="0" Background="#FF232338" Padding="14,10">
-                <TextBlock x:Name="TxtInboxTitle" Text="Inbox"
+                <TextBlock x:Name="TxtInboxTitle" Text="{loc:Str inbox_title}"
                            Foreground="#FFE8E8F5" FontSize="13" FontWeight="SemiBold"/>
             </Border>
 
-            <TextBlock x:Name="TxtInboxEmpty" Grid.Row="1" Text="Nothing waiting."
+            <TextBlock x:Name="TxtInboxEmpty" Grid.Row="1" Text="{loc:Str inbox_empty}"
                        Foreground="#FF8A8AA8" FontSize="12" Margin="14,18,14,18"
                        HorizontalAlignment="Left" VerticalAlignment="Top" IsVisible="False"/>
 

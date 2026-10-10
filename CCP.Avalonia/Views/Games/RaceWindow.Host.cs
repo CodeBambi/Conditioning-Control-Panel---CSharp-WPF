@@ -87,7 +87,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                     return true;
                 case "run-started":
                     if (!_raceRun.TryStart()) return true;
-                    // not ported: SeasonRecapService.TrackFeature(SeasonFeatureKeys.Race) is head-side on WPF.
+                    global::ConditioningControlPanel.Services.SeasonFeatureTracker.TrackFeature(global::ConditioningControlPanel.Models.SeasonFeatureKeys.Race);   // WPF CaucusHostService:338
                     Log.Information("RaceHost: run started (seed={Seed})", (string?)o["seed"]);
                     return true;
                 case "run-ended":

@@ -71,8 +71,9 @@ public sealed class RemoteVerbsTests
         foreach (var verb in new[] { "show_pink_filter", "show_spiral", "set_pink_opacity", "start_brain_drain",
                      "trigger_lock_card", "start_autonomy", "start_session", "stop_session", "trigger_wallpaper", "stop_wallpaper" })
             Assert.Equal(RemoteCommands.NotOnThisBuild, RemoteCommands.Execute(verb, new JObject()));
-        // Still refused on every head (the controller supplies a url: owner call).
-        Assert.Equal(RemoteCommands.NotOnThisBuild, RemoteCommands.Execute("play_hypnotube", null));
+        // Site-locked (owner, 2026-10-10): no url is refused as a url; a good one still needs a head.
+        Assert.Equal(RemoteVideoLink.Refused, RemoteCommands.Execute("play_hypnotube", null));
+        Assert.Equal(RemoteCommands.NotOnThisBuild, RemoteCommands.Execute("play_hypnotube", new JObject { ["url"] = "https://hypnotube.com/video/1" }));
         Assert.False(RemoteCommands.OverlayHold);
     }
 

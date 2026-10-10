@@ -2636,7 +2636,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             var name = string.IsNullOrEmpty(_enhancement.Metadata.Name)
                 ? Loc.Get("deeper_editor_untitled") : _enhancement.Metadata.Name;
             TxtTitle.Text = name;
-            Title = $"Deeper - {name}";
+            Title = $"{Loc.Get("tab_deeper")} - {name}";
             // Linked-files strip shows the file path; keep it in sync.
             RefreshLinkedFilesUi();
             // Metadata drawer subtitle ("Metadata · {name}") shown when collapsed.

@@ -140,6 +140,7 @@ internal static class AwarenessHead
     {
         AwarenessPlatform.ForegroundProbeFactory = () => new HeadForegroundProbe();
         AwarenessPlatform.InputProbeFactory = () => new HeadInputProbe();
+        AwarenessPlatform.MicrophoneProbeFactory = () => new MicrophoneInUseProbe();   // WPF WasapiMicrophoneProbe; "unknown" on Linux
         AwarenessPlatform.MediaWatcherFactory = MediaAwareness.Create;
         AwarenessPlatform.AppStateProbeFactory = () => new HeadAppStateProbe();
         AwarenessPlatform.PollTimerFactory = (interval, tick) => new AwarenessPollTimer(interval, tick);

@@ -114,7 +114,7 @@
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="18,0,0,0">
                             <TextBlock Text="👁" FontSize="22" VerticalAlignment="Center" Margin="0,0,10,0"/>
                             <StackPanel VerticalAlignment="Center">
-                                <TextBlock Theme="{StaticResource Type.CardTitle}" Text="Awareness Engine"/>
+                                <TextBlock Theme="{StaticResource Type.CardTitle}" Text="{loc:Str label_awareness_engine}"/>
                                 <TextBlock Text="She's watching your screen and your typing. React in real time."
                                            FontSize="11.5" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,1,0,0"/>
                             </StackPanel>
@@ -127,7 +127,7 @@
                                     VerticalAlignment="Center" Margin="0,0,14,0"
                                     Click="BtnAwarenessTutorial_Click"
                                     ToolTip.Tip="{loc:Str awareness_tour_tip}">
-                                <TextBlock Text="🎓 Tutorial"/>
+                                <TextBlock Text="{loc:Str deeper_tab_tutorial_btn}"/>
                             </Button>
                             <!-- the breathing status glow: a sibling BoxShadow (MainShellWindow SetStatusPulse), never an Effect on the dot -->
                             <Panel VerticalAlignment="Center" Margin="0,0,8,0">
@@ -170,6 +170,13 @@
                     </Grid.ColumnDefinitions>
 
                     <StackPanel Grid.Column="0">
+
+                        <!-- Owner, 2026-10-10: a panic press switches keyword triggers off until the user
+                             turns them back on. This says why the switches read off (RefreshPanicNotice). -->
+                        <TextBlock x:Name="TxtAwarenessPanicNotice" IsVisible="False"
+                                   Text="{loc:Str awareness_off_by_panic}"
+                                   FontSize="11.5" FontStyle="Italic" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource TextMutedBrush}" Margin="4,0,0,8"/>
 
                         <!-- ==================== LIVE PULSE ====================
                              The heartbeat of the tab: amber wash + edge bar so it reads as the

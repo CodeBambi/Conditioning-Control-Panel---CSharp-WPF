@@ -87,14 +87,34 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             _ => VoiceActionMore(name),
         };
 
-        /// <summary>WPF TriggerPanicFromRemote: the spoken safe word. Deliberately NOT refused under
-        /// Lockdown or a strict lock - it is the intended way out (decisions "Panic ↔ mic").</summary>
+        /// <summary>WPF TriggerPanicFromRemote: the spoken safe word. Owner, 2026-10-10 (hard rule 6): it is a
+        /// panic press by another name, so it answers to the same rule as the key, the tray stop and the
+        /// 6-blink stop (Core BlinkStopGate): refused under Lockdown, with the panic key switched off and
+        /// under Strict Lock. It used to stop everything regardless, which made the spoken word a wider way
+        /// out than the key. Refused = what a refused key press does: a log line, nothing stopped, no
+        /// Chaster safety hold, and (as the key) a leash task still parks, because panic always works on a
+        /// leash. Cutting the leash is a different door and is never gated or priced.</summary>
         internal void VoicePanic()
         {
+            var block = VoiceStopBlock();
+            if (block != ConditioningControlPanel.Services.Safety.BlinkStopGate.Block.None)
+            {
+                Log.Information("Voice safe word refused ({Reason})", block);
+                // WPF LeashPanicKeyWhilePanicOff, as Win32Input.OnPanicPress does for the key.
+                if (block is ConditioningControlPanel.Services.Safety.BlinkStopGate.Block.Lockdown
+                        or ConditioningControlPanel.Services.Safety.BlinkStopGate.Block.NoEscape
+                    && Platform.LeashHead.IsLeashed)
+                    Platform.LeashTaskHost.OnPanicPress(panicRuns: false);
+                return;
+            }
             Log.Information("Panic triggered by voice");
             PanicSurfaces.StopAll("voice", this);
             ShowFromTray();
         }
+
+        /// <summary>Why the spoken safe word is refused right now; None when the panic key would run too.
+        /// The same inputs as <see cref="TrayStopBlock"/> and the 6-blink stop.</summary>
+        internal static ConditioningControlPanel.Services.Safety.BlinkStopGate.Block VoiceStopBlock() => TrayStopBlock();
 
         /// <summary>Panic (key, tray, voice): abort the capture and the command chain in flight. The wake
         /// loop and push-to-talk stay armed (decisions "Panic ↔ mic").</summary>
@@ -198,12 +218,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 string? why = null, title = null;
                 if (!CoreSpeech.IsAvailable)
                 {
-                    title = "Voice Test \u2014 Not Available";
-                    why = "Speech isn't available.\n\n" + (!CoreSpeech.HasCaptureDevice
-                        ? "No microphone was detected. Connect one, then try again."
+                    title = Loc.Get("voice_test_unavailable_title");
+                    why = Loc.Get("voice_test_unavailable_intro") + "\n\n" + (!CoreSpeech.HasCaptureDevice
+                        ? Loc.Get("voice_test_unavailable_no_mic")
                         : CoreSpeech.ModelStatus == CoreSpeechModelStatus.LoadFailed
-                            ? "The speech model on disk would not load. If you added your own model under Resources/Models/vosk, remove it so the bundled one is used, then restart."
-                            : "No speech model was found under Resources/Models/vosk (see the README there).");
+                            ? Loc.Get("voice_test_unavailable_load_failed")
+                            : Loc.Get("voice_test_unavailable_no_model"));
                 }
                 if (why != null) { await Dialogs.MessageDialog.ShowAsync(this, title!, why); return; }
                 // Usually the companion was switched off (Dismiss sticks across restarts). Offer to
@@ -216,12 +236,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 {
                     // Declined: nothing to say. Switched on and still no tube: the old note.
                     if (CoreSettings.Current.AvatarEnabled)
-                        await Dialogs.MessageDialog.ShowAsync(this, "Voice Test - No Avatar",
-                            "The companion avatar needs to be visible for the voice prompt. Show the avatar, then try again.");
+                        await Dialogs.MessageDialog.ShowAsync(this, Loc.Get("voice_test_no_avatar_title"),
+                            Loc.Get("voice_test_no_avatar_body"));
                     return;
                 }
                 if (!App.MantraVoice.HasMantras())
-                    (title, why) = ("Voice Test \u2014 No Mantras", "No spoken mantras are available for the active mod.\n\nAdd a mantras.json under the mod's companion_audio folder, then try again.");
+                    (title, why) = (Loc.Get("voice_test_no_mantras_title"), Loc.Get("voice_test_no_mantras_body"));
                 if (why != null) { await Dialogs.MessageDialog.ShowAsync(this, title!, why); return; }
                 // Privacy gate: the mic never opens until the consent dialog was accepted.
                 if (!CoreSettings.Current.MicConsentGiven)

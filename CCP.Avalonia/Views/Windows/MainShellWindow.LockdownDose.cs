@@ -4,6 +4,9 @@
 //
 // A keeper start is StartEngine(systemInitiated: true); a conscription pulses the window edge through
 // the Possession director when it is haunting, and is announced by the bark alone otherwise.
+//
+// Owner, 2026-10-10: the dose keeper ships as on WPF, default on. No behaviour change here; it is
+// still owed one desk run before the port ships.
 
 using System;
 using System.Collections.Generic;

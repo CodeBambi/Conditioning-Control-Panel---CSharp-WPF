@@ -36,10 +36,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
         }
 
         public static Bitmap? Resolve(string kind, string id) => TryLoad(PathFor(kind, id));
-        public static Bitmap? ResolveBanner() => TryLoad(FilePath("banner.png"));
-        public static Bitmap? ResolveMenu() => TryLoad(FilePath("menu.png"));
-        public static Bitmap? ResolveMenuFrame(int n) => TryLoad(MenuFramePath(n));
-        public static Bitmap? ResolveRecap() => TryLoad(FilePath("recap.png"));
 
         /// <summary>The first existing convention path for a kind/id, or null.</summary>
         public static string? PathFor(string kind, string id) => FilePath(Path.Combine(kind, id + ".png"));
@@ -56,7 +52,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
             return null;
         }
 
-        public static string? MenuFramePath(int n) => FilePath($"menu_{n}.png");
 
         /// <summary>The Chaos folders: the user's library (assets/Chaos), then the shipped art beside the exe.</summary>
         private static IEnumerable<string> Roots()

@@ -1,3 +1,4 @@
+using ConditioningControlPanel.Localization;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
@@ -119,11 +120,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private async Task RunSequenceAsync()
         {
             _dot.IsVisible = true;
-            _txtStatus.Text = "Get comfortable, then look at the pink dot.";
+            _txtStatus.Text = Loc.Get("webcam_recal_comfortable");
             await Task.Delay(ReadyMs);
             if (_cancelled) return;
 
-            _txtStatus.Text = "Hold your gaze on the dot…";
+            _txtStatus.Text = Loc.Get("webcam_recal_hold");
             _samples.Clear();
             Play("lvup.mp3", 0.25f);   // CalibrationSoundService.DotSampleStart
             _collecting = true;
@@ -143,7 +144,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             _completedOk = true;
             Play("chime3.mp3", 0.55f);   // CalibrationSoundService.QuickRecalComplete
-            _txtStatus.Text = $"Done. Cursor nudged by ({dx:F0}, {dy:F0}) px.";
+            _txtStatus.Text = Loc.GetF("webcam_recal_done", dx.ToString("F0"), dy.ToString("F0"));
             await Task.Delay(FinishHoldMs);
             Close(true);
         }

@@ -10,8 +10,8 @@
 // Privacy: nothing in this file logs a title, a process name or an app id. Samples live in the
 // observer's memory and leave it only as a ContextFrame through AwarenessPrivacyRules.
 //
-// not ported: WasapiMicrophoneProbe (the head has no NAudio session API and no PulseAudio reader yet).
-// The observer falls back to "microphone unknown", which WPF itself defines as "not in a meeting":
+// WasapiMicrophoneProbe is Platform/MicrophoneInUseProbe.cs (Windows: the capture session sweep). On Linux
+// there is no PulseAudio reader yet: "microphone unknown", which WPF itself defines as "not in a meeting";
 // the fullscreen, typing-burst and CCP-surface gates still apply.
 
 using System;
@@ -357,7 +357,6 @@ internal sealed class HeadAppStateProbe : IAppStateProbe, IAttachableProbe, IDis
     {
         try { if (CoreEngine.Video?.IsPlaying == true) return true; } catch { }
         try { if (Views.Windows.LockCardWindow.IsAnyOpen()) return true; } catch { }
-        try { if (Views.Chaos.ChaosRunHost.IsActive) return true; } catch { }
         try { if (Views.Games.GameWindow.IsAnyOpen()) return true; } catch { }
         return false;
     }

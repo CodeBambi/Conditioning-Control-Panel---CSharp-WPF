@@ -119,6 +119,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         internal static void StopAllForRecalibration(MainShellWindow? shell)
         {
             PanicSurfaces.ArmSafetyHold();   // a panic press by another name: Circe's hold arms too
+            PanicSurfaces.SwitchOffKeywordTriggers();   // owner 2026-10-10: and keyword triggers go off until re-enabled
             foreach (var s in PanicSurfaces.All.Where(x => !BlinkStopSkips.Contains(x.Id)))
             {
                 try { s.Stop(shell); }

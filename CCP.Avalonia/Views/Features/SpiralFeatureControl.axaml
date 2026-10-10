@@ -135,14 +135,14 @@
                 <!-- Actions (kept above the library so they're reachable without scrolling) -->
                 <!-- THE LOOM: weave your own spiral (also craftable inside DtRH) -->
                 <Button x:Name="BtnOpenLoom"
-                        Content="🌀 THE LOOM - weave your own spiral"
+                        Content="{loc:Str btn_spiral_loom}"
                         Theme="{DynamicResource OutlineButton}" HorizontalAlignment="Stretch"
                         Padding="12,10"
                         Margin="0,0,0,10"/>
 
                 <!-- Standalone corner-GIF overlays (independent of sessions) -->
                 <Button x:Name="BtnCornerGifs"
-                        Content="🖼 CORNER GIFs - pin a GIF to a screen corner"
+                        Content="{loc:Str btn_spiral_corner_gifs}"
                         Theme="{DynamicResource OutlineButton}" HorizontalAlignment="Stretch"
                         Padding="12,10"
                         Margin="0,0,0,10"/>
@@ -163,28 +163,28 @@
                                 Background="{StaticResource SectionHueStudioBrush}"/>
                         <StackPanel Margin="16,10,16,12">
                             <Grid Margin="0,0,0,10" Background="Transparent"
-                                  ToolTip.Tip="Pick the spiral used everywhere. Drop your own .gif / image files in the folder, then Refresh.">
+                                  ToolTip.Tip="{loc:Str tooltip_spiral_library}">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0"
-                                           Text="SPIRAL LIBRARY"
+                                           Text="{loc:Str label_spiral_library}"
                                            Foreground="{StaticResource TextLightBrush}"
                                            FontSize="13"
                                            FontWeight="SemiBold"
                                            VerticalAlignment="Center"/>
                                 <Button Grid.Column="1"
                                         x:Name="BtnOpenSpiralFolder"
-                                        Content="Open folder"
+                                        Content="{loc:Str btn_spiral_open_folder}"
                                         Theme="{DynamicResource OutlineButton}"
                                         Padding="10,5"
                                         Margin="0,0,6,0"
                                         FontSize="11"/>
                                 <Button Grid.Column="2"
                                         x:Name="BtnRefreshSpirals"
-                                        Content="⟳ Refresh"
+                                        Content="{loc:Str btn_spiral_refresh}"
                                         Theme="{DynamicResource OutlineButton}"
                                         Padding="10,5"
                                         FontSize="11"/>

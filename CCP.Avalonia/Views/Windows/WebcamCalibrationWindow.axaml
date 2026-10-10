@@ -28,9 +28,9 @@
 
      There is NO Win32 P/Invoke and NO WebView2 in this view - see the code-behind header. -->
 <Window xmlns="https://github.com/avaloniaui"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="ConditioningControlPanel.Avalonia.Views.Windows.WebcamCalibrationWindow"
-        Title="Webcam Calibration"
+        Title="{loc:Str webcam_cal_title}"
         Background="#000000"
         SystemDecorations="None"
         WindowState="Maximized"
@@ -92,13 +92,13 @@
             <StackPanel Orientation="Horizontal">
                 <TextBlock Text="👁" FontSize="13" VerticalAlignment="Center" Margin="0,0,8,0"/>
                 <TextBlock Foreground="#FFE3F0" FontSize="12" VerticalAlignment="Center"
-                           Text="Tip: blink fast 6 times in a row, anytime, to stop everything and jump straight back here to recalibrate."/>
+                           Text="{loc:Str webcam_cal_blink_stop_tip}"/>
             </StackPanel>
         </Border>
 
         <StackPanel x:Name="StatusPanel" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,40,0,0">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                <TextBlock x:Name="TxtTitle" Text="Webcam Calibration" Foreground="White"
+                <TextBlock x:Name="TxtTitle" Text="{loc:Str webcam_cal_title}" Foreground="White"
                            FontSize="22" FontWeight="Bold" VerticalAlignment="Center"/>
                 <!-- Inline "?" (HelpButtonStyle lives only in MainWindow, not reachable
                      from this top-level Window). Always visible, even when gated/locked. -->
@@ -106,7 +106,7 @@
                         Width="24" Height="24" Margin="12,0,0,0" VerticalAlignment="Center"
                         Cursor="Help" Foreground="White" Background="Transparent"
                         BorderBrush="#FF69B4" BorderThickness="1" FontWeight="Bold" FontSize="12"
-                        ToolTip.Tip="Calibration help">
+                        ToolTip.Tip="{loc:Str webcam_cal_help}">
                     <Button.Template>
                         <ControlTemplate TargetType="Button">
                             <Border x:Name="bd" Background="{TemplateBinding Background}"
@@ -120,7 +120,7 @@
                     </Button.Template>
                 </Button>
             </StackPanel>
-            <TextBlock x:Name="TxtStatus" Text="Look at the pink dot. Press ESC to cancel."
+            <TextBlock x:Name="TxtStatus" Text="{loc:Str webcam_cal_look_esc}"
                        Foreground="{DynamicResource TextMutedBrush}" FontSize="14" Margin="0,8,0,0" HorizontalAlignment="Center"/>
             <TextBlock x:Name="TxtProgress" Text="" Foreground="#FF69B4" FontSize="13"
                        Margin="0,4,0,0" HorizontalAlignment="Center" FontFamily="Consolas, Courier New"/>
@@ -132,10 +132,10 @@
                 HorizontalAlignment="Center" VerticalAlignment="Center"
                 MaxWidth="640">
             <StackPanel>
-                <TextBlock Text="Webcam Calibration"
+                <TextBlock Text="{loc:Str webcam_cal_title}"
                            Foreground="#FFFFFF" FontSize="26" FontWeight="Bold"
                            HorizontalAlignment="Center" Margin="0,0,0,4"/>
-                <TextBlock Text="Two short phases - under a minute total."
+                <TextBlock Text="{loc:Str webcam_cal_intro_sub}"
                            Foreground="#FFB6E1" FontSize="14"
                            HorizontalAlignment="Center" Margin="0,0,0,22"/>
 
@@ -143,9 +143,9 @@
                     <TextBlock Grid.Column="0" Text="1." Foreground="#FF69B4"
                                FontSize="15" FontWeight="Bold" VerticalAlignment="Top"/>
                     <StackPanel Grid.Column="1">
-                        <TextBlock Text="Dot grid (16 dots)" Foreground="#FFFFFF"
+                        <TextBlock Text="{loc:Str webcam_cal_grid_title}" Foreground="#FFFFFF"
                                    FontSize="15" FontWeight="SemiBold"/>
-                        <TextBlock Text="A pink dot moves around the screen. Look at it and hold your gaze until the ring around it fills up."
+                        <TextBlock Text="{loc:Str webcam_cal_grid_desc}"
                                    Foreground="{DynamicResource TextSecondaryBrush}" FontSize="13" TextWrapping="Wrap" Margin="0,2,0,0"/>
                     </StackPanel>
                 </Grid>
@@ -154,9 +154,9 @@
                     <TextBlock Grid.Column="0" Text="2." Foreground="#FF69B4"
                                FontSize="15" FontWeight="Bold" VerticalAlignment="Top"/>
                     <StackPanel Grid.Column="1">
-                        <TextBlock Text="Quick checks" Foreground="#FFFFFF"
+                        <TextBlock Text="{loc:Str webcam_cal_checks_title}" Foreground="#FFFFFF"
                                    FontSize="15" FontWeight="SemiBold"/>
-                        <TextBlock Text="Two quick prompts to warm up tracking: blink, then open your mouth wide."
+                        <TextBlock Text="{loc:Str webcam_cal_checks_desc}"
                                    Foreground="{DynamicResource TextSecondaryBrush}" FontSize="13" TextWrapping="Wrap" Margin="0,2,0,0"/>
                     </StackPanel>
                 </Grid>
@@ -164,17 +164,17 @@
                 <TextBlock Foreground="#FFC96E" FontSize="12.5"
                            HorizontalAlignment="Center" TextAlignment="Center"
                            TextWrapping="Wrap" Margin="0,0,0,8"
-                           Text="⚠ Dim-lit rooms make eye tracking super inconsistent - put some light on your face if you can."/>
+                           Text="{loc:Str webcam_cal_dim_warning}"/>
                 <TextBlock Foreground="{DynamicResource TextMutedBrush}" FontSize="12"
                            HorizontalAlignment="Center" TextAlignment="Center"
                            TextWrapping="Wrap" Margin="0,0,0,18"
-                           Text="Sit comfortably. ESC cancels at any time."/>
+                           Text="{loc:Str webcam_cal_sit}"/>
 
                 <Button x:Name="BtnIntroContinue"
                         Padding="32,10" Background="#FF69B4" Foreground="Black"
                         BorderThickness="0" FontWeight="Bold" FontSize="15"
                         Cursor="Hand" HorizontalAlignment="Center">
-                    <TextBlock Text="Continue"/>
+                    <TextBlock Text="{loc:Str webcam_cal_continue}"/>
                 </Button>
             </StackPanel>
         </Border>
@@ -249,10 +249,10 @@
                 </Ellipse>
             </Canvas>
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,40,0,0">
-                <TextBlock Text="Accuracy test" Foreground="White" FontSize="22" FontWeight="Bold"
+                <TextBlock Text="{loc:Str webcam_cal_accuracy_title}" Foreground="White" FontSize="22" FontWeight="Bold"
                            HorizontalAlignment="Center"/>
                 <TextBlock x:Name="TxtBubbleTestStatus"
-                           Text="Look at each bubble - hold your gaze on it to pop it. ESC cancels."
+                           Text="{loc:Str webcam_cal_accuracy_desc}"
                            Foreground="{DynamicResource TextMutedBrush}" FontSize="14" Margin="0,8,0,0" HorizontalAlignment="Center"/>
             </StackPanel>
         </Grid>
@@ -262,7 +262,7 @@
                 CornerRadius="10" Padding="24" HorizontalAlignment="Center" VerticalAlignment="Center"
                 MaxWidth="520">
             <StackPanel>
-                <TextBlock Text="Calibration failed" Foreground="#FF8080" FontSize="18"
+                <TextBlock Text="{loc:Str webcam_cal_failed}" Foreground="#FF8080" FontSize="18"
                            FontWeight="Bold" HorizontalAlignment="Center"/>
                 <TextBlock x:Name="TxtErrorDetail" Text="" Foreground="White" FontSize="13"
                            Margin="0,12,0,16" TextWrapping="Wrap" HorizontalAlignment="Center"/>
@@ -270,7 +270,7 @@
                         Background="#FF69B4" Foreground="Black" BorderThickness="0"
                         FontWeight="Bold" Cursor="Hand"
                         HorizontalAlignment="Center">
-                    <TextBlock Text="Close"/>
+                    <TextBlock Text="{loc:Str btn_close}"/>
                 </Button>
             </StackPanel>
         </Border>
@@ -284,12 +284,12 @@
                 CornerRadius="10" Padding="28" HorizontalAlignment="Center" VerticalAlignment="Center"
                 MaxWidth="560">
             <StackPanel>
-                <TextBlock Text="Calibration verified" Foreground="#FF69B4" FontSize="22"
+                <TextBlock Text="{loc:Str webcam_cal_verified}" Foreground="#FF69B4" FontSize="22"
                            FontWeight="Bold" HorizontalAlignment="Center"/>
-                <TextBlock Text="Calibration complete. Blink and mouth tracking warmed up - you're all set."
+                <TextBlock Text="{loc:Str webcam_cal_complete}"
                            Foreground="{DynamicResource TextSecondaryBrush}" FontSize="13" Margin="0,8,0,0"
                            TextWrapping="Wrap" HorizontalAlignment="Center"/>
-                <TextBlock x:Name="TxtVerifyStatus" Text="Preview accuracy with a live gaze cursor, or pop a few bubbles with your eyes to test (and auto fine-tune) precision."
+                <TextBlock x:Name="TxtVerifyStatus" Text="{loc:Str webcam_cal_verify_desc}"
                            Foreground="{DynamicResource TextMutedBrush}" FontSize="12" Margin="0,16,0,20"
                            TextWrapping="Wrap" HorizontalAlignment="Center" MaxWidth="440"/>
 
@@ -298,23 +298,23 @@
                             Background="#33333A" Foreground="White" BorderBrush="#FF69B4"
                             BorderThickness="1" FontWeight="SemiBold" Cursor="Hand"
                             Margin="0,0,8,0">
-                        <TextBlock Text="Verify accuracy"/>
+                        <TextBlock Text="{loc:Str webcam_cal_btn_verify}"/>
                     </Button>
                     <Button x:Name="BtnVerifyBubbleTest" Padding="20,10"
                             Background="#33333A" Foreground="White" BorderBrush="#FF69B4"
                             BorderThickness="1" FontWeight="SemiBold" Cursor="Hand"
                             Margin="0,0,8,0">
-                        <TextBlock Text="Bubble test"/>
+                        <TextBlock Text="{loc:Str webcam_cal_btn_bubble_test}"/>
                     </Button>
                     <Button x:Name="BtnVerifyRecalibrate" Padding="20,10"
                             Background="#33333A" Foreground="White" BorderThickness="0"
                             Cursor="Hand" Margin="0,0,8,0">
-                        <TextBlock Text="Recalibrate"/>
+                        <TextBlock Text="{loc:Str webcam_cal_btn_recalibrate}"/>
                     </Button>
                     <Button x:Name="BtnVerifyDone" Padding="20,10"
                             Background="#FF69B4" Foreground="Black" BorderThickness="0"
                             FontWeight="Bold" Cursor="Hand">
-                        <TextBlock Text="Done"/>
+                        <TextBlock Text="{loc:Str btn_done}"/>
                     </Button>
                 </StackPanel>
             </StackPanel>

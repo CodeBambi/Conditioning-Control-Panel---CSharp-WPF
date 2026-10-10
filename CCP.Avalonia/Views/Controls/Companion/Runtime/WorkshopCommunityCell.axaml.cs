@@ -9,9 +9,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion.Runtime
     public partial class WorkshopCommunityCell : UserControl
     {
         // The WPF cell forwards each click to MainWindow (Window.GetWindow(this) is MainWindow).
-        // This head has no MainWindow API surface yet and the cell must not grow App. coupling, so
-        // the four actions leave the cell as events and the host wires them - the same contract,
-        // one indirection later.
+        // Here the four actions leave the cell as events; the cell's own Actions half answers them
+        // through seams, so the cell still has no App. coupling.
         public event EventHandler? BrowsePromptsRequested;
         public event EventHandler? ImportPromptRequested;
         public event EventHandler? ExportPromptRequested;
@@ -27,11 +26,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion.Runtime
             this.FindControl<Button>("BtnExportPrompt")!.Click += (_, _) => ExportPromptRequested?.Invoke(this, EventArgs.Empty);
             this.FindControl<Button>("BtnRefreshPrompts")!.Click += (_, _) => RefreshPromptsRequested?.Invoke(this, EventArgs.Empty);
 
-            // Hidden: browse, import, export and refresh all wait for CommunityPromptService (WPF
-            // Services/Companion/CommunityPromptService.cs) to cross to CCP.Core. The ? help and
-            // the (empty) installed list stay.
-            foreach (var name in new[] { "BtnBrowsePrompts", "BtnImportPrompt", "BtnExportPrompt", "BtnRefreshPrompts" })
-                this.FindControl<Button>(name)!.IsVisible = false;
+            // The four actions and the installed list: WorkshopCommunityCell.Actions.cs, over Core
+            // CommunityPromptLibrary. With no library seeded the buttons stay hidden.
+            InitializeCommunityActions();
 
             // CompanionWheelRelay.Attach(InstalledPromptsScroll) is NOT ported: it works around
             // WPF's ScrollViewer marking every wheel notch handled even when it cannot scroll.

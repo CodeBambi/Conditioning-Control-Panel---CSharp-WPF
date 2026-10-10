@@ -229,7 +229,7 @@
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="Solid mode (game friendly)" FontSize="13" FontWeight="SemiBold"
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_flash_solid_mode}" FontSize="13" FontWeight="SemiBold"
                                            Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
                                 <CheckBox Grid.Column="1" x:Name="ChkSolidMode"
                                           Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
@@ -367,7 +367,7 @@
                         <Border Width="3" HorizontalAlignment="Left" Margin="0,10" CornerRadius="0,2,2,0"
                                 Background="{StaticResource SectionHueStudioBrush}"/>
                         <StackPanel Margin="16,8,16,8">
-                            <TextBlock Text="Gaze interaction" FontSize="13" FontWeight="SemiBold"
+                            <TextBlock Text="{loc:Str label_gaze_interaction}" FontSize="13" FontWeight="SemiBold"
                                        Foreground="{StaticResource TextLightBrush}" Margin="0,2,0,4"/>
 
                             <Grid Height="34" Background="Transparent" ToolTip.Tip="Look at a flash for ~1s to dismiss it (same effect as clicking, including hydra).">
@@ -375,7 +375,7 @@
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="Stare to pop" FontSize="13" FontWeight="SemiBold"
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_stare_to_pop}" FontSize="13" FontWeight="SemiBold"
                                            Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
                                 <CheckBox Grid.Column="1" x:Name="ChkFlashGazePop"
                                           Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
@@ -386,7 +386,7 @@
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="Stare to keep" FontSize="13" FontWeight="SemiBold"
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_stare_to_keep}" FontSize="13" FontWeight="SemiBold"
                                            Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
                                 <CheckBox Grid.Column="1" x:Name="ChkFlashGazeLinger"
                                           Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
@@ -398,7 +398,7 @@
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto" MinWidth="56"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="Linger boost" FontSize="13" FontWeight="SemiBold"
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_linger_boost}" FontSize="13" FontWeight="SemiBold"
                                            Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
                                 <Slider Grid.Column="1" x:Name="SliderFlashLingerMs" Minimum="500" Maximum="5000" Value="1500"
                                         TickFrequency="250" IsSnapToTickEnabled="True"

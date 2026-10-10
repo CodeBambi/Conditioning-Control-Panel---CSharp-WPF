@@ -87,10 +87,11 @@ public sealed class RemoteRelayTests
     }
 
     [Fact]
-    public void Lockdown_refuses_only_enable_strict_lock()
+    public void Strict_lock_on_and_panic_off_are_refused_with_or_without_Lockdown()
     {
-        Assert.Null(RemoteCommandGate.Screen("enable_strict_lock", lockdownActive: false));
-        Assert.Equal("not during Lockdown", RemoteCommandGate.Screen("enable_strict_lock", lockdownActive: true));
+        // Owner, 2026-10-10: refused for every controller, always (it used to run outside Lockdown).
+        Assert.Equal(RemoteCommandGate.StrictLockIsLocal, RemoteCommandGate.Screen("enable_strict_lock", lockdownActive: false));
+        Assert.Equal(RemoteCommandGate.StrictLockIsLocal, RemoteCommandGate.Screen("enable_strict_lock", lockdownActive: true));
         foreach (var a in new[] { "disable_strict_lock", "enable_panic", "stop_session", "pause_session", "trigger_panic", "start_flash" })
             Assert.Null(RemoteCommandGate.Screen(a, lockdownActive: true));
         Assert.NotNull(RemoteCommandGate.Screen("disable_panic", lockdownActive: false));
@@ -190,14 +191,15 @@ public sealed class RemoteRelayTests
             Assert.Null(RemoteCommands.Execute("trigger_panic", null));
             Assert.False(s.StrictLockEnabled);
             Assert.True(s.PanicKeyEnabled);
-            Assert.Equal(RemoteCommands.NotOnThisBuild, RemoteCommands.Execute("play_hypnotube", null));
+            Assert.Equal(RemoteVideoLink.Refused, RemoteCommands.Execute("play_hypnotube", null));
         }
         finally { (s.StrictLockEnabled, s.PanicKeyEnabled) = (strict, panic); }
     }
-    // main 71cfc4185 (ccp-bugs #1340): the controller leaving hands back the panic key and the strict
-    // lock IT switched on; a strict lock the subject set stays.
+    // main 71cfc4185 (ccp-bugs #1340): the controller leaving hands back the panic key. Owner, 2026-10-10:
+    // a controller never switches Strict Lock on, so there is none of its own to release; a strict lock
+    // the subject set stays.
     [Fact]
-    public async Task Controller_leave_releases_the_controllers_strict_lock_and_the_panic_key_only()
+    public async Task Controller_leave_releases_the_panic_key_and_never_touches_the_subjects_strict_lock()
     {
         var s = CoreSettings.Current;
         var saved = (s.StrictLockEnabled, s.PanicKeyEnabled, s.StopEffectsOnRemoteDisconnect);
@@ -209,7 +211,7 @@ public sealed class RemoteRelayTests
             await r.StartAsync("full");
             Poll(f, "{\"controller_connected\":true,\"commands\":[{\"id\":\"1\",\"action\":\"enable_strict_lock\"}]}");
             await r.PollOnceAsync();
-            Assert.True(s.StrictLockEnabled);
+            Assert.False(s.StrictLockEnabled);   // refused at the gate: it never ran
             Poll(f, "{\"controller_connected\":false}");
             await r.PollOnceAsync();
             Assert.False(s.StrictLockEnabled);
@@ -316,7 +318,7 @@ public sealed class RemoteRelayTests
     });
 
     // Safety review P1/P2: a command fetched before a panic or a leave never runs after it, however
-    // late its UI dispatch lands; a late enable_strict_lock that did land before the leave is released.
+    // late its UI dispatch lands; enable_strict_lock is refused before any dispatch.
     [Fact]
     public void A_command_in_flight_never_outlives_a_panic_or_a_leave() => WithSteppedHaptics((clock, sent) =>
     {
@@ -348,8 +350,8 @@ public sealed class RemoteRelayTests
             Poll(f, "{\"controller_connected\":true}"); r.PollOnceAsync().Wait();
             parked = null;
             Poll(f, Cmd("3", "enable_strict_lock")); r.PollOnceAsync().Wait();
-            Assert.Null(parked!());          // lands late, still before the leave
-            Assert.True(s.StrictLockEnabled);
+            Assert.Null(parked);             // refused at the gate: never even dispatched
+            Assert.False(s.StrictLockEnabled);
             Poll(f, "{\"controller_connected\":false}"); r.PollOnceAsync().Wait();
             Assert.False(s.StrictLockEnabled);
         }
@@ -357,7 +359,7 @@ public sealed class RemoteRelayTests
     });
 
     // Safety review P2: Avalonia cancels an Invoke that times out, so after a UI stall the leave cleanup is
-    // posted instead: the loop stops, the controller's strict lock goes, the panic key comes back.
+    // posted instead: the loop stops and the panic key comes back.
     [Fact]
     public void A_leave_during_a_ui_stall_still_releases_everything() => WithSteppedHaptics((clock, sent) =>
     {
@@ -373,7 +375,7 @@ public sealed class RemoteRelayTests
             Poll(f, Cmd("1", "enable_strict_lock")); r.PollOnceAsync().Wait();
             Poll(f, Cmd("2", "haptic_pattern", Loop)); r.PollOnceAsync().Wait();
             s.PanicKeyEnabled = false;
-            Assert.True(s.StrictLockEnabled && RemoteCommands.RemoteHaptics.IsPlaying);
+            Assert.True(!s.StrictLockEnabled && RemoteCommands.RemoteHaptics.IsPlaying);   // the strict verb was refused
 
             var posted = new List<Action>();
             CoreDispatch.InvokeProvider = (_, _) => (false, null);   // the UI is stalled: Avalonia cancels the call

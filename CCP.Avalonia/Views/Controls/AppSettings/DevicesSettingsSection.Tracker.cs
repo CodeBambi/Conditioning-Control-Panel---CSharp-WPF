@@ -108,8 +108,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
 
         private void OnTrackerState() => PaintTrackerState(log: true);
         private void OnTrackerProgress(double p, string status) => PaintTrackerState(log: false);
-        private void OnTrackerFaceFound() { _debugFace = "yes"; PaintCounters(); AppendWebcamDebugLog("Face FOUND"); PaintTrackerState(log: false); }
-        private void OnTrackerFaceLost() { _debugFace = "lost"; PaintCounters(); AppendWebcamDebugLog("Face LOST"); PaintTrackerState(log: false); }
+        private void OnTrackerFaceFound() { _debugFace = Loc.Get("webcam_debug_face_yes"); PaintCounters(); AppendWebcamDebugLog("Face FOUND"); PaintTrackerState(log: false); }
+        private void OnTrackerFaceLost() { _debugFace = Loc.Get("webcam_debug_face_lost"); PaintCounters(); AppendWebcamDebugLog("Face LOST"); PaintTrackerState(log: false); }
         private void OnTrackerBlink() { _debugBlinks++; PaintCounters(); AppendWebcamDebugLog($"Blink #{_debugBlinks}"); }
 
         // Logged on change only: gaze side fires every frame and would drown the blinks (WPF).

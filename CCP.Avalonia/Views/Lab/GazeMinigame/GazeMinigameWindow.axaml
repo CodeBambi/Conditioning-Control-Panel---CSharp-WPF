@@ -25,9 +25,9 @@
 
      The four button styles were local to the WPF window, so they stay local here. -->
 <Window xmlns="https://github.com/avaloniaui"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="ConditioningControlPanel.Avalonia.Views.Lab.GazeMinigame.GazeMinigameWindow"
-        Title="Gaze Minigame"
+        Title="{loc:Str label_gaze_minigame}"
         Width="1100" Height="720"
         MinWidth="900" MinHeight="600"
         Background="Black"
@@ -169,8 +169,8 @@
                     <TextBlock Text="👁" FontSize="36" Width="46" Height="46" Margin="0,0,12,0"
                                TextAlignment="Center" VerticalAlignment="Center"/>
                     <StackPanel VerticalAlignment="Center">
-                        <TextBlock Text="Gaze Training" Foreground="White" FontSize="26" FontWeight="Bold"/>
-                        <TextBlock Text="Drag a set into Focus and one or more into Ignore, then hold your eyes on the focus content to win."
+                        <TextBlock Text="{loc:Str gaze_mini_heading}" Foreground="White" FontSize="26" FontWeight="Bold"/>
+                        <TextBlock Text="{loc:Str gaze_mini_intro}"
                                    Foreground="#AAAAAA" FontSize="12"/>
                     </StackPanel>
                 </StackPanel>
@@ -182,11 +182,11 @@
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <TextBlock Text="YOUR CONTENT" Foreground="#888888" FontSize="11" FontWeight="Bold"
+                    <TextBlock Text="{loc:Str gaze_mini_your_content}" Foreground="#888888" FontSize="11" FontWeight="Bold"
                                VerticalAlignment="Center"/>
-                    <Button Grid.Column="1" x:Name="BtnAddFolder" Content="+ Add folder"
+                    <Button Grid.Column="1" x:Name="BtnAddFolder" Content="{loc:Str blink_trainer_add_folder}"
                             Theme="{StaticResource ToolBtn}"/>
-                    <Button Grid.Column="2" x:Name="BtnRescan" Content="⟳ Rescan"
+                    <Button Grid.Column="2" x:Name="BtnRescan" Content="{loc:Str gaze_mini_rescan}"
                             Theme="{StaticResource ToolBtn}"/>
                 </Grid>
 
@@ -201,13 +201,13 @@
                         </ScrollViewer>
                         <StackPanel x:Name="LibraryEmptyState" IsVisible="False"
                                     HorizontalAlignment="Center" VerticalAlignment="Center" Margin="16">
-                            <TextBlock Text="No content sets found"
+                            <TextBlock Text="{loc:Str gaze_mini_empty_title}"
                                        Foreground="#CCCCCC" FontSize="14" FontWeight="SemiBold"
                                        HorizontalAlignment="Center"/>
                             <TextBlock TextWrapping="Wrap" TextAlignment="Center" MaxWidth="560" Margin="0,6,0,10"
                                        Foreground="#888888" FontSize="12"
-                                       Text="Make at least two folders of images (or videos) - one to focus on, one or more to ignore - inside your assets folder, then Rescan. You can also use “+ Add folder” to point anywhere."/>
-                            <Button x:Name="BtnOpenAssets" Content="Open assets folder"
+                                       Text="{loc:Str gaze_mini_empty_body}"/>
+                            <Button x:Name="BtnOpenAssets" Content="{loc:Str gaze_mini_open_assets}"
                                     Theme="{StaticResource ToolBtn}" Margin="0"
                                     HorizontalAlignment="Center"/>
                         </StackPanel>
@@ -230,13 +230,13 @@
                                 <RowDefinition Height="*"/>
                             </Grid.RowDefinitions>
                             <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
-                                <TextBlock Text="👁 FOCUS ON" Foreground="#FF69B4" FontWeight="Bold" FontSize="13"/>
-                                <TextBlock Text="   the one set to stare at" Foreground="#9A7488" FontSize="11" VerticalAlignment="Center"/>
+                                <TextBlock Text="{loc:Str gaze_mini_focus_title}" Foreground="#FF69B4" FontWeight="Bold" FontSize="13"/>
+                                <TextBlock Text="{loc:Str gaze_mini_focus_sub}" Foreground="#9A7488" FontSize="11" VerticalAlignment="Center"/>
                             </StackPanel>
                             <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
                                 <Grid>
                                     <WrapPanel x:Name="FocusPanel"/>
-                                    <TextBlock x:Name="FocusPlaceholder" Text="Drag one set here"
+                                    <TextBlock x:Name="FocusPlaceholder" Text="{loc:Str gaze_mini_focus_placeholder}"
                                                Foreground="#664A59" FontStyle="Italic" FontSize="13"
                                                HorizontalAlignment="Center" VerticalAlignment="Center"
                                                Margin="0,24,0,0" IsHitTestVisible="False"/>
@@ -254,13 +254,13 @@
                                 <RowDefinition Height="*"/>
                             </Grid.RowDefinitions>
                             <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
-                                <TextBlock Text="🚫 IGNORE" Foreground="#FF8080" FontWeight="Bold" FontSize="13"/>
-                                <TextBlock Text="   distractions to look away from" Foreground="#9A7070" FontSize="11" VerticalAlignment="Center"/>
+                                <TextBlock Text="{loc:Str gaze_mini_ignore_title}" Foreground="#FF8080" FontWeight="Bold" FontSize="13"/>
+                                <TextBlock Text="{loc:Str gaze_mini_ignore_sub}" Foreground="#9A7070" FontSize="11" VerticalAlignment="Center"/>
                             </StackPanel>
                             <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
                                 <Grid>
                                     <WrapPanel x:Name="IgnorePanel"/>
-                                    <TextBlock x:Name="IgnorePlaceholder" Text="Drag one or more sets here"
+                                    <TextBlock x:Name="IgnorePlaceholder" Text="{loc:Str gaze_mini_ignore_placeholder}"
                                                Foreground="#664A4A" FontStyle="Italic" FontSize="13"
                                                HorizontalAlignment="Center" VerticalAlignment="Center"
                                                Margin="0,24,0,0" IsHitTestVisible="False"/>
@@ -273,17 +273,17 @@
                 <!-- Difficulty + advanced settings -->
                 <StackPanel Grid.Row="4" Margin="0,12,0,0">
                     <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="Difficulty" Foreground="#CCCCCC" FontSize="12"
+                        <TextBlock Text="{loc:Str setting_difficulty}" Foreground="#CCCCCC" FontSize="12"
                                    VerticalAlignment="Center" Margin="0,0,12,0"/>
-                        <Button x:Name="BtnDiffEasy" Content="Easy" Theme="{StaticResource DiffChip}" Tag="Easy"/>
-                        <Button x:Name="BtnDiffNormal" Content="Normal" Theme="{StaticResource DiffChip}" Tag="Normal"/>
-                        <Button x:Name="BtnDiffHard" Content="Hard" Theme="{StaticResource DiffChip}" Tag="Hard"/>
+                        <Button x:Name="BtnDiffEasy" Content="{loc:Str rack_diff_easy}" Theme="{StaticResource DiffChip}" Tag="Easy"/>
+                        <Button x:Name="BtnDiffNormal" Content="{loc:Str gaze_mini_diff_normal}" Theme="{StaticResource DiffChip}" Tag="Normal"/>
+                        <Button x:Name="BtnDiffHard" Content="{loc:Str rack_diff_hard}" Theme="{StaticResource DiffChip}" Tag="Hard"/>
                     </StackPanel>
 
                     <!-- Avalonia's Expander theme sizes itself and its content to the header
                          rather than filling the row the way WPF's does, so both alignments are
                          stated; without them the whole advanced panel renders ~285px wide. -->
-                    <Expander x:Name="AdvancedExpander" Header="Advanced settings"
+                    <Expander x:Name="AdvancedExpander" Header="{loc:Str gaze_mini_advanced}"
                               HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
                               Foreground="#AAAAAA" FontSize="12" Margin="0,8,0,0">
                         <Border Background="#0F0F1A" BorderBrush="#33333A" BorderThickness="1"
@@ -296,7 +296,7 @@
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Text="Image count" Foreground="#CCCCCC" FontSize="12"/>
+                                        <TextBlock Text="{loc:Str gaze_mini_image_count}" Foreground="#CCCCCC" FontSize="12"/>
                                         <TextBlock Grid.Column="1" x:Name="TxtImageCountVal" Text="8"
                                                    Foreground="#FF69B4" FontFamily="Consolas, Courier New" FontSize="12"/>
                                     </Grid>
@@ -309,7 +309,7 @@
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Text="Video count" Foreground="#CCCCCC" FontSize="12"/>
+                                        <TextBlock Text="{loc:Str gaze_mini_video_count}" Foreground="#CCCCCC" FontSize="12"/>
                                         <TextBlock Grid.Column="1" x:Name="TxtVideoCountVal" Text="2"
                                                    Foreground="#FF69B4" FontFamily="Consolas, Courier New" FontSize="12"/>
                                     </Grid>
@@ -322,7 +322,7 @@
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Text="Image duration (sec)" Foreground="#CCCCCC" FontSize="12"/>
+                                        <TextBlock Text="{loc:Str gaze_mini_image_duration}" Foreground="#CCCCCC" FontSize="12"/>
                                         <TextBlock Grid.Column="1" x:Name="TxtImageDurVal" Text="5"
                                                    Foreground="#FF69B4" FontFamily="Consolas, Courier New" FontSize="12"/>
                                     </Grid>
@@ -335,7 +335,7 @@
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Text="Video max duration (sec)" Foreground="#CCCCCC" FontSize="12"/>
+                                        <TextBlock Text="{loc:Str gaze_mini_video_duration}" Foreground="#CCCCCC" FontSize="12"/>
                                         <TextBlock Grid.Column="1" x:Name="TxtVideoDurVal" Text="30"
                                                    Foreground="#FF69B4" FontFamily="Consolas, Courier New" FontSize="12"/>
                                     </Grid>
@@ -348,7 +348,7 @@
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Text="Pass time (sec)" Foreground="#CCCCCC" FontSize="12"/>
+                                        <TextBlock Text="{loc:Str gaze_mini_pass_time}" Foreground="#CCCCCC" FontSize="12"/>
                                         <TextBlock Grid.Column="1" x:Name="TxtPassTimeVal" Text="3"
                                                    Foreground="#FF69B4" FontFamily="Consolas, Courier New" FontSize="12"/>
                                     </Grid>
@@ -360,32 +360,32 @@
 
                                     <Rectangle Height="1" Fill="#33333A" Margin="0,16,0,12"/>
 
-                                    <TextBlock Text="Vibration"
+                                    <TextBlock Text="{loc:Str gaze_mini_vibration}"
                                                Foreground="#CCCCCC" FontSize="12" Margin="0,0,0,4"/>
                                     <ComboBox x:Name="CboVibration"
                                               BorderBrush="#33333A"
                                               Padding="6,4" Margin="0,0,0,4"
                                               HorizontalAlignment="Stretch">
-                                        <ComboBoxItem Content="None" Tag="None"/>
-                                        <ComboBoxItem Content="On correct (reward)" Tag="OnCorrect"/>
-                                        <ComboBoxItem Content="On wrong (punishment)" Tag="OnWrong"/>
+                                        <ComboBoxItem Content="{loc:Str profile_customize_none}" Tag="None"/>
+                                        <ComboBoxItem Content="{loc:Str gaze_mini_vib_correct}" Tag="OnCorrect"/>
+                                        <ComboBoxItem Content="{loc:Str gaze_mini_vib_wrong}" Tag="OnWrong"/>
                                     </ComboBox>
                                     <TextBlock x:Name="TxtVibrationStatus" Text=""
                                                Foreground="#888888" FontSize="10" FontStyle="Italic"
                                                Margin="0,0,0,12"/>
 
-                                    <TextBlock Text="Reward effect (on correct)"
+                                    <TextBlock Text="{loc:Str gaze_mini_reward_effect}"
                                                Foreground="#CCCCCC" FontSize="12" Margin="0,0,0,4"/>
                                     <ComboBox x:Name="CboReward"
                                               BorderBrush="#33333A"
                                               Padding="6,4" Margin="0,0,0,8"
                                               HorizontalAlignment="Stretch">
-                                        <ComboBoxItem Content="None" Tag="None"/>
-                                        <ComboBoxItem Content="Flashes (small burst)" Tag="Flashes"/>
-                                        <ComboBoxItem Content="Bubbles (4-5)" Tag="Bubbles"/>
-                                        <ComboBoxItem Content="Audio clip" Tag="Audio"/>
-                                        <ComboBoxItem Content="Mind wipe" Tag="MindWipe"/>
-                                        <ComboBoxItem Content="Overlay pulse" Tag="OverlayPulse"/>
+                                        <ComboBoxItem Content="{loc:Str profile_customize_none}" Tag="None"/>
+                                        <ComboBoxItem Content="{loc:Str gaze_mini_reward_flashes}" Tag="Flashes"/>
+                                        <ComboBoxItem Content="{loc:Str gaze_mini_reward_bubbles}" Tag="Bubbles"/>
+                                        <ComboBoxItem Content="{loc:Str gaze_mini_reward_audio}" Tag="Audio"/>
+                                        <ComboBoxItem Content="{loc:Str mindwipe_title}" Tag="MindWipe"/>
+                                        <ComboBoxItem Content="{loc:Str kwt_effect_overlay_pulse}" Tag="OverlayPulse"/>
                                     </ComboBox>
 
                                     <Grid x:Name="RewardAudioRow" IsVisible="False">
@@ -393,7 +393,7 @@
                                             <ColumnDefinition Width="Auto"/>
                                             <ColumnDefinition Width="*"/>
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="Audio clip:" Foreground="#CCCCCC"
+                                        <TextBlock Grid.Column="0" Text="{loc:Str gaze_mini_audio_label}" Foreground="#CCCCCC"
                                                    FontSize="11" VerticalAlignment="Center" Margin="6,0,8,0"/>
                                         <ComboBox Grid.Column="1" x:Name="CboRewardAudio"
                                                   BorderBrush="#33333A"
@@ -401,7 +401,7 @@
                                                   HorizontalAlignment="Stretch"/>
                                     </Grid>
 
-                                    <TextBlock Text="Press F11 to toggle fullscreen during the game."
+                                    <TextBlock Text="{loc:Str gaze_mini_f11}"
                                                Foreground="#666666" FontSize="10" FontStyle="Italic"
                                                Margin="0,16,0,0"/>
                                 </StackPanel>
@@ -422,7 +422,7 @@
                         <TextBlock x:Name="TxtReadyBanner" Grid.Column="0" Text=""
                                    Foreground="#FFC8C8" FontSize="13" TextWrapping="Wrap"
                                    VerticalAlignment="Center"/>
-                        <Button x:Name="BtnReadyBannerAction" Grid.Column="1" Content="Calibrate"
+                        <Button x:Name="BtnReadyBannerAction" Grid.Column="1" Content="{loc:Str blink_trainer_calibration_btn}"
                                 Theme="{StaticResource SecondaryBtn}" Margin="12,0,0,0"
                                 IsVisible="False"/>
                     </Grid>
@@ -436,8 +436,8 @@
                     </Grid.ColumnDefinitions>
                     <TextBlock Grid.Column="0" x:Name="TxtSelectionSummary" VerticalAlignment="Center"
                                Foreground="#888888" FontSize="12" TextWrapping="Wrap" Margin="0,0,16,0"
-                               Text="Pick a Focus set and at least one Ignore set."/>
-                    <Button Grid.Column="1" x:Name="BtnStartGame" Content="Start ▶"
+                               Text="{loc:Str gaze_mini_pick_sets}"/>
+                    <Button Grid.Column="1" x:Name="BtnStartGame" Content="{loc:Str gaze_mini_start}"
                             Theme="{StaticResource PrimaryBtn}" Padding="40,12" FontSize="16"
                             IsEnabled="False"/>
                 </Grid>
@@ -501,7 +501,7 @@
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
-                <TextBlock Grid.Row="0" Text="Session complete"
+                <TextBlock Grid.Row="0" Text="{loc:Str gaze_mini_session_complete}"
                            Foreground="White" FontSize="32" FontWeight="Bold"
                            HorizontalAlignment="Center"/>
                 <TextBlock Grid.Row="1" x:Name="TxtResultsHeadline"
@@ -522,9 +522,9 @@
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <Button Grid.Column="0" x:Name="BtnResultsClose" Content="Close"
+                    <Button Grid.Column="0" x:Name="BtnResultsClose" Content="{loc:Str btn_close}"
                             Theme="{StaticResource SecondaryBtn}"/>
-                    <Button Grid.Column="2" x:Name="BtnResultsPlayAgain" Content="Play again"
+                    <Button Grid.Column="2" x:Name="BtnResultsPlayAgain" Content="{loc:Str btn_play_again}"
                             Theme="{StaticResource PrimaryBtn}"
                             Padding="32,10"/>
                 </Grid>

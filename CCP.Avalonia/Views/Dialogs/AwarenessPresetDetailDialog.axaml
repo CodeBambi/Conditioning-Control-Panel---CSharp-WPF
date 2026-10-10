@@ -165,14 +165,14 @@
             <!-- Buttons -->
             <StackPanel Grid.Row="7" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,15,0,0">
                 <!-- Delete is only shown for user-created presets (replaces Clone). -->
-                <Button x:Name="BtnDeletePreset" Content="Delete preset" Padding="12,8" Margin="0,0,8,0"
+                <Button x:Name="BtnDeletePreset" Content="{loc:Str title_delete_preset}" Padding="12,8" Margin="0,0,8,0"
                         Background="#5A3030" Foreground="White" BorderThickness="0" Cursor="Hand"
                         IsVisible="False"/>
                 <Button x:Name="BtnClone" Content="Copy to custom" Padding="12,8" Margin="0,0,8,0"
                         Background="#2A2A44" Foreground="White" BorderThickness="0" Cursor="Hand"/>
-                <Button x:Name="BtnClose" Content="Close" Padding="12,8" Margin="0,0,8,0"
+                <Button x:Name="BtnClose" Content="{loc:Str btn_close}" Padding="12,8" Margin="0,0,8,0"
                         Background="#2A2A44" Foreground="White" BorderThickness="0" Cursor="Hand"/>
-                <Button x:Name="BtnInstall" Content="Activate" Padding="16,8"
+                <Button x:Name="BtnInstall" Content="{loc:Str btn_activate}" Padding="16,8"
                         Background="{DynamicResource PinkBrush}" Foreground="White"
                         BorderThickness="0" FontWeight="Bold" Cursor="Hand"/>
             </StackPanel>

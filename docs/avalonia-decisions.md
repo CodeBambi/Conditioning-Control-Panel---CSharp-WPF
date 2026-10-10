@@ -848,3 +848,23 @@ Behaviour (refund, re-raise, Dispose detaching) is unchanged. The Avalonia gate 
 - Tests: `Tests/CCP.Core.Tests/RoadmapServiceAtomicSaveTests.cs` (4 tests; the unreadable-file test returns early (passes without asserting) on Windows
   and when running as root). Fail-proofs (break, red, restore) are logged at
   ~/ccp-port/evidence/review-roadmap-atomic-save/fail-proofs.log.
+## 2026-10-10: Owner safety calls: remote Strict Lock, the safe word, keyword triggers on panic (parity/k20-calls)
+- Strict Lock from a remote controller is refused on the client, for every controller, on every tier, always
+  (it used to run outside Lockdown and a leash). `RemoteCommandGate.Screen` refuses `enable_strict_lock` beside
+  `disable_panic`; `RemoteCommands.Execute` has no case for it; any command naming `strict_lock` loses the key
+  before a head sees it (`DropsStrictLockFlag` / `WithoutStrictLock`). The "controller's strict lock" bookkeeping
+  is gone; a leave still hands the panic key back. Tests: `Tests/CCP.Core.Tests/RemoteStrictLockRuleTests.cs`
+  (one table over every verb the client knows, per tier, leashed or not; the waiver line pinned to the gate).
+- SUPERSEDES "2026-09-30: Panic and the mic" and the 2026-10-08 "safe word is the only exit under Lockdown" line:
+  the spoken safe word now answers to the same rule as the panic key, the tray stop and the 6-blink stop
+  (Core `BlinkStopGate`: Lockdown, panic key off, Strict Lock). Refused = a log line, nothing stopped, no Chaster
+  safety hold; a leash task still parks, as on a refused key press. Cutting the leash stays ungated and unpriced.
+  Tests: `PanicSafetyHoldTests` (TheSafeWord...), `VoiceCommandsTests.TheSpokenSafeWordIsRefusedUnderLockdownAndWorksOutsideIt`.
+- "Stop until re-enabled": every accepted panic press switches keyword triggers off
+  (`PanicSurfaces.SwitchOffKeywordTriggers`): the master goes off, the screen read goes off as a SAVED setting
+  (the master is per-session and never saved, so the saved switch is the one that matters next launch), the
+  reader stops, highlights come down. `PanicWatchdog`'s recovery finishes the switch-off instead of restarting
+  the reader (deliberate WPF deviation). A refused press and a palette-claimed Escape change nothing. The
+  Awareness tab repaints and shows `awareness_off_by_panic` until the user switches back on. Tests:
+  `PanicKeywordOffTests`.
+- The Lockdown dose keeper ships as on WPF, default on, pending one desk run. No code change.

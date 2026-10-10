@@ -369,9 +369,9 @@
                     <!-- Hidden ComboBox keeps existing handler wiring intact -->
                     <ComboBox x:Name="CmbRemoteTier" IsVisible="False" SelectedIndex="0"
                               SelectionChanged="CmbRemoteTier_SelectionChanged">
-                        <ComboBoxItem Content="Light"/>
-                        <ComboBoxItem Content="Standard"/>
-                        <ComboBoxItem Content="Full"/>
+                        <ComboBoxItem Content="{loc:Str label_remote_tier_light}"/>
+                        <ComboBoxItem Content="{loc:Str label_remote_tier_standard}"/>
+                        <ComboBoxItem Content="{loc:Str label_remote_tier_full}"/>
                     </ComboBox>
 
                     <!-- Status row: controller info (left) + command log (right), two dense cards -->

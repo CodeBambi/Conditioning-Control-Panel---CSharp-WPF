@@ -855,7 +855,7 @@
                                                  kept in sync with the Blink Trainer toggle via
                                                  RefreshBlinkTrainerTrackerButton on the WPF head. -->
                                             <Button x:Name="BtnDeeperWebcamStartStopTracker" x:FieldModifier="internal"
-                                                    Content="Start tracker"
+                                                    Content="{loc:Str deeper_webcam_start_tracker}"
                                                     Theme="{StaticResource OutlineButton}"
                                                     Padding="10,4" Margin="0,0,0,6" FontSize="10"
                                                     Click="BtnDeeperWebcamStartStopTracker_Click"/>

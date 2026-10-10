@@ -207,8 +207,18 @@ public sealed class DtrhHostFramesTests
             ChaosArt.ResetForTest();
             try { Directory.Delete(user, true); Directory.Delete(shipped, true); } catch { }
         }
-        // X14: the csproj ships the art, so the recap banner and the Brain Drain bubble sprite exist.
-        Assert.NotNull(ChaosArt.FilePath("recap.png"));
-        Assert.NotNull(ChaosArt.PathFor("bubbles", "braindrain_melt"));
+        // The csproj names the one sprite a live feature reads (the Melt bubble). The native run's art is
+        // retired with the run (owner, 2026-10-10) and must not come back through a folder glob.
+        var csproj = File.ReadAllText(Path.Combine(ArtRepoRoot(), "CCP.Avalonia", "CCP.Avalonia.csproj"));
+        Assert.DoesNotContain(@"assets\Chaos\**", csproj);
+        Assert.Contains(@"assets\Chaos\bubbles\braindrain_melt.png", csproj);
+        Assert.True(File.Exists(Path.Combine(ArtRepoRoot(), "ConditioningControlPanel", "assets", "Chaos", "bubbles", "braindrain_melt.png")));
+    }
+
+    private static string ArtRepoRoot()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, "CCP.Avalonia"))) dir = dir.Parent;
+        return dir!.FullName;
     }
 }

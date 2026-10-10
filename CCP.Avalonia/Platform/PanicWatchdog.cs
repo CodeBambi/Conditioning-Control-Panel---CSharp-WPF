@@ -3,9 +3,10 @@
 // thread here, so a wedged UI thread can no longer lose the key itself; it can still sit on the queued
 // handler. This watches that handler from a background thread and, if it has not finished inside
 // 2 s, runs the thread-safe part of the stop off the UI thread.
-// Screen OCR (WPF MainWindow.xaml.cs:1141 and :1173-1196): this fallback is the ONLY panic path that
-// stops the screen reader, and it queues the restart for when the UI thread drains. The designed panic
-// path leaves OCR, keyword highlights and the awareness observer running, and so does this head.
+// Screen OCR: WPF (MainWindow.xaml.cs:1141 and :1173-1196) stopped the reader only here and queued its
+// restart. Owner, 2026-10-10 ("stop until re-enabled"): a panic press switches keyword triggers off, so
+// this fallback stops the reader off-thread and the queued recovery finishes the switch-off on the UI
+// thread (PanicSurfaces.SwitchOffKeywordTriggers) instead of restarting anything.
 
 using System;
 using System.Threading;
@@ -102,10 +103,14 @@ internal static class PanicWatchdog
     /// <summary>Test seam: the UI-thread post used by the recovery.</summary>
     internal static Action<Action> PostToUi { get; set; } = a => Dispatcher.UIThread.Post(a);
 
-    /// <summary>WPF QueuePanicFallbackRecovery: the off-thread teardown stopped the screen reader behind
-    /// the settings' back, so restart it under the real start conditions once the UI thread drains.
-    /// Sync() starts only when the switches and the access check still say so, and is idempotent.</summary>
-    private static void QueueRecovery() => PostToUi(() => Step("screen OCR restart", ScreenOcrService.Sync));
+    /// <summary>WPF QueuePanicFallbackRecovery restarted the screen reader here. Owner, 2026-10-10: a
+    /// panic press switches keyword triggers off until the user turns them back on, so once the UI
+    /// thread drains this finishes the switch-off (settings, key listener, highlights) and restarts
+    /// nothing. Idempotent with the queued handler's own switch-off.</summary>
+    private static void QueueRecovery() => PostToUi(() => Step("keyword triggers off", () => KeywordOff()));
+
+    /// <summary>Test seam: what the recovery runs on the UI thread.</summary>
+    internal static Action KeywordOff { get; set; } = Views.Windows.PanicSurfaces.SwitchOffKeywordTriggers;
 
     private static void Step(string name, Action step)
     {

@@ -3,6 +3,8 @@
 // instead of a call remembered in each route (P06). The panic key, the tray's Stop everything and the
 // spoken safe word all call StopAll; Lockdown refusal, the lock-card/palette/grace-pause rungs, the
 // window restore and the double-press exit ladder stay in the routes. Guarded by PanicSurfacesTests.
+// Owner, 2026-10-10 ("stop until re-enabled"): every accepted panic route also switches keyword triggers
+// off (SwitchOffKeywordTriggers); the user switches them back on in the Awareness tab.
 
 using System;
 using System.Collections.Generic;
@@ -35,11 +37,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             new("blink-trainer", _ => Overlays.BlinkTrainerSession.Stop()),
             new("gaze-minigame", _ => Lab.GazeMinigame.GazeMinigameWindow.CloseAllForPanic(), Lab.GazeMinigame.GazeMinigameWindow.IsAnyRunning),   // ends before the camera stop below
             new("mantra", _ => MantraWindow.StopForPanic()),                // WPF KillAllAudio -> Mantra?.Dispose()
-            new("chaos", _ => Chaos.ChaosRunHost.ForceShutdown(), () => Chaos.ChaosRunHost.IsDescending),
+            // No "chaos" line: the native Chaos run is retired on this head (owner, 2026-10-10). Chaos is the
+            // web descent, a game window, closed by "games" above.
             // WPF PanicStopEverySurface (:1992): the toys go to zero, bypassing throttles and gates.
             new("haptics", _ => CoreHaptics.Service?.PanicStop()),
             new("remote-haptics", _ => RemoteCommands.StopHaptics()),   // decisions 2026-10-08
-            new("remote-overlays", _ => RemoteCommands.PanicDropOverlays()),   // a controller-held pink filter, spiral or haze never outlives a panic
+            new("remote-overlays", sh => { RemoteCommands.PanicDropOverlays(); sh?.StopBrowserVideoFromRemote(); }),   // a controller-held pink filter, spiral or haze never outlives a panic
             // Lockdown's haunt: every possessed control back at once, the edge pulse and its shake gone.
             // The lockdown itself is LockdownPauseRule's business, never this line's.
             new("possession", sh => MainShellWindow.StopPossessionForPanic(sh)),
@@ -87,11 +90,65 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             catch (Exception ex) { Serilog.Log.Debug(ex, "Panic: Chaster safety hold failed"); }
         }
 
+        /// <summary>Raised on the UI thread after a panic switched keyword triggers off (the Awareness tab
+        /// repaints its switches and its notice).</summary>
+        internal static event Action? KeywordTriggersSwitchedOff;
+
+        /// <summary>True from a panic that switched the master off until the user switches it back on.
+        /// This run only: the master is a per-session switch (AppSettings.KeywordTriggersEnabled is not
+        /// saved), so the next launch starts with it off anyway.</summary>
+        internal static bool KeywordMasterOffByPanic { get; set; }
+
+        /// <summary>Test seam: stopping what reads the screen and the keys and what it drew.</summary>
+        internal static Action StopKeywordSources { get; set; } = () =>
+        {
+            Platform.KeywordTriggerHead.SyncSources();   // the X11 key listener follows the master
+            Platform.ScreenOcrService.Stop();            // the screen reader's timer, whatever the switches say
+            Overlays.KeywordHighlightOverlay.CloseAll(); // any highlight box still on screen
+        };
+
+        /// <summary>Owner, 2026-10-10: "Stop until re-enabled". A panic press switches keyword triggers
+        /// off and they stay off until the user turns them back on: the master (typed and screen) goes
+        /// off, the screen read goes off AS A SAVED SETTING (the master is per-session, so it is the
+        /// saved switch that would otherwise read the screen again next time), the reader stops and any
+        /// highlight comes down. Nothing here or in PanicWatchdog switches either back on.
+        /// Called by every accepted route: <see cref="StopAll"/> (tray, safe word, leash gate, the key's
+        /// stop pass), the 6-blink stop, and the key's lock-card and grace-pause rungs. A refused press
+        /// never gets here, and neither does an Escape the settings palette claimed (not a panic).
+        /// UI thread. Idempotent. Never throws.</summary>
+        internal static void SwitchOffKeywordTriggers()
+        {
+            var changed = false;
+            try
+            {
+                var s = CoreSettings.Current;
+                if (s != null)
+                {
+                    if (s.KeywordTriggersEnabled) { s.KeywordTriggersEnabled = false; KeywordMasterOffByPanic = true; changed = true; }
+                    if (s.ScreenOcrEnabled)
+                    {
+                        s.ScreenOcrEnabled = false;
+                        s.KeywordTriggersOffByPanic = true;
+                        changed = true;
+                        CoreSettings.Save();
+                    }
+                }
+                if (changed) Serilog.Log.Information("Panic: keyword triggers switched off until the user turns them back on");
+            }
+            catch (Exception ex) { Serilog.Log.Warning(ex, "Panic: keyword trigger switch-off failed"); }
+            try { StopKeywordSources(); }
+            catch (Exception ex) { Serilog.Log.Warning(ex, "Panic: keyword source stop failed"); }
+            if (!changed) return;
+            try { KeywordTriggersSwitchedOff?.Invoke(); }
+            catch (Exception ex) { Serilog.Log.Debug(ex, "Panic: keyword switch-off repaint failed"); }
+        }
+
         /// <summary>Stops every surface in order. One failing stop never skips the rest. Never throws.</summary>
         internal static void StopAll(string reason, MainShellWindow? shell = null)
         {
             Serilog.Log.Information("Panic: stopping every surface ({Reason})", reason);
             ArmSafetyHold();
+            SwitchOffKeywordTriggers();
             shell ??= MainShellWindow.Current;
             foreach (var s in All)
             {

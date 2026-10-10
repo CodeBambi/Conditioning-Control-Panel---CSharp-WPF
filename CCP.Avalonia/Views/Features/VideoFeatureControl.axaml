@@ -94,7 +94,7 @@
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="56"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="Duration filter" FontSize="13" FontWeight="SemiBold"
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_duration_filter}" FontSize="13" FontWeight="SemiBold"
                                            Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
                                 <Slider Grid.Column="1" x:Name="SliderVideoMinDur" sessionLock:SessionLock.Owned="True" Minimum="0" Maximum="600" Value="0"
                                         VerticalAlignment="Center" Margin="14,0,8,0"/>
@@ -245,7 +245,7 @@
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="Stare to click" FontSize="13" FontWeight="SemiBold"
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_stare_to_click}" FontSize="13" FontWeight="SemiBold"
                                            Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
                                 <CheckBox Grid.Column="1" x:Name="ChkVideoGazeClick"
                                           Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>

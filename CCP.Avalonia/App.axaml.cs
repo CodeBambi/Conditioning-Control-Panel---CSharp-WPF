@@ -34,6 +34,8 @@ namespace ConditioningControlPanel.Avalonia
         /// <summary>The achievement engine (achievements.json), or null on the headless render path.
         /// Local-only: no sync, no streak writes, no ResetProgress on this head (oracle-achievements.md).</summary>
         internal static AchievementEngine? Achievements { get; private set; }
+        /// <summary>WPF App.CommunityPrompts. Null only if its construction failed.</summary>
+        internal static CommunityPromptLibrary? CommunityPrompts { get; private set; }
 
         /// <summary>WPF App.WindowAwareness (App.xaml.cs:2674), the legacy title observer. X11/XWayland
         /// titles on Linux, user32 on Windows (Platform/ActiveWindowTitle); unlike WPF, the privacy rules run on each title first (docs/avalonia-decisions.md).</summary>
@@ -477,6 +479,12 @@ namespace ConditioningControlPanel.Avalonia
                     Views.Overlays.FlashOverlay.TriggerOnce(host);
                     NoteFeatureUsed(ConditioningControlPanel.Services.Companion.Brain.MemorySignalWriter.FeatureFlash);
                 };
+                CoreFlash.TryShowProvider = () =>
+                {
+                    if (desktop.MainWindow == null || Views.Overlays.FlashOverlay.IsBusy) return false;
+                    CoreFlash.ShowProvider?.Invoke();
+                    return Views.Overlays.FlashOverlay.IsBusy;   // TriggerOnce claims the surface before its first await
+                };
 
                 // Subliminal and bouncing-text surfaces. Core owns the schedule / the motion;
                 // these draw on click-through overlays (Views/Overlays), hosted like the flash.
@@ -752,6 +760,17 @@ namespace ConditioningControlPanel.Avalonia
                 // caller's thread; the popup hops to the UI thread as WPF's DispatcherHelper does.
                 Achievements = new AchievementEngine(new AchievementStore(AchievementsPath));
                 WireAchievementUnlocks(Achievements);
+                // WPF App.CommunityPrompts: the Workshop's Community cell and a companion's assigned prompt.
+                try
+                {
+                    CommunityPrompts = new CommunityPromptLibrary { FlaggedAdvisory = Platform.CommunityPromptAdvisory.Show };
+                    Views.Controls.Companion.Runtime.WorkshopCommunityCell.Library = () => CommunityPrompts;
+                    Services.Companion.CompanionCore.ActivatePrompt ??= id => CommunityPrompts?.ActivatePrompt(id);
+                }
+                catch (Exception exPrompts) { Serilog.Log.Warning(exPrompts, "Community prompts unavailable this run"); }
+                // WPF App.xaml.cs:2121: per-day feature use, read off the lifetime counters every 60 s.
+                try { FeatureDayLogService.Current = new FeatureDayLogService(FeatureDayLogService.DefaultPath, () => FeatureDayLogService.ReadCounters(Achievements?.Progress, CoreSettings.Current)); }
+                catch (Exception exDayLog) { Serilog.Log.Warning(exDayLog, "[FeatureDayLog] service construction failed; per-day feature use is not recorded this run"); }
                 Platform.LoginStreak.Start(Achievements);   // progression#42: WPF AchievementService ctor + App.xaml.cs:2732 + CheckDayRollover
                 WardrobeCatalog.ProgressProvider = () => Achievements?.Progress;
                 CoreProgram.UnlockAchievementProvider = id => Achievements?.TryUnlock(id);
@@ -1187,6 +1206,8 @@ namespace ConditioningControlPanel.Avalonia
             // WPF AchievementService.Dispose saves synchronously; only when dirty here, so an idle exit
             // never rewrites the file (or rotates its .bak) - it may be shared with the WPF head.
             try { if (Achievements is { IsDirty: true } a) a.Save(); } catch { /* the store logs write failures */ }
+            try { FeatureDayLogService.Current?.Dispose(); } catch { /* WPF App.OnExit:5773; the last tick and the file */ }
+            try { CommunityPrompts?.Dispose(); } catch { }
             try { Platform.AwarenessHead.Shutdown(); } catch { /* WPF App.OnExit:5779; flushes the ledger */ }
             try { Quests?.Dispose(); } catch { /* WPF App.OnExit:6104; saves only when dirty */ }
             try { Programs?.Dispose(); } catch { /* WPF App.OnExit:6309; idempotent after StopPrograms */ }
@@ -1201,7 +1222,6 @@ namespace ConditioningControlPanel.Avalonia
             // WPF App.OnExit:6013/6173: zero the toys first (a Lovense level has no timeout), then dispose.
             try { CoreHaptics.Service?.Dispose(); } catch { }
             try { Views.Overlays.BlinkTrainerSession.Stop(); } catch { /* WPF Application.Exit += Stop */ }
-            try { Views.Chaos.ChaosRunHost.ForceShutdown(); } catch { /* WPF App.OnExit:6241 Chaos.ForceShutdown */ }
             try { Platform.WebcamTracker.Instance.Stop(); } catch { /* WPF App.OnExit:6185 Webcam.Dispose */ }
 
             // Roadmap is lazy: do not construct it merely to dispose it on a profile that never

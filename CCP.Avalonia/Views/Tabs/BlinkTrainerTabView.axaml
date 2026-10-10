@@ -220,7 +220,7 @@
                       Padding="16,7"
                       Theme="{StaticResource OutlineButton}"
                       Click="BtnBlinkTrainerStartStopTracker_Click">
-                <TextBlock Text="Start tracker" FontSize="12"/>
+                <TextBlock Text="{loc:Str deeper_webcam_start_tracker}" FontSize="12"/>
               </Button>
 
               <!-- ═══ START BUTTON — still the loudest thing on the row ═══ -->
