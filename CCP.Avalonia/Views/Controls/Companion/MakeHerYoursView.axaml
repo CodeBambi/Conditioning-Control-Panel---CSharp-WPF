@@ -147,7 +147,7 @@
             </Grid>
 
             <!-- ========== interview spotlight ========== -->
-            <Grid x:Name="InterviewSpotlight" Margin="0,13,0,14" IsVisible="{Binding !IsInterviewed}">
+            <Grid x:Name="InterviewSpotlight" Margin="0,13,0,14" IsVisible="{Binding IsInterviewSpotlightShown}">
                 <Border x:Name="InterviewCard" Theme="{StaticResource CmpZ4InterviewCardStyle}"
                         Classes.dormant="{Binding !IsInterviewAvailable}">
                     <Grid>
@@ -276,7 +276,7 @@
                         <TextBlock Text="{Binding SpiceSubtitle}" FontSize="10" Margin="0,1,0,0"
                                    Foreground="{StaticResource CmpFaintBrush}" TextWrapping="Wrap"/>
                     </StackPanel>
-                    <ToggleButton Grid.Column="2" Theme="{StaticResource CmpToggleSwitchStyle}"
+                    <ToggleButton x:Name="SpiceToggle" Grid.Column="2" Theme="{StaticResource CmpToggleSwitchStyle}"
                                   VerticalAlignment="Center" ToolTip.Tip="{Binding SpiceSubtitle}"
                                   IsChecked="{Binding IsSpiceOn, Mode=TwoWay}"/>
                 </Grid>
@@ -290,7 +290,7 @@
                 </Grid.ColumnDefinitions>
                 <TextBlock Grid.Column="0" Text="{Binding ActivePersonalityLine}" FontSize="11"
                            Foreground="{StaticResource CmpMutedBrush}" TextWrapping="Wrap"/>
-                <Button Grid.Column="1" Content="{Binding ResetLabel}" Theme="{StaticResource CmpLinkButtonStyle}"
+                <Button x:Name="BtnResetPersonality" Grid.Column="1" Content="{Binding ResetLabel}" Theme="{StaticResource CmpLinkButtonStyle}"
                         Command="{Binding ResetPersonalityCommand}" Padding="8,2,0,2"
                         IsVisible="{Binding CanResetPersonality}"/>
             </Grid>

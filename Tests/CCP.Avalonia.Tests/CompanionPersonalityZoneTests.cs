@@ -64,6 +64,10 @@ public sealed class CompanionPersonalityZoneTests
             var view = shell.GetLogicalDescendants().OfType<MakeHerYoursView>().Single();
             var vm = view.ViewModel;
             Assert.Same(shell, vm.Shell);
+            // WPF MakeHerYoursView ctor collapses the interview card under Companion v2.
+            Assert.True(ConditioningControlPanel.Services.Companion.CompanionExperience.IsV2Enabled);
+            Assert.False(view.FindControl<Control>("InterviewSpotlight")!.IsVisible);
+            var spice = view.FindControl<ToggleButton>("SpiceToggle")!;
 
             // Chips are the service's presets, the active one selected; the readout names it.
             var all = PersonalityService.Shared.GetAllPresets();
@@ -95,20 +99,20 @@ public sealed class CompanionPersonalityZoneTests
             s.SlutModeEnabled = false;
             s.ActivePersonalityPresetId = spicy.Id;
             vm.Sync();
-            vm.IsSpiceOn = true;
-            Dispatcher.UIThread.RunJobs();
+            Click(shell, spice);
             Gate(shell)!.FindControl<Button>("BtnCancel")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Dispatcher.UIThread.RunJobs();
             Assert.False(s.SlutModeEnabled);
             Assert.False(vm.IsSpiceOn);
+            Assert.False(spice.IsChecked);
 
             // ...and written once acknowledged.
             ExplicitContentGate.MarkAcknowledged(s.CompanionPrompt);
-            vm.IsSpiceOn = true;
-            Dispatcher.UIThread.RunJobs();
+            Click(shell, spice);
             Assert.Null(Gate(shell));
             Assert.True(s.SlutModeEnabled);
             Assert.True(vm.IsSpiceOn);
+            Assert.True(spice.IsChecked);
 
             // A community prompt shows Reset, and Reset clears the override.
             s.ActiveCommunityPromptId = "community-x";
@@ -118,7 +122,7 @@ public sealed class CompanionPersonalityZoneTests
             Dispatcher.UIThread.RunJobs();
             Assert.True(vm.CanResetPersonality);
             Assert.Equal(Loc.GetF("companion_personality_active_custom_fmt", "community-x"), vm.ActivePersonalityLine);
-            vm.ResetPersonalityCommand.Execute(null);
+            Click(shell, view.FindControl<Button>("BtnResetPersonality")!);
             Assert.Null(s.ActiveCommunityPromptId);
             Assert.False(vm.CanResetPersonality);
         }

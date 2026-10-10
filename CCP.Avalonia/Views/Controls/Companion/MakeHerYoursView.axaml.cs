@@ -42,11 +42,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         {
             AvaloniaXamlLoader.Load(this);
             // WPF MakeHerYoursView ctor: under Companion v2 the Train 3 preview tag and interview card go.
+            // The spotlight goes through IsInterviewSpotlightShown: a local IsVisible would lose to its binding.
             if (ConditioningControlPanel.Services.Companion.CompanionExperience.IsV2Enabled)
-            {
                 this.FindControl<Control>("PreviewTrainTag")!.IsVisible = false;
-                this.FindControl<Control>("InterviewSpotlight")!.IsVisible = false;
-            }
             DataContext = ViewModel = new MakeHerYoursViewModel(this);
             Loaded += OnLoaded;
         }
@@ -143,6 +141,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
         // ---- interview / trait glance: Train 3, dormant (WPF returns false / empty too) ----
         public bool IsInterviewAvailable => false;
         public bool IsInterviewed => false;
+        public bool IsInterviewSpotlightShown =>
+            !IsInterviewed && !ConditioningControlPanel.Services.Companion.CompanionExperience.IsV2Enabled;
         public string InterviewTitle => Loc.Get("companion_personality_interview_title");
         public string InterviewBody => Loc.Get("companion_personality_interview_body_1");
         public string InterviewCtaLabel => Loc.Get("companion_personality_interview_cta");
@@ -161,7 +161,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion
             set
             {
                 if (_isSpiceOn == value) return;
-                // Never set from the setter: the gate can refuse, and Sync reads back the settings file.
+                // Never write settings from the setter: the gate can refuse, and Sync reads back the
+                // settings file. Track the toggle's value meanwhile, or the binding drops Sync's
+                // read-back as unchanged and the toggle stays on after Cancel.
+                _isSpiceOn = value;
                 _ = SetSpiceAsync(value);
             }
         }
