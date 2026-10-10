@@ -44,12 +44,24 @@ public sealed class EmiRingWiringTests
     {
         var ids = EmiTargets.All.Select(t => t.Id).ToList();
         // Table order, minus exactly the doors this head cannot open.
-        var hidden = new[] { "arcademy", "fyp", "dtrh", "intake", "spiral", "goon", "backroom", "justdrop" };
+        var hidden = new[] { "fyp", "spiral", "justdrop" };
         Assert.Equal(EmiDoors.All.Select(d => d.Id).Except(hidden), ids);
 
-        // A brand new user: no pins, no usage, so the first six available doors in order.
+        // A brand new user: no pins, no usage, so the first six available doors in order (a locked door is never suggested).
         var ring = EmiSuggester.Compose(EmiTargets.All).Select(s => s.Target.Id);
         Assert.Equal(new[] { "loom", "sessions", "flashes", "codex", "videos", "subliminals" }, ring);
+
+        // HC9: the game doors open through the launcher's entry.
+        var prev = EmiTargets.LaunchGame;
+        var launched = new System.Collections.Generic.List<string>();
+        EmiTargets.LaunchGame = id => { launched.Add(id); return true; };
+        try
+        {
+            foreach (var id in new[] { "arcademy", "dtrh", "goon", "backroom", "intake" }) EmiTargets.Find(id)!.Open();
+            Assert.Equal(new[] { "arcademy", "dtrh", "goon", "backroom", "intake" }, launched);
+        }
+        finally { EmiTargets.LaunchGame = prev; }
+        EmiState.Current.OpenScore.Clear(); EmiState.Current.UsageAt.Clear();
 
         // A pick scores the door (WPF Pick -> NoteOpen), and a pin takes slot one.
         EmiTargets.Find("vault")!.Open();

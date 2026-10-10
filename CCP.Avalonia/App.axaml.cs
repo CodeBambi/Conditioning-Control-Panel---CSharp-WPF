@@ -555,6 +555,7 @@ namespace ConditioningControlPanel.Avalonia
                     // WPF App.Descent, with its three askers besides the Trainer Card: profile loaded, a sync
                     // accepted (once a block has been seen) and the silent migration (lane z1).
                     Descent ??= new Services.Descent.DescentService();
+                    Views.Windows.MainShellWindow.WireProfileSpiral(Descent);   // HC6: the profile's spiral doors and the Spiral Room
                     // WPF App.xaml.cs:2490: built always, armed only if the user asked AND a Discord is linked
                     // (an anonymous invite-code account never exposes itself by accident).
                     DiscordRpc = new Services.DiscordRichPresenceService();

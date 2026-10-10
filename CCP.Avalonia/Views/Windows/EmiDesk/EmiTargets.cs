@@ -15,9 +15,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
     /// openers this head has. WPF twin: ConditioningControlPanel/Services/EmiDesk/EmiTargets.cs, whose
     /// availability, lock probe and opener this mirrors door for door.
     ///
-    /// <para>ponytail: HIDDEN, not faked, until this head has their surface: arcademy, fyp, dtrh,
-    /// intake, spiral (overlay), goon, backroom and justdrop. Each is a host window or overlay no
-    /// Avalonia code launches yet; a null from <see cref="Door"/> keeps the card out of the ring the
+    /// <para>The game doors (arcademy, dtrh, goon, backroom) and the intake open through the launcher's own
+    /// entry (MainShellWindow.LaunchCardGame), so its sign-in ask, leash gate and tier refusal answer; a
+    /// locked one still opens that door, which refuses in its own words.</para>
+    ///
+    /// <para>ponytail: HIDDEN, not faked, until this head has their surface: fyp and justdrop (shell
+    /// WindowKeys with no window here) and spiral (the timed overlay card, WPF ShowOverlayTimed). A null from <see cref="Door"/> keeps the card out of the ring the
     /// same way an unavailable door does. Also missing: the moments WPF's Pick fires
     /// (<c>ringPick</c>, <c>lockedCardTapped</c>) - there is no <c>App.EmiDesk.Fire</c> on this head.</para>
     /// </summary>
@@ -46,6 +49,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
 
         private static (Func<bool> Available, Func<bool> Locked, Action Open)? Door(string id) => id switch
         {
+            "arcademy" => (() => ConditioningControlPanel.Services.Arcademy.ArcademyHostService.DoorAvailable, () => GameLocked(id), () => Game(id)),
+            "dtrh" or "goon" or "backroom" or "intake" => (Always, () => GameLocked(id), () => Game(id)),
             "loom" => Free(() => Rack("spiral")),
             "sessions" => Free(() => Nav("presets")),
             "flashes" => Free(() => Rack("flash")),
@@ -67,6 +72,21 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
             "settings" => Free(() => Nav("appsettings")),
             _ => null,
         };
+
+        /// <summary>Doors whose own entry raises the refusal (the launcher's gate), so a locked pick still opens it.</summary>
+        internal static bool GateOwnsRefusal(string id) => id is "arcademy" or "dtrh" or "goon" or "backroom" or "intake";
+
+        /// <summary>The launcher card's padlock probe (WPF LabOk / IntakePass.CanStartIntake).</summary>
+        private static bool GameLocked(string id) =>
+            ConditioningControlPanel.Services.Launcher.LauncherCards.Find(id) is { } card && LauncherWindow.LockedFor(card);
+
+        /// <summary>Test seam: the game door (default: the panel card's launcher entry).</summary>
+        internal static Func<string, bool> LaunchGame { get; set; } = id => Shell?.LaunchCardGame(id) == true;
+
+        private static void Game(string id)
+        {
+            if (!LaunchGame(id)) Log.Debug("[EmiDesk] no game door for {Target} on this head", id);
+        }
 
         private static MainShellWindow? Shell =>
             (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow as MainShellWindow;
@@ -96,6 +116,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
 
             try
             {
+                if (locked && GateOwnsRefusal(id)) { open(); return; }   // its own gate says why; never scored
                 if (locked)
                 {
                     var name = Loc.Get("emi_desk_target_" + id);

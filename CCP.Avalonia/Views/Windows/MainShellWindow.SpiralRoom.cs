@@ -3,8 +3,8 @@
 // the rail in the nav rework; "spiral" is a hidden tab of the You section (NavSections), reached
 // through ShowTab, the palette and the barks.
 //
-// ponytail: DescentService (BlockChanged) is a WPF-head network service, so only the fuse and the
-// language are subscribed. BeginSpiralFirstLight has no caller here (DescentShowDirector is
+// The block's own subscription is MainShellWindow.WireProfileSpiral (profile doors) and SpiralTabView.Wire
+// (the room); here only the fuse and the language. BeginSpiralFirstLight has no caller here (DescentShowDirector is
 // WPF-only) and is not ported until it does.
 
 using System;
