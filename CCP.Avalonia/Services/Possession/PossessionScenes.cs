@@ -2,8 +2,8 @@
 // part this head needs), TheCountScene, WhereYouAreScene. A scene is a haunt the director starts with
 // no target (Core IPossessionScene, PossessionDirector.ElectScene): it takes free DISPLAY victims
 // from the host registry, books them, plays a few timed beats and gives every one back on undo.
-// Not here: RailSweepScene (its victims are the rail doors: buttons), the ember charge before each
-// beat, and the pointer-proximity pick in "where you are" (any free card is taken instead).
+// RailSweepScene (the rail doors) is in PossessionReachEffects.cs (k22). Not here: the ember charge
+// before each beat, and the pointer-proximity pick in "where you are" (any free card is taken instead).
 
 using System;
 using System.Collections.Generic;
@@ -30,13 +30,13 @@ internal abstract class PossessionSceneBase : PossessionEffectBase, IPossessionS
     /// <summary>A free, visible display control of this role, or null. Booked when asked to.</summary>
     protected PossessionTarget? Pick(PossessionContext ctx, PossessionRole role, bool book)
     {
-        if (!PossessionTree.IsDisplayRole(role)) return null;
+        if (!PossessionTree.IsDisplayRole(role) && !(TakesInteractive && PossessionTree.IsInteractiveRole(role))) return null;
         var free = new List<PossessionTarget>();
         foreach (var t in ctx.Host.Targets())
         {
             if (t == null || t.Role != role || t.IsLive || _booked.Contains(t)) continue;
             if (t.CooldownUntil > DateTime.Now) continue;
-            if (t.Element is not Control c || !c.IsEffectivelyVisible || PossessionTree.IsOffLimits(c)) continue;
+            if (t.Element is not Control c || !c.IsEffectivelyVisible || !PossessionTree.MayTouch(c, role, TakesInteractive)) continue;
             free.Add(t);
         }
         if (free.Count == 0) return null;

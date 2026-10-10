@@ -4,8 +4,8 @@
 // this is the room it haunts: the shell's edge pulse, the short list of possessable controls and the
 // two micro-tics this head can draw.
 //
-// Narrower than WPF on purpose (HB13): only DISPLAY controls are enrolled, so no button, toggle, timer
-// or exit ever moves under the pointer. Views mark victims with poss:Possession.Role and the shell
+// Reach = WPF 7.1.5 (owner, 10 Oct 2026; k22) inside the owner's hard limits: the rail doors, Start, the
+// lockdown card, the Lockdown toggles and the timer are enrolled, and no SAFETY control ever is. Views mark victims with poss:Possession.Role and the shell
 // walks its visual tree (Services/Possession/Possession.cs: PossessionTree holds the refusals). The
 // deck here: nudge, typo, breathe, drift, rewrite, melt, glyphrot, crack, retitle (Services/Possession/*.cs).
 
@@ -38,7 +38,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 PossessionDirector.Current?.Dispose();
                 PossessionDirector.Current = new PossessionDirector(lockdown, PossessionHeadEffects(), PossessionHostFor(() => Current));
                 PossessionDirector.Current.Scenes.AddRange(PossessionHeadScenes());
+                // A Start control is a STOP control while the engine or a session runs.
+                PossessionTree.SomethingRunning = () => CoreEngine.IsRunning || App.Sessions?.IsRunning == true;
                 InstallPossessionRemember(lockdown);
+                // WPF PossessionAudio.Install: the two synthesised tics (tones, never speech).
+                PossessionAudio.Install(lockdown, () => PossessionDirector.Current);
                 lockdown.LockdownActivated += () => Dispatcher.UIThread.Post(() => PostPossessionRulesIfFirstTime(() => Current));
             }
             catch (Exception ex) { Log.Warning(ex, "Possession: install failed"); }
@@ -56,6 +60,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             new Services.Possession.Effects.CrackEffect(),
             new Services.Possession.Effects.RetitleEffect(),
             new Services.Possession.Effects.GlitchPortraitEffect(),
+            // k22, reach = WPF: the effects written for the roles the user acts on.
+            new Services.Possession.Effects.DodgeEffect(), new Services.Possession.Effects.WobbleEffect(),
+            new Services.Possession.Effects.RelabelEffect(), new Services.Possession.Effects.ToggleLieEffect(), new Services.Possession.Effects.ReorderDoorsEffect(),
         };
 
         internal const string PossessionRulesKey = "intro:possession";
@@ -116,11 +123,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             catch (Exception ex) { Log.Warning(ex, "Possession: remember install failed"); }
         }
 
-        /// <summary>WPF PossessionSceneCatalog, minus the rail sweep (its victims are the rail doors,
-        /// which are buttons and not enrolled on this head).</summary>
+        /// <summary>WPF PossessionSceneCatalog (the rail sweep joined with the doors, k22).</summary>
         internal static IPossessionScene[] PossessionHeadScenes() => new IPossessionScene[]
         {
             new Services.Possession.Scenes.TheCountScene(), new Services.Possession.Scenes.WhereYouAreScene(),
+            new Services.Possession.Scenes.RailSweepScene(),
         };
 
         /// <summary>The director's host over a shell (the live one at run time, a test's own in tests).</summary>
@@ -139,6 +146,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         internal static void StopPossessionForPanic(MainShellWindow? shell)
         {
             try { PossessionDirector.Current?.PanicStop(); } catch (Exception ex) { Log.Warning(ex, "Possession: panic stop failed"); }
+            try { PossessionAudio.StopForPanic(); } catch (Exception ex) { Log.Debug("Possession: audio stop failed: {E}", ex.Message); }
             try { (shell ?? Current)?.PaintPossessionPulse(double.MaxValue); } catch (Exception ex) { Log.Debug("Possession: pulse drop failed: {E}", ex.Message); }
             try { Deeper.ScreenShake.Stop(); } catch (Exception ex) { Log.Debug("Possession: shake drop failed: {E}", ex.Message); }
         }
@@ -159,10 +167,11 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         // ---- the reactive layer (WPF PossessionEvents, the card half) -----------------------------
         // A press on a haunted room's card makes that card breathe. The press is only WATCHED: it is
-        // never handled, so whatever was pressed still gets it. Not here, on purpose: a pressed rail
-        // door dropping (a button), Start / Stop dodging the pointer (a stop control may never get
-        // harder to hit), and the typo that answers a changed setting (a setting can be changed by a
-        // remote controller, and no remote path may feed the haunt).
+        // never handled, so whatever was pressed still gets it. The pointer reaching Start asks for a
+        // dodge (a START only: a Start that reads Stop is a safety control). Not here, on purpose: a
+        // pressed rail door dropping its letters (drop is not ported), and the typo that answers a
+        // changed setting (a setting can be changed by a remote controller, and no remote path may
+        // feed the haunt).
         private bool _possessionPressHooked;
 
         private void HookPossessionPress()
@@ -174,6 +183,28 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 try { PossessionReactToPress(e.Source as Visual); }
                 catch (Exception ex) { Log.Debug("Possession: reactive press failed: {E}", ex.Message); }
             }, global::Avalonia.Interactivity.RoutingStrategies.Tunnel, handledEventsToo: true);
+            // WPF PossessionEvents.OnHoverChanged: the pointer reaching Start asks for a dodge. The
+            // effect itself refuses a Start that is a Stop right now (DodgeEffect, PossessionTree.IsSafety).
+            if (Named<Button>("BtnStart") is { } start)
+                start.PointerEntered += (_, _) =>
+                {
+                    try { PossessionReactToStartHover(start); }
+                    catch (Exception ex) { Log.Debug("Possession: reactive hover failed: {E}", ex.Message); }
+                };
+        }
+
+        /// <summary>The pointer is on Start: while the local lockdown haunts (Drift or deeper) and
+        /// nothing is running, it may slip away. Never a stop, an exit or a cancel.</summary>
+        internal void PossessionReactToStartHover(Control start)
+        {
+            if (PossessionDirector.Current is not { IsHaunting: true } director) return;
+            if (PossessionTree.IsSafety(start)) return;
+            foreach (var t in PossessionTargets())
+            {
+                if (!ReferenceEquals(t.Element, start)) continue;
+                director.RequestReactive("dodge", t, PossessionRung.Drift);
+                return;
+            }
         }
 
         /// <summary>The card (if any) the pressed visual sits in asks the director for a breath.</summary>
@@ -271,13 +302,40 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         public abstract IReadOnlyList<PossessionRole> Roles { get; }
         public bool IsLive { get; private set; }
 
+        /// <summary>True for a tic that leaves bounds and input alone on a card that holds controls.</summary>
+        protected virtual bool GlowsGuarded => false;
+        private bool _guarded;
+        private IDisposable? _guard;
+
+        private bool Permits(Control c, PossessionRole role)
+        {
+            // The control's own tag is the louder statement (a registry entry can be older than it).
+            if (Services.Possession.Possession.GetRole(c) is var own && own != PossessionRole.None) role = own;
+            if (PossessionTree.IsGuardedContainer(c)) return GlowsGuarded && !PossessionTree.IsSafety(c);
+            if (PossessionOffLimits.IsReservedName(c.Name)) return false;
+            return PossessionTree.MayTouch(c, role, takesInteractive: true);
+        }
+
         public bool CanApply(PossessionContext ctx, PossessionTarget? target) =>
-            !IsLive && ctx != null && target?.Element is Control c && c.IsEffectivelyVisible
-            && !PossessionOffLimits.IsReservedName(c.Name);
+            !IsLive && ctx != null && target?.Element is Control c && c.IsEffectivelyVisible && Permits(c, target.Role);
+
+        protected virtual bool StartGuarded(Control c, PossessionContext ctx) => false;
+        protected virtual void StopGuarded() { }
 
         public Task ApplyAsync(PossessionContext ctx, PossessionTarget? target, CancellationToken ct)
         {
-            if (target?.Element is not Control c) return Task.CompletedTask;
+            if (IsLive || target?.Element is not Control c || !Permits(c, target.Role)) return Task.CompletedTask;
+            if (PossessionTree.IsGuardedContainer(c))
+            {
+                // A card that holds controls: glow only. No transform is ever set on it.
+                if (!StartGuarded(c, ctx)) return Task.CompletedTask;
+                _victim = c;
+                _guarded = true;
+                IsLive = true;
+                return Task.CompletedTask;
+            }
+            if (PossessionTree.IsInteractiveRole(target.Role))
+                _guard = PossessionGuard.Watch(c, () => _ = UndoAsync(TimeSpan.Zero));
             _victim = c;
             _priorTransform = c.RenderTransform;
             _priorOrigin = c.RenderTransformOrigin;
@@ -295,6 +353,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             var c = _victim;
             var lease = Lease;
+            try { _guard?.Dispose(); } catch { }
+            _guard = null;
+            if (_guarded)
+            {
+                _guarded = false;
+                try { StopGuarded(); } catch (Exception ex) { Log.Debug("Possession {Id}: glow drop failed: {E}", Id, ex.Message); }
+                _victim = null;
+                IsLive = false;
+                return;
+            }
             if (c == null || lease == null) { IsLive = false; return; }
             try { _tween?.Cancel(); } catch { }
             // WPF UndoMs: zero is the synchronous path, no animation at all.
@@ -332,6 +400,52 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         public override IReadOnlyList<PossessionRole> Roles => _roles;
 
         protected override Transform NewTransform() => new ScaleTransform(1, 1);
+
+        // The lockdown card breathes scale-free: an ember glow (a BoxShadow laid over the card's own
+        // at animation priority) swells and fades on the same 3.2 s breath. The card's transform,
+        // size, opacity and hit testing are never touched, so the Emergency Exit inside it keeps its
+        // hit target at rest position and size on every frame. A slow sine, never a blink.
+        internal const double GlowPeriodMs = 3200;
+        protected override bool GlowsGuarded => true;
+        private Border? _glowCard;
+        private IDisposable? _glow;
+        private DispatcherTimer? _glowTimer;
+        private double _glowPeak;
+        internal bool IsGlowing => _glowCard != null;
+
+        protected override bool StartGuarded(Control c, PossessionContext ctx)
+        {
+            if (c is not Border card) return false;
+            _glowCard = card;
+            _glowPeak = ctx.Photosafe ? 0.22 : 0.45;
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            PaintGlow(0);
+            _glowTimer = new DispatcherTimer(TimeSpan.FromMilliseconds(33), DispatcherPriority.Render,
+                (_, _) => PaintGlow(clock.Elapsed.TotalMilliseconds));
+            _glowTimer.Start();
+            return true;
+        }
+
+        /// <summary>One frame of the glow at <paramref name="ms"/> into the breath.</summary>
+        internal void PaintGlow(double ms)
+        {
+            if (_glowCard is not { } card) return;
+            double w = (1 - Math.Cos(ms / GlowPeriodMs * 2 * Math.PI)) / 2;
+            byte a = (byte)Math.Round(255 * Math.Clamp(_glowPeak * w, 0, 1));
+            var shadow = new BoxShadows(new BoxShadow { Blur = 26, Spread = 1, Color = Color.FromArgb(a, 0xFF, 0x8A, 0x5C) });
+            var next = card.SetValue(Border.BoxShadowProperty, shadow, global::Avalonia.Data.BindingPriority.Animation);
+            try { _glow?.Dispose(); } catch { }
+            _glow = next;
+        }
+
+        protected override void StopGuarded()
+        {
+            _glowTimer?.Stop();
+            _glowTimer = null;
+            try { _glow?.Dispose(); } catch { }
+            _glow = null;
+            _glowCard = null;
+        }
 
         protected override void Start(Transform lease, double amp, Random rng, CancellationToken ct)
         {

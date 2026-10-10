@@ -189,7 +189,42 @@ internal static class BackRoomOverlays
 
     // ---- windows ------------------------------------------------------------------------------
 
-    /// <summary>One click-through window per screen, or null when the platform cannot make them
+    /// <summary>Which screens a room overlay covers (owner, 10 Oct 2026: respect the single-screen
+    /// setting, as WPF): every screen with the user's dual-monitor setting on, and with it off only
+    /// the screen the room window is on (the primary when that cannot be told, then the first).</summary>
+    internal static int[] RoomScreenIndices(int count, bool dualMonitor, int roomIndex, int primaryIndex)
+    {
+        if (count <= 0) return Array.Empty<int>();
+        if (dualMonitor) return Enumerable.Range(0, count).ToArray();
+        if (roomIndex >= 0 && roomIndex < count) return new[] { roomIndex };
+        return new[] { primaryIndex >= 0 && primaryIndex < count ? primaryIndex : 0 };
+    }
+
+    /// <summary>Tests: the dual-monitor answer (null = the user's setting).</summary>
+    internal static Func<bool>? DualMonitorForTests;
+
+    internal static IReadOnlyList<Screen> RoomScreens(Visual host)
+    {
+        var all = ScreenList.Enumerate(host);
+        if (all.Count <= 1) return all;
+        bool dual = false;
+        try { dual = DualMonitorForTests?.Invoke() ?? global::ConditioningControlPanel.CoreSettings.Current?.DualMonitorEnabled == true; }
+        catch (Exception ex) { Log.Debug("[BackRoom] dual-monitor setting unreadable: {E}", ex.Message); }
+        int room = -1, primary = -1;
+        try
+        {
+            Screen? on = TopLevel.GetTopLevel(host) is WindowBase win ? win.Screens?.ScreenFromWindow(win) : null;
+            for (int i = 0; i < all.Count; i++)
+            {
+                if (all[i].IsPrimary && primary < 0) primary = i;
+                if (on != null && room < 0 && (ReferenceEquals(all[i], on) || all[i].Bounds == on.Bounds)) room = i;
+            }
+        }
+        catch (Exception ex) { Log.Debug("[BackRoom] room screen unknown: {E}", ex.Message); }
+        return RoomScreenIndices(all.Count, dual, room, primary).Select(i => all[i]).ToList();
+    }
+
+    /// <summary>One click-through window per screen the room may cover (RoomScreens), or null when the platform cannot make them
     /// click-through (refused for the session: a topmost full-screen window that eats clicks locks the desktop).</summary>
     internal static List<RoomOverlayWindow>? Open(Visual host)
     {
@@ -197,7 +232,7 @@ internal static class BackRoomOverlays
         var list = new List<RoomOverlayWindow>();
         try
         {
-            foreach (var screen in ScreenList.Enumerate(host))
+            foreach (var screen in RoomScreens(host))
             {
                 var w = new RoomOverlayWindow();
                 w.PlaceOn(screen);
@@ -534,7 +569,9 @@ internal static class BackRoomOverlays
             double age = Now - _spiralStart;
             if (RoomOverlayMath.SpiralDone(age, durationMs, _spiralReleasedAt)) { StopSpiral(); return; }
             double a = RoomOverlayMath.SpiralEnvelope(age, durationMs, _spiralReleasedAt) * peak;
-            SpiralOverlay.Hold(BackRoomFxHead.Host ?? host, SpiralOverlay.RoomOwner, new SpiralHold(a, gifPath, AllScreens: true, Slow: slow));
+            // Screens: the rule the spiral overlay already uses (the user's spiral monitor and the
+            // dual-monitor setting), never "every screen whatever the setting says".
+            SpiralOverlay.Hold(BackRoomFxHead.Host ?? host, SpiralOverlay.RoomOwner, new SpiralHold(a, gifPath, AllScreens: false, Slow: slow));
         }
     }
 

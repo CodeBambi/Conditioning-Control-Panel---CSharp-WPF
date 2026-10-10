@@ -6694,6 +6694,8 @@
   "tray_wake": "起こす",
   "tray_show": "ウィンドウを表示",
   "tray_stop_everything": "すべて停止",
+  "tray_stop_refused_panic_off": "何も停止していません。パニックキーがオフです。",
+  "tray_stop_refused_strict": "何も停止していません。厳格ロックがオンです。",
   "panic_portal_description": "パニック：すべて停止",
   "panic_portal_bound": "パニックキー（全ウィンドウ）：{0}",
   "panic_portal_unavailable": "パニックキーはCCPなどのX11ウィンドウにフォーカスがある間だけ効きます。それ以外はトレイの「すべて停止」を使ってください。",
