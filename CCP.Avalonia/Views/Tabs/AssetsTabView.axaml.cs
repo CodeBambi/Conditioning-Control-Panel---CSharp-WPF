@@ -28,8 +28,8 @@ using Serilog;
 namespace ConditioningControlPanel.Avalonia.Views.Tabs
 {
     /// <summary>
-    /// PORTED from ConditioningControlPanel/Views/Tabs/AssetsTabView.xaml.cs and the asset-browser
-    /// and preset halves of MainWindow/MainWindow.Assets.cs. The WPF
+    /// PORTED from ConditioningControlPanel/Views/Tabs/AssetsTabView.xaml.cs and the asset-browser,
+    /// preset and FX halves of MainWindow/MainWindow.Assets.cs + MainWindow.AssetsFx.cs. The WPF
     /// code-behind forwards every handler to MainWindow; here the tab owns them, and the shell calls
     /// <see cref="OnTabShown"/> where WPF's ShowTab("assets") ran RefreshAssetTree +
     /// InitializeAssetPresets (MainWindow.TabNavigation.cs:433-438).
@@ -38,7 +38,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
     /// ContentPackService here; the section is hidden in WPF too), the remote-media picker
     /// (needs an async consent gate, MainShellWindow.Assets.cs), video thumbnails (WPF uses the
     /// Windows shell thumbnailer; videos draw the 🎬 placeholder), BtnCreatorDiscord /
-    /// PacksScrollViewer wheel-to-pan and the AssetsFx motion (MainWindow.AssetsFx.cs).
+    /// PacksScrollViewer wheel-to-pan and the pack-card sheen (pack cards only).
     /// </summary>
     public partial class AssetsTabView : UserControl
     {
@@ -53,9 +53,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private AssetTreeItem? _selectedFolder;
         private bool _isLoadingPreset;
         private int _thumbGeneration;
+        private int _mediaLogSeenCount;
+        private CancellationTokenSource? _mediaLogPulse;
 
         /// <summary>Every thumbnail decode started by the last folder load (tests await it).</summary>
         internal Task ThumbnailLoads { get; private set; } = Task.CompletedTask;
+        internal bool MediaLogPulsing => _mediaLogPulse is { IsCancellationRequested: false };
         internal IReadOnlyList<AssetTreeItem> AssetTree => _assetTree;
         internal IReadOnlyList<AssetThumbnailViewModel> CurrentFolderFiles => _currentFolderFiles;
 
@@ -80,13 +83,23 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             };
             Confirm = (title, msg) => MessageDialog.ConfirmAsync((TopLevel.GetTopLevel(this) as Window)!, title, msg);
             Inform = (title, msg) => MessageDialog.ShowAsync((TopLevel.GetTopLevel(this) as Window)!, title, msg);
+            IsVisibleChanged(this);
         }
 
-        /// <summary>WPF ShowTab("assets"): RefreshAssetTree, InitializeAssetPresets.</summary>
+        private static void IsVisibleChanged(AssetsTabView view)
+            => view.PropertyChanged += (_, e) =>
+            {
+                // MainWindow.AssetsFx.cs:OnAssetsTabVisibilityChanged: hidden stops the motion.
+                if (e.Property == IsVisibleProperty && !view.IsVisible) view.StopMediaLogPulse(resetOpacity: true);
+            };
+
+        /// <summary>WPF ShowTab("assets"): RefreshAssetTree, InitializeAssetPresets, then the
+        /// AssetsFx entrance (the Media Log pulse when entries arrived since it was last opened).</summary>
         internal void OnTabShown()
         {
             RefreshAssetTree();
             InitializeAssetPresets();
+            PulseMediaLogIfUnseen();
         }
 
         private static AppSettings S => CoreSettings.Current;
@@ -533,6 +546,65 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         private async void BtnUpdateAssetPreset_Click(object? sender, RoutedEventArgs e) => await UpdateAssetPresetAsync();
         private async void BtnDeleteAssetPreset_Click(object? sender, RoutedEventArgs e) => await DeleteAssetPresetAsync();
 
+        // ---- FX (MainWindow.AssetsFx.cs) -----------------------------------------------------
+
+        private static bool MotionAllowed()
+        {
+            try { return AmbientFxCanvas.Env.AllowTransitions; }
+            catch { return true; }
+        }
+
+        /// <summary>AssetsFx OnAssetTreeRowHover: a 3 px, 130 ms ease-out slide.</summary>
+        private void AssetTreeRow_PointerEntered(object? sender, PointerEventArgs e) => NudgeRow(sender as Control, true);
+        private void AssetTreeRow_PointerExited(object? sender, PointerEventArgs e) => NudgeRow(sender as Control, false);
+
+        internal static void NudgeRow(Control? row, bool on)
+        {
+            if (row == null) return;
+            if (row.RenderTransform is not TranslateTransform slide)
+            {
+                if (row.RenderTransform != null) return;   // someone else's transform: leave it
+                slide = new TranslateTransform();
+                row.RenderTransform = slide;
+            }
+            slide.Transitions = MotionAllowed()
+                ? new Transitions { new DoubleTransition { Property = TranslateTransform.XProperty, Duration = TimeSpan.FromMilliseconds(130), Easing = new QuadraticEaseOut() } }
+                : null;
+            slide.X = on ? 3.0 : 0;
+        }
+
+        /// <summary>AssetsFx PulseMediaLogIfUnseen: three 0.45 s dips to 0.45 opacity and back,
+        /// only when the log grew since it was last opened. Finite; stopped on hide or click.</summary>
+        private void PulseMediaLogIfUnseen()
+        {
+            if ((App.MediaHistory?.Count ?? 0) <= _mediaLogSeenCount || !MotionAllowed() || MediaLogPulsing) return;
+            var cts = new CancellationTokenSource();
+            _mediaLogPulse = cts;
+            var anim = new Animation
+            {
+                Duration = TimeSpan.FromSeconds(0.9),
+                IterationCount = new IterationCount(3),
+                Easing = new SineEaseInOut(),
+                Children =
+                {
+                    new KeyFrame { Cue = new Cue(0), Setters = { new Setter(OpacityProperty, 1.0) } },
+                    new KeyFrame { Cue = new Cue(0.5), Setters = { new Setter(OpacityProperty, 0.45) } },
+                    new KeyFrame { Cue = new Cue(1), Setters = { new Setter(OpacityProperty, 1.0) } },
+                },
+            };
+            _ = anim.RunAsync(BtnMediaLog, cts.Token).ContinueWith(_ =>
+            {
+                if (ReferenceEquals(_mediaLogPulse, cts)) _mediaLogPulse = null;
+            }, TaskScheduler.FromCurrentSynchronizationContext());
+        }
+
+        private void StopMediaLogPulse(bool resetOpacity)
+        {
+            _mediaLogPulse?.Cancel();
+            _mediaLogPulse = null;
+            if (resetOpacity) BtnMediaLog.Opacity = 1.0;
+        }
+
         /// <summary>
         /// The Media Log. The one WPF handler in this file that is not a forward - it builds the
         /// window itself - and the window is ported. Non-modal and owned, exactly as on WPF; an
@@ -543,6 +615,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         {
             try
             {
+                // AssetsFx MediaLogButton_Clicked: opening the log marks it seen and ends the pulse.
+                _mediaLogSeenCount = App.MediaHistory?.Count ?? 0;
+                StopMediaLogPulse(resetOpacity: true);
                 var win = new Views.Windows.MediaHistoryWindow();
                 if (TopLevel.GetTopLevel(this) is Window owner) win.Show(owner);
                 else win.Show();
