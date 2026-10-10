@@ -1702,3 +1702,19 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 
 ## avalonia-port/main-20261009-compat: +199
 - Compat for main sync #6: BillboardContract/NavSections into Core, QuestsOpen/GameAvailable head seams, LegacyBillboard keeps the Avalonia slideshow, WPF scan tests via SourceRoots/Assets. GATE-OK.
+
+## avalonia-port/rows-possession-lockdown: +278
+- views-tab-lockdown: blood-red theme + 600 ms activation flash + Video/BubbleCount Strict greys wired, restored on exit (10 fail-proofs; theme live; Bubble Count hold decided at Lockdown event like WPF, not on rack re-attach). Row still stub: Possession readout, Dose keeper.
+- shell-possession untouched: ~12.1k-line subsystem needs a slice plan (P33).
+
+## avalonia-port/rows-graded-intake-tab: +312
+- Graded Intake window lifecycle ported: `fullscreen-set` with the mode remembered, the control panel minimised for the run and restored on close, and a heartbeat watchdog that relaunches once (WPF IntakeHostService). Tests use the real `OpenIntake` path on a stepped clock and were proven to fail when broken.
+- First-ever-run rule moved to Core `IntakePunchCardState`; duplicate parity row removed. The row stays `stub`.
+
+## avalonia-port/rows-remote-control: +611
+- Remote emotes (tab + overlay big picker, edit popup) via Core RemoteRelay.SendEmoteAsync; controller overlay, 2 s command toast, joined notice and Start lock wired from startup.
+- Rows stay stub: directory opt-in chain, listing pill, session verbs, HUD/preview folds, taskbar flash, avatar emote bubble.
+
+## avalonia-port/rows-possession-lockdown: +278
+- views-tab-lockdown: blood-red theme + 600 ms activation flash + Video/BubbleCount Strict greys wired, restored on exit (10 fail-proofs; theme live; Bubble Count hold decided at Lockdown event like WPF, not on rack re-attach). Row still stub: Possession readout, Dose keeper.
+- shell-possession untouched: ~12.1k-line subsystem needs a slice plan (P33).
