@@ -200,6 +200,21 @@ public sealed class HomeLayoutTests
         Assert.Equal("deeper", shell.CurrentTab);
     });
 
+    // k4 HA4: a Tonight Board "tab:<key>" button reaches lane pages and redirect keys, as ShowTab does.
+    [Fact]
+    public Task A_board_tab_button_reaches_a_lane_page_and_a_moved_key() => WithHome((shell, tab) =>
+    {
+        shell.ShowBillboardTab("friends");
+        Settle();
+        Assert.Equal("friends", shell.CurrentTab);
+        shell.ShowBillboardTab("exclusives");
+        Settle();
+        Assert.Equal("premium", shell.CurrentTab);
+        shell.ShowBillboardTab("no-such-page");
+        Settle();
+        Assert.Equal("premium", shell.CurrentTab);
+    });
+
     [Fact]
     public Task The_account_strip_is_one_line_of_bubbles_and_one_label_opens_at_a_time() => WithHome((shell, tab) =>
     {
@@ -207,6 +222,10 @@ public sealed class HomeLayoutTests
         var names = bar.Bubbles.Select(b => b.Name).ToArray();
         Assert.Equal(new[] { "BtnLinkPhone", "BtnQuickLogout", "ChkQuickDiscordRichPresence", "VelvetBtnWebcam",
             "VelvetBtnSystem", "VelvetBtnSchedulerRamp", "VelvetBtnCatalogue", "VelvetBtnAppInfo", "BtnOpenDiagnostics" }, names);
+#if !DEBUG
+        // HA9: the diagnostics bubble is a developer affordance, hidden outside DEBUG.
+        Assert.False(tab.FindControl<Button>("BtnOpenDiagnostics")!.IsVisible);
+#endif
         // The Discord pill keeps its label and is not dressed.
         Assert.DoesNotContain(bar.Bubbles, b => b.Name == "BtnDiscord");
         Assert.Same(bar, tab.FindControl<Button>("BtnDiscord")!.Parent);
