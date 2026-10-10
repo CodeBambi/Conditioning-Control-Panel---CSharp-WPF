@@ -138,6 +138,25 @@ public sealed class EmiDeskAskTests
     }));
 
     [Fact]
+    public Task TheLeanAndTheStretchEndWhereTheyStarted() => AvaloniaTestDispatcher.RunAsync(() => Run(async (w, heard) =>
+    {
+        bool leaned = w.RunFidgetForTest(EmiFidget.WeightShift);
+        Assert.Equal(leaned ? 1 : 0, w.WeightShifts);          // it declines below Full motion, and says so
+        Assert.False(w.RunFidgetForTest(EmiFidget.Screen));     // no glass channels here: the wheel moves on
+
+        w.CancelChain();
+        w.MakeStretchDueForTest();
+        w.AliveStep(DateTime.UtcNow);
+        if (w.Stretches == 1)                                   // a quiet moment: she took it
+        {
+            for (int t = 0; t < 1300; t += 20) { await Task.Delay(20); AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Dispatcher.UIThread.RunJobs(); }
+            Assert.Equal(1.0, w.BodyScaleY, 3);                 // every effect has an out
+        }
+        w.AliveStep(DateTime.UtcNow);
+        Assert.True(w.Stretches <= 1);                          // rare: the next one is twenty minutes off
+    }));
+
+    [Fact]
     public Task GamesAndBrainDrainFireOncePerEdge() => AvaloniaTestDispatcher.RunAsync(() =>
     {
         EnsureApp();

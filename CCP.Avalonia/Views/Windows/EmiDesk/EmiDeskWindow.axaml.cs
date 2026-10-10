@@ -1758,6 +1758,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows.EmiDesk
             try
             {
                 if (_wobbleLive || _closingForGood) return;
+                StopWeightShift();   // a pick-up takes the lean over cleanly (WPF Alive.cs:596)
                 _wobbleLive = true;
 
                 // ORDER MATTERS, and it is the inverse of WPF's. A settle still running from the
