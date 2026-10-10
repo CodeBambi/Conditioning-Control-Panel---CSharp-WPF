@@ -59,6 +59,11 @@ public sealed class PremiumSparkTests
                 Assert.Equal(SparkTier.Prime, spark.Tier);
                 Assert.True(spark.LoopsRunning);
                 Assert.True(spark.Field.Alive.Count > 0, "prewarm left a bare card");
+                // A same-state refresh (sign-in, rollover) keeps the running field (WPF Apply :144).
+                spark.Advance(0.5);
+                var before = spark.Field.Alive[0];
+                shell.RefreshProfileBubble();
+                Assert.Equal(before, spark.Field.Alive[0]);
 
                 // P01: hidden -> parked; shown -> running again.
                 spark.IsVisible = false;

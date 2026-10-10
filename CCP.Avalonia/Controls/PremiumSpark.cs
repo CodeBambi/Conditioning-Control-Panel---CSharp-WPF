@@ -58,6 +58,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
         private IBrush[] _motes = Array.Empty<IBrush>();
         private readonly List<(Geometry g, IBrush b)> _facets = new();
         private Pen _valleyPen = new(Brushes.Transparent);
+        private Pen _shadowLabelPen = new(), _edgeLabelPen = new(), _shadowStarPen = new(), _edgeStarPen = new(), _rimPen = new();
         private Geometry? _label;
 
         // Hover/press settle (WPF Slide: BackEase out, amplitude 0.35) and the hover wobble.
@@ -108,13 +109,14 @@ namespace ConditioningControlPanel.Avalonia.Controls
 
         internal void Apply(SparkTier tier, SparkMotion motion, bool particlesAllowed)
         {
+            bool changed = tier != Tier || motion != Motion || particlesAllowed != ParticlesAllowed;
             Tier = tier; Motion = motion; ParticlesAllowed = particlesAllowed;
             _field.Configure(tier, motion, particlesAllowed);
             Paint();
             var tip = Loc.Get(PremiumSparkRules.TooltipKey(tier));
             ToolTip.SetTip(this, tip);
             AutomationProperties.SetName(this, tip);
-            RestartLoops();
+            if (changed || !LoopsRunning) RestartLoops();   // WPF Apply: a same-state Refresh keeps the field
         }
 
         private void Paint()
@@ -137,6 +139,11 @@ namespace ConditioningControlPanel.Avalonia.Controls
                 GradientStops = { new(C(l.FaceMid), 0), new(C(l.FaceBottom), 1) },
             };
             BuildFolds(dark);
+            _shadowLabelPen = new Pen(_shadow, PremiumSparkRules.LabelDieCutPx, lineJoin: PenLineJoin.Round);
+            _edgeLabelPen = new Pen(_edge, PremiumSparkRules.LabelDieCutPx, lineJoin: PenLineJoin.Round);
+            _shadowStarPen = new Pen(_shadow, PremiumSparkRules.DieCutPx, lineJoin: PenLineJoin.Round);
+            _edgeStarPen = new Pen(_edge, PremiumSparkRules.DieCutPx, lineJoin: PenLineJoin.Round);
+            _rimPen = new Pen(Rim, 1.3, lineJoin: PenLineJoin.Round);
             _motes = Tier == SparkTier.Basic
                 ? new IBrush[] { new SolidColorBrush(Color.FromRgb(0xFF, 0xD2, 0x4A)), Brushes.White, new SolidColorBrush(Color.FromRgb(0xFF, 0xB0, 0x22)) }
                 : new IBrush[] { new SolidColorBrush(C(l.Mote)), Brushes.White, new SolidColorBrush(C(l.Ink)) };
@@ -467,17 +474,17 @@ namespace ConditioningControlPanel.Avalonia.Controls
                 if (_label != null)
                 {
                     using (dc.PushTransform(Matrix.CreateTranslation(shadow * 0.3, shadow * 0.5)))
-                        dc.DrawGeometry(_shadow, new Pen(_shadow, PremiumSparkRules.LabelDieCutPx, lineJoin: PenLineJoin.Round), _label);
-                    dc.DrawGeometry(_edge, new Pen(_edge, PremiumSparkRules.LabelDieCutPx, lineJoin: PenLineJoin.Round), _label);
+                        dc.DrawGeometry(_shadow, _shadowLabelPen, _label);
+                    dc.DrawGeometry(_edge, _edgeLabelPen, _label);
                     dc.DrawGeometry(_ink, null, _label);
                 }
 
                 using (dc.PushTransform(Matrix.CreateTranslation(StarLeft, StarTop)))
                 {
                     using (dc.PushTransform(Matrix.CreateTranslation(shadow * 0.45, shadow * 0.8)))
-                        dc.DrawGeometry(_shadow, new Pen(_shadow, PremiumSparkRules.DieCutPx, lineJoin: PenLineJoin.Round), Star);
-                    dc.DrawGeometry(_edge, new Pen(_edge, PremiumSparkRules.DieCutPx, lineJoin: PenLineJoin.Round), Star);
-                    dc.DrawGeometry(_face, new Pen(Rim, 1.3, lineJoin: PenLineJoin.Round), Star);
+                        dc.DrawGeometry(_shadow, _shadowStarPen, Star);
+                    dc.DrawGeometry(_edge, _edgeStarPen, Star);
+                    dc.DrawGeometry(_face, _rimPen, Star);
                     using (dc.PushGeometryClip(Star))
                     {
                         foreach (var (g, b) in _facets) dc.DrawGeometry(b, null, g);
