@@ -43,6 +43,10 @@ internal sealed class RoomOverlayWindow : Window
 
     internal bool Primary { get; private set; }
 
+    /// <summary>The monitor's scale (physical px per DIP) and its physical bounds, for mapping a desktop rect in.</summary>
+    internal double Scale { get; private set; } = 1;
+    internal Rect ScreenPx { get; private set; }
+
     /// <summary>Fills exactly one monitor (Position is physical, Width / Height are DIPs).</summary>
     public void PlaceOn(Screen screen)
     {
@@ -52,6 +56,8 @@ internal sealed class RoomOverlayWindow : Window
         Width = b.Width / scale;
         Height = b.Height / scale;
         Primary = screen.IsPrimary;
+        Scale = scale;
+        ScreenPx = new Rect(b.X, b.Y, b.Width, b.Height);
     }
 }
 
@@ -373,9 +379,14 @@ internal static class BackRoomOverlays
         }, shown);
     }
 
-    /// <summary>gif-from: the picture grows from the middle of the primary screen to cover it while every
-    /// screen dims, then fades. (The page rect is not mapped on this head: it always starts from the centre box.)</summary>
-    internal static void GifFrom(Visual host, string path, double aspect, int durationMs, double scale, double dim, Action? shown)
+    /// <summary>The rect the last gif-from started from, in its stage's DIPs, and whether it was a centre box (tests).</summary>
+    internal static (Rect From, bool Centred, bool Primary) LastFrom { get; private set; }
+
+    /// <summary>gif-from: the picture grows out of the page's rect (WPF MapFrom: mapped through the room's
+    /// viewport onto the screen the room is on; a centre box when the rect or the viewport is missing) to cover
+    /// that screen while every screen dims, then fades.</summary>
+    internal static void GifFrom(Visual host, string path, double aspect, int durationMs, double scale, double dim, Action? shown,
+        FxCssRect? css = null, RoomViewport? viewport = null)
     {
         Begin(From, host, path, 1280, run =>
         {
@@ -387,12 +398,17 @@ internal static class BackRoomOverlays
                 w.Stage.Children.Add(fill);
                 dims.Add((fill, brush));
             }
-            var stage = PrimaryOf(run.Windows);
+            // Physical px on the desktop -> the DIPs of the stage on that screen.
+            var target = BackRoomFromMap.MapFrom(css, viewport, run.Windows.Select(w => (w.ScreenPx, w.Primary)).ToList());
+            var stage = target.ScreenIndex >= 0 ? run.Windows[target.ScreenIndex] : PrimaryOf(run.Windows);
             var image = new Image { Stretch = Stretch.Fill, Opacity = 0 };
             stage.Stage.Children.Add(image);
             run.Images.Add(image);
-            double sw = stage.Width, sh = stage.Height;
-            var from = new Rect((sw - RoomOverlayMath.CentreBoxW) / 2, (sh - RoomOverlayMath.CentreBoxH) / 2, RoomOverlayMath.CentreBoxW, RoomOverlayMath.CentreBoxH);
+            double sw = stage.Width, sh = stage.Height, k = stage.Scale > 0 ? stage.Scale : 1;
+            var from = target.ScreenIndex >= 0 && target.RectPx.Width > 0
+                ? new Rect((target.RectPx.X - stage.ScreenPx.X) / k, (target.RectPx.Y - stage.ScreenPx.Y) / k, target.RectPx.Width / k, target.RectPx.Height / k)
+                : new Rect((sw - RoomOverlayMath.CentreBoxW) / 2, (sh - RoomOverlayMath.CentreBoxH) / 2, RoomOverlayMath.CentreBoxW, RoomOverlayMath.CentreBoxH);
+            LastFrom = (from, target.Centred, stage.Primary);
             run.Every(age =>
             {
                 if (age >= durationMs) { StopSlot(From); return; }
@@ -549,5 +565,9 @@ internal static class BackRoomOverlays
         foreach (var slot in Slots.Keys.Concat(Gens.Keys).Distinct().ToList()) StopSlot(slot);
         TunnelModel.Cancel();
         StopSpiral();
+        GifCascadeOverlay.CloseOwned(RainOwner);   // the room's own rain; somebody else's keeps falling
     }
+
+    /// <summary>The owner tag of a cascade the room started (<see cref="GifCascadeOverlay"/>).</summary>
+    internal const string RainOwner = "backroom";
 }

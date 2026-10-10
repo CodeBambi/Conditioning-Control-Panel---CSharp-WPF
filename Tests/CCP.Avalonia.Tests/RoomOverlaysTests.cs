@@ -336,7 +336,7 @@ public sealed class RoomOverlaysTests
     {
         foreach (var p in new[] { FxPrim.GifFull, FxPrim.GifFrom, FxPrim.GlitchBubbles, FxPrim.SpiralFull, FxPrim.SpiralLoom, FxPrim.Wash })
             Assert.Contains(p, BackRoomFxHead.Supported);
-        Assert.DoesNotContain(FxPrim.GifRain, BackRoomFxHead.Supported);   // no cascade overlay on this head
+        Assert.Contains(FxPrim.GifRain, BackRoomFxHead.Supported);         // lane k14: the cascade (GifCascadeOverlay)
     }
 
     // ---- Deeper's screen shake --------------------------------------------------------------------
