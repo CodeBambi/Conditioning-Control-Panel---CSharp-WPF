@@ -102,10 +102,12 @@ public sealed partial class FriendsDrawer
                 ToolTip.SetShowOnDisabled(tile, true);
                 ToolTip.SetTip(tile, Loc.Get(blocked));
             }
+            else if (id == InviteDestination.Goon && string.IsNullOrEmpty(FriendsInviteCodes.GoonCode()))
+                ToolTip.SetTip(tile, Loc.Get("friends_invite_goon_tip"));
             tile.Click += async (_, _) =>
             {
                 Pop(tile, LilacC);
-                if (id == InviteDestination.Goon) await InviteAsync(f.Id, id, FriendsInviteCodes.GoonCode());
+                if (id == InviteDestination.Goon) await InviteToGoonAsync(f.Id);
                 else if (id == InviteDestination.Chess) await InviteToChessAsync(f.Id);
                 else await InviteAsync(f.Id, id, null);
             };
@@ -146,6 +148,33 @@ public sealed partial class FriendsDrawer
     }
 
     private bool _openingChess;
+
+    private bool _openingGoonRoom;
+
+    /// <summary>WPF InviteToGoonAsync: send the live room code, or open a room first and send its code
+    /// the moment the game reports it. One tap either way.</summary>
+    internal async Task<SendResult?> InviteToGoonAsync(string friendId)
+    {
+        var code = FriendsInviteCodes.GoonCode();
+        if (string.IsNullOrEmpty(code))
+        {
+            if (!FriendsInviteCodes.CanHostGoon()) { ShowTimed(friendId, Loc.Get("friends_invite_goon_prime"), false); return null; }
+            if (_openingGoonRoom) return null;   // a second tap while the room opens costs nothing
+            _openingGoonRoom = true;
+            ShowNote(friendId, "friends_invite_goon_opening");
+            (string? Code, bool Busy) opened;
+            try { opened = await FriendsInviteCodes.OpenGoonRoom(TimeSpan.FromSeconds(45)); }
+            catch { opened = (null, false); }
+            finally { _openingGoonRoom = false; }
+            if (string.IsNullOrEmpty(opened.Code))
+            {
+                ShowTimed(friendId, Loc.Get(opened.Busy ? "friends_invite_goon_busy" : "friends_invite_goon_failed"), false);
+                return null;
+            }
+            code = opened.Code;
+        }
+        return await InviteAsync(friendId, InviteDestination.Goon, code);
+    }
 
     /// <summary>WPF InviteToChessAsync: open the board on a challenge, then send its id. One tap.</summary>
     internal async Task<SendResult?> InviteToChessAsync(string friendId)
@@ -284,11 +313,14 @@ public sealed partial class FriendsDrawer
 }
 
 /// <summary>WPF InviteCodes + CatalogueWatches. The chess board is hosted (Views/Games/GameWindow.Pbp.cs:
-/// the board opens on a challenge and hands back its id). SEAM(g3): this head hosts no Goon room yet, so
-/// that tile stays shut ("not on this build") until the Goon host sets GoonCode.</summary>
+/// the board opens on a challenge and hands back its id; GameWindow.Goon.cs: the Goon page reports the room
+/// it is hosting, and with no room yet the tile opens one and sends its code, so it is only shut for an
+/// account that cannot host).</summary>
 internal static class FriendsInviteCodes
 {
-    public static Func<string?> GoonCode { get; set; } = () => null;
+    public static Func<string?> GoonCode { get; set; } = () => ConditioningControlPanel.Services.GoonGame.GoonHostService.RoomCode;
+    public static Func<bool> CanHostGoon { get; set; } = () => ConditioningControlPanel.Services.GoonGame.GoonHostService.CanHost;
+    public static Func<TimeSpan, Task<(string? Code, bool Busy)>> OpenGoonRoom { get; set; } = Games.GameWindow.OpenGoonRoomForInviteAsync;
     public static Func<string, TimeSpan, Task<string?>> ChallengeFriend { get; set; } = Games.GameWindow.PbpChallengeFriendAsync;
     public static Func<bool> HostsChess { get; set; } = () => true;
     public static Func<IReadOnlyList<(string Id, string Title)>> CatalogueWatches { get; set; } = () => Array.Empty<(string, string)>();
@@ -296,7 +328,7 @@ internal static class FriendsInviteCodes
     /// <summary>The loc key of why a tile is shut, or null when it can be sent.</summary>
     internal static string? BlockedKey(string destination) => destination switch
     {
-        InviteDestination.Goon when string.IsNullOrEmpty(GoonCode()) => "exclusives_not_on_this_build",
+        InviteDestination.Goon when string.IsNullOrEmpty(GoonCode()) && !CanHostGoon() => "friends_invite_goon_prime",
         InviteDestination.Chess when !HostsChess() => "exclusives_not_on_this_build",
         _ => null,
     };

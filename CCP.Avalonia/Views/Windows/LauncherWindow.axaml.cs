@@ -125,6 +125,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             };
             BuildTiles();
             HookVeil();
+            HookOpenTables();
             HookFx();
             PaintSoundButton();
         }
@@ -709,8 +710,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (needsAccount) plate.Children.Add(Pill("launcher_pill_sign_in", null, Res("AccentGradientBrush"), Brushes.White, 10));
             else if (locked) plate.Children.Add(Pill("launcher_prime_pill", "🔒", Res("Tier2DiamondBorderBrush"),
                 new SolidColorBrush(Color.FromRgb(0x2A, 0x1C, 0x08)), 10));
-            // ponytail: WPF's Goon "N open" badge (OpenTablesBadgeFor) and the hover shortcut button need the
-            // Lobby service and LauncherShortcuts, which this head does not have yet.
+            if (OpenTablesBadgeFor(card.Id, revealed && !needsAccount) is { } openBadge) plate.Children.Add(openBadge);   // LauncherWindow.OpenTables.cs
+            // ponytail: WPF's hover shortcut button needs LauncherShortcuts, which this head does not have yet.
             if (card.IsNew && revealed) plate.Children.Add(Pill("exclusives_badge_new", null, Res("AccentGradientBrush"), Brushes.White,
                 needsAccount || locked ? 40 : 10));
             body.Children.Add(plate);

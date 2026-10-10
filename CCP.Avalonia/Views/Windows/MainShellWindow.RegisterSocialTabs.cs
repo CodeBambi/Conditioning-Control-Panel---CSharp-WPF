@@ -213,11 +213,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     case LobbyGame.Chess:
                         LobbyJoinChess(row.Key);
                         break;
-                    // SEAM(g3): INTERIM, the Goon host is not ported (WPF GoonHostService.Launch(joinCode: key)),
-                    // so Join opens the GAME on its own lobby, not the table.
+                    // WPF GoonHostService.Launch(joinCode: key): the game opens and goes straight into that table.
                     case LobbyGame.Goon:
-                        Log.Information("[Lobby] join Goon: the game opens on its own lobby (no join code on this head yet)");
-                        LobbyLaunchGame("goon");
+                        LobbyJoinGoon(row.Key);
                         break;
                     case LobbyGame.Remote:
                         // ponytail: ClaimRemoteSubjectAsync(key) (AvailableSubjectsService.TryClaimAsync + the
@@ -236,6 +234,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         internal static Action<string> LobbyJoinChess { get; set; } = key => Games.GameWindow.PbpJoinOpenTable(key);
         internal static Action LobbyHostChess { get; set; } = () => Games.GameWindow.PbpHostOpenTable();
 
+        /// <summary>Test seams: the Lobby's Goon doors (WPF GoonHostService.Launch(joinCode) / LaunchToHost).</summary>
+        internal static Action<string> LobbyJoinGoon { get; set; } = key => Games.GameWindow.LaunchGoon(key);
+        internal static Action LobbyHostGoon { get; set; } = () => Games.GameWindow.LaunchGoonToHost();
+
         /// <summary>The host bar (and the empty state's buttons): each game's own host door.</summary>
         internal void LobbyHost(LobbyGame game)
         {
@@ -249,15 +251,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                         // the page's default clock (a pbp:friend frame, mode host).
                         LobbyHostChess();
                         break;
-                    // SEAM(g3): the Goon host door below is still the interim (WPF GoonHostService.LaunchToHost()).
                     case LobbyGame.Goon:
-                        // Patrons host; everyone else sees the gate. INTERIM: WPF GoonHostService.LaunchToHost();
-                        // here the game opens on its own lobby.
-                        if (TierGate.DemandPremium("Goon Game"))
-                        {
-                            Log.Information("[Lobby] host Goon: the game opens on its own lobby (no host door on this head yet)");
-                            LobbyLaunchGame("goon");
-                        }
+                        // Patrons host; everyone else sees the gate. WPF GoonHostService.LaunchToHost().
+                        if (TierGate.DemandPremium("Goon Game")) LobbyHostGoon();
                         break;
                     case LobbyGame.Remote:
                         // Hosting a Remote table = opting in to the directory from the Remote tab,

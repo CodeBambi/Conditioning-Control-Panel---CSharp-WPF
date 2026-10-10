@@ -144,16 +144,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         /// <summary>
         /// The Live card's Join (WPF LiveProvider.Invoke): signed out asks to sign in, a gate refusal
-        /// shows the sign-in, else each game's own door. ponytail: chess
-        /// (PieceByPieceHostService.JoinOpenTable) and Goon (GoonHostService.Launch joinCode) are not
-        /// hosted on this head yet, so the card opens the Lobby with the table on it instead.
+        /// shows the sign-in, else each game's own door (the Lobby row's own: chess sits at the table,
+        /// Goon opens straight into joining it).
         /// </summary>
         private void JoinFromBoard(global::ConditioningControlPanel.Services.Lobby.LobbyGame game, string key)
         {
             var gates = CurrentLobbyGates();
             if (!gates.SignedIn || !gates.CanJoin(game)) { _ = OpenUnifiedLoginDialog(); return; }
-            Log.Information("[Billboard] live join {Game} goes to the Lobby (not hosted on this head yet)", game);
-            ShowBillboardTab("availablesubjects");
+            if (string.IsNullOrEmpty(key)) { ShowBillboardTab("availablesubjects"); return; }
+            if (game == global::ConditioningControlPanel.Services.Lobby.LobbyGame.Chess) LobbyJoinChess(key);
+            else if (game == global::ConditioningControlPanel.Services.Lobby.LobbyGame.Goon) LobbyJoinGoon(key);
+            else ShowBillboardTab("availablesubjects");
         }
 
         private static MainShellWindow? BillboardShell() =>
