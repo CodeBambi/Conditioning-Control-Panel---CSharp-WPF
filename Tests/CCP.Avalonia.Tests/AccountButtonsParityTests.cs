@@ -111,7 +111,7 @@ public sealed class AccountButtonsParityTests
             Assert.True(section.FindControl<Border>("DataPrivacySection")!.IsVisible);   // Export my data is reachable
             Assert.True(section.FindControl<Border>("AccountLinkingSection")!.IsVisible);
             Assert.True(section.FindControl<Button>("BtnLinkDiscord")!.IsVisible);
-            Assert.False(section.FindControl<Border>("CloudSettingsBackupSection")!.IsVisible);   // no backup service: stays shut
+            Assert.True(section.FindControl<Border>("CloudSettingsBackupSection")!.IsVisible);    // backup card opens with the account (k25)
         }
         finally { (s.UnifiedId, s.HasLinkedDiscord) = (oldId, oldD); }
         return Task.CompletedTask;

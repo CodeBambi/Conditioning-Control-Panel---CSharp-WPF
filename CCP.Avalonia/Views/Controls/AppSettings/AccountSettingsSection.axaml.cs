@@ -92,6 +92,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
             RefreshProviderRows();
             RefreshFriendsPresence();
             RefreshChaster();
+            _ = UpdateBackupStatusAsync();
             PlansView.RefreshVault();   // the plates can move between visits (sign-in, tier change)
             // Throttled inside (30 s): the invites card lives on this copy (WPF RefreshVaultCore).
             _ = PlansView.FindControl<Controls.Invites.InvitePanel>("InvitesHost")?.RefreshAsync();
@@ -250,11 +251,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.AppSettings
         }
 
 
-        // ponytail: cloud settings backup - ProfileSyncService.BackupSettingsAsync /
-        // GetSettingsBackupInfoAsync / RestoreSettingsFromCloudAsync, all still in the WPF head.
-        // CloudSettingsBackupSection stays hidden until they land (MainShellWindow.CloudBackup.cs).
-        private void BtnBackupSettingsNow_Click(object? sender, RoutedEventArgs e) { }
-        private void BtnRestoreSettings_Click(object? sender, RoutedEventArgs e) { }
+        // Cloud settings backup: AccountSettingsSection.CloudBackup.cs.
 
         // Live (social#4): AccountSettingsSection.Providers.cs ExportDataAsync.
         private void BtnExportData_Click(object? sender, RoutedEventArgs e) => _ = ExportDataAsync();
