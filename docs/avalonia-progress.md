@@ -1804,3 +1804,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/sync6-premium-page-b: +830
 - Header Premium spark ported (rows 97/99): PremiumSparkRules/Field moved to Core, Avalonia `PremiumSpark` draws it, clock gated by visibility/motion and stopped on detach; `PremiumSparkTests` fail-proven, live Free check.
 - Row 100 (vault flair, no header row on Premium, Home ring) left needs-port for sync6-premium-page-c.
+
+## avalonia-port/sync6-launcher-badges: +106
+- Launcher whole-card launch + once-per-window grow to seat every tile row (WPF 7.1.5 d0001dd5e); 2 fail-proven tests.
+- Badge hue/seen-dim folded to shell-nav-rail and win-launcher Lobby fold (no surface yet).

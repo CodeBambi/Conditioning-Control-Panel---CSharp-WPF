@@ -88,6 +88,62 @@ public sealed class LauncherWindowTests
         Assert.Equal("gradedintake", shell.CurrentTab);
     });
 
+    /// <summary>WPF 7.1.5 Tiles.cs:220: a press and release anywhere on the card runs Play; a press
+    /// that ends off the card does not.</summary>
+    [Fact]
+    public void WholeCard_PressAndReleaseOnTheArt_Plays_ReleaseOffTheCardDoesNot() => Run(shell =>
+    {
+        CoreAccount.IsLoggedInProvider = () => true;
+        CoreEntitlement.HasLabProvider = () => true;
+        LauncherWindow.BackToLauncher(shell);
+        Dispatcher.UIThread.RunJobs();
+        var w = LauncherWindow.Instance!;
+        var tile = w.FindControl<UniformGrid>("GamesGrid")!.Children[0];
+        AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+        var art = tile.TranslatePoint(new Point(tile.Bounds.Width / 2, tile.Bounds.Height / 4), w)!.Value;
+        var off = tile.TranslatePoint(new Point(-40, tile.Bounds.Height / 4), w)!.Value;
+
+        w.MouseDown(art, MouseButton.Left);
+        w.MouseUp(off, MouseButton.Left);
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(w.IsVisible);
+        Assert.False(shell.IsVisible);
+
+        w.MouseDown(art, MouseButton.Left);
+        w.MouseUp(art, MouseButton.Left);
+        Dispatcher.UIThread.RunJobs();
+        Assert.False(w.IsVisible);
+        Assert.True(shell.IsVisible);
+        Assert.Equal("gradedintake", shell.CurrentTab);
+    });
+
+    /// <summary>WPF 7.1.5 GrowToFitTiles: overflowing tiles grow the window once, within the work area.</summary>
+    [Fact]
+    public void OverflowingTiles_GrowTheWindowOnce_WithinTheWorkArea() => Run(shell =>
+    {
+        CoreAccount.IsLoggedInProvider = () => true;
+        LauncherWindow.BackToLauncher(shell);
+        Dispatcher.UIThread.RunJobs();
+        var w = LauncherWindow.Instance!;
+        var grid = w.FindControl<UniformGrid>("GamesGrid")!;
+        // One tile fits: the block sits centred (WPF FitTiles).
+        Assert.Equal(global::Avalonia.Layout.VerticalAlignment.Center, grid.VerticalAlignment);
+        for (int i = 0; i < 8; i++) grid.Children.Add(new Border());
+        double old = w.Bounds.Height;
+        w.SeatGrid();
+        double grown = w.Height;
+        Assert.True(grown > old + 1, $"{old} -> {grown}");
+        var wa = w.Screens.ScreenFromWindow(w)!;
+        Assert.True(grown <= wa.WorkingArea.Height / wa.Scaling + 0.5);
+        Assert.InRange(w.Position.Y, wa.WorkingArea.Y, wa.WorkingArea.Bottom - (int)Math.Ceiling(grown * wa.Scaling));
+        Assert.Equal(global::Avalonia.Layout.VerticalAlignment.Top, grid.VerticalAlignment);
+
+        w.Height = old;
+        Dispatcher.UIThread.RunJobs();
+        w.SeatGrid();
+        Assert.Equal(old, w.Height);
+    });
+
     private static void ClickPlay(Control tile) =>
         tile.GetVisualDescendants().OfType<Button>().Single()
             .RaiseEvent(new global::Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
