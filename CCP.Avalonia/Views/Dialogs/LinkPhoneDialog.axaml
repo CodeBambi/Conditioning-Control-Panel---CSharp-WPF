@@ -83,7 +83,7 @@
                     Padding="20,8" HorizontalAlignment="Right"
                     Background="Transparent" Foreground="{DynamicResource TextMutedBrush}"
                     BorderThickness="0" Cursor="Hand">
-                <TextBlock Text="Close"/>
+                <TextBlock Text="{loc:Str btn_close}"/>
             </Button>
         </Grid>
     </Border>

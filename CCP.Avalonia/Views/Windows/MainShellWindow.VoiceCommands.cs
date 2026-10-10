@@ -198,12 +198,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 string? why = null, title = null;
                 if (!CoreSpeech.IsAvailable)
                 {
-                    title = "Voice Test \u2014 Not Available";
-                    why = "Speech isn't available.\n\n" + (!CoreSpeech.HasCaptureDevice
-                        ? "No microphone was detected. Connect one, then try again."
+                    title = Loc.Get("voice_test_unavailable_title");
+                    why = Loc.Get("voice_test_unavailable_intro") + "\n\n" + (!CoreSpeech.HasCaptureDevice
+                        ? Loc.Get("voice_test_unavailable_no_mic")
                         : CoreSpeech.ModelStatus == CoreSpeechModelStatus.LoadFailed
-                            ? "The speech model on disk would not load. If you added your own model under Resources/Models/vosk, remove it so the bundled one is used, then restart."
-                            : "No speech model was found under Resources/Models/vosk (see the README there).");
+                            ? Loc.Get("voice_test_unavailable_load_failed")
+                            : Loc.Get("voice_test_unavailable_no_model"));
                 }
                 if (why != null) { await Dialogs.MessageDialog.ShowAsync(this, title!, why); return; }
                 // Usually the companion was switched off (Dismiss sticks across restarts). Offer to
@@ -216,12 +216,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 {
                     // Declined: nothing to say. Switched on and still no tube: the old note.
                     if (CoreSettings.Current.AvatarEnabled)
-                        await Dialogs.MessageDialog.ShowAsync(this, "Voice Test - No Avatar",
-                            "The companion avatar needs to be visible for the voice prompt. Show the avatar, then try again.");
+                        await Dialogs.MessageDialog.ShowAsync(this, Loc.Get("voice_test_no_avatar_title"),
+                            Loc.Get("voice_test_no_avatar_body"));
                     return;
                 }
                 if (!App.MantraVoice.HasMantras())
-                    (title, why) = ("Voice Test \u2014 No Mantras", "No spoken mantras are available for the active mod.\n\nAdd a mantras.json under the mod's companion_audio folder, then try again.");
+                    (title, why) = (Loc.Get("voice_test_no_mantras_title"), Loc.Get("voice_test_no_mantras_body"));
                 if (why != null) { await Dialogs.MessageDialog.ShowAsync(this, title!, why); return; }
                 // Privacy gate: the mic never opens until the consent dialog was accepted.
                 if (!CoreSettings.Current.MicConsentGiven)

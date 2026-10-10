@@ -24,7 +24,7 @@
        PreviewKeyDown / MouseLeftButtonDown    -> KeyDown / PointerPressed, wired in the constructor
        Click="..."                             -> wired in the constructor -->
 <Window xmlns="https://github.com/avaloniaui"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="ConditioningControlPanel.Avalonia.Views.Windows.FeatureIntroPopup"
         Title="Feature Intro"
         Width="620" SizeToContent="Height" MaxHeight="640"
@@ -158,7 +158,7 @@
                             Cursor="Hand"
                             FontSize="14" FontWeight="SemiBold"/>
                     <Button x:Name="BtnDismiss" Theme="{StaticResource CardButtonStyle}"
-                            Content="Got it"
+                            Content="{loc:Str btn_got_it}"
                             Height="37" MinWidth="132"
                             Cursor="Hand"
                             FontSize="14" FontWeight="SemiBold"/>

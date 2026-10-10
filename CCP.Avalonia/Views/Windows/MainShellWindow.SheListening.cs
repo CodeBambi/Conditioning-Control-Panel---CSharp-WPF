@@ -36,7 +36,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         /// <summary>
         /// True when the offline mic is actually armed: consent given AND at least one input mode
-        /// (wake word or push-to-talk) is on. The "She's Listening" master on/off state, fully
+        /// (wake word or push-to-talk) is on. The Loc.Get("tab_shelistening") master on/off state, fully
         /// independent of Takeover.
         /// </summary>
         internal bool MicIsArmed()
@@ -101,7 +101,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             tab.ShowOnlyVoiceCommands(VoiceCmds.Available.Select(i => i.Name).ToHashSet());
 
-            // "Revoke consent" only means something once consent exists.
+            // Loc.Get("blink_trainer_consent_revoke") only means something once consent exists.
             tab.SL_PrivacyCard.IsVisible = s.MicConsentGiven;
 
             RefreshSheListeningDeviceChips();
@@ -169,7 +169,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
             tab.BtnSL_MicMaster.IsEnabled = available;
             if (tab.BtnSL_MicMaster.Content is TextBlock label)
-                label.Text = armed ? "■  Stop listening" : "▶  Start listening";
+                label.Text = armed ? Loc.Get("shelisten_btn_stop") : Loc.Get("shelisten_btn_start");
             tab.BtnSL_MicMaster.Foreground = armed
                 ? new SolidColorBrush(Color.FromRgb(0xFF, 0xB0, 0xB0))
                 : new SolidColorBrush(Color.FromRgb(0x90, 0xEE, 0x90));

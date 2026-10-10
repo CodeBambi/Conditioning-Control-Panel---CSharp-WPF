@@ -186,12 +186,12 @@
                                                     </StackPanel>
                                                     <StackPanel x:Name="NoAudioPanel" Orientation="Horizontal"
                                                                 IsVisible="{Binding !HasAudio}">
-                                                        <TextBlock Text="No Audio" Foreground="#606060" FontSize="10" VerticalAlignment="Center"
+                                                        <TextBlock Text="{loc:Str kwt_no_audio}" Foreground="#606060" FontSize="10" VerticalAlignment="Center"
                                                                    Margin="0,0,6,0"/>
                                                         <Button x:Name="BrowseBtn" Background="#353550"
                                                                 Foreground="White" BorderThickness="0" FontSize="10" Padding="6,2" Cursor="Hand"
                                                                 VerticalAlignment="Center" IsVisible="{Binding CanBrowseAudio}">
-                                                            <TextBlock Text="Browse"/>
+                                                            <TextBlock Text="{loc:Str btn_browse}"/>
                                                         </Button>
                                                     </StackPanel>
                                                 </StackPanel>

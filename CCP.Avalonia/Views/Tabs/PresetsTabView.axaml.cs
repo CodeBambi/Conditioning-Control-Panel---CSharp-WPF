@@ -380,17 +380,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             TxtDetailTitle.Text = CoreMods.MakeModAware(preset.Name);
             TxtDetailSubtitle.Text = CoreMods.MakeModAware(preset.Description);
             TxtDetailFlash.Text = preset.FlashEnabled
-                ? $"Enabled | {preset.FlashFrequency}/hr | ×{preset.SimultaneousImages} | Opacity: {preset.FlashOpacity}%"
-                : "Disabled";
+                ? Loc.GetF("preset_detail_flash", preset.FlashFrequency, preset.SimultaneousImages, preset.FlashOpacity)
+                : Loc.Get("preset_detail_disabled");
             TxtDetailVideo.Text = preset.MandatoryVideosEnabled
-                ? $"Enabled | {preset.VideosPerHour}/hr | Strict: {(preset.StrictLockEnabled ? "Yes" : "No")}"
-                : "Disabled";
+                ? Loc.GetF("preset_detail_video", preset.VideosPerHour, (preset.StrictLockEnabled ? Loc.Get("btn_yes") : Loc.Get("btn_no")))
+                : Loc.Get("preset_detail_disabled");
             TxtDetailSubliminal.Text = preset.SubliminalEnabled
-                ? $"Enabled | {preset.SubliminalFrequency}/min | Opacity: {preset.SubliminalOpacity}%"
-                : "Disabled";
-            TxtDetailAudio.Text = $"Whispers: {(preset.SubAudioEnabled ? $"Yes ({preset.SubAudioVolume}%)" : "No")} | Master: {preset.MasterVolume}%";
-            TxtDetailOverlays.Text = $"Spiral: {(preset.SpiralEnabled ? "Yes" : "No")} | Pink: {(preset.PinkFilterEnabled ? "Yes" : "No")}";
-            TxtDetailAdvanced.Text = $"Bubbles: {(preset.BubblesEnabled ? "Yes" : "No")} | Lock Card: {(preset.LockCardEnabled ? "Yes" : "No")}";
+                ? Loc.GetF("preset_detail_subliminal", preset.SubliminalFrequency, preset.SubliminalOpacity)
+                : Loc.Get("preset_detail_disabled");
+            TxtDetailAudio.Text = Loc.GetF("preset_detail_audio", preset.SubAudioEnabled ? Loc.GetF("preset_detail_yes_pct", preset.SubAudioVolume) : Loc.Get("btn_no"), preset.MasterVolume);
+            TxtDetailOverlays.Text = Loc.GetF("preset_detail_overlays", (preset.SpiralEnabled ? Loc.Get("btn_yes") : Loc.Get("btn_no")), (preset.PinkFilterEnabled ? Loc.Get("btn_yes") : Loc.Get("btn_no")));
+            TxtDetailAdvanced.Text = Loc.GetF("preset_detail_advanced", (preset.BubblesEnabled ? Loc.Get("btn_yes") : Loc.Get("btn_no")), (preset.LockCardEnabled ? Loc.Get("btn_yes") : Loc.Get("btn_no")));
 
             BtnLoadPreset.IsEnabled = true;
             BtnSaveOverPreset.IsEnabled = !preset.IsDefault;

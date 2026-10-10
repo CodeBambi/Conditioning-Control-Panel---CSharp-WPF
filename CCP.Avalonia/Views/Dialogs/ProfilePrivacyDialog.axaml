@@ -9,7 +9,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization"
         x:Class="ConditioningControlPanel.Avalonia.Views.Dialogs.ProfilePrivacyDialog"
-        Title="Privacy &amp; Sharing"
+        Title="{loc:Str profile_privacy_title}"
         Width="500" Height="700" MinWidth="420" MinHeight="420"
         Background="{DynamicResource DarkerBgBrush}"
         WindowStartupLocation="CenterOwner"

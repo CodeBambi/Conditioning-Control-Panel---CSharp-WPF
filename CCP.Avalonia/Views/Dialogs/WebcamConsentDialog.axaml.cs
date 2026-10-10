@@ -1,3 +1,4 @@
+using ConditioningControlPanel.Localization;
 using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
 using Avalonia.Markup.Xaml;
@@ -99,14 +100,14 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
                     _btnEnable.IsVisible = false;
                     _btnSkipCal.IsVisible = false;
                     _btnCalNow.IsVisible = false;
-                    _btnNext.Content = "I want to know more →";
+                    _btnNext.Content = Loc.Get("consent_know_more");
                     break;
                 case Step.Privacy:
                     _btnNext.IsVisible = true;
                     _btnEnable.IsVisible = false;
                     _btnSkipCal.IsVisible = false;
                     _btnCalNow.IsVisible = false;
-                    _btnNext.Content = "Continue →";
+                    _btnNext.Content = Loc.Get("consent_continue");
                     break;
                 case Step.Consent:
                     _btnNext.IsVisible = false;
@@ -140,16 +141,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Dialogs
 
             if (allChecked && typed)
             {
-                _txtConfirmHint.Text = "All gates passed. You can enable now.";
+                _txtConfirmHint.Text = Loc.Get("consent_gates_passed");
                 _txtConfirmHint.Foreground = new SolidColorBrush(Color.FromRgb(0xA0, 0xE0, 0xA0));
             }
             else
             {
                 var missing = "";
-                if (!allChecked) missing += "all 3 checkboxes";
+                if (!allChecked) missing += Loc.Get("consent_wait_checks");
                 if (!allChecked && !typed) missing += " + ";
-                if (!typed) missing += "ENABLE typed";
-                _txtConfirmHint.Text = "Waiting for: " + missing + ".";
+                if (!typed) missing += Loc.Get("consent_wait_typed");
+                _txtConfirmHint.Text = Loc.GetF("consent_waiting", missing);
                 _txtConfirmHint.Foreground = new SolidColorBrush(Color.FromRgb(0x88, 0x88, 0xA0));
             }
         }

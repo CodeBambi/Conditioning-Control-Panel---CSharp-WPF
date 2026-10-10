@@ -145,7 +145,7 @@
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="Solid mode (game friendly)" FontSize="13" FontWeight="SemiBold"
+                                <TextBlock Grid.Column="0" Text="{loc:Str setting_subliminal_solid_mode}" FontSize="13" FontWeight="SemiBold"
                                            Foreground="{StaticResource TextLightBrush}" VerticalAlignment="Center"/>
                                 <CheckBox Grid.Column="1" x:Name="ChkSolidMode"
                                           Theme="{StaticResource ToggleStyle}" VerticalAlignment="Center"/>
@@ -153,7 +153,7 @@
 
                             <!-- Font: any family installed on the system, plus the bundled Fredoka. -->
                             <Grid Height="34" Background="Transparent"
-                                  ToolTip.Tip="Any font installed on Windows. Applies to the next subliminal.">
+                                  ToolTip.Tip="{loc:Str tooltip_subliminal_font_any_installed}">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" MinWidth="90"/>
                                     <ColumnDefinition Width="*"/>

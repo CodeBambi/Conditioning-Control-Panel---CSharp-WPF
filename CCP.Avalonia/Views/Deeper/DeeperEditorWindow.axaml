@@ -542,7 +542,7 @@
                                                 <MenuItem x:Name="CtxEffectOverlay" Header="Overlay"/>
                                                 <MenuItem x:Name="CtxEffectSpeak" Header="Speak (voice)"/>
                                             </MenuItem>
-                                            <MenuItem Header="Add Rule"
+                                            <MenuItem Header="{loc:Str deeper_editor_rules_add_tooltip}"
                                                       Foreground="{DynamicResource DeeperAccentBrush}" FontWeight="Bold">
                                                 <MenuItem x:Name="CtxRuleTimeReached" Header="{loc:Str deeper_friendly_trigger_time_reached}"
                                                           ToolTip.Tip="{loc:Str deeper_desc_trigger_time_reached}"/>
@@ -1057,14 +1057,14 @@
 
                                 <!-- Effect editors for non-haptic Effect TimelineItems. -->
                                 <StackPanel x:Name="FlashEffectEditor" IsVisible="False">
-                                    <TextBlock Text="Flash effect" Theme="{StaticResource EditorLabel}"/>
+                                    <TextBlock Text="{loc:Str deeper_friendly_effect_flash}" Theme="{StaticResource EditorLabel}"/>
                                     <TextBlock Text="Image / sound / opacity inherit your CCP Flashes settings."
                                                Foreground="{DynamicResource TextDimBrush}" FontSize="10"
                                                TextWrapping="Wrap" Margin="0,0,0,8"/>
                                     <TextBlock Text="{loc:Str deeper_editor_effect_start}" Theme="{StaticResource EditorLabel}"/>
                                     <TextBox x:Name="TxtFlashStart" Theme="{StaticResource EditorTextBox}"
                                              ToolTip.Tip="{loc:Str deeper_editor_tt_effect_start}"/>
-                                    <TextBlock Text="Duration (ms)" Theme="{StaticResource EditorLabel}"/>
+                                    <TextBlock Text="{loc:Str deeper_editor_action_duration_ms}" Theme="{StaticResource EditorLabel}"/>
                                     <TextBox x:Name="TxtFlashDuration" Theme="{StaticResource EditorTextBox}"
                                              ToolTip.Tip="{loc:Str deeper_editor_tip_flash_duration}"/>
                                     <CheckBox x:Name="ChkFlashSuppressHaptic"
@@ -1072,7 +1072,7 @@
                                               ToolTip.Tip="Skip the automatic haptic buzz that normally fires when this flash appears."
                                               Foreground="{DynamicResource TextLightBrush}"
                                               Margin="0,4,0,4"/>
-                                    <Button x:Name="BtnDeleteFlashEffect" Content="Delete"
+                                    <Button x:Name="BtnDeleteFlashEffect" Content="{loc:Str btn_delete}"
                                             ToolTip.Tip="{loc:Str deeper_editor_tip_effect_delete}"
                                             Background="{DynamicResource DangerBrush}" Foreground="White"
                                             BorderThickness="0" Padding="10,6" Cursor="Hand"
@@ -1080,7 +1080,7 @@
                                 </StackPanel>
 
                                 <StackPanel x:Name="BubbleEffectEditor" IsVisible="False">
-                                    <TextBlock Text="Bubble effect" Theme="{StaticResource EditorLabel}"/>
+                                    <TextBlock Text="{loc:Str deeper_friendly_effect_bubble}" Theme="{StaticResource EditorLabel}"/>
                                     <TextBlock Text="Burst rate / volume inherit your CCP Bubbles settings."
                                                Foreground="{DynamicResource TextDimBrush}" FontSize="10"
                                                TextWrapping="Wrap" Margin="0,0,0,8"/>
@@ -1090,12 +1090,12 @@
                                     <TextBlock Text="Window (s)" Theme="{StaticResource EditorLabel}"/>
                                     <TextBox x:Name="TxtBubbleWindow" Theme="{StaticResource EditorTextBox}"
                                              ToolTip.Tip="{loc:Str deeper_editor_tip_bubble_window}"/>
-                                    <TextBlock Text="Intensity" Theme="{StaticResource EditorLabel}"/>
+                                    <TextBlock Text="{loc:Str deeper_editor_haptic_intensity}" Theme="{StaticResource EditorLabel}"/>
                                     <Slider x:Name="SliderBubbleIntensity" Minimum="0" Maximum="1"
                                             SmallChange="0.05" LargeChange="0.1" Margin="0,0,0,8"
                                             ToolTip.Tip="{loc:Str deeper_editor_tip_bubble_intensity}"
                                             Foreground="{DynamicResource DeeperAccentBrush}"/>
-                                    <Button x:Name="BtnDeleteBubbleEffect" Content="Delete"
+                                    <Button x:Name="BtnDeleteBubbleEffect" Content="{loc:Str btn_delete}"
                                             ToolTip.Tip="{loc:Str deeper_editor_tip_effect_delete}"
                                             Background="{DynamicResource DangerBrush}" Foreground="White"
                                             BorderThickness="0" Padding="10,6" Cursor="Hand"
@@ -1103,14 +1103,14 @@
                                 </StackPanel>
 
                                 <StackPanel x:Name="SubliminalEffectEditor" IsVisible="False">
-                                    <TextBlock Text="Subliminal effect" Theme="{StaticResource EditorLabel}"/>
+                                    <TextBlock Text="{loc:Str deeper_friendly_effect_subliminal}" Theme="{StaticResource EditorLabel}"/>
                                     <TextBlock Text="{loc:Str deeper_editor_effect_start}" Theme="{StaticResource EditorLabel}"/>
                                     <TextBox x:Name="TxtSubliminalStart" Theme="{StaticResource EditorTextBox}"
                                              ToolTip.Tip="{loc:Str deeper_editor_tt_effect_start}"/>
                                     <TextBlock Text="Text" Theme="{StaticResource EditorLabel}"/>
                                     <TextBox x:Name="TxtSubliminalText" Theme="{StaticResource EditorTextBox}"
                                              ToolTip.Tip="{loc:Str deeper_editor_tip_subliminal_text}"/>
-                                    <TextBlock Text="Duration (ms)" Theme="{StaticResource EditorLabel}"/>
+                                    <TextBlock Text="{loc:Str deeper_editor_action_duration_ms}" Theme="{StaticResource EditorLabel}"/>
                                     <TextBox x:Name="TxtSubliminalDuration" Theme="{StaticResource EditorTextBox}"
                                              ToolTip.Tip="{loc:Str deeper_editor_tip_subliminal_duration}"/>
                                     <CheckBox x:Name="ChkSubliminalSuppressHaptic"
@@ -1118,7 +1118,7 @@
                                               ToolTip.Tip="Skip the automatic haptic buzz that normally fires when this subliminal appears."
                                               Foreground="{DynamicResource TextLightBrush}"
                                               Margin="0,4,0,4"/>
-                                    <Button x:Name="BtnDeleteSubliminalEffect" Content="Delete"
+                                    <Button x:Name="BtnDeleteSubliminalEffect" Content="{loc:Str btn_delete}"
                                             ToolTip.Tip="{loc:Str deeper_editor_tip_effect_delete}"
                                             Background="{DynamicResource DangerBrush}" Foreground="White"
                                             BorderThickness="0" Padding="10,6" Cursor="Hand"
@@ -1126,7 +1126,7 @@
                                 </StackPanel>
 
                                 <StackPanel x:Name="OverlayEffectEditor" IsVisible="False">
-                                    <TextBlock Text="Overlay effect" Theme="{StaticResource EditorLabel}"/>
+                                    <TextBlock Text="{loc:Str deeper_friendly_effect_overlay}" Theme="{StaticResource EditorLabel}"/>
                                     <TextBlock Text="{loc:Str deeper_editor_effect_start}" Theme="{StaticResource EditorLabel}"/>
                                     <TextBox x:Name="TxtOverlayStart" Theme="{StaticResource EditorTextBox}"
                                              ToolTip.Tip="{loc:Str deeper_editor_tt_effect_start}"/>
@@ -1142,10 +1142,10 @@
                                         <ComboBoxItem Content="Brain Drain" Tag="braindrain"/>
                                         <ComboBoxItem Content="Brain Melt" Tag="braindrain_melt"/>
                                     </ComboBox>
-                                    <TextBlock Text="Duration (ms)" Theme="{StaticResource EditorLabel}"/>
+                                    <TextBlock Text="{loc:Str deeper_editor_action_duration_ms}" Theme="{StaticResource EditorLabel}"/>
                                     <TextBox x:Name="TxtOverlayDuration" Theme="{StaticResource EditorTextBox}"
                                              ToolTip.Tip="{loc:Str deeper_editor_tip_overlay_duration}"/>
-                                    <TextBlock x:Name="LblOverlayOpacity" Text="Opacity" Theme="{StaticResource EditorLabel}"/>
+                                    <TextBlock x:Name="LblOverlayOpacity" Text="{loc:Str deeper_editor_action_opacity}" Theme="{StaticResource EditorLabel}"/>
                                     <Slider x:Name="SliderOverlayOpacity" Minimum="0" Maximum="1"
                                             SmallChange="0.05" LargeChange="0.1" Margin="0,0,0,8"
                                             ToolTip.Tip="{loc:Str deeper_editor_tip_overlay_opacity}"
@@ -1162,7 +1162,7 @@
                                             IsVisible="False"
                                             ToolTip.Tip="Opacity at the end of the region."
                                             Foreground="{DynamicResource DeeperAccentBrush}"/>
-                                    <Button x:Name="BtnDeleteOverlayEffect" Content="Delete"
+                                    <Button x:Name="BtnDeleteOverlayEffect" Content="{loc:Str btn_delete}"
                                             ToolTip.Tip="{loc:Str deeper_editor_tip_effect_delete}"
                                             Background="{DynamicResource DangerBrush}" Foreground="White"
                                             BorderThickness="0" Padding="10,6" Cursor="Hand"
@@ -1231,7 +1231,7 @@
                                     <TextBox x:Name="TxtSpeakIncorrect" Theme="{StaticResource EditorTextBox}"
                                              MaxLength="40"
                                              ToolTip.Tip="Flashed after a wrong/too-quiet attempt, e.g. 'try again'."/>
-                                    <Button x:Name="BtnDeleteSpeakEffect" Content="Delete"
+                                    <Button x:Name="BtnDeleteSpeakEffect" Content="{loc:Str btn_delete}"
                                             ToolTip.Tip="{loc:Str deeper_editor_tip_effect_delete}"
                                             Background="{DynamicResource DangerBrush}" Foreground="White"
                                             BorderThickness="0" Padding="10,6" Cursor="Hand"

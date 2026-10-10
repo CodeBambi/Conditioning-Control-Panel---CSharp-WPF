@@ -286,7 +286,7 @@
                             HorizontalAlignment="Left" Margin="0,0,0,8" Padding="10,3"
                             Background="#22FFFFFF" Foreground="{StaticResource TextDim}" FontSize="12"
                             BorderThickness="0" Cursor="Hand" CornerRadius="7"
-                            ToolTip.Tip="back to the main menu"/>
+                            ToolTip.Tip="{loc:Str chaos_menu_tip}"/>
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="🐇 DOWN THE RABBIT HOLE" Foreground="White" FontSize="22" FontWeight="Bold">
                             <TextBlock.Effect><DropShadowEffect Color="#FFE84393" BlurRadius="20" OffsetX="0" OffsetY="0" Opacity="0.7"/></TextBlock.Effect>
@@ -435,7 +435,7 @@
                                 <TextBlock Text="THE DESCENT" Theme="{StaticResource SectionHdr}" Margin="0,0,0,2"/>
                                 <TextBlock Text="dress it up however you like. it ends the same way." Foreground="{StaticResource TextMut}" FontSize="11" Margin="0,0,0,10"/>
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                                    <TextBlock Text="Difficulty" Theme="{StaticResource Lbl}"/>
+                                    <TextBlock Text="{loc:Str setting_difficulty}" Theme="{StaticResource Lbl}"/>
                                     <StackPanel x:Name="GrpDifficulty" Orientation="Horizontal">
                                         <ToggleButton Theme="{StaticResource Seg}" Tag="Easy" Content="Gentle" Click="Segment_Click"/>
                                         <ToggleButton x:Name="SegMedium" Theme="{StaticResource Seg}" Tag="Medium" Content="Teasing" Click="Segment_Click"/>
@@ -444,7 +444,7 @@
                                     </StackPanel>
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                                    <TextBlock Text="Length" Theme="{StaticResource Lbl}"/>
+                                    <TextBlock Text="{loc:Str chaos_opt_length}" Theme="{StaticResource Lbl}"/>
                                     <StackPanel x:Name="GrpLength" Orientation="Horizontal">
                                         <ToggleButton Theme="{StaticResource Seg}" Tag="120" Content="2 min" Click="Segment_Click"/>
                                         <ToggleButton Theme="{StaticResource Seg}" Tag="180" Content="3 min" Click="Segment_Click"/>
@@ -452,11 +452,11 @@
                                     </StackPanel>
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                                    <TextBlock Text="Motion" Theme="{StaticResource Lbl}"/>
+                                    <TextBlock Text="{loc:Str setting_bubble_motion}" Theme="{StaticResource Lbl}"/>
                                     <StackPanel x:Name="GrpMotion" Orientation="Horizontal">
                                         <ToggleButton Theme="{StaticResource Seg}" Tag="Mixed" Content="Mixed" Click="Segment_Click"/>
                                         <ToggleButton Theme="{StaticResource Seg}" Tag="FloatUp" Content="Float" Click="Segment_Click"/>
-                                        <ToggleButton Theme="{StaticResource Seg}" Tag="RainDown" Content="Rain" Click="Segment_Click"/>
+                                        <ToggleButton Theme="{StaticResource Seg}" Tag="RainDown" Content="{loc:Str bubble_motion_rain}" Click="Segment_Click"/>
                                         <ToggleButton Theme="{StaticResource Seg}" Tag="RoamBounce" Content="Roam" Click="Segment_Click"/>
                                     </StackPanel>
                                 </StackPanel>
@@ -467,42 +467,42 @@
 
                         <Border Theme="{StaticResource CardStyle}">
                             <StackPanel>
-                                <TextBlock Text="SENSATION" Theme="{StaticResource SectionHdr}"/>
-                                <CheckBox x:Name="ChkShake" Theme="{StaticResource Chk}" Content="Screen shake"/>
+                                <TextBlock Text="{loc:Str chaos_sensation}" Theme="{StaticResource SectionHdr}"/>
+                                <CheckBox x:Name="ChkShake" Theme="{StaticResource Chk}" Content="{loc:Str chaos_screen_shake}"/>
                                 <Slider x:Name="SldShake" Theme="{StaticResource PinkSlider}" Minimum="0" Maximum="1" Margin="0,0,0,6"/>
-                                <CheckBox x:Name="ChkFlashes" Theme="{StaticResource Chk}" Content="Color flashes"/>
-                                <CheckBox x:Name="ChkSkiaFx" Theme="{StaticResource Chk}" Content="Enhanced FX (bloom &amp; bursts)"
-                                          ToolTip.Tip="Additive Skia-rendered glow: rabbit trail, cursor halo, lightning, bubble pop bursts &amp; glassy shine. Off = the classic effects."/>
-                                <CheckBox x:Name="ChkPinTop" Theme="{StaticResource Chk}" Content="Keep on top"
-                                          ToolTip.Tip="Pins the chaos layer above other windows. Off = other apps can come forward over the descent."/>
-                                <CheckBox x:Name="ChkSharedHost" Theme="{StaticResource Chk}" Content="Smooth bubbles (experimental)"
+                                <CheckBox x:Name="ChkFlashes" Theme="{StaticResource Chk}" Content="{loc:Str chaos_color_flashes}"/>
+                                <CheckBox x:Name="ChkSkiaFx" Theme="{StaticResource Chk}" Content="{loc:Str chaos_enhanced_fx}"
+                                          ToolTip.Tip="{loc:Str chaos_enhanced_fx_tip}"/>
+                                <CheckBox x:Name="ChkPinTop" Theme="{StaticResource Chk}" Content="{loc:Str chaos_keep_on_top}"
+                                          ToolTip.Tip="{loc:Str chaos_keep_on_top_tip}"/>
+                                <CheckBox x:Name="ChkSharedHost" Theme="{StaticResource Chk}" Content="{loc:Str chaos_smooth_bubbles}"
                                           ToolTip.Tip="{loc:Str chaos_shared_host_tip}"/>
-                                <TextBlock Text="Effect intensity" Foreground="{StaticResource TextMut}" FontSize="11" Margin="0,6,0,0"/>
+                                <TextBlock Text="{loc:Str chaos_effect_intensity}" Foreground="{StaticResource TextMut}" FontSize="11" Margin="0,6,0,0"/>
                                 <Slider x:Name="SldEffect" Theme="{StaticResource PinkSlider}" Minimum="0.2" Maximum="1.5"/>
-                                <CheckBox x:Name="ChkAnnouncer" Theme="{StaticResource Chk}" Content="Announcements" Margin="0,8,0,0"/>
+                                <CheckBox x:Name="ChkAnnouncer" Theme="{StaticResource Chk}" Content="{loc:Str chaos_announcements}" Margin="0,8,0,0"/>
                                 <TextBlock Text="THE MADAM" Theme="{StaticResource SectionHdr}" Margin="0,12,0,0"/>
-                                <CheckBox x:Name="ChkNarrative" Theme="{StaticResource Chk}" Content="Narrator (voiced reactions)"
-                                          ToolTip.Tip="A reactive narrator speaks voiced + text lines during a descent."/>
-                                <CheckBox x:Name="ChkBackdrop" Theme="{StaticResource Chk}" Content="Zone backdrops" Margin="0,4,0,0"
-                                          ToolTip.Tip="Per-zone backdrop plates under the bubbles. Off = classic Chaos over your live desktop."/>
-                                <TextBlock Text="Backdrop opacity" Foreground="{StaticResource TextMut}" FontSize="11" Margin="0,6,0,0"/>
+                                <CheckBox x:Name="ChkNarrative" Theme="{StaticResource Chk}" Content="{loc:Str chaos_narrator}"
+                                          ToolTip.Tip="{loc:Str chaos_narrator_tip}"/>
+                                <CheckBox x:Name="ChkBackdrop" Theme="{StaticResource Chk}" Content="{loc:Str chaos_zone_backdrops}" Margin="0,4,0,0"
+                                          ToolTip.Tip="{loc:Str chaos_zone_backdrops_tip}"/>
+                                <TextBlock Text="{loc:Str chaos_backdrop_opacity}" Foreground="{StaticResource TextMut}" FontSize="11" Margin="0,6,0,0"/>
                                 <Slider x:Name="SldBackdropOpacity" Theme="{StaticResource PinkSlider}" Minimum="0" Maximum="1"/>
-                                <CheckBox x:Name="ChkTunnel" Theme="{StaticResource Chk}" Content="3D rabbit-hole tunnel" Margin="0,10,0,0"
-                                          ToolTip.Tip="An endless procedurally-generated 3D tunnel rendered behind the game. Heavier on the GPU - default off."/>
+                                <CheckBox x:Name="ChkTunnel" Theme="{StaticResource Chk}" Content="{loc:Str chaos_tunnel}" Margin="0,10,0,0"
+                                          ToolTip.Tip="{loc:Str chaos_tunnel_tip}"/>
                             </StackPanel>
                         </Border>
 
                         <Border x:Name="CardKeybinds" Theme="{StaticResource CardStyle}">
                             <StackPanel>
-                                <TextBlock Text="KEYBINDS" Theme="{StaticResource SectionHdr}" Margin="0,0,0,2"/>
+                                <TextBlock Text="{loc:Str chaos_keybinds}" Theme="{StaticResource SectionHdr}" Margin="0,0,0,2"/>
                                 <TextBlock x:Name="TxtKeybindsSub" Text="your equipped toy fires on this, mid-descent. the second pocket isn't sewn yet."
                                            Foreground="{StaticResource TextMut}" FontSize="11" Margin="0,0,0,10"/>
                                 <StackPanel x:Name="RowToyKey1" Orientation="Horizontal" Margin="0,0,0,8">
-                                    <TextBlock Text="Toy 1" Theme="{StaticResource Lbl}"/>
+                                    <TextBlock Text="{loc:Str chaos_toy1}" Theme="{StaticResource Lbl}"/>
                                     <ComboBox x:Name="CmbAccKey1" Theme="{StaticResource DarkComboBoxStyle}" Width="70" SelectionChanged="AccKey_Changed"/>
                                 </StackPanel>
                                 <StackPanel x:Name="RowToyKey2" Orientation="Horizontal">
-                                    <TextBlock Text="Toy 2" Theme="{StaticResource Lbl}"/>
+                                    <TextBlock Text="{loc:Str chaos_toy2}" Theme="{StaticResource Lbl}"/>
                                     <ComboBox x:Name="CmbAccKey2" Theme="{StaticResource DarkComboBoxStyle}" Width="70" SelectionChanged="AccKey_Changed"/>
                                 </StackPanel>
                             </StackPanel>
@@ -529,7 +529,7 @@
                                         <ToggleButton Theme="{StaticResource Seg}" Tag="htlink" Content="Gif Rain" Margin="0,0,6,6"/>
                                     </WrapPanel>
                                     <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                                        <TextBlock Text="presets:" Foreground="{StaticResource TextMut}" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                        <TextBlock Text="{loc:Str chaos_presets}" Foreground="{StaticResource TextMut}" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0"/>
                                         <Button Content="Balanced" Tag="Balanced" Click="Preset_Click" Theme="{StaticResource Stepper}" Width="NaN" Padding="10,4" Margin="0,0,6,0"/>
                                         <Button Content="Tease" Tag="Tease" Click="Preset_Click" Theme="{StaticResource Stepper}" Width="NaN" Padding="10,4" Margin="0,0,6,0"/>
                                         <Button Content="Flash-only" Tag="Flash-only" Click="Preset_Click" Theme="{StaticResource Stepper}" Width="NaN" Padding="10,4"/>
@@ -553,8 +553,8 @@
                             </Border>
 
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                                <Button Content="↻ Randomize" Click="BtnRandomize_Click" Theme="{StaticResource Stepper}" Width="NaN" Height="NaN" Padding="12,8" Margin="0,0,8,0"/>
-                                <Button Content="Defaults" Click="BtnDefaults_Click" Theme="{StaticResource Stepper}" Width="NaN" Height="NaN" Padding="12,8"/>
+                                <Button Content="{loc:Str chaos_randomize}" Click="BtnRandomize_Click" Theme="{StaticResource Stepper}" Width="NaN" Height="NaN" Padding="12,8" Margin="0,0,8,0"/>
+                                <Button Content="{loc:Str chaos_defaults}" Click="BtnDefaults_Click" Theme="{StaticResource Stepper}" Width="NaN" Height="NaN" Padding="12,8"/>
                             </StackPanel>
                         </StackPanel><!-- /TestingBody -->
                         </StackPanel><!-- /SetupBody -->
@@ -633,7 +633,7 @@
                          restored if the pick ever returns to the hub. -->
                     <Button x:Name="BtnBeginDesktop" Content="🖥 FREE DESKTOP" Tag="FreeDesktop" Click="BtnBegin_Click"
                             IsVisible="False"
-                            ToolTip.Tip="Pop bubbles over your real desktop - no story or backdrop, and other windows can stay in front. Your companion floats along."
+                            ToolTip.Tip="{loc:Str chaos_free_desktop_tip}"
                             Background="#332A2A4A" Foreground="{StaticResource TextMut}" FontWeight="SemiBold" FontSize="14"
                             BorderBrush="#55E84393" BorderThickness="1" Padding="22,12" Margin="0,0,12,0" Cursor="Hand"
                             CornerRadius="14"/>
@@ -641,7 +641,7 @@
                          ("FALL IN — STORY" label + Story tag removed). StartRun resolves the actual
                          mode from ChaosModeService.SelectedPlayMode. -->
                     <Button x:Name="BtnBegin" Content="▶ FALL IN" Click="BtnBegin_Click"
-                            ToolTip.Tip="Begin the descent."
+                            ToolTip.Tip="{loc:Str chaos_begin_tip}"
                             Background="{StaticResource Brand}" Foreground="White" FontWeight="Bold" FontSize="16"
                             BorderThickness="0" Padding="32,13" Cursor="Hand" CornerRadius="14">
                         <Button.Effect><DropShadowEffect Color="#FFE84393" BlurRadius="18" OffsetX="0" OffsetY="0" Opacity="0.6"/></Button.Effect>
@@ -739,7 +739,7 @@
                                 Click="Menu_Dollhouse_Click" ToolTip.Tip="pockets, toys, the bench - dress the fall."/>
                         <Button x:Name="BtnMenuStory" Theme="{StaticResource MenuBtn}" Content="📖  STORY MODE  🔒"
                                 Click="Menu_Story_Click" ToolTip.Tip="the Madam's narrated descent - coming soon."/>
-                        <Button x:Name="BtnMenuOptions" Theme="{StaticResource MenuBtn}" Content="⚙  OPTIONS" Click="Menu_Options_Click"/>
+                        <Button x:Name="BtnMenuOptions" Theme="{StaticResource MenuBtn}" Content="{loc:Str chaos_options_title}" Click="Menu_Options_Click"/>
                         <Button x:Name="BtnMenuExit" Theme="{StaticResource MenuBtn}" Content="✕  EXIT" Click="Menu_Exit_Click"/>
                     </StackPanel>
                 </Grid>
@@ -766,7 +766,7 @@
                     </Border>
                     <!-- soundtrack mute toggle (icon swaps 🔊/🔇 in code-behind) -->
                     <Button x:Name="BtnMenuMute" Click="BtnMenuMute_Click" Cursor="Hand"
-                            ToolTip.Tip="Mute / unmute the menu music" Background="{StaticResource Card2}"
+                            ToolTip.Tip="{loc:Str chaos_mute_tip}" Background="{StaticResource Card2}"
                             BorderThickness="0" Padding="10,5" Margin="8,0,0,0" CornerRadius="9">
                         <TextBlock x:Name="MenuMuteIcon" Text="🔊" FontSize="15" VerticalAlignment="Center"/>
                     </Button>
@@ -782,8 +782,8 @@
                 <Grid RowDefinitions="Auto,*,Auto">
 
                     <StackPanel Grid.Row="0">
-                        <TextBlock Text="⚙  OPTIONS" Foreground="{StaticResource Pink}" FontFamily="Consolas, Courier New" FontWeight="Bold" FontSize="28"/>
-                        <TextBlock Text="display &amp; comfort - these stick between descents." Foreground="{StaticResource TextMut}" FontSize="13" Margin="2,6,0,0"/>
+                        <TextBlock Text="{loc:Str chaos_options_title}" Foreground="{StaticResource Pink}" FontFamily="Consolas, Courier New" FontWeight="Bold" FontSize="28"/>
+                        <TextBlock Text="{loc:Str chaos_options_sub}" Foreground="{StaticResource TextMut}" FontSize="13" Margin="2,6,0,0"/>
                     </StackPanel>
 
                     <Grid Grid.Row="1" Margin="0,12,0,0" VerticalAlignment="Center" ColumnDefinitions="*,64,*">
@@ -796,25 +796,25 @@
                                 <ScaleTransform ScaleX="1.35" ScaleY="1.35"/>
                             </LayoutTransformControl.LayoutTransform>
                             <StackPanel>
-                                <CheckBox x:Name="OptFullscreen" Theme="{StaticResource OptChk}" Content="Fullscreen" Click="OptFullscreen_Click"/>
-                                <CheckBox x:Name="OptKeepTop" Theme="{StaticResource OptChk}" Content="Keep on top"
+                                <CheckBox x:Name="OptFullscreen" Theme="{StaticResource OptChk}" Content="{loc:Str btn_fullscreen}" Click="OptFullscreen_Click"/>
+                                <CheckBox x:Name="OptKeepTop" Theme="{StaticResource OptChk}" Content="{loc:Str chaos_keep_on_top}"
                                           IsChecked="{Binding #ChkPinTop.IsChecked, Mode=TwoWay}"/>
-                                <CheckBox x:Name="OptSkiaFx" Theme="{StaticResource OptChk}" Content="Enhanced FX (bloom &amp; bursts)"
+                                <CheckBox x:Name="OptSkiaFx" Theme="{StaticResource OptChk}" Content="{loc:Str chaos_enhanced_fx}"
                                           IsChecked="{Binding #ChkSkiaFx.IsChecked, Mode=TwoWay}"/>
-                                <CheckBox x:Name="OptAnnounce" Theme="{StaticResource OptChk}" Content="Announcements"
+                                <CheckBox x:Name="OptAnnounce" Theme="{StaticResource OptChk}" Content="{loc:Str chaos_announcements}"
                                           IsChecked="{Binding #ChkAnnouncer.IsChecked, Mode=TwoWay}"/>
                             </StackPanel>
                         </LayoutTransformControl>
 
                         <!-- right: intensity slider -->
                         <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="0,0,6,0">
-                            <TextBlock Text="EFFECT INTENSITY" Foreground="{StaticResource TextMut}" FontFamily="Consolas, Courier New" FontSize="13" FontWeight="Bold" Margin="0,0,0,10"/>
+                            <TextBlock Text="{loc:Str chaos_effect_intensity_caps}" Foreground="{StaticResource TextMut}" FontFamily="Consolas, Courier New" FontSize="13" FontWeight="Bold" Margin="0,0,0,10"/>
                             <Slider Theme="{StaticResource PinkSlider}" Minimum="0.2" Maximum="1.5" Value="{Binding #SldEffect.Value, Mode=TwoWay}" Height="30"/>
-                            <TextBlock Text="lower = gentler bloom &amp; shake." Foreground="{StaticResource TextMut}" FontSize="12" Margin="0,10,0,0"/>
+                            <TextBlock Text="{loc:Str chaos_intensity_hint}" Foreground="{StaticResource TextMut}" FontSize="12" Margin="0,10,0,0"/>
                         </StackPanel>
                     </Grid>
 
-                    <Button Grid.Row="2" Content="‹ back" Click="Options_Back_Click" Theme="{StaticResource MenuBtn}"
+                    <Button Grid.Row="2" Content="{loc:Str chaos_back}" Click="Options_Back_Click" Theme="{StaticResource MenuBtn}"
                             HorizontalAlignment="Left" Width="170" Height="52" Margin="0,16,0,0"/>
                 </Grid>
             </Border>
@@ -874,7 +874,7 @@
                                 HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,10,12,0" ZIndex="5"
                                 Width="34" Height="34" Padding="0" FontSize="14" Foreground="White" Cursor="Hand"
                                 HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
-                                Background="#66000000" BorderThickness="0" CornerRadius="17" ToolTip.Tip="Close"/>
+                                Background="#66000000" BorderThickness="0" CornerRadius="17" ToolTip.Tip="{loc:Str btn_close}"/>
                     </Grid>
                 </Border>
             </Border>
@@ -886,9 +886,9 @@
         <!-- shared window controls (top-right, above both views) -->
         <StackPanel x:Name="WinChrome" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top"
                     Margin="0,10,12,0" ZIndex="50">
-            <Button x:Name="BtnMin" Theme="{StaticResource WinBtn}" Content="-" Click="BtnMin_Click" ToolTip.Tip="Minimize"/>
-            <Button x:Name="BtnFull" Theme="{StaticResource WinBtn}" Content="⛶" Click="BtnFull_Click" ToolTip.Tip="Fullscreen (maximize)"/>
-            <Button x:Name="BtnCloseWin" Theme="{StaticResource WinBtn}" Content="✕" Click="BtnClose_Click" ToolTip.Tip="Close"/>
+            <Button x:Name="BtnMin" Theme="{StaticResource WinBtn}" Content="-" Click="BtnMin_Click" ToolTip.Tip="{loc:Str titlebar_minimize_tip}"/>
+            <Button x:Name="BtnFull" Theme="{StaticResource WinBtn}" Content="⛶" Click="BtnFull_Click" ToolTip.Tip="{loc:Str chaos_fullscreen_tip}"/>
+            <Button x:Name="BtnCloseWin" Theme="{StaticResource WinBtn}" Content="✕" Click="BtnClose_Click" ToolTip.Tip="{loc:Str btn_close}"/>
         </StackPanel>
         </Grid>
     </Border>
