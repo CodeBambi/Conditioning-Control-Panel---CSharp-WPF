@@ -383,8 +383,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
         /// </summary>
         private void LoadPortrait()
         {
-            _portrait.Source = null;
-            _portraitHost.IsVisible = false;
+            // WPF ChaosHudWindow.xaml.cs:196: assets/Chaos/portraits/neutral.png, host collapsed when absent.
+            var src = ChaosArt.Resolve("portraits", "neutral");
+            _portrait.Source = src;
+            _portraitHost.IsVisible = src != null;
         }
 
         private bool _pinnedOpen;   // pre-run loadout glance: panel stays open until SINK fires

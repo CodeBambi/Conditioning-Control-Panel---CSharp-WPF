@@ -354,9 +354,8 @@
                         <!-- Emote MenuItems replace the 5 items above (Engine, TriggerMode, BambiTakeover,
                              Personality, Mute) whenever a remote controller is connected. On WPF their
                              headers are filled in AvatarContextMenu_Opened from RemoteEmotePresets.
-                             They stay IsVisible="False" on this head: the presets are in Core, but the
-                             swap is driven by App.RemoteControl.ControllerConnected and each item sends
-                             through MainWindow.SendEmoteAndReportAsync, both head-side. -->
+                             Here the swap and the send are in AvatarTubeWindow.QuickMenu.cs
+                             (RefreshEmoteMenuItemsForRemoteState, OnMenuEmote). -->
                         <MenuItem x:Name="MenuItemEmote1" Header="" IsVisible="False"/>
                         <MenuItem x:Name="MenuItemEmote2" Header="" IsVisible="False"/>
                         <MenuItem x:Name="MenuItemEmote3" Header="" IsVisible="False"/>

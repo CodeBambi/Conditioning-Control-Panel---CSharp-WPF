@@ -20,6 +20,10 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <RootNamespace>ConditioningControlPanel.Avalonia</RootNamespace>
     <AssemblyName>CCP.Avalonia</AssemblyName>
+    <!-- The label of an unreleased build (Version.props) rides the informational version only:
+         AssemblyVersion stays the plain number every version check parses. -->
+    <InformationalVersion Condition="'$(CcpVersionLabel)' != ''">$(Version)-$(CcpVersionLabel)</InformationalVersion>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <WarningsAsErrors>$(WarningsAsErrors);CA1416</WarningsAsErrors>
   </PropertyGroup>
@@ -94,6 +98,16 @@
     </Content>
     <!-- WPF CornerGifMedia's built-in corner asset (pre-scaled), CornerGifOverlay's fallback. -->
     <Content Include="..\Assets\spiral_corner.gif" Link="Resources\spiral_corner.gif">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+    </Content>
+    <!-- Chaos art (WPF ConditioningControlPanel.csproj:216): hub banner + backdrop, boon chips, portraits, the recap
+         banner and the bubble sprites, resolved by Views/Chaos/ChaosArt from <exe>\assets\Chaos\{kind}\{id}.png.
+         The art still lives in the WPF head's folder; staging candidates stay out, as on WPF. -->
+    <Content Include="..\ConditioningControlPanel\assets\Chaos\**\*.png;..\ConditioningControlPanel\assets\Chaos\**\*.gif;..\ConditioningControlPanel\assets\Chaos\**\*.json"
+             Exclude="..\ConditioningControlPanel\assets\Chaos\**\_staging*\**"
+             Link="assets\Chaos\%(RecursiveDir)%(Filename)%(Extension)">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>

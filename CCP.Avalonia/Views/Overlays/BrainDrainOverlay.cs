@@ -94,7 +94,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
 
         /// <summary>WPF RefreshOverlays' gate, same as the tint: the engine (or a session) runs and is not paused.</summary>
         private static bool ShouldShow()
-            => App.Sessions?.IsPaused != true
+            => global::ConditioningControlPanel.Services.RemoteCommands.OverlayHold || App.Sessions?.IsPaused != true
                && (CoreSession.IsEngineRunningProvider is null || CoreSession.IsEngineRunning || App.Sessions?.IsRunning == true);
 
         /// <summary>Bring the haze in line with the settings. Idempotent: every handler just calls it.</summary>

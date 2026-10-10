@@ -63,17 +63,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                     // WPF MotionFx.GlowBreath(glyph, 0.45, 1.0, 3.8): reduced motion parks it lit.
                     _fuseBreath = new System.Threading.CancellationTokenSource();
                     if (ConditioningControlPanel.Avalonia.Controls.AmbientFxCanvas.Env.AllowAmbientLoops)
-                        _ = new Animation
-                        {
-                            Duration = TimeSpan.FromSeconds(3.8),
-                            IterationCount = IterationCount.Infinite,
-                            PlaybackDirection = PlaybackDirection.Alternate,
-                            Children =
-                            {
-                                new KeyFrame { Cue = new Cue(0d), Setters = { new Setter(OpacityProperty, 0.45) } },
-                                new KeyFrame { Cue = new Cue(1d), Setters = { new Setter(OpacityProperty, 1.0) } },
-                            },
-                        }.RunAsync(glyph, _fuseBreath.Token);
+                    {
+                        // X7: the header fuse is up for hours, so its breath rides the shared 30 fps beat
+                        // (BreathClock), never an infinite Animation. Same curve: 0.45 to 1.0 over 3.8 s, back again.
+                        var breath = new Features.BreathClock(glyph, 3.8);
+                        _fuseBreath.Token.Register(breath.Stop);
+                        breath.Start((glyph, 0.45, 1.0));
+                    }
                 }
                 else if (!show && _fuseBreath != null)
                 {

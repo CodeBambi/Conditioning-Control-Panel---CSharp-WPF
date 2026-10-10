@@ -110,7 +110,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
 
         private void Build(string landing)
         {
-            _web = new WebHost();
+            _web = new WebHost { Profile = Platform.WebProfiles.BambiCloud };
             _web.AllowNavigation = uri =>
             {
                 // Their own pages stay in the frame; anything else goes to the player's browser.

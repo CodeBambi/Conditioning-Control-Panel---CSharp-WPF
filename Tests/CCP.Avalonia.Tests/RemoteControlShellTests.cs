@@ -160,6 +160,54 @@ public sealed class RemoteControlShellTests
         }
     });
 
+    /// <summary>MainShellWindow.RemoteVerbs.cs: the shell is the head for the verbs that need a window. Headless
+    /// has no click-through overlay, so a show is refused with the reason and the subject's settings stay.</summary>
+    [Fact]
+    public Task The_shell_is_the_remote_head_and_an_overlay_it_cannot_show_is_refused() => AvaloniaTestDispatcher.RunAsync(() =>
+    {
+        if (Application.Current is null)
+            AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>()
+                .UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                .SetupWithoutStarting();
+        var (oldProvider, oldHead) = (CoreSettings.ServiceProvider, RemoteCommands.Head);
+        var service = new SettingsService();
+        CoreSettings.ServiceProvider = () => service;
+        MainShellWindow? shell = null;
+        try
+        {
+            shell = new MainShellWindow();
+            shell.Show();
+            Dispatcher.UIThread.RunJobs();
+            Assert.Same(shell, RemoteCommands.Head);
+            var s = CoreSettings.Current;
+            (s.PinkFilterEnabled, s.StrictLockEnabled, s.PanicKeyEnabled) = (false, false, true);
+            Assert.Equal(RemoteCommands.NoOverlayHere, RemoteCommands.Execute("show_pink_filter", null));
+            Assert.False(s.PinkFilterEnabled);
+            Assert.False(RemoteCommands.OverlayHold);
+            Assert.False(shell.IsSessionRemoteStarted);
+
+            // start_session with no id: a 30-minute run on the subject's own settings (WPF fallback).
+            var generic = MainShellWindow.RemoteSessionFor(null);
+            Assert.Equal("remote_session", generic.Id);
+            Assert.Equal(30, generic.DurationMinutes);
+            Assert.Equal(s.FlashEnabled, generic.Settings.FlashEnabled);
+            Assert.Equal("remote_session", MainShellWindow.RemoteSessionFor("no-such-session").Id);
+
+            RemoteCommands.StopEffects(force: true);   // a remote panic through the head never throws
+            Assert.True(s.PanicKeyEnabled);
+            Assert.False(s.StrictLockEnabled);
+            shell.Close();
+            shell = null;
+            Assert.Null(RemoteCommands.Head);
+        }
+        finally
+        {
+            shell?.Close();
+            (CoreSettings.ServiceProvider, RemoteCommands.Head) = (oldProvider, oldHead);
+        }
+        return Task.CompletedTask;
+    });
+
     /// <summary>The opacity the fade is heading to (the transition animates the visible value).</summary>
     private static double Target(Visual v) => v.GetBaseValue(Visual.OpacityProperty).Value;
 

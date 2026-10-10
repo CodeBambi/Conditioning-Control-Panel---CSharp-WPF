@@ -4,10 +4,11 @@
 // "someone is controlling you" overlay (fade in/out, session code + PIN, idle subtitle, session info card,
 // big emote picker, End Session), the 2 s command toast, the controller-joined notice and the Start
 // button lock while a controller drives.
-// ponytail: still missing here - remote-driven session verbs (StartSessionFromRemote & co; Core
-// RemoteCommands refuses them "not on this build"), the directory opt-in chain, tray minimise/restore
-// for remote, the taskbar flash on join (no Avalonia API), the RemoteHud pill and the browser
-// blindfold (no embedded browser under the overlay on this head).
+// The verbs that need a window (overlays, Melt, lock card, Takeover, session verbs) are in
+// MainShellWindow.RemoteVerbs.cs. The tray restore on a remote stop and the taskbar flash on join
+// (Platform/TaskbarFlash.cs, Windows) are below; WPF's MinimizeToTrayForRemote has no caller there and
+// is not ported. The browser blindfold (WPF :903-973) is here too; its play_hypnotube caller is not. The RemoteHud pill is in
+// MainShellWindow.RemoteHud.cs + RemoteHudWindow.cs.
 
 using System;
 using System.Linq;
@@ -51,13 +52,19 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             r.ControllerIdleChanged += idle;
             r.SessionEnded += ended;
             r.CommandReceived += command;
+            RemoteCommands.Head = this;   // the verbs that need a window (MainShellWindow.RemoteVerbs.cs)
+            Action<string, bool> feedback = (text, pending) => _avatarTubeWindow?.ShowEmoteFeedback(text, pending);
+            RemoteControlTabView.EmoteFeedback = feedback;
             Closed += (_, _) =>
             {
                 r.ControllerConnectedChanged -= connected;
                 r.ControllerIdleChanged -= idle;
                 r.SessionEnded -= ended;
                 r.CommandReceived -= command;
+                if (ReferenceEquals(RemoteCommands.Head, this)) RemoteCommands.Head = null;
+                if (ReferenceEquals(RemoteControlTabView.EmoteFeedback, feedback)) RemoteControlTabView.EmoteFeedback = null;
                 _remoteOverlayTimer?.Stop();
+                DisposeRemoteHud();
             };
             // WPF fades the overlay in 300 ms and the toast in 200 ms (out: 200 / 300 ms).
             if (Named<Border>("RemoteControlOverlay") is { } o)
@@ -71,8 +78,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             var connected = RemoteControllerConnected;
             UpdateStartButtonForRemoteControl(connected);
-            if (connected) { ShowRemoteControlOverlay(); NotifyRemoteControllerJoined(); }
-            else HideRemoteControlOverlay();
+            if (connected) { ShowRemoteControlOverlay(); NotifyRemoteControllerJoined(); EnsureRemoteHud(); }
+            else { HideRemoteControlOverlay(); RefreshRemoteHud(); }
         }
 
         /// <summary>WPF OnRemoteControllerIdleChanged (:818): orange "may be idle", else the grey default.</summary>
@@ -90,6 +97,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             HideRemoteControlOverlay();
             UpdateStartButtonForRemoteControl(false);
+            RefreshRemoteHud();
         }
 
         /// <summary>WPF OnRemoteCommandReceived (:1091): quiet verbs make no toast.</summary>
@@ -110,11 +118,50 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             var presets = CoreSettings.Current.RemoteEmotePresets;
             if (Named<ItemsControl>("LstEmotePresetsBigTop") is { } top) top.ItemsSource = presets.Take(3).ToList();
             if (Named<ItemsControl>("LstEmotePresetsBigBottom") is { } bottom) bottom.ItemsSource = presets.Skip(3).ToList();
+            // WPF :903: the embedded browser is a native surface and paints over the overlay (airspace), so it
+            // is blindfolded while the card is up. NOT while the controller's own video plays in it
+            // (RevealBrowserForRemoteVideo): a reconnect mid-video must not blindfold it again.
+            if (!_remoteOverlayBrowserRevealed) SetRemoteBrowserBlindfold(true);
             if (Named<Border>("RemoteControlOverlay") is { } o) { o.IsVisible = true; o.Opacity = 1; }
             _remoteOverlayHidingAt = null;
             _remoteOverlayTimer ??= new DispatcherTimer(RemoteOverlaySlowTick, DispatcherPriority.Background, (_, _) => RemoteOverlayTick());
             _remoteOverlayTimer.Start();
             RemoteOverlayTick();
+        }
+
+        // True while a controller-started browser video has lifted the overlay's browser blindfold.
+        private bool _remoteOverlayBrowserRevealed;
+
+        /// <summary>The Dashboard's browser container (SettingsTabView), hidden or shown. Null-safe: the
+        /// page may not be built yet.</summary>
+        private void SetRemoteBrowserBlindfold(bool blind)
+        {
+            try
+            {
+                if (Named<SettingsTabView>("SettingsTab")?.BrowserContainer is { } browser) browser.IsVisible = !blind;
+            }
+            catch (Exception ex) { Serilog.Log.Debug("Remote browser blindfold failed: {Error}", ex.Message); }
+        }
+
+        /// <summary>True while the remote overlay holds the browser hidden.</summary>
+        internal bool RemoteBrowserBlindfolded =>
+            Named<SettingsTabView>("SettingsTab")?.BrowserContainer is { IsVisible: false }
+            && Named<Border>("RemoteControlOverlay") is { IsVisible: true };
+
+        /// <summary>WPF RevealBrowserForRemoteVideo (ccp-bugs#1138): the one command that deliberately puts a
+        /// video in that browser lifts the blindfold while it plays and puts it back when it stops, if the
+        /// controller is still connected. play_hypnotube is not on this head yet; this is its seam.</summary>
+        internal void RevealBrowserForRemoteVideo(bool reveal)
+        {
+            if (_remoteOverlayBrowserRevealed == reveal) return;
+            _remoteOverlayBrowserRevealed = reveal;
+            if (reveal)
+            {
+                SetRemoteBrowserBlindfold(false);
+                Serilog.Log.Information("[RemoteControl] Browser un-hidden for a controller video (the remote overlay stays behind it)");
+            }
+            else if (Named<Border>("RemoteControlOverlay") is { IsVisible: true } && _remoteOverlayHidingAt == null)
+                SetRemoteBrowserBlindfold(true);   // still connected: the card needs its airspace back
         }
 
         /// <summary>WPF's 1 s session-info cadence; 100 ms only while a toast or fade-out is pending (P07).</summary>
@@ -148,6 +195,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 _remoteOverlayTimer?.Stop();
                 if (Named<Border>("RemoteControlOverlay") is { } o) o.IsVisible = false;
                 if (Named<Border>("RemoteCommandNotification") is { } n0) n0.Opacity = 0;
+                // WPF :923: the browser comes back now that the overlay is gone.
+                SetRemoteBrowserBlindfold(false);
+                _remoteOverlayBrowserRevealed = false;
                 return;
             }
             if (_remoteToastShownAt is { } t && RemoteOverlayTime.GetElapsedTime(t) >= RemoteToastHold)
@@ -187,11 +237,28 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         }
 
         /// <summary>WPF NotifyRemoteControllerJoined (:1481): the tray balloon (here the OS notification).</summary>
-        private static void NotifyRemoteControllerJoined()
+        private void NotifyRemoteControllerJoined()
         {
             try { Platform.OsNotifications.Show(Loc.Get("title_remote_controller_joined"), Loc.Get("msg_remote_controller_joined")); }
             catch (Exception ex) { Serilog.Log.Debug("Remote controller notice failed: {Error}", ex.Message); }
+            // WPF :1493: flash the taskbar button so the host notices even with notifications off. It does
+            // NOT restore the window: the host stays in control of window state.
+            if (Platform.TaskbarFlash.ShouldFlash(WindowState == WindowState.Minimized, IsVisible))
+            {
+                try { Platform.TaskbarFlash.Flash(this); } catch { }
+            }
         }
+
+        /// <summary>WPF RestoreFromTrayForRemote (TrayIconService.ShowWindow) + ShowAvatarTube, called by both
+        /// remote stop paths: a panel the session left in the tray or minimised comes back. A panel that is
+        /// already on screen is left where it is (WPF re-activated it; here a stop never pulls the panel
+        /// over the app the player is in).</summary>
+        internal void RestoreFromTrayForRemote()
+        {
+            if (!IsVisible || WindowState == WindowState.Minimized) ShowFromTray();
+        }
+
+        void RemoteCommands.IRemoteHead.RestoreWindow() => RestoreFromTrayForRemote();
 
         /// <summary>WPF UpdateStartButtonForRemoteControl (StartStop.cs:992): disabled, green, 🎮 REMOTE CONNECTED.</summary>
         internal void UpdateStartButtonForRemoteControl(bool connected)

@@ -213,6 +213,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             Windows.Clear();
             _shownOn = Array.Empty<int>();
             QuestMinutes.Follow(false);
+            // WPF OverlayService.cs:2094: the fullscreen spiral left, so a session may raise its corner GIF again.
+            try { App.Sessions?.RefreshCornerGifPolicy(); } catch (Exception ex) { Log.Debug("Spiral: corner policy: {E}", ex.Message); }
         }
 
         /// <summary>WPF AchievementService:276 - quest minutes while the spiral is on screen.</summary>
@@ -221,7 +223,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         /// <summary>Same gate as the pink tint (WPF RefreshOverlays returns early unless the engine runs):
         /// a running engine or session, not paused. Unseeded (renders, tests) means the card owns it.</summary>
         private static bool ShouldShow()
-            => App.Sessions?.IsPaused != true
+            => global::ConditioningControlPanel.Services.RemoteCommands.OverlayHold || App.Sessions?.IsPaused != true
                && (CoreSession.IsEngineRunningProvider is null || CoreSession.IsEngineRunning || App.Sessions?.IsRunning == true);
 
         private static void BeginDecode(Visual host, string path)

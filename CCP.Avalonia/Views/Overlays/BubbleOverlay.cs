@@ -74,6 +74,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         private static int _statN, _statBubbles;
 
         public static bool IsRunning => _running;
+        /// <summary>Focus Gaze: the DPI scale of a bubble's screen (bubble coordinates are pixels / this).</summary>
+        internal static double ScalingOf(int screen)
+        {
+            foreach (var w in Windows) if (w.Index == screen) return w.Scaling > 0 ? w.Scaling : 1;
+            return 1;
+        }
         internal static bool IsFrameOwner(BubbleOverlayWindow w) => Windows.Count > 0 && Windows[0] == w;
 
         /// <summary><paramref name="frequency"/> per minute overrides the setting (WPF Start's).</summary>
@@ -358,6 +364,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                 var k = _w.K;
                 double ox = _w.Bounds.X / _w.Scaling, oy = _w.Bounds.Y / _w.Scaling;
                 var img = BubbleOverlay.Image;
+                // WPF BubbleService.cs:3437: assets/Chaos/bubbles/{variant}.png replaces the tinted
+                // bubble.png when present, and the tint is then skipped (cached, one decode).
+                var drainSprite = Views.Chaos.ChaosArt.Resolve("bubbles", ConditioningControlPanel.Services.Chaos.BrainDrainBubble.VariantId);
                 var bubbles = BubbleOverlay.Field.Bubbles;
                 for (var i = 0; i < bubbles.Count; i++)
                 {
@@ -369,9 +378,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
                     using (dc.PushTransform(m))
                     using (dc.PushOpacity(b.DrawOpacity))
                     {
-                        if (img != null) dc.DrawImage(img, new Rect(cx - size / 2, cy - size / 2, size, size));
+                        if (b.IsDrain && drainSprite != null) dc.DrawImage(drainSprite, new Rect(cx - size / 2, cy - size / 2, size, size));
+                        else if (img != null) dc.DrawImage(img, new Rect(cx - size / 2, cy - size / 2, size, size));
                         else dc.DrawEllipse(FallbackFill, FallbackPen, new Point(cx, cy), size / 2 - 5, size / 2 - 5);
-                        if (b.IsDrain) dc.DrawEllipse(DrainTint, null, new Point(cx, cy), size / 2 - 5, size / 2 - 5);
+                        if (b.IsDrain && drainSprite == null) dc.DrawEllipse(DrainTint, null, new Point(cx, cy), size / 2 - 5, size / 2 - 5);
                     }
                 }
             }

@@ -72,8 +72,8 @@
                            Foreground="{DynamicResource PinkBrush}" FontWeight="SemiBold" FontSize="11"/>
             </Button>
         </Grid>
-        <!-- Hidden: waits for a webcam engine and its hotkey on this head. -->
-        <Grid x:Name="RowCameraShortcut" IsVisible="False" Margin="0,0,0,9" ColumnDefinitions="*,Auto">
+        <!-- Camera start/stop shortcut (WPF BtnCameraShortcut): MainShellWindow.CameraShortcut.cs. -->
+        <Grid x:Name="RowCameraShortcut" Margin="0,0,0,9" ColumnDefinitions="*,Auto">
             <TextBlock Grid.Column="0" Text="{loc:Str tooltip_change_camera_shortcut}" Theme="{StaticResource CmpCellLabelStyle}"
                        TextTrimming="CharacterEllipsis" Margin="0,0,6,0"/>
             <Button x:Name="BtnCameraShortcut" Grid.Column="1" Theme="{StaticResource CmpCellButtonStyle}"

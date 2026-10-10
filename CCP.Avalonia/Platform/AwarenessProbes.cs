@@ -229,15 +229,31 @@ internal sealed class HeadInputProbe : IInputProbe
         {
             long idle = X11ActiveWindow.IdleMilliseconds();
             if (idle < 0) return null;
-            // X reports "idle for", not "last input at": the moment of the last input, in sample-sized
-            // steps, changes exactly when new input arrived since the previous sample.
-            long step = (long)SampleInterval.TotalMilliseconds;
-            long lastInputAt = (Environment.TickCount64 - idle) / step;
+            // X reports "idle for", not "last input at". now - idle is the moment of the last input, but
+            // it wobbles by the round trip's few milliseconds, so it only counts as NEW input when it has
+            // moved by more than that wobble. (Rounding it to sample-sized steps instead flips back and
+            // forth whenever the moment sits on a step edge, which read as typing on an idle desk.)
+            long lastInputAt = StableInputMoment(Environment.TickCount64 - idle);
             var pointer = X11Pointer.Read();
             return pointer is { } p ? (lastInputAt, p.At.X, p.At.Y) : (lastInputAt, 0, 0);
         }
 
         return null;
+    }
+
+    /// <summary>Milliseconds of disagreement between two reads of the same input moment that are still
+    /// the same moment (timer jitter + the X round trip).</summary>
+    internal const long InputMomentSlackMs = 100;
+    private static long _stableInputMoment = long.MinValue;
+
+    /// <summary>The last-input moment with read wobble removed: the held value moves only when the new
+    /// reading differs from it by more than <see cref="InputMomentSlackMs"/>. Pure but for the held value.</summary>
+    internal static long StableInputMoment(long reading)
+    {
+        long held = Interlocked.Read(ref _stableInputMoment);
+        if (held != long.MinValue && Math.Abs(reading - held) <= InputMomentSlackMs) return held;
+        Interlocked.Exchange(ref _stableInputMoment, reading);
+        return reading;
     }
 
     private void Push(bool typingish)

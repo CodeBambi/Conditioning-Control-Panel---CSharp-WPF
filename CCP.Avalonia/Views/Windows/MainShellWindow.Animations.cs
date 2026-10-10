@@ -1,3 +1,6 @@
+// j1 (2026-10-10): StartSeasonTitleShimmer and StartLockdownPulse have NO caller on this head, so the
+// infinite Animations below never run. Whoever wires them must move them to Helpers/BeatLoop first
+// (an infinite Animation or an animated Effect property makes the whole window compose at 60 Hz).
 // PORTED-IN-PART from ConditioningControlPanel/MainWindow/MainWindow.Animations.cs (199 lines).
 //
 // The two ambient loops are LIVE. WPF drove them with Storyboards; the Avalonia twin of each is a
@@ -75,49 +78,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 _seasonTitleClock = new CancellationTokenSource();
                 var token = _seasonTitleClock.Token;
 
-                var sweep = new Animation
+                // X7: on the shared 30 fps beat, never an infinite Animation (it composes the whole window at 60 Hz).
+                var titleGlow = title.Effect as DropShadowEffect;
+                var loop = new Helpers.AmbientLoop(title, t =>
                 {
-                    Duration = TimeSpan.FromSeconds(3),
-                    IterationCount = IterationCount.Infinite,
-                    Children =
-                    {
-                        new KeyFrame
-                        {
-                            Cue = new Cue(0d),
-                            Setters =
-                            {
-                                new Setter(LinearGradientBrush.StartPointProperty, Relative(-1)),
-                                new Setter(LinearGradientBrush.EndPointProperty, Relative(0)),
-                            },
-                        },
-                        new KeyFrame
-                        {
-                            Cue = new Cue(1d),
-                            Setters =
-                            {
-                                new Setter(LinearGradientBrush.StartPointProperty, Relative(1)),
-                                new Setter(LinearGradientBrush.EndPointProperty, Relative(2)),
-                            },
-                        },
-                    },
-                };
-                _ = sweep.RunAsync(brush, token);
-
-                if (title.Effect is DropShadowEffect glow)
-                {
-                    var breath = new Animation
-                    {
-                        Duration = TimeSpan.FromSeconds(1.5),
-                        IterationCount = IterationCount.Infinite,
-                        PlaybackDirection = PlaybackDirection.Alternate,
-                        Children =
-                        {
-                            new KeyFrame { Cue = new Cue(0d), Setters = { new Setter(DropShadowEffect.OpacityProperty, 0.3) } },
-                            new KeyFrame { Cue = new Cue(1d), Setters = { new Setter(DropShadowEffect.OpacityProperty, 0.9) } },
-                        },
-                    };
-                    _ = breath.RunAsync(glow, token);
-                }
+                    double x = -1 + 2 * Helpers.AmbientLoop.Saw(t, 3);
+                    brush.StartPoint = Relative(x);
+                    brush.EndPoint = Relative(x + 1);
+                    if (titleGlow != null) titleGlow.Opacity = 0.3 + 0.6 * Helpers.AmbientLoop.PingPong(t, 1.5);
+                });
+                token.Register(loop.Stop);
+                loop.Start();
             }
             catch (Exception ex) { Log.Warning("Failed to start season title shimmer: {Error}", ex.Message); }
 
@@ -165,50 +136,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 _lockdownPulseClock = new CancellationTokenSource();
                 var token = _lockdownPulseClock.Token;
 
-                var colour = new Animation
+                // X7: on the shared 30 fps beat, never an infinite Animation.
+                var plateGlow = plate.Effect as DropShadowEffect;
+                var loop = new Helpers.AmbientLoop(plate, t =>
                 {
-                    Duration = TimeSpan.FromSeconds(1.5),
-                    IterationCount = IterationCount.Infinite,
-                    PlaybackDirection = PlaybackDirection.Alternate,
-                    Children =
-                    {
-                        new KeyFrame { Cue = new Cue(0d), Setters = { new Setter(SolidColorBrush.ColorProperty, Color.FromRgb(0xFF, 0x14, 0x93)) } },
-                        new KeyFrame { Cue = new Cue(1d), Setters = { new Setter(SolidColorBrush.ColorProperty, Color.FromRgb(0xFF, 0x69, 0xB4)) } },
-                    },
-                };
-                _ = colour.RunAsync(brush, token);
-
-                if (plate.Effect is DropShadowEffect glow)
-                {
-                    var breath = new Animation
-                    {
-                        Duration = TimeSpan.FromSeconds(1.5),
-                        IterationCount = IterationCount.Infinite,
-                        PlaybackDirection = PlaybackDirection.Alternate,
-                        Children =
-                        {
-                            new KeyFrame
-                            {
-                                Cue = new Cue(0d),
-                                Setters =
-                                {
-                                    new Setter(DropShadowEffect.BlurRadiusProperty, 12d),
-                                    new Setter(DropShadowEffect.OpacityProperty, 0.7),
-                                },
-                            },
-                            new KeyFrame
-                            {
-                                Cue = new Cue(1d),
-                                Setters =
-                                {
-                                    new Setter(DropShadowEffect.BlurRadiusProperty, 22d),
-                                    new Setter(DropShadowEffect.OpacityProperty, 1.0),
-                                },
-                            },
-                        },
-                    };
-                    _ = breath.RunAsync(glow, token);
-                }
+                    double k = Helpers.AmbientLoop.PingPong(t, 1.5);
+                    brush.Color = Color.FromRgb(0xFF, (byte)(0x14 + (0x69 - 0x14) * k), (byte)(0x93 + (0xB4 - 0x93) * k));
+                    if (plateGlow != null) { plateGlow.BlurRadius = 12 + 10 * k; plateGlow.Opacity = 0.7 + 0.3 * k; }
+                });
+                token.Register(loop.Stop);
+                loop.Start();
             }
             catch (Exception ex) { Log.Warning("Failed to start lockdown pulse: {Error}", ex.Message); }
         }

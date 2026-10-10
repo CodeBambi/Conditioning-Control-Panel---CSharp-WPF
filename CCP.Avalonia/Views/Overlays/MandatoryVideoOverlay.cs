@@ -137,7 +137,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             _attention = s.AttentionChecksEnabled;
 
             _player = new MediaPlayer(vlc) { EnableHardwareDecoding = true };
-            _player.Volume = MandatoryVideoScheduler.EffectiveVolume(s.MasterVolume, s.VideoVolume);
+            _externalPaused = false;   // a freeze never carries over to the next clip
+            _player.Volume = ExternalMute ? 0 : MandatoryVideoScheduler.EffectiveVolume(s.MasterVolume, s.VideoVolume);
             var blur = s.VideoBlurredBackgroundEnabled;
             _sink = new VlcFrameSink(_player, () => _media, bmp =>
             {
@@ -183,6 +184,16 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
             // Teardown runs on the UI thread, so checking _player there never touches a disposed player.
             _player.Playing += (_, _) => Dispatcher.UIThread.Post(() => { if (_player == live) LibVlcAudio.ApplyPreferredDevice(live); });
             _player.TimeChanged += (_, e) => Interlocked.Exchange(ref _watchedMs, e.Time);
+            // WPF VideoService.cs:3542: a descent's video is a random slice. One shot per clip; the seek waits
+            // until the player is rolling (seeking while the output is still being built blanks the picture).
+            var segment = TakeSegment();
+            if (segment is { } seg)
+                _player.LengthChanged += (_, e) =>
+                {
+                    var startMs = ConditioningControlPanel.Services.Chaos.ChaosVideoSegment.StartMs(e.Length, seg.Sec, seg.Fraction);
+                    if (startMs <= 0 || Interlocked.Exchange(ref _segmentSeeked, 1) != 0) return;
+                    Dispatcher.UIThread.Post(() => DispatcherTimer.RunOnce(() => { if (_player == live) live.Time = startMs; }, TimeSpan.FromMilliseconds(700)));
+                };
             _player.EndReached += (_, _) =>
             {
                 var len = _player?.Length ?? 0;
@@ -208,7 +219,47 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         internal void UpdateVolume()
         {
             var s = CoreSettings.Current;
-            if (_player is { } p) p.Volume = MandatoryVideoScheduler.EffectiveVolume(s.MasterVolume, s.VideoVolume);
+            if (_player is { } p) p.Volume = ExternalMute ? 0 : MandatoryVideoScheduler.EffectiveVolume(s.MasterVolume, s.VideoVolume);
+        }
+
+        // WPF VideoService.ArmRandomSegment (:517): the NEXT video starts at a random position that leaves at
+        // least this many seconds to play. Armed by the descent's video payload; stale after 30 s.
+        private double _segmentSec, _segmentFraction;
+        private DateTime _segmentArmedUtc = DateTime.MinValue;
+        private int _segmentSeeked;
+        internal void ArmRandomSegment(double segmentSec)
+        {
+            _segmentSec = Math.Max(1, segmentSec);
+            _segmentFraction = Random.Shared.NextDouble();
+            _segmentArmedUtc = DateTime.UtcNow;
+        }
+        internal bool SegmentArmed => ConditioningControlPanel.Services.Chaos.ChaosVideoSegment.StillArmed(_segmentArmedUtc, DateTime.UtcNow);
+        /// <summary>The armed slice for the clip that is starting, spent by the read (one shot per video).</summary>
+        internal (double Sec, double Fraction)? TakeSegment()
+        {
+            if (!SegmentArmed) return null;
+            _segmentArmedUtc = DateTime.MinValue;
+            _segmentSeeked = 0;
+            return (_segmentSec, _segmentFraction);
+        }
+
+        /// <summary>WPF VideoService.SetExternalMute: the descent's in-page master mute also silences a
+        /// covering clip. The caller releases it on run end and on teardown, always.</summary>
+        internal bool ExternalMute { get; private set; }
+        internal void SetExternalMute(bool on) { ExternalMute = on; UpdateVolume(); }
+
+        /// <summary>WPF VideoService.PausePrimary / PlayPrimary: the descent's Freeze bubble holds a
+        /// covering clip still. Never fights the grace pause; the clip guards wait with it.</summary>
+        private bool _externalPaused;
+        internal bool ExternalPaused => _externalPaused;
+        internal void SetExternalPause(bool on)
+        {
+            if (on == _externalPaused) return;
+            _externalPaused = on;
+            if (_player == null || _gracePaused || _closing) return;
+            _player.SetPause(on);
+            if (on) { _sinceShow.Stop(); _sinceFrame.Stop(); }
+            else { _sinceShow.Start(); if (FirstFrameMs >= 0) _sinceFrame.Start(); FrameTs = Stopwatch.GetTimestamp(); }
         }
 
         /// <summary>WPF VideoService.VideoScreens -> App.ResolveScreens (ccp-bugs #1154): the Video
@@ -434,7 +485,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Overlays
         /// that shows no frame, stalls, overruns or passes the user's max ends like a dismiss.</summary>
         internal void GuardTick()
         {
-            if (_gracePaused || _surfaces.Count == 0 || !Scheduler.IsPlaying) return;
+            if (_gracePaused || _externalPaused || _surfaces.Count == 0 || !Scheduler.IsPlaying) return;
             var framed = FirstFrameMs >= 0;
             var why = MandatoryVideoScheduler.Guard(Elapsed, framed ? _sinceFrame.Elapsed.TotalSeconds : Elapsed, framed,
                 (_player?.VideoTrackCount ?? -1) != 0, (_player?.Length ?? 0) / 1000.0,

@@ -140,6 +140,99 @@ public sealed class CornerGifOverlayTests
         Assert.Contains("CornerGifOverlay.RestoreOnStartup(", src);
     }
 
+    /// <summary>Lane c1 (U13): the session-owned slot. It draws the session's own art in its corner as an
+    /// animated gif, the user's own slots stand down while it is up and come back on the handback, and
+    /// panic takes it off the screen.</summary>
+    [Fact]
+    public async Task SessionSlot_ShowsItsOwnGif_StandaloneSlotsYield_AndComeBackOnTheHandback()
+    {
+        var dir = Directory.CreateTempSubdirectory("ccp-cornergif-session-").FullName;
+        var gif = Path.Combine(dir, "tiny.gif");
+        File.WriteAllBytes(gif, Convert.FromBase64String(TinyGif));
+        await AvaloniaTestDispatcher.RunAsync(async () =>
+        {
+            if (Application.Current is null)
+                AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>()
+                    .UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                    .SetupWithoutStarting();
+            var s = CoreSettings.Current;
+            var saved = s.CornerGifOverlays;
+            var handler = CoreCornerGif.RefreshHandler;
+            var clock = new SteppedClock();
+            var shell = new MainShellWindow();
+            shell.Show();
+            try
+            {
+                CornerGifOverlay.StopAll();
+                CornerGifOverlay.Clock = clock;
+                CornerGifOverlay.SkipPlatformChecksForTests = true;
+                CornerGifOverlay.ManualFramesForTests = true;
+                CornerGifOverlay.Seed(() => shell);
+                s.CornerGifOverlays = new List<CornerGifOverlaySetting>
+                {
+                    new() { Enabled = true, GifPath = gif, Position = CornerPosition.BottomRight, Size = 100, Opacity = 30 },
+                };
+
+                // The runner's call, through the Core seam.
+                CoreCornerGif.SessionActive = true;
+                CoreCornerGif.ShowSession(gif, CornerPosition.TopLeft, 150, 40);
+                await Settle();
+                Assert.True(CornerGifOverlay.SessionActive);
+                Assert.False(CornerGifOverlay.HasStandaloneOverlays);
+                var w = CornerGifOverlay.WindowFor(CornerGifOverlay.SessionSlot)!;
+                var screen = shell.Screens.Primary ?? shell.Screens.All[0];
+                Assert.Equal(screen.Bounds.X, w.Position.X);
+                Assert.Equal(screen.Bounds.Y, w.Position.Y);
+                Assert.Equal(0.4, w.Spiral.Opacity, 3);
+                Assert.True(w.Topmost && !w.IsHitTestVisible);
+                var first = w.Spiral.Source;
+                CornerGifOverlay.Advance(CornerGifOverlay.SessionSlot);       // a gif plays as a gif, never a still
+                Assert.NotSame(first, w.Spiral.Source);
+                Assert.False(File.Exists(CornerGifOverlay.SentinelPath));     // a session's GIF never disables the user's slots next launch
+
+                // The user's own slot is enabled, but the corner is the session's: a rebuild leaves it down.
+                CornerGifOverlay.Refresh(shell);
+                clock.Now += TimeSpan.FromSeconds(1).Ticks;
+                CornerGifOverlay.Pump();
+                await Settle();
+                Assert.Equal(new[] { CornerGifOverlay.SessionSlot }, CornerGifOverlay.ShownSlots);
+
+                // Terminal close: the corner goes back to the user's own slots.
+                CoreCornerGif.SessionActive = false;
+                CoreCornerGif.HideSession(true);
+                await Settle();
+                clock.Now += TimeSpan.FromSeconds(1).Ticks;
+                CornerGifOverlay.Pump();
+                await Settle();
+                Assert.False(CornerGifOverlay.SessionActive);
+                Assert.Equal(new[] { 0 }, CornerGifOverlay.ShownSlots);
+
+                // Panic stops what is on screen, the session's included.
+                CoreCornerGif.SessionActive = true;
+                CornerGifOverlay.ShowSession(shell, gif, CornerPosition.TopLeft, 150, 40);
+                clock.Now += TimeSpan.FromSeconds(1).Ticks;
+                CornerGifOverlay.Pump();
+                await Settle();
+                Assert.True(CornerGifOverlay.SessionActive);
+                CornerGifOverlay.StopAll();
+                Assert.False(CornerGifOverlay.SessionActive);
+                Assert.Empty(CornerGifOverlay.ShownSlots);
+            }
+            finally
+            {
+                CoreCornerGif.SessionActive = false;
+                CornerGifOverlay.StopAll();
+                CornerGifOverlay.SkipPlatformChecksForTests = false;
+                CornerGifOverlay.ManualFramesForTests = false;
+                CornerGifOverlay.Clock = TimeProvider.System;
+                CoreCornerGif.RefreshHandler = handler;
+                s.CornerGifOverlays = saved;
+                shell.Close();
+                Directory.Delete(dir, true);
+            }
+        });
+    }
+
     private static async Task Settle()
     {
         // The dialog's 150 ms debounce is bypassed by a switch (ApplyLiveAll); the seam posts.

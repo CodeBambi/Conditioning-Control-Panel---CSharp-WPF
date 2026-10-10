@@ -80,7 +80,7 @@ public sealed class PanicSurfacesTests
     private static readonly string[] SafetyCritical =
     {
         "intake", "voice-capture", "ai-followups", "blink-trainer", "gaze-minigame", "mantra", "chaos", "haptics",
-        "remote-haptics", "takeover", "program-session", "engine", "pink-rush", "corner-gif", "lock-cards", "attention-test", "deeper-editor-audio", "camera",
+        "remote-haptics", "remote-overlays", "takeover", "program-session", "engine", "pink-rush", "corner-gif", "lock-cards", "attention-test", "deeper-editor-audio", "camera",
     };
 
     /// <summary>The order that is contract: (stops first, stops later). WPF refs are
@@ -117,7 +117,7 @@ public sealed class PanicSurfacesTests
 
     [Fact]
     public void TheSurfaceListIsExactAndOrdered() =>
-        Assert.Equal(new[] { "intake", "games", "friends-landing", "voice-capture", "ai-followups", "blink-trainer", "gaze-minigame", "mantra", "chaos", "haptics", "remote-haptics",
+        Assert.Equal(new[] { "intake", "games", "friends-landing", "voice-capture", "ai-followups", "blink-trainer", "gaze-minigame", "mantra", "chaos", "haptics", "remote-haptics", "remote-overlays",
             "takeover", "program-session", "engine", "pink-rush", "corner-gif", "tube", "lock-cards", "attention-test", "deeper-editor-audio", "camera" }, PanicSurfaces.All.Select(x => x.Id));
 
     [Fact]
@@ -159,6 +159,7 @@ public sealed class PanicSurfacesTests
         ["DevicesSettingsSection"] = "camera preview/calibration: the 'camera' surface stops WebcamTracker",
         ["BlinkTrainerTabView"] = "camera: the 'camera' and 'blink-trainer' surfaces",
         ["SettingsTabView"] = "the Home browser card's webcam pill: the 'camera' surface stops WebcamTracker",
+        ["PlayTabView"] = "the Focus Gaze switch starts the camera: the 'camera' surface stops WebcamTracker, which stands GazeFocusHead down",
         ["LibVlcAudio"] = "the CoreAudio sink: Core services stop their clips on the 'engine' surface",
         ["MandatoryVideoOverlay"] = "Core video sink: the 'engine' surface (CoreEngine.Stop) closes it",
         ["FlashClipPlayer"] = "a flash's muted clip: the 'engine' surface (FlashOverlay.CloseAll) closes the window, which disposes it",

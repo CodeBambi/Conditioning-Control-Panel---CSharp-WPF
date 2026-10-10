@@ -61,10 +61,38 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion.Runtime
             // running (the player buys it at the Prize Counter in another window), so the whole cell
             // is re-read on every reveal rather than seeded once at startup.
             SyncFromSettings();
+            // WPF MainWindow.Patreon.cs:2214: the tube menu's "Pause browser" and this switch are one state.
+            // The shell owns it (BrowserPaused); the switch follows it from wherever it was flipped.
+            _pauseShell = global::Avalonia.LogicalTree.LogicalExtensions.FindLogicalAncestorOfType<Views.Windows.MainShellWindow>(this)
+                          ?? Views.Windows.MainShellWindow.Current;
+            if (_pauseShell != null)
+            {
+                _pauseShell.BrowserPausedChanged += OnShellBrowserPaused;
+                SetPauseBrowser(_pauseShell.BrowserPaused);
+            }
+        }
+
+        private Views.Windows.MainShellWindow? _pauseShell;
+
+        private void OnShellBrowserPaused(bool paused)
+        {
+            if (Dispatcher.UIThread.CheckAccess()) SetPauseBrowser(paused);
+            else Dispatcher.UIThread.Post(() => SetPauseBrowser(paused));
+        }
+
+        /// <summary>Shows the browser-pause state without raising <see cref="PauseBrowserChanged"/>.</summary>
+        internal void SetPauseBrowser(bool paused)
+        {
+            if (ChkPauseBrowserCompanion.IsChecked == paused) return;
+            var was = _isLoading;
+            _isLoading = true;
+            try { ChkPauseBrowserCompanion.IsChecked = paused; }
+            finally { _isLoading = was; }
         }
 
         protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
         {
+            if (_pauseShell != null) { _pauseShell.BrowserPausedChanged -= OnShellBrowserPaused; _pauseShell = null; }
             if (CoreSettings.Service is { } svc) svc.CurrentReplaced -= OnCurrentReplaced;
             base.OnDetachedFromVisualTree(e);
         }
@@ -120,8 +148,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Controls.Companion.Runtime
         /// TextBlock. The literal in the markup is a placeholder, not a binding, so assigning
         /// .Text here is safe (nothing on this control carries {loc:Str}).
         /// </summary>
-        internal void RefreshChatShortcutLabel() =>
+        internal void RefreshChatShortcutLabel()
+        {
             TxtChatShortcutLabel.Text = AvatarTube.AvatarTubeWindow.FormatChatShortcut();
+            RefreshCameraShortcutLabel();
+        }
+
+        /// <summary>WPF RefreshCameraShortcutLabel (MainWindow.SessionIO.cs:1466), the same pill.</summary>
+        internal void RefreshCameraShortcutLabel() =>
+            TxtCameraShortcutLabel.Text = Views.Windows.MainShellWindow.FormatCameraShortcut();
 
         private void SliderIdleInterval_ValueChanged(object? sender, RangeBaseValueChangedEventArgs e)
         {

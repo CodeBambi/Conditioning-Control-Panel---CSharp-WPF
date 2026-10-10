@@ -85,7 +85,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             AddHandler(DragDrop.DropEvent, Tab_Drop);
             _startSessionLabel = BtnStartSession.Content;
             BtnStartSession.Click += (_, _) =>
+            {
+                // WPF MainWindow.Presets.cs:1586: the corner GIF picks ride the session as it starts. Never
+                // while one runs: the button is Stop then, and the live edits have their own path.
+                if (App.Sessions?.IsRunning != true) ApplyCornerGifPicks(_selectedSession);
                 (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.BtnStartSession_Click(_selectedSession);
+            };
+            WireCornerGifOption();
             TxtDetailTitle.Text = Loc.Get("label_select_a_preset");
             TxtDetailSubtitle.Text = Loc.Get("label_click_on_a_preset_or_session_to_see_details");
             TxtSessionDuration.Text = Loc.Get("label_30_minutes");
@@ -1039,10 +1045,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             BtnExportSession.IsEnabled = true;   // WPF SessionIO.cs:973
             SessionSpoilerPanel.IsVisible = false;
             SetRevealLabel("btn_reveal_details");
-            // ponytail: WPF shows it when session.HasCornerGifOption. The standalone overlay exists
-            // (CornerGifOverlay) but SessionRunner has no session-scoped corner GIF (WPF SessionEngine's
-            // start/end minute, admission and handback), so the option would promise a picture that never appears.
-            CornerGifOptionPanel.IsVisible = false;
+            ShowCornerGifOption(session);   // WPF MainWindow.Presets.cs:527 (PresetsTabView.CornerGif.cs)
 
             // WPF MainWindow.SessionIO.cs:927-972 (SelectSession).
             TxtDetailTitle.Text = $"{(string.IsNullOrWhiteSpace(session.Icon) ? "🎬" : session.Icon)} {SessionName(session)}";

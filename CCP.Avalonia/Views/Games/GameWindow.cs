@@ -71,7 +71,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
         private static readonly List<GameWindow> Open = new();
 
         internal Game Spec { get; }
-        internal WebHost Web { get; } = new();
+        internal WebHost Web { get; }
         internal Uri? PageUrl { get; private set; }
 
         /// <summary>WPF LaunchCore: one live window per game, focused rather than relaunched (a
@@ -93,6 +93,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
         internal GameWindow(Game spec)
         {
             Spec = spec;
+            // WPF gives each game its own WebView2 profile folder; same names here (Platform/WebProfiles).
+            Web = new WebHost { Profile = Platform.WebProfiles.ForGame(spec.Id) };
             Title = Loc.Get(spec.TitleKey);
             Width = 1280;
             Height = 800;
@@ -107,9 +109,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
 
         internal void Load(WebAssetServer server)
         {
-            var url = server.Url(Spec.Page);
-            if (!string.IsNullOrEmpty(Spec.Query)) url += "&" + Spec.Query;
-            PageUrl = new Uri(url);
+            // WPF's https://ccp.game/<page> on WebView2; the loopback twin (token first) elsewhere.
+            PageUrl = new Uri(server.Url(Spec.Page, Spec.Query));
             Web.Navigate(PageUrl);
         }
 
@@ -141,6 +142,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                     break;
                 case "boot-error":
                     Log.Warning("[Game] {Id}: page boot-error: {Msg}", Spec.Id, (string?)o["msg"]);
+                    // WPF DtrhHostService.OnBootError: the descent falls back to the classic door.
+                    if (Spec.Id == "dtrh") { OnDtrhBootError((string?)o["msg"]); break; }
                     Close();
                     break;
                 case "exit":
@@ -156,7 +159,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                     break;
                 case "fire-payload" when Spec.Id == "dtrh":
                     // WPF DtrhHostService.cs:296: the run's video / whisper cross to the desktop.
-                    Chaos.DtrhPayloadBridge.Fire(json);
+                    NoteDtrhPayloadFired(Chaos.DtrhPayloadBridge.Fire(json));
                     break;
                 case "heartbeat":
                 case "pong":

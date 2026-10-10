@@ -63,6 +63,11 @@ public sealed class HeaderLevelLiveTests
             s.MotionLevel = MotionLevel.Full;          // the fill tweens instead of snapping
             ProgressionBank.Add(1, "Quest");
             Dispatcher.UIThread.RunJobs();
+            // WPF MotionFx.Odometer: the readout counts 5 -> 6 over 0.7 s instead of snapping.
+            Assert.True(shell.XpOdometerRunning);
+            Assert.Equal($"5 / {(int)Need(11)} XP", Text("TxtXP"));
+            shell.SettleXpOdometerForTests();
+            Assert.False(shell.XpOdometerRunning);
             Assert.Equal($"6 / {(int)Need(11)} XP", Text("TxtXP"));
             Assert.NotNull(bar.Transitions);
         }

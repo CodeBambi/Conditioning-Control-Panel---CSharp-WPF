@@ -112,13 +112,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Chaos
         }
 
         /// <summary>WPF ChaosArt.Roots: assets/Chaos under the user's assets folder first, then beside the exe.
-        /// SEAM(ship): CCP.Avalonia.csproj does not copy ConditioningControlPanel/assets/Chaos to the output yet.</summary>
+        /// CCP.Avalonia.csproj copies the shared art there (c1).</summary>
         internal static string? ChaosArtFile(string relative)
         {
-            var candidates = new List<string>();
-            try { candidates.Add(System.IO.Path.Combine(CorePaths.EffectiveAssets, "Chaos", relative)); } catch { /* no assets folder yet */ }
-            candidates.Add(System.IO.Path.Combine(AppContext.BaseDirectory, "assets", "Chaos", relative));
-            return candidates.FirstOrDefault(System.IO.File.Exists);
+            return ChaosArt.FilePath(relative);
         }
 
         private T Part<T>(string name) where T : Control => this.FindControl<T>(name)

@@ -1,0 +1,249 @@
+  Determining projects to restore...
+  Restored C:\wt-ava\Tests\CCP.Avalonia.Tests\CCP.Avalonia.Tests.csproj (in 2,91 sec).
+  2 of 3 projects are up-to-date for restore.
+  CCP.Core -> C:\wt-ava\CCP.Core\bin\Debug\net10.0\CCP.Core.dll
+  CCP.Avalonia -> C:\wt-ava\CCP.Avalonia\bin\Debug\net10.0\CCP.Avalonia.dll
+C:\wt-ava\Tests\CCP.Avalonia.Tests\BlinkTrainerSessionTests.cs(62,21): warning CS0618: 'Bitmap.Save(string, int?)' is obsolete: 'Use the overload accepting BitmapEncoderOptions instead.' [C:\wt-ava\Tests\CCP.Avalonia.Tests\CCP.Avalonia.Tests.csproj]
+C:\wt-ava\Tests\CCP.Avalonia.Tests\BlinkTrainerSessionTests.cs(64,21): warning CS0618: 'Bitmap.Save(string, int?)' is obsolete: 'Use the overload accepting BitmapEncoderOptions instead.' [C:\wt-ava\Tests\CCP.Avalonia.Tests\CCP.Avalonia.Tests.csproj]
+C:\wt-ava\Tests\CCP.Avalonia.Tests\BlinkTrainerSessionTests.cs(191,17): warning CS0618: 'Bitmap.Save(string, int?)' is obsolete: 'Use the overload accepting BitmapEncoderOptions instead.' [C:\wt-ava\Tests\CCP.Avalonia.Tests\CCP.Avalonia.Tests.csproj]
+C:\wt-ava\Tests\CCP.Avalonia.Tests\FeaturePlateArtTests.cs(53,17): warning CS0618: 'Bitmap.Save(string, int?)' is obsolete: 'Use the overload accepting BitmapEncoderOptions instead.' [C:\wt-ava\Tests\CCP.Avalonia.Tests\CCP.Avalonia.Tests.csproj]
+C:\wt-ava\Tests\CCP.Avalonia.Tests\LockCardVoiceTests.cs(140,37): warning CS0618: 'Bitmap.Save(string, int?)' is obsolete: 'Use the overload accepting BitmapEncoderOptions instead.' [C:\wt-ava\Tests\CCP.Avalonia.Tests\CCP.Avalonia.Tests.csproj]
+C:\wt-ava\Tests\CCP.Avalonia.Tests\MediaHistoryWindowTests.cs(34,70): warning CS0618: 'Bitmap.Save(string, int?)' is obsolete: 'Use the overload accepting BitmapEncoderOptions instead.' [C:\wt-ava\Tests\CCP.Avalonia.Tests\CCP.Avalonia.Tests.csproj]
+C:\wt-ava\Tests\CCP.Avalonia.Tests\OfflineModeShellTests.cs(128,62): warning CS8600: Converting null literal or possible null value to non-nullable type. [C:\wt-ava\Tests\CCP.Avalonia.Tests\CCP.Avalonia.Tests.csproj]
+C:\wt-ava\Tests\CCP.Avalonia.Tests\ChasterTabLiveTests.cs(57,31): warning xUnit1051: Calls to methods which accept CancellationToken should use TestContext.Current.CancellationToken to allow test cancellation to be more responsive. (https://xunit.net/xunit.analyzers/rules/xUnit1051) [C:\wt-ava\Tests\CCP.Avalonia.Tests\CCP.Avalonia.Tests.csproj]
+C:\wt-ava\Tests\CCP.Avalonia.Tests\ChasterTabLiveTests.cs(58,31): warning xUnit1051: Calls to methods which accept CancellationToken should use TestContext.Current.CancellationToken to allow test cancellation to be more responsive. (https://xunit.net/xunit.analyzers/rules/xUnit1051) [C:\wt-ava\Tests\CCP.Avalonia.Tests\CCP.Avalonia.Tests.csproj]
+C:\wt-ava\Tests\CCP.Avalonia.Tests\ChasterTabLiveTests.cs(61,31): warning xUnit1051: Calls to methods which accept CancellationToken should use TestContext.Current.CancellationToken to allow test cancellation to be more responsive. (https://xunit.net/xunit.analyzers/rules/xUnit1051) [C:\wt-ava\Tests\CCP.Avalonia.Tests\CCP.Avalonia.Tests.csproj]
+C:\wt-ava\Tests\CCP.Avalonia.Tests\FriendsDrawerTests.cs(79,15): warning xUnit1051: Calls to methods which accept CancellationToken should use TestContext.Current.CancellationToken to allow test cancellation to be more responsive. (https://xunit.net/xunit.analyzers/rules/xUnit1051) [C:\wt-ava\Tests\CCP.Avalonia.Tests\CCP.Avalonia.Tests.csproj]
+C:\wt-ava\Tests\CCP.Avalonia.Tests\WebAssetServerTests.cs(31,27): warning xUnit1051: Calls to methods which accept CancellationToken should use TestContext.Current.CancellationToken to allow test cancellation to be more responsive. (https://xunit.net/xunit.analyzers/rules/xUnit1051) [C:\wt-ava\Tests\CCP.Avalonia.Tests\CCP.Avalonia.Tests.csproj]
+C:\wt-ava\Tests\CCP.Avalonia.Tests\WebAssetServerTests.cs(34,41): warning xUnit1051: Calls to methods which accept CancellationToken should use TestContext.Current.CancellationToken to allow test cancellation to be more responsive. (https://xunit.net/xunit.analyzers/rules/xUnit1051) [C:\wt-ava\Tests\CCP.Avalonia.Tests\CCP.Avalonia.Tests.csproj]
+C:\wt-ava\Tests\CCP.Avalonia.Tests\WebAssetServerTests.cs(39,28): warning xUnit1051: Calls to methods which accept CancellationToken should use TestContext.Current.CancellationToken to allow test cancellation to be more responsive. (https://xunit.net/xunit.analyzers/rules/xUnit1051) [C:\wt-ava\Tests\CCP.Avalonia.Tests\CCP.Avalonia.Tests.csproj]
+C:\wt-ava\Tests\CCP.Avalonia.Tests\IntakePageTests.cs(85,59): warning xUnit1051: Calls to methods which accept CancellationToken should use TestContext.Current.CancellationToken to allow test cancellation to be more responsive. (https://xunit.net/xunit.analyzers/rules/xUnit1051) [C:\wt-ava\Tests\CCP.Avalonia.Tests\CCP.Avalonia.Tests.csproj]
+C:\wt-ava\Tests\CCP.Avalonia.Tests\IntakePageTests.cs(86,52): warning xUnit1051: Calls to methods which accept CancellationToken should use TestContext.Current.CancellationToken to allow test cancellation to be more responsive. (https://xunit.net/xunit.analyzers/rules/xUnit1051) [C:\wt-ava\Tests\CCP.Avalonia.Tests\CCP.Avalonia.Tests.csproj]
+C:\wt-ava\Tests\CCP.Avalonia.Tests\LocalProvidersTests.cs(105,23): warning xUnit1051: Calls to methods which accept CancellationToken should use TestContext.Current.CancellationToken to allow test cancellation to be more responsive. (https://xunit.net/xunit.analyzers/rules/xUnit1051) [C:\wt-ava\Tests\CCP.Avalonia.Tests\CCP.Avalonia.Tests.csproj]
+C:\wt-ava\Tests\CCP.Avalonia.Tests\LocalProvidersTests.cs(109,31): warning xUnit1051: Calls to methods which accept CancellationToken should use TestContext.Current.CancellationToken to allow test cancellation to be more responsive. (https://xunit.net/xunit.analyzers/rules/xUnit1051) [C:\wt-ava\Tests\CCP.Avalonia.Tests\CCP.Avalonia.Tests.csproj]
+C:\wt-ava\Tests\CCP.Avalonia.Tests\WebAssetServerTests.cs(48,55): warning xUnit1051: Calls to methods which accept CancellationToken should use TestContext.Current.CancellationToken to allow test cancellation to be more responsive. (https://xunit.net/xunit.analyzers/rules/xUnit1051) [C:\wt-ava\Tests\CCP.Avalonia.Tests\CCP.Avalonia.Tests.csproj]
+C:\wt-ava\Tests\CCP.Avalonia.Tests\WebAssetServerTests.cs(49,55): warning xUnit1051: Calls to methods which accept CancellationToken should use TestContext.Current.CancellationToken to allow test cancellation to be more responsive. (https://xunit.net/xunit.analyzers/rules/xUnit1051) [C:\wt-ava\Tests\CCP.Avalonia.Tests\CCP.Avalonia.Tests.csproj]
+C:\wt-ava\Tests\CCP.Avalonia.Tests\WebAssetServerTests.cs(53,54): warning xUnit1051: Calls to methods which accept CancellationToken should use TestContext.Current.CancellationToken to allow test cancellation to be more responsive. (https://xunit.net/xunit.analyzers/rules/xUnit1051) [C:\wt-ava\Tests\CCP.Avalonia.Tests\CCP.Avalonia.Tests.csproj]
+C:\wt-ava\Tests\CCP.Avalonia.Tests\WebAssetServerTests.cs(90,25): warning xUnit1051: Calls to methods which accept CancellationToken should use TestContext.Current.CancellationToken to allow test cancellation to be more responsive. (https://xunit.net/xunit.analyzers/rules/xUnit1051) [C:\wt-ava\Tests\CCP.Avalonia.Tests\CCP.Avalonia.Tests.csproj]
+C:\wt-ava\Tests\CCP.Avalonia.Tests\WebAssetServerTests.cs(92,41): warning xUnit1051: Calls to methods which accept CancellationToken should use TestContext.Current.CancellationToken to allow test cancellation to be more responsive. (https://xunit.net/xunit.analyzers/rules/xUnit1051) [C:\wt-ava\Tests\CCP.Avalonia.Tests\CCP.Avalonia.Tests.csproj]
+C:\wt-ava\Tests\CCP.Avalonia.Tests\InvitePanelTests.cs(220,33): warning xUnit1051: Calls to methods which accept CancellationToken should use TestContext.Current.CancellationToken to allow test cancellation to be more responsive. (https://xunit.net/xunit.analyzers/rules/xUnit1051) [C:\wt-ava\Tests\CCP.Avalonia.Tests\CCP.Avalonia.Tests.csproj]
+C:\wt-ava\Tests\CCP.Avalonia.Tests\InvitePanelTests.cs(221,33): warning xUnit1051: Calls to methods which accept CancellationToken should use TestContext.Current.CancellationToken to allow test cancellation to be more responsive. (https://xunit.net/xunit.analyzers/rules/xUnit1051) [C:\wt-ava\Tests\CCP.Avalonia.Tests\CCP.Avalonia.Tests.csproj]
+C:\wt-ava\Tests\CCP.Avalonia.Tests\LockdownTests.cs(315,59): warning xUnit1051: Calls to methods which accept CancellationToken should use TestContext.Current.CancellationToken to allow test cancellation to be more responsive. (https://xunit.net/xunit.analyzers/rules/xUnit1051) [C:\wt-ava\Tests\CCP.Avalonia.Tests\CCP.Avalonia.Tests.csproj]
+  CCP.Avalonia.Tests -> C:\wt-ava\Tests\CCP.Avalonia.Tests\bin\Debug\net10.0\CCP.Avalonia.Tests.dll
+Test run for C:\wt-ava\Tests\CCP.Avalonia.Tests\bin\Debug\net10.0\CCP.Avalonia.Tests.dll (.NETCoreApp,Version=v10.0)
+A total of 1 test files matched the specified pattern.
+[xUnit.net 00:03:24.14]     CCP.Avalonia.Tests.PresetsTabSessionDetailTests.RowFillsDetailRevealAsksThriceAndCatalogueChipOpens [FAIL]
+  Failed CCP.Avalonia.Tests.PresetsTabSessionDetailTests.RowFillsDetailRevealAsksThriceAndCatalogueChipOpens [853 ms]
+  Error Message:
+   Assert.Equal() Failure: Strings differ
+                      ↓ (pos 11)
+Expected: "+1320 XP (1.1x)"
+Actual:   "+1320 XP (1,1x)"
+                      ↑ (pos 11)
+  Stack Trace:
+     at CCP.Avalonia.Tests.PresetsTabSessionDetailTests.<>c.<RowFillsDetailRevealAsksThriceAndCatalogueChipOpens>b__0_0(MainShellWindow shell) in C:\wt-ava\Tests\CCP.Avalonia.Tests\PresetsTabSessionDetailTests.cs:line 46
+   at CCP.Avalonia.Tests.PresetsTabSessionDetailTests.<>c__DisplayClass2_0.<Run>b__0() in C:\wt-ava\Tests\CCP.Avalonia.Tests\PresetsTabSessionDetailTests.cs:line 116
+   at CCP.Avalonia.Testing.AvaloniaTestDispatcher.Execute(Func`1 action, TaskCompletionSource`1 completion) in C:\wt-ava\Tests\Shared\AvaloniaTestDispatcher.cs:line 115
+--- End of stack trace from previous location ---
+--- End of stack trace from previous location ---
+[xUnit.net 00:03:48.01]     CCP.Avalonia.Tests.LockCardVoiceTests.SpeakingThePhraseCompletesTheCard [SKIP]
+[xUnit.net 00:03:48.01]     CCP.Avalonia.Tests.LockCardVoiceTests.SixUnavailableAttemptsFallBackToTyping [SKIP]
+[xUnit.net 00:03:48.01]     CCP.Avalonia.Tests.LockCardVoiceTests.ClosingMidListenClosesTheMic [SKIP]
+[xUnit.net 00:03:48.02]     CCP.Avalonia.Tests.LockCardVoiceTests.WithoutConsentTheMicNeverOpens [SKIP]
+[xUnit.net 00:03:48.02]     CCP.Avalonia.Tests.LockCardVoiceTests.AWrongPhraseKeepsTheCardOpen [SKIP]
+  Skipped CCP.Avalonia.Tests.LockCardVoiceTests.SpeakingThePhraseCompletesTheCard [1 ms]
+  Skipped CCP.Avalonia.Tests.LockCardVoiceTests.SixUnavailableAttemptsFallBackToTyping [1 ms]
+  Skipped CCP.Avalonia.Tests.LockCardVoiceTests.ClosingMidListenClosesTheMic [1 ms]
+  Skipped CCP.Avalonia.Tests.LockCardVoiceTests.WithoutConsentTheMicNeverOpens [1 ms]
+  Skipped CCP.Avalonia.Tests.LockCardVoiceTests.AWrongPhraseKeepsTheCardOpen [1 ms]
+[xUnit.net 00:03:49.36]     CCP.Avalonia.Tests.WebAssetServerTests.RefusesSymlinksThatLeaveTheRoot [FAIL]
+  Failed CCP.Avalonia.Tests.WebAssetServerTests.RefusesSymlinksThatLeaveTheRoot [4 ms]
+  Error Message:
+   System.IO.IOException : Il privilegio richiesto non appartiene al client. : 'C:\Users\Admin\AppData\Local\Temp\ccp-web-o2meonnz.3on\web\leak.txt'.
+  Stack Trace:
+     at Interop.Kernel32.CreateSymbolicLink(String symlinkFileName, String targetFileName, Boolean isDirectory)
+   at System.IO.File.CreateSymbolicLink(String path, String pathToTarget)
+   at CCP.Avalonia.Tests.WebAssetServerTests.RefusesSymlinksThatLeaveTheRoot() in C:\wt-ava\Tests\CCP.Avalonia.Tests\WebAssetServerTests.cs:line 77
+   at System.RuntimeMethodHandle.InvokeMethod(ObjectHandleOnStack target, Void** arguments, ObjectHandleOnStack sig, BOOL isConstructor, ObjectHandleOnStack result)
+   at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+[xUnit.net 00:03:54.56]     CCP.Avalonia.Tests.AppUpdaterTests.LinuxPillShowsVersionOpensPageAndNeverDownloads [SKIP]
+  Skipped CCP.Avalonia.Tests.AppUpdaterTests.LinuxPillShowsVersionOpensPageAndNeverDownloads [1 ms]
+[xUnit.net 00:04:22.14]     CCP.Avalonia.Tests.IntakePageTests.TheFallbackPanelNeverShowsTheToken [FAIL]
+[xUnit.net 00:04:22.14]     CCP.Avalonia.Tests.IntakePageTests.TheAssetsPrefixServesOnlyActiveLibraryMedia [FAIL]
+  Failed CCP.Avalonia.Tests.IntakePageTests.TheFallbackPanelNeverShowsTheToken [2 ms]
+  Error Message:
+   Assert.Equal() Failure: Strings differ
+Expected: "http://127.0.0.1:5000/intake/index.html?x=1"
+Actual:   null
+  Stack Trace:
+     at CCP.Avalonia.Tests.IntakePageTests.<>c.<TheFallbackPanelNeverShowsTheToken>b__4_0() in C:\wt-ava\Tests\CCP.Avalonia.Tests\IntakePageTests.cs:line 193
+   at CCP.Avalonia.Testing.AvaloniaTestDispatcher.Execute(Func`1 action, TaskCompletionSource`1 completion) in C:\wt-ava\Tests\Shared\AvaloniaTestDispatcher.cs:line 115
+--- End of stack trace from previous location ---
+   at CCP.Avalonia.Tests.IntakePageTests.TheFallbackPanelNeverShowsTheToken() in C:\wt-ava\Tests\CCP.Avalonia.Tests\IntakePageTests.cs:line 185
+--- End of stack trace from previous location ---
+  Failed CCP.Avalonia.Tests.IntakePageTests.TheAssetsPrefixServesOnlyActiveLibraryMedia [5 ms]
+  Error Message:
+   System.IO.DirectoryNotFoundException : Could not find a part of the path 'C:\Users\Admin\AppData\Local\Temp\ccp-avalonia-tests-2ef15a213b494c478f82df9ebf11d4b2\images\p.png'.
+  Stack Trace:
+     at System.IO.File.Delete(String path)
+   at CCP.Avalonia.Tests.IntakePageTests.TheAssetsPrefixServesOnlyActiveLibraryMedia() in C:\wt-ava\Tests\CCP.Avalonia.Tests\IntakePageTests.cs:line 175
+   at System.RuntimeMethodHandle.InvokeMethod(ObjectHandleOnStack target, Void** arguments, ObjectHandleOnStack sig, BOOL isConstructor, ObjectHandleOnStack result)
+   at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+[xUnit.net 00:04:43.98]     CCP.Avalonia.Tests.SecretStoreTests.LibsecretRoundTrip [SKIP]
+[xUnit.net 00:04:44.00]     CCP.Avalonia.Tests.SecretStoreTests.NoBusReadsNullAndWritesNoFile [SKIP]
+  Skipped CCP.Avalonia.Tests.SecretStoreTests.LibsecretRoundTrip [1 ms]
+  Skipped CCP.Avalonia.Tests.SecretStoreTests.NoBusReadsNullAndWritesNoFile [1 ms]
+[xUnit.net 00:04:52.10]     CCP.Avalonia.Tests.PanicCancelsAiScanTests.PanicRouteCancelsPendingAi(file: "ConditioningControlPanel/MainWindow/MainWindow.Rem"···, signature: "internal void TriggerPanicFromRemote()", call: "CancelPendingAi();") [FAIL]
+[xUnit.net 00:04:52.11]     CCP.Avalonia.Tests.PanicCancelsAiScanTests.PanicRouteCancelsPendingAi(file: "ConditioningControlPanel/MainWindow/MainWindow.xam"···, signature: "private void HandlePanicKeyPress()", call: "CancelPendingAi();") [FAIL]
+[xUnit.net 00:04:52.12]     CCP.Avalonia.Tests.PanicCancelsAiScanTests.PanicRouteCancelsPendingAi(file: "CCP.Avalonia/Views/Windows/MainShellWindow.PanicKe"···, signature: "internal void HandlePanicKeyPress(DateTime now)", call: "CancelPendingAi();") [FAIL]
+[xUnit.net 00:04:52.12]     CCP.Avalonia.Tests.PanicCancelsAiScanTests.PanicRouteCancelsPendingAi(file: "ConditioningControlPanel/MainWindow/MainWindow.xam"···, signature: "private void RunEmergencyPanicTeardown()", call: "CancelPendingAi();") [FAIL]
+[xUnit.net 00:04:52.12]     CCP.Avalonia.Tests.PanicCancelsAiScanTests.PanicRouteCancelsPendingAi(file: "CCP.Core/Services/RemoteControl/RemoteCommands.cs", signature: "public static void StopEffects(bool force)", call: "if (force) Commands.AiCommandService.CancelAll();") [FAIL]
+  Failed CCP.Avalonia.Tests.PanicCancelsAiScanTests.PanicRouteCancelsPendingAi(file: "ConditioningControlPanel/MainWindow/MainWindow.Rem"···, signature: "internal void TriggerPanicFromRemote()", call: "CancelPendingAi();") [13 ms]
+  Error Message:
+   System.ArgumentOutOfRangeException : length ('-70500') must be a non-negative value. (Parameter 'length')
+Actual value was -70500.
+  Stack Trace:
+     at System.ArgumentOutOfRangeException.ThrowNegative[T](T value, String paramName)
+   at System.ArgumentOutOfRangeException.ThrowIfNegative[T](T value, String paramName)
+   at System.String.ThrowSubstringArgumentOutOfRange(Int32 startIndex, Int32 length)
+   at System.String.Substring(Int32 startIndex, Int32 length)
+   at CCP.Avalonia.Tests.PanicCancelsAiScanTests.PanicRouteCancelsPendingAi(String file, String signature, String call) in C:\wt-ava\Tests\CCP.Avalonia.Tests\PanicCancelsAiScanTests.cs:line 25
+   at System.RuntimeMethodHandle.InvokeMethod(ObjectHandleOnStack target, Void** arguments, ObjectHandleOnStack sig, BOOL isConstructor, ObjectHandleOnStack result)
+   at System.Reflection.MethodBaseInvoker.InvokeDirectByRefWithFewArgs(Object obj, Span`1 copyOfArgs, BindingFlags invokeAttr)
+  Failed CCP.Avalonia.Tests.PanicCancelsAiScanTests.PanicRouteCancelsPendingAi(file: "ConditioningControlPanel/MainWindow/MainWindow.xam"···, signature: "private void HandlePanicKeyPress()", call: "CancelPendingAi();") [11 ms]
+  Error Message:
+   System.ArgumentOutOfRangeException : length ('-86439') must be a non-negative value. (Parameter 'length')
+Actual value was -86439.
+  Stack Trace:
+     at System.ArgumentOutOfRangeException.ThrowNegative[T](T value, String paramName)
+   at System.ArgumentOutOfRangeException.ThrowIfNegative[T](T value, String paramName)
+   at System.String.ThrowSubstringArgumentOutOfRange(Int32 startIndex, Int32 length)
+   at System.String.Substring(Int32 startIndex, Int32 length)
+   at CCP.Avalonia.Tests.PanicCancelsAiScanTests.PanicRouteCancelsPendingAi(String file, String signature, String call) in C:\wt-ava\Tests\CCP.Avalonia.Tests\PanicCancelsAiScanTests.cs:line 25
+   at InvokeStub_PanicCancelsAiScanTests.PanicRouteCancelsPendingAi(Object, Span`1)
+   at System.Reflection.MethodBaseInvoker.InvokeWithFewArgs(Object obj, BindingFlags invokeAttr, Binder binder, Object[] parameters, CultureInfo culture)
+  Failed CCP.Avalonia.Tests.PanicCancelsAiScanTests.PanicRouteCancelsPendingAi(file: "CCP.Avalonia/Views/Windows/MainShellWindow.PanicKe"···, signature: "internal void HandlePanicKeyPress(DateTime now)", call: "CancelPendingAi();") [1 ms]
+  Error Message:
+   System.ArgumentOutOfRangeException : length ('-2776') must be a non-negative value. (Parameter 'length')
+Actual value was -2776.
+  Stack Trace:
+     at System.ArgumentOutOfRangeException.ThrowNegative[T](T value, String paramName)
+   at System.ArgumentOutOfRangeException.ThrowIfNegative[T](T value, String paramName)
+   at System.String.ThrowSubstringArgumentOutOfRange(Int32 startIndex, Int32 length)
+   at System.String.Substring(Int32 startIndex, Int32 length)
+   at CCP.Avalonia.Tests.PanicCancelsAiScanTests.PanicRouteCancelsPendingAi(String file, String signature, String call) in C:\wt-ava\Tests\CCP.Avalonia.Tests\PanicCancelsAiScanTests.cs:line 25
+   at InvokeStub_PanicCancelsAiScanTests.PanicRouteCancelsPendingAi(Object, Span`1)
+   at System.Reflection.MethodBaseInvoker.InvokeWithFewArgs(Object obj, BindingFlags invokeAttr, Binder binder, Object[] parameters, CultureInfo culture)
+  Failed CCP.Avalonia.Tests.PanicCancelsAiScanTests.PanicRouteCancelsPendingAi(file: "ConditioningControlPanel/MainWindow/MainWindow.xam"···, signature: "private void RunEmergencyPanicTeardown()", call: "CancelPendingAi();") [1 ms]
+  Error Message:
+   System.ArgumentOutOfRangeException : length ('-58104') must be a non-negative value. (Parameter 'length')
+Actual value was -58104.
+  Stack Trace:
+     at System.ArgumentOutOfRangeException.ThrowNegative[T](T value, String paramName)
+   at System.ArgumentOutOfRangeException.ThrowIfNegative[T](T value, String paramName)
+   at System.String.ThrowSubstringArgumentOutOfRange(Int32 startIndex, Int32 length)
+   at System.String.Substring(Int32 startIndex, Int32 length)
+   at CCP.Avalonia.Tests.PanicCancelsAiScanTests.PanicRouteCancelsPendingAi(String file, String signature, String call) in C:\wt-ava\Tests\CCP.Avalonia.Tests\PanicCancelsAiScanTests.cs:line 25
+   at InvokeStub_PanicCancelsAiScanTests.PanicRouteCancelsPendingAi(Object, Span`1)
+   at System.Reflection.MethodBaseInvoker.InvokeWithFewArgs(Object obj, BindingFlags invokeAttr, Binder binder, Object[] parameters, CultureInfo culture)
+  Failed CCP.Avalonia.Tests.PanicCancelsAiScanTests.PanicRouteCancelsPendingAi(file: "CCP.Core/Services/RemoteControl/RemoteCommands.cs", signature: "public static void StopEffects(bool force)", call: "if (force) Commands.AiCommandService.CancelAll();") [7 ms]
+  Error Message:
+   System.ArgumentOutOfRangeException : length ('-7714') must be a non-negative value. (Parameter 'length')
+Actual value was -7714.
+  Stack Trace:
+     at System.ArgumentOutOfRangeException.ThrowNegative[T](T value, String paramName)
+   at System.ArgumentOutOfRangeException.ThrowIfNegative[T](T value, String paramName)
+   at System.String.ThrowSubstringArgumentOutOfRange(Int32 startIndex, Int32 length)
+   at System.String.Substring(Int32 startIndex, Int32 length)
+   at CCP.Avalonia.Tests.PanicCancelsAiScanTests.PanicRouteCancelsPendingAi(String file, String signature, String call) in C:\wt-ava\Tests\CCP.Avalonia.Tests\PanicCancelsAiScanTests.cs:line 25
+   at InvokeStub_PanicCancelsAiScanTests.PanicRouteCancelsPendingAi(Object, Span`1)
+   at System.Reflection.MethodBaseInvoker.InvokeWithFewArgs(Object obj, BindingFlags invokeAttr, Binder binder, Object[] parameters, CultureInfo culture)
+[xUnit.net 00:04:52.14]     CCP.Avalonia.Tests.PanicCancelsAiScanTests.PanicRouteCancelsPendingAi(file: "ConditioningControlPanel/Services/RemoteControlSer"···, signature: "private void StopAllRemoteEffects(bool force)", call: "if (force) MainWindow.CancelPendingAi();") [FAIL]
+[xUnit.net 00:04:52.14]     CCP.Avalonia.Tests.PanicCancelsAiScanTests.PanicRouteCancelsPendingAi(file: "CCP.Avalonia/Views/Windows/PanicSurfaces.cs", signature: "internal static IReadOnlyList<Surface> All", call: "MainShellWindow.CancelPendingAi()") [FAIL]
+  Failed CCP.Avalonia.Tests.PanicCancelsAiScanTests.PanicRouteCancelsPendingAi(file: "ConditioningControlPanel/Services/RemoteControlSer"···, signature: "private void StopAllRemoteEffects(bool force)", call: "if (force) MainWindow.CancelPendingAi();") [10 ms]
+  Error Message:
+   System.ArgumentOutOfRangeException : length ('-48034') must be a non-negative value. (Parameter 'length')
+Actual value was -48034.
+  Stack Trace:
+     at System.ArgumentOutOfRangeException.ThrowNegative[T](T value, String paramName)
+   at System.ArgumentOutOfRangeException.ThrowIfNegative[T](T value, String paramName)
+   at System.String.ThrowSubstringArgumentOutOfRange(Int32 startIndex, Int32 length)
+   at System.String.Substring(Int32 startIndex, Int32 length)
+   at CCP.Avalonia.Tests.PanicCancelsAiScanTests.PanicRouteCancelsPendingAi(String file, String signature, String call) in C:\wt-ava\Tests\CCP.Avalonia.Tests\PanicCancelsAiScanTests.cs:line 25
+   at InvokeStub_PanicCancelsAiScanTests.PanicRouteCancelsPendingAi(Object, Span`1)
+   at System.Reflection.MethodBaseInvoker.InvokeWithFewArgs(Object obj, BindingFlags invokeAttr, Binder binder, Object[] parameters, CultureInfo culture)
+  Failed CCP.Avalonia.Tests.PanicCancelsAiScanTests.PanicRouteCancelsPendingAi(file: "CCP.Avalonia/Views/Windows/PanicSurfaces.cs", signature: "internal static IReadOnlyList<Surface> All", call: "MainShellWindow.CancelPendingAi()") [7 ms]
+  Error Message:
+   System.ArgumentOutOfRangeException : length ('-1353') must be a non-negative value. (Parameter 'length')
+Actual value was -1353.
+  Stack Trace:
+     at System.ArgumentOutOfRangeException.ThrowNegative[T](T value, String paramName)
+   at System.ArgumentOutOfRangeException.ThrowIfNegative[T](T value, String paramName)
+   at System.String.ThrowSubstringArgumentOutOfRange(Int32 startIndex, Int32 length)
+   at System.String.Substring(Int32 startIndex, Int32 length)
+   at CCP.Avalonia.Tests.PanicCancelsAiScanTests.PanicRouteCancelsPendingAi(String file, String signature, String call) in C:\wt-ava\Tests\CCP.Avalonia.Tests\PanicCancelsAiScanTests.cs:line 25
+   at InvokeStub_PanicCancelsAiScanTests.PanicRouteCancelsPendingAi(Object, Span`1)
+   at System.Reflection.MethodBaseInvoker.InvokeWithFewArgs(Object obj, BindingFlags invokeAttr, Binder binder, Object[] parameters, CultureInfo culture)
+[xUnit.net 00:06:08.25]     CCP.Avalonia.Tests.AccountSeedTests.TrainerCardText_MatchesWpfRules [FAIL]
+[xUnit.net 00:06:08.34]     CCP.Avalonia.Tests.AccountSeedTests.TrainerCard_OwnCard_LookedUpCard_Unknown_Offline_GetsOnly [FAIL]
+  Failed CCP.Avalonia.Tests.AccountSeedTests.TrainerCardText_MatchesWpfRules [7 ms]
+  Error Message:
+   Assert.Equal() Failure: Values differ
+Expected: Tuple ("1.2M", "3.4k", "999")
+Actual:   Tuple ("1,2M", "3,4k", "999")
+  Stack Trace:
+     at CCP.Avalonia.Tests.AccountSeedTests.TrainerCardText_MatchesWpfRules() in C:\wt-ava\Tests\CCP.Avalonia.Tests\TrainerCardTests.cs:line 206
+   at System.RuntimeMethodHandle.InvokeMethod(ObjectHandleOnStack target, Void** arguments, ObjectHandleOnStack sig, BOOL isConstructor, ObjectHandleOnStack result)
+   at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+  Failed CCP.Avalonia.Tests.AccountSeedTests.TrainerCard_OwnCard_LookedUpCard_Unknown_Offline_GetsOnly [95 ms]
+  Error Message:
+   Assert.Equal() Failure: Values differ
+Expected: Tuple ("29", "#3", "90.0k", "9 / ")
+Actual:   Tuple ("29", "#3", "90,0k", "9 / ")
+  Stack Trace:
+     at CCP.Avalonia.Tests.AccountSeedTests.<>c__DisplayClass69_0.<<TrainerCard_OwnCard_LookedUpCard_Unknown_Offline_GetsOnly>b__1>d.MoveNext() in C:\wt-ava\Tests\CCP.Avalonia.Tests\TrainerCardTests.cs:line 91
+--- End of stack trace from previous location ---
+   at CCP.Avalonia.Tests.AccountSeedTests.TrainerCard_OwnCard_LookedUpCard_Unknown_Offline_GetsOnly() in C:\wt-ava\Tests\CCP.Avalonia.Tests\TrainerCardTests.cs:line 62
+--- End of stack trace from previous location ---
+[xUnit.net 00:06:09.40]     CCP.Avalonia.Tests.AccountSeedTests.LeaderboardAndProfileCard_ReadTranscribedResponses_WithGetsOnly [FAIL]
+  Failed CCP.Avalonia.Tests.AccountSeedTests.LeaderboardAndProfileCard_ReadTranscribedResponses_WithGetsOnly [9 ms]
+  Error Message:
+   Assert.Equal() Failure: Values differ
+Expected: Tuple ("120.0k", 31, 1, "I")
+Actual:   Tuple ("120,0k", 31, 1, "I")
+  Stack Trace:
+     at CCP.Avalonia.Tests.AccountSeedTests.LeaderboardAndProfileCard_ReadTranscribedResponses_WithGetsOnly() in C:\wt-ava\Tests\CCP.Avalonia.Tests\CloudLeaderboardTests.cs:line 82
+--- End of stack trace from previous location ---
+[xUnit.net 00:06:35.61]     CCP.Avalonia.Tests.VoiceCommandsTests.PanicBeforeTheMantraListenKeepsTheMicShut [SKIP]
+[xUnit.net 00:06:35.61]     CCP.Avalonia.Tests.VoiceCommandsTests.TakeoverSpokenMantraHeardInTheWavCreditsXp [SKIP]
+[xUnit.net 00:06:35.61]     CCP.Avalonia.Tests.VoiceCommandsTests.AVoicedPromptHoldsTheMicUntilHerClipEnds [SKIP]
+[xUnit.net 00:06:35.61]     CCP.Avalonia.Tests.VoiceCommandsTests.PanicAbortsTheCaptureButTheLoopStaysArmed [SKIP]
+[xUnit.net 00:06:35.61]     CCP.Avalonia.Tests.VoiceCommandsTests.StopRevokeAndLapseEachCloseTheMic [SKIP]
+  Skipped CCP.Avalonia.Tests.VoiceCommandsTests.PanicBeforeTheMantraListenKeepsTheMicShut [1 ms]
+  Skipped CCP.Avalonia.Tests.VoiceCommandsTests.TakeoverSpokenMantraHeardInTheWavCreditsXp [1 ms]
+  Skipped CCP.Avalonia.Tests.VoiceCommandsTests.AVoicedPromptHoldsTheMicUntilHerClipEnds [1 ms]
+  Skipped CCP.Avalonia.Tests.VoiceCommandsTests.PanicAbortsTheCaptureButTheLoopStaysArmed [1 ms]
+  Skipped CCP.Avalonia.Tests.VoiceCommandsTests.StopRevokeAndLapseEachCloseTheMic [1 ms]
+[xUnit.net 00:06:35.61]     CCP.Avalonia.Tests.VoiceCommandsTests.TheWakePhraseInTheWavOpensTheCommandListen [SKIP]
+[xUnit.net 00:06:35.62]     CCP.Avalonia.Tests.VoiceCommandsTests.RevokeOrPanicDuringTheMantraListenClosesTheMic(revoke: False) [SKIP]
+[xUnit.net 00:06:35.62]     CCP.Avalonia.Tests.VoiceCommandsTests.RevokeOrPanicDuringTheMantraListenClosesTheMic(revoke: True) [SKIP]
+[xUnit.net 00:06:35.62]     CCP.Avalonia.Tests.VoiceCommandsTests.HelpAndTheTabNameOnlyRunnableCommands [SKIP]
+[xUnit.net 00:06:35.62]     CCP.Avalonia.Tests.VoiceCommandsTests.RevokingMidCommandClosesTheMicForGood [SKIP]
+[xUnit.net 00:06:35.62]     CCP.Avalonia.Tests.VoiceCommandsTests.TheSpokenSafeWordWorksUnderLockdown [SKIP]
+[xUnit.net 00:06:35.62]     CCP.Avalonia.Tests.VoiceCommandsTests.WithoutEntitlementOrConsentTheMicNeverOpens [SKIP]
+[xUnit.net 00:06:35.62]     CCP.Avalonia.Tests.VoiceCommandsTests.AWakeTurnWithNoCommandFallsBackToAMantraOnlyWhenOn(on: False) [SKIP]
+[xUnit.net 00:06:35.62]     CCP.Avalonia.Tests.VoiceCommandsTests.AWakeTurnWithNoCommandFallsBackToAMantraOnlyWhenOn(on: True) [SKIP]
+  Skipped CCP.Avalonia.Tests.VoiceCommandsTests.TheWakePhraseInTheWavOpensTheCommandListen [1 ms]
+  Skipped CCP.Avalonia.Tests.VoiceCommandsTests.RevokeOrPanicDuringTheMantraListenClosesTheMic(revoke: False) [1 ms]
+  Skipped CCP.Avalonia.Tests.VoiceCommandsTests.RevokeOrPanicDuringTheMantraListenClosesTheMic(revoke: True) [1 ms]
+  Skipped CCP.Avalonia.Tests.VoiceCommandsTests.HelpAndTheTabNameOnlyRunnableCommands [1 ms]
+  Skipped CCP.Avalonia.Tests.VoiceCommandsTests.RevokingMidCommandClosesTheMicForGood [1 ms]
+  Skipped CCP.Avalonia.Tests.VoiceCommandsTests.TheSpokenSafeWordWorksUnderLockdown [1 ms]
+  Skipped CCP.Avalonia.Tests.VoiceCommandsTests.WithoutEntitlementOrConsentTheMicNeverOpens [1 ms]
+  Skipped CCP.Avalonia.Tests.VoiceCommandsTests.AWakeTurnWithNoCommandFallsBackToAMantraOnlyWhenOn(on: False) [1 ms]
+  Skipped CCP.Avalonia.Tests.VoiceCommandsTests.AWakeTurnWithNoCommandFallsBackToAMantraOnlyWhenOn(on: True) [1 ms]
+
+Failed!  - Failed:    14, Passed:   637, Skipped:    22, Total:   673, Duration: 6 m 33 s - CCP.Avalonia.Tests.dll (net10.0)

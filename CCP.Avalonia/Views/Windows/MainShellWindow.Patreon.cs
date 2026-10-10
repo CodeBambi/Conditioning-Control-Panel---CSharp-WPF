@@ -143,6 +143,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             {
                 if (CoreEntitlement.HasPremiumProvider is null) return;
                 var cleared = Services.EntitlementLapse.Enforce(CoreSettings.Current);
+                // WPF MainWindow.Patreon.cs:258: a mid-session lapse must not leave the chant running behind the padlock.
+                if (!CoreSettings.Current.MantraChantEnabled) Platform.MantraChantService.Instance.Stop();
                 foreach (var f in cleared) Serilog.Log.Information("Entitlement lapsed: {Feature} switched off", f);
                 _lapseUnsaved |= cleared.Count > 0;
                 if (persist && _lapseUnsaved)

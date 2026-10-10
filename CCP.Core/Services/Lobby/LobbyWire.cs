@@ -74,6 +74,64 @@ public sealed class RemoteDirectoryApi
         }
     }
 
+    /// <summary>WPF AvailableSubjectsService.TryClaimAsync: <c>POST /v2/directory/claim</c> for one listed
+    /// subject. The session url on 200 (it carries the PIN in its fragment: the caller opens it once and
+    /// never logs or stores it); null on a 409 (someone claimed first, <paramref name="lostRace"/> set so the
+    /// caller re-reads the list), on any other refusal (status only is logged, never the body) and on a fault.
+    /// Only an absolute http(s) url without quotes or control characters is handed back.</summary>
+    public async Task<(string? Url, bool LostRace)> ClaimAsync(string subjectUnifiedId, CancellationToken ct = default)
+    {
+        var id = _identity();
+        if (id == null || _baseUrl.Length == 0)
+        {
+            Log.Warning("[AvailableSubjects] claim called without auth state");
+            return (null, false);
+        }
+        if (string.IsNullOrEmpty(subjectUnifiedId)) return (null, false);
+        using var budget = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        budget.CancelAfter(Timeout);
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/v2/directory/claim")
+            {
+                Content = new StringContent(JsonConvert.SerializeObject(new { unified_id = subjectUnifiedId }), System.Text.Encoding.UTF8, "application/json"),
+            };
+            req.Headers.Add("X-Auth-Token", id.Value.Token);
+            req.Headers.Add("X-Caller-Unified-Id", id.Value.UnifiedId);
+            using var res = await _http.SendAsync(req, budget.Token).ConfigureAwait(false);
+            if ((int)res.StatusCode == 409)
+            {
+                // Contract D first (WPF :221): a merged-account 409 is about the caller, not the claim. The
+                // recovery swaps to the canonical account; this click is nothing, not a lost race.
+                if (await MergedAccountRecovery.TryHandleAsync(res).ConfigureAwait(false)) return (null, false);
+                return (null, true);
+            }
+            if (!res.IsSuccessStatusCode)
+            {
+                Log.Warning("[AvailableSubjects] claim failed: {Status}", (int)res.StatusCode);
+                return (null, false);
+            }
+            var text = await res.Content.ReadAsStringAsync(budget.Token).ConfigureAwait(false);
+            var url = SafeSessionUrl(JsonConvert.DeserializeObject<JObject>(text, ReadSettings)?["session_url"]?.ToString());
+            if (url == null) Log.Warning("[AvailableSubjects] claim 200 without a usable session_url");
+            return (url, false);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning("[AvailableSubjects] claim error: {E}", ex.GetType().Name);
+            return (null, false);
+        }
+    }
+
+    /// <summary>Pure. The url as the browser gets it, or null when it is not a plain web address.</summary>
+    internal static string? SafeSessionUrl(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return null;
+        foreach (var c in url) if (c == '"' || c == '\'' || char.IsControl(c)) return null;
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return null;
+        return uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp ? uri.AbsoluteUri : null;
+    }
+
     /// <summary>Pure. <c>entries</c> must be an array; an entry without a unified id is dropped.
     /// Defaults match WPF ParseEntry (Anonymous, level 1, tier light).</summary>
     internal static (IReadOnlyList<RemoteSeat> Seats, bool Ok) Parse(string? text)

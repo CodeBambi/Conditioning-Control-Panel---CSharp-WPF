@@ -36,6 +36,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             if (Spec.Id is "dtrh" or "arcademy") StartHeartbeatWatch();
             if (Spec.Id == PbpId) OpenPbp();   // chess host (GameWindow.Pbp.cs); it unhooks itself on Closed
             if (Spec.Id == "arcademy") OpenArcademy();
+            if (Spec.Id == "dtrh") OpenDtrhHost();
         }
 
         private void OnGameClosed()
@@ -65,10 +66,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                 // WPF DtrhHostService.OnPageReady: init carries the SAVED run setup for the hub's Descent tab.
                 var init = JObject.FromObject(InitMessage());
                 init["runSetup"] = JToken.FromObject(BuildRunSetup());
+                DtrhInitExtras(init);
                 Post(init);
                 PostDtrhReady();
+                // WPF :243: the mod's own descent media mixed into (or replacing) the library's.
+                var m = GameMediaManifest.BuildLive();
+                Dtrh.DtrhModContent.MergeMedia(m);
+                Post(m.Frame());
+                PostDtrhAfterManifest();
+                return;
             }
-            else Post(InitMessage());
+            Post(InitMessage());
             Post(GameMediaManifest.BuildLive().Frame());
         }
 

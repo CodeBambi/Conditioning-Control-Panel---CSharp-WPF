@@ -8,10 +8,8 @@
 //     door (FriendsHead.Identity / BaseUrl: a sandbox without a loopback url sends nothing).
 //   - The Lobby page asks for its lease from its own effective visibility
 //     (AvailableSubjectsTabView.EffectiveVisibilityChanged) instead of ShowTab's switch.
-//   - Join and Host reach games this head does not host yet: chess (PieceByPieceHostService),
-//     Goon (GoonHostService) and the Remote directory claim (AvailableSubjectsService.TryClaimAsync).
-//     Each one logs and stays put (ponytail below); the gates, the sign-in door and the Remote host
-//     route (TierGate -> the Remote tab) are real.
+//   - Join on a Remote table is Core RemoteDirectoryApi.ClaimAsync (WPF AvailableSubjectsService.TryClaimAsync);
+//     the session url goes to the browser through ExternalOpener and nowhere else.
 using System;
 using System.Collections.Generic;
 using Avalonia;
@@ -218,13 +216,34 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                         LobbyJoinGoon(row.Key);
                         break;
                     case LobbyGame.Remote:
-                        // ponytail: ClaimRemoteSubjectAsync(key) (AvailableSubjectsService.TryClaimAsync + the
-                        // session url) is not on this head; the click is logged and the page stays.
-                        Log.Information("[Lobby] join Remote not hosted on this head yet");
+                        await ClaimRemoteSubjectAsync(row.Key);
                         break;
                 }
             }
             catch (Exception ex) { Log.Warning(ex, "[Lobby] join {Game} failed", row.Game); }
+        }
+
+        /// <summary>Test seams: the directory claim (WPF AvailableSubjectsService.TryClaimAsync) and the one
+        /// place its session url goes (the browser, through ExternalOpener).</summary>
+        internal static Func<string, System.Threading.Tasks.Task<(string? Url, bool LostRace)>> LobbyClaimRemote { get; set; } =
+            key => new RemoteDirectoryApi().ClaimAsync(key);
+        internal static Func<TopLevel?, string, System.Threading.Tasks.Task<bool>> LobbyOpenSessionUrl { get; set; } =
+            (top, url) => ExternalOpener.OpenAsync(top, url);
+
+        /// <summary>WPF ClaimRemoteSubjectAsync (MainWindow.RemoteControl.cs:499): Join on a Remote table claims
+        /// the subject and opens the returned session url in the browser. The url lives on this stack only (its
+        /// fragment carries the PIN): never logged, never stored. A lost race just re-reads the list, so the row
+        /// flips to playing.</summary>
+        internal async System.Threading.Tasks.Task ClaimRemoteSubjectAsync(string subjectUnifiedId)
+        {
+            if (string.IsNullOrEmpty(subjectUnifiedId)) return;
+            var (url, _) = await LobbyClaimRemote(subjectUnifiedId);
+            if (!string.IsNullOrEmpty(url))
+            {
+                try { if (!await LobbyOpenSessionUrl(this, url)) Log.Warning("[Lobby] could not open the browser for the claimed session"); }
+                catch (Exception ex) { Log.Warning("[Lobby] failed to open browser for claimed session: {E}", ex.GetType().Name); }
+            }
+            try { _ = Lobby.RefreshAsync(); } catch { }
         }
 
         /// <summary>Test seam: what a Lobby Join / Host press opens (the game window, by game id).</summary>

@@ -57,7 +57,9 @@ namespace ConditioningControlPanel.Avalonia.Controls
         private const float RingRadiusMin = 0.30f;
         private const float RingRadiusMax = 0.455f;
 
-        private readonly DispatcherTimer _timer;
+        // On the window's frame clock (Controls/Fx/FrameClock), not a free-running DispatcherTimer:
+        // a 33 ms timer drifts against the refresh and shows as an uneven step.
+        private readonly global::ConditioningControlPanel.Avalonia.Controls.Fx.FrameClock _timer;
 
         // ---- cached at (re)start: never read per tick ----
         private int _wispBudget;
@@ -116,7 +118,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
         {
             IsHitTestVisible = false;
 
-            _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(33) };
+            _timer = new global::ConditioningControlPanel.Avalonia.Controls.Fx.FrameClock(this) { Interval = TimeSpan.FromMilliseconds(33) };
             _timer.Tick += (_, _) => Tick();
 
             Loaded += OnLoaded;

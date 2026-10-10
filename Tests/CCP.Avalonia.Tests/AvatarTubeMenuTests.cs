@@ -144,10 +144,19 @@ public sealed class AvatarTubeMenuTests
         Assert.Equal(1.0, tube.CurrentScale, 3);
         Assert.Equal(stock, tube.Width, 1);
 
+        // WPF Window_PreviewMouseWheel: Ctrl+scroll steps the same scale; a plain scroll is not taken.
+        Assert.False(tube.WheelZoom(ctrl: false, deltaY: 1));
+        Assert.Equal(1.0, tube.CurrentScale, 3);
+        Assert.True(tube.WheelZoom(ctrl: true, deltaY: 1));
+        Assert.Equal(1.25, tube.CurrentScale, 3);
+        Assert.True(tube.WheelZoom(ctrl: true, deltaY: -1));
+        Assert.Equal(1.0, tube.CurrentScale, 3);
+
         // Docked again she is stock size and the three items go away.
         Click(grow);
         Click(Item(tube, "MenuItemAttach"));
         Assert.False(tube.IsDetached);
+        Assert.False(tube.WheelZoom(ctrl: true, deltaY: 1));   // docked: the wheel never resizes her
         Assert.Equal(stock, tube.Width, 1);
         Assert.False(shrink.IsVisible);
 
@@ -157,6 +166,58 @@ public sealed class AvatarTubeMenuTests
         Assert.False(CoreSettings.Current.AvatarEnabled);
         Assert.False(tube.IsDetached);
         Assert.False(tube.IsVisible);
+    });
+
+    private sealed class FakeArbiter : ConditioningControlPanel.Services.Awareness.IReactionArbiter
+    {
+        public readonly System.Collections.Generic.List<ConditioningControlPanel.Services.Awareness.ContextFrame> Submitted = new();
+        public bool Speaks = true;
+        public Task<ConditioningControlPanel.Services.Awareness.ArbiterDecision> SubmitAsync(
+            ConditioningControlPanel.Services.Awareness.ContextFrame frame, System.Threading.CancellationToken cancellationToken = default)
+        {
+            Submitted.Add(frame);
+            return Task.FromResult(Speaks
+                ? new ConditioningControlPanel.Services.Awareness.ArbiterDecision((ConditioningControlPanel.Services.Awareness.AwarenessVerdict)1,
+                    ConditioningControlPanel.Services.Awareness.RarityTier.Common, "test")
+                : ConditioningControlPanel.Services.Awareness.ArbiterDecision.Silent("test"));
+        }
+        public void RecordExternalLine(ConditioningControlPanel.Services.Awareness.ReactionSource source, string? appId = null) { }
+        public bool CanSpeak(ConditioningControlPanel.Services.Awareness.ReactionSource source, string? appId = null) => true;
+    }
+
+    // WPF TriggerActivityCommentAsync (ChatInput.cs:185): three presets, then on the fourth a recognised
+    // activity goes down the awareness v2 road (the observer's last frame through the arbiter).
+    [Fact]
+    public Task DoubleClickComment_EveryFourthAsksTheArbiterAboutARecognisedActivity() => Run(tube =>
+    {
+        var arbiter = new FakeArbiter();
+        var frame = new ConditioningControlPanel.Services.Awareness.ContextFrame { AppId = "steam" };
+        tube.ActivityArbiter = () => arbiter;
+        tube.ActivityFrame = () => frame;
+        var activity = ConditioningControlPanel.Services.ActivityCategory.Gaming;
+        tube.ActivityNow = () => (activity, "Steam");
+
+        for (var i = 0; i < 3; i++) tube.TriggerActivityCommentAsync().GetAwaiter().GetResult();
+        Assert.Empty(arbiter.Submitted);                 // three presets first
+        tube.TriggerActivityCommentAsync().GetAwaiter().GetResult();
+        Assert.Same(frame, Assert.Single(arbiter.Submitted));
+
+        // The arbiter declines: asked once more on the next fourth, and the preset road takes over.
+        arbiter.Speaks = false;
+        for (var i = 0; i < 4; i++) tube.TriggerActivityCommentAsync().GetAwaiter().GetResult();
+        Assert.Equal(2, arbiter.Submitted.Count);
+
+        // Nothing she recognises: a random thought, the arbiter is not asked.
+        activity = ConditioningControlPanel.Services.ActivityCategory.Unknown;
+        for (var i = 0; i < 4; i++) tube.TriggerActivityCommentAsync().GetAwaiter().GetResult();
+        Assert.Equal(2, arbiter.Submitted.Count);
+
+        // Trigger mode: always a custom trigger, never the arbiter.
+        activity = ConditioningControlPanel.Services.ActivityCategory.Gaming;
+        CoreSettings.Current.TriggerModeEnabled = true;
+        CoreSettings.Current.CustomTriggers = new System.Collections.Generic.List<string> { "drop" };
+        for (var i = 0; i < 4; i++) tube.TriggerActivityCommentAsync().GetAwaiter().GetResult();
+        Assert.Equal(2, arbiter.Submitted.Count);
     });
 
     private static Task Run(Action<AvatarTubeWindow> body) => AvaloniaTestDispatcher.RunAsync(() =>

@@ -496,21 +496,71 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 _washSection = section;
                 var hue = NavStripRules.Accent(section);
                 PaintSectionInk(section);
-                if (Named<Border>("SectionPageWash") is { } wash)
-                {
-                    wash.Background = NavPaint.Diagonal(new[]
-                    {
-                        (NavRailRules.WithAlpha(hue, SectionChromeRules.SectionWashAlpha), 0.0),
-                        (NavRailRules.WithAlpha(hue, 0), 0.66),
-                    });
-                }
-                if (Named<Border>("SectionWashLine") is { } line)
-                    line.Background = NavPaint.Solid(NavRailRules.WithAlpha(hue, SectionChromeRules.SectionWashLineAlpha));
+                int washMs = NavRailRules.Ms(SectionChromeRules.SectionWashMs, global::ConditioningControlPanel.Avalonia.Controls.AmbientFxCanvas.Env.Level);
+                TweenSectionWash(hue, washMs);
                 PaintDepthRail(hue);
                 PaintDepthHud(hue);
-                PaintSectionEdge(hue, NavRailRules.Ms(SectionChromeRules.SectionWashMs, global::ConditioningControlPanel.Avalonia.Controls.AmbientFxCanvas.Env.Level));
+                PaintSectionEdge(hue, washMs);
             }
             catch (Exception ex) { Log.Debug("PaintSectionWash failed: {E}", ex.Message); }
+        }
+
+        private uint _washHueShown;
+        private bool _washHuePainted;
+        private DispatcherTimer? _washTween;
+
+        /// <summary>Test seam: the wash colour is travelling to a new section hue.</summary>
+        internal bool SectionWashTweening => _washTween?.IsEnabled == true;
+
+        /// <summary>Test seam: the hue the wash wears right now.</summary>
+        internal uint SectionWashHueShown => _washHueShown;
+
+        /// <summary>WPF PaintSectionWash's ColorAnimation (MainWindow.SectionChrome.cs:181): the
+        /// wash and its top line travel from the hue on screen to the new one over SectionWashMs
+        /// (halved on Reduced), quadratic ease out; Off, the first paint and a hidden window snap.</summary>
+        private void TweenSectionWash(uint hue, int ms)
+        {
+            _washTween?.Stop();
+            _washTween = null;
+            if (ms <= 0 || !_washHuePainted || !IsVisible || _washHueShown == hue)
+            {
+                PaintWashHue(hue);
+                return;
+            }
+            uint from = _washHueShown;
+            var started = System.Diagnostics.Stopwatch.GetTimestamp();
+            DispatcherTimer? timer = null;
+            timer = new DispatcherTimer(TimeSpan.FromMilliseconds(16), DispatcherPriority.Render, (_, _) =>
+            {
+                try
+                {
+                    double p = Math.Clamp(System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds / ms, 0, 1);
+                    double e = 1 - (1 - p) * (1 - p);   // QuadraticEase, EaseOut
+                    PaintWashHue(p >= 1 ? hue : LerpArgb(from, hue, e));
+                    if (p < 1) return;
+                }
+                catch (Exception ex) { Log.Debug("TweenSectionWash: {E}", ex.Message); PaintWashHue(hue); }
+                timer!.Stop();
+                if (ReferenceEquals(_washTween, timer)) _washTween = null;
+            });
+            _washTween = timer;
+            timer.Start();
+        }
+
+        private void PaintWashHue(uint hue)
+        {
+            _washHueShown = hue;
+            _washHuePainted = true;
+            if (Named<Border>("SectionPageWash") is { } wash)
+            {
+                wash.Background = NavPaint.Diagonal(new[]
+                {
+                    (NavRailRules.WithAlpha(hue, SectionChromeRules.SectionWashAlpha), 0.0),
+                    (NavRailRules.WithAlpha(hue, 0), 0.66),
+                });
+            }
+            if (Named<Border>("SectionWashLine") is { } line)
+                line.Background = NavPaint.Solid(NavRailRules.WithAlpha(hue, SectionChromeRules.SectionWashLineAlpha));
         }
 
         /// <summary>The section ink resources (SectionInk / Tint / Rule / Outline, colour and brush)

@@ -309,8 +309,14 @@ namespace ConditioningControlPanel.Avalonia.Platform
             }
         }, TaskScheduler.Default);
 
+        /// <summary>Ducking OTHER apps is pactl, so Linux only (Windows: not built, WPF used Core Audio
+        /// sessions). Off Linux the sweep is a quiet no-op instead of a failed process start per duck.
+        /// The test constructor (no LibVLC) hands in its own pactl and always sweeps.</summary>
+        private bool NoSystemPactl => _vlc is not null && !OperatingSystem.IsLinux();
+
         private void DuckSweep(double keep)
         {
+            if (NoSystemPactl) return;
             using var doc = JsonDocument.Parse(_pactl("-f json list sink-inputs"));
             foreach (var si in doc.RootElement.EnumerateArray())
             {

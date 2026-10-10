@@ -113,6 +113,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             AttachModSwitch();
             HookWallRings();   // MainShellWindow.Presets.cs: wall tile rings follow the flags
             HookLevelDisplay(); // MainShellWindow.HeroFx.cs: header level/XP follow ProgressionBank
+            InitializeQuestStamps(); // MainShellWindow.QuestStamps.cs: the header quest stamps
             HookAutonomy();     // MainShellWindow.Autonomy.cs: Takeover seeds; starts only on the user's switch
             InitializeDescentFuse(); // MainShellWindow.DescentFuse.cs (WPF MainWindow ctor); no-op without App.DescentCountdown
             InitializeSpiralRoom();  // MainShellWindow.SpiralRoom.cs (WPF MainWindow ctor): the rail row
@@ -133,6 +134,8 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             InitializeHelpButtons(); // MainShellWindow.HelpButtons.cs (WPF MainWindow.Presets.cs:35 SetupHelpButtons)
             InitializeDashboardFx(); // MainShellWindow.DashboardFx.cs (WPF MainWindow ctor -> InitializeDashboardFx)
             InitializeRememberButton(); // MainShellWindow.Remember.cs (WPF MainWindow.xaml.cs:3508)
+            InitializeFocusGaze(); // MainShellWindow.FocusGaze.cs (WPF MainWindow.LabTab.cs HookFocusGazeService)
+            InitializeCameraShortcut(); // MainShellWindow.CameraShortcut.cs (WPF ApplyCameraShortcutTo + ApplyGlobalCameraHotkey)
             InitializeMicActivePill(); // MainShellWindow.SheListening.cs (WPF MainWindow.xaml.cs:3594 WireMicActivePill)
             InitializeRemoteControlOverlay(); // MainShellWindow.RemoteControl.cs (WPF MainWindow.RemoteControl.cs:784)
             // WPF MainWindow.xaml.cs:3695: the tube is built on load when the companion is enabled.

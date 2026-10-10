@@ -244,19 +244,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 dot.Effect = req.Glow;
 
                 req.Clock = new CancellationTokenSource();
-                var anim = new Animation
-                {
-                    Duration = TimeSpan.FromSeconds(StatusPulseSeconds),
-                    IterationCount = IterationCount.Infinite,
-                    PlaybackDirection = PlaybackDirection.Alternate,
-                    Easing = new SineEaseInOut(),
-                    Children =
-                    {
-                        new KeyFrame { Cue = new Cue(0d), Setters = { new Setter(DropShadowEffect.OpacityProperty, StatusPulseMinOpacity) } },
-                        new KeyFrame { Cue = new Cue(1d), Setters = { new Setter(DropShadowEffect.OpacityProperty, StatusPulseMaxOpacity) } },
-                    },
-                };
-                _ = anim.RunAsync(req.Glow, req.Clock.Token);
+                // X7: the glow breathes on the shared 30 fps beat, never an infinite Animation over an Effect
+                // (that kept the whole window composing at 60 Hz). Same curve: sine eased, min to max and back.
+                var glowNow = req.Glow;
+                var loop = new Helpers.AmbientLoop(dot, t =>
+                    glowNow.Opacity = StatusPulseMinOpacity + (StatusPulseMaxOpacity - StatusPulseMinOpacity) * Helpers.AmbientLoop.Breath(t, StatusPulseSeconds));
+                req.Clock.Token.Register(loop.Stop);
+                loop.Start();
             }
             catch (Exception ex) { Log.Debug("ApplyStatusPulse: {E}", ex.Message); }
         }

@@ -79,6 +79,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
                         _purchaseBurst.Fire(card, EnhancementBurstCount);
                         if (PrestigeRankNow() > rankBefore && _prestigeRow != null)
                             _purchaseBurst.Fire(_prestigeRow, PrestigeBurstCount, color: Env.GlowColor);
+                        // WPF CelebratePrestige: the rank-up also sweeps one sheen across the whole chrome.
+                        if (PrestigeRankNow() > rankBefore)
+                            (global::Avalonia.Controls.TopLevel.GetTopLevel(this) as global::ConditioningControlPanel.Avalonia.Views.Windows.MainShellWindow)?.SweepPrestigeSheen();
                     }
                     else if (!string.IsNullOrEmpty(error))
                         await TellFailure(owner, Loc.Get("dialog_purchase_failed"), error);

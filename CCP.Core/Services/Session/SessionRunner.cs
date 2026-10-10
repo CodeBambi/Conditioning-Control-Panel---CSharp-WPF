@@ -102,10 +102,12 @@ namespace ConditioningControlPanel.Services
             try { s.RecordSessionStart(s.ActiveModId); } catch { }
             CoreSettings.SaveImmediate();
 
+            CaptureCornerGifUserState(s);   // the user's own Spiral master, before any override
             _snapshot = SessionSettingsSnapshot.Capture(s);
             _custody = PhrasePoolCustody.Begin(s, session.Settings, CoreMods.ActiveModId, session);
             Apply(session.Settings, s);
             StartPhases(session);
+            StartCornerGif(session.Settings);   // SessionEngine.cs:214
 
             _timer = new Timer(_ => CoreDispatch.Post(() => Tick(Elapsed)), null, 1000, 1000);
             SessionLog.BeginSession(session);
@@ -206,6 +208,7 @@ namespace ConditioningControlPanel.Services
             CoreEngine.PopQuiz?.Stop();   // SessionEngine.cs:527, closes an open quiz
             CoreBouncingText.Stop();
             PausePhases();
+            PauseCornerGif();   // SessionEngine.cs:552: hidden, the corner stays claimed
             Log.Information("Session paused (pause #{Count}, -100 XP penalty)", PauseCount);
         }
 
@@ -225,6 +228,7 @@ namespace ConditioningControlPanel.Services
             if (ss.BouncingTextEnabled && !_deferred.IsPending("bouncing text")) CoreBouncingText.Start();
             if (CoreSettings.Current.PopQuizEnabled) CoreEngine.PopQuiz?.Start();   // SessionEngine.cs:574
             ResumePhases(ss);
+            ResumeCornerGif(ss);   // SessionEngine.cs:596
             Log.Information("Session resumed");
         }
 
@@ -254,6 +258,7 @@ namespace ConditioningControlPanel.Services
             UpdateRamps(session, minutes);
             _deferred.FireDue(minutes);
             TickPhases(session, minutes);
+            TickCornerGif(session.Settings, minutes);   // SessionEngine.cs:909-940
 
             // Pink delayed start at its randomised minute (SessionEngine.cs:849); the head shows it.
             var s = CoreSettings.Current;
@@ -310,6 +315,7 @@ namespace ConditioningControlPanel.Services
             s.ClearSessionFlashRamp();   // SessionEngine.cs:390, ahead of the restore
             PinkOpacity = null;
             StopPhases();
+            StopCornerGif();   // SessionEngine.cs:372: the corner goes back to the user's own slots
             _snapshot?.RestoreTo(s);
             _snapshot = null;
             _custody?.Restore(s);

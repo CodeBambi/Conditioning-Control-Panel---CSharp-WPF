@@ -70,12 +70,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         {
             RequestAudioPack(App.ReleaseContent);   // WPF Launch: kicked, never awaited
             PageUrl = new Uri(server.Url("intake/index.html"));
-            AssetsBase = $"{PageUrl.GetLeftPart(UriPartial.Authority)}/{WebAssetServer.AssetsPrefix}";
+            _server = server;
             Web.Navigate(PageUrl);
         }
 
         /// <summary>Where the media manifest points (WPF https://ccp.assets/).</summary>
-        internal string AssetsBase { get; private set; } = "";
+        // Read when the manifest is built (the page is up by then), never at Load: a web view that
+        // cannot carry the virtual hosts moves the whole server to loopback urls first.
+        internal string AssetsBase => _server?.AssetUrl("") ?? "";
+        private WebAssetServer? _server;
 
         internal static bool SameOrigin(Uri a, Uri b) =>
             a.IsAbsoluteUri && b.IsAbsoluteUri && a.Scheme == b.Scheme && a.Authority == b.Authority;

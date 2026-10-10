@@ -158,7 +158,10 @@ namespace ConditioningControlPanel.Services
             Math.Clamp(Fade, 0, 1) * _spiralFade * (IsDrain && !Popping ? Chaos.BrainDrainBubble.PulseAt(_timeAlive) : 1.0);
 
         /// <summary>Draw scale this step: the pop/breathe scale plus WPF's 0.06 x sin(7.5 t) wobble.</summary>
-        public double DrawScale => Scale + 0.06 * Math.Sin(_timeAlive * 7.5 + _wobbleOffset);
+        public double DrawScale => (Scale + 0.06 * Math.Sin(_timeAlive * 7.5 + _wobbleOffset)) * (1.0 + 0.25 * GazeDwell);
+
+        /// <summary>Focus Gaze dwell fill, 0..1 (WPF Bubble.SetGazeDwellProgress: swells to 1.25x).</summary>
+        public double GazeDwell;
 
         public double CenterX => X + Size / 2;
         public double CenterY => Y + Size / 2;

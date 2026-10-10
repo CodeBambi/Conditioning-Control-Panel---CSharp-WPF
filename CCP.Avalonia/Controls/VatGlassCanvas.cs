@@ -78,7 +78,8 @@ namespace ConditioningControlPanel.Avalonia.Controls
 
         // --------------------------------------------------------------- surface
 
-        private readonly DispatcherTimer _timer;
+        // On the window's frame clock (Controls/Fx/FrameClock), not a free-running DispatcherTimer.
+        private readonly global::ConditioningControlPanel.Avalonia.Controls.Fx.FrameClock _timer;
         private readonly System.Diagnostics.Stopwatch _clock = new();
         private readonly Random _rng = new();
         private double _lastTickMs;
@@ -151,7 +152,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
 
             // Background priority, same as AmbientFxCanvas: a decorative meter yields
             // to input and layout, it never competes with them.
-            _timer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(33) };
+            _timer = new global::ConditioningControlPanel.Avalonia.Controls.Fx.FrameClock(this) { Interval = TimeSpan.FromMilliseconds(33) };
             _timer.Tick += (_, _) => Tick();
 
             Loaded += OnLoaded;
