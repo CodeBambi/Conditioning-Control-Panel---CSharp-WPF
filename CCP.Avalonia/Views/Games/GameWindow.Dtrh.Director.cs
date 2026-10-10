@@ -4,7 +4,6 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Threading;
-using ConditioningControlPanel.Avalonia.Views.Chaos;
 using ConditioningControlPanel.Avalonia.Views.Windows;
 using ConditioningControlPanel.Services.Chaos;
 using Newtonsoft.Json.Linq;
@@ -30,8 +29,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
         /// <summary>WPF BootFailedThisSession (:90): the page reported boot-error this app session.</summary>
         internal static bool DtrhBootFailedThisSession { get; private set; }
 
-        /// <summary>Seam: the classic-hub door the boot-error path opens (tests swap it).</summary>
-        internal static Action DtrhLegacyFallback = LaunchDtrhLegacyFallback;
+        /// <summary>Seam: what the boot-error path shows the player (tests swap it). The native Chaos run is
+        /// retired on this head (owner, 2026-10-10): there is no classic door to fall back to.</summary>
+        internal static Action<string, string?> DtrhBootErrorNotice = ShowDtrhBootErrorNotice;
 
         /// <summary>Seams: tuck / restore the main window (tests swap them). True = it was tucked.</summary>
         internal static Func<bool> DtrhTuckShell = TuckShell;
@@ -102,37 +102,31 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             catch (Exception ex) { Log.Debug("DtrhHost session-metrics record: {E}", ex.Message); }
         }
 
-        /// <summary>WPF OnBootError (:943): the page could not start its renderer. Remember it,
-        /// close, and (outside test mode) open the classic door so the click still lands somewhere.</summary>
+        /// <summary>WPF OnBootError (:943): the page could not start its renderer. Remember it, close, and
+        /// (outside test mode) say so. WPF falls back to its native run here; this head has none.</summary>
         private void OnDtrhBootError(string? msg)
         {
-            Log.Warning("DtrhHost: page boot-error: {Msg} - falling back to the classic game this session", msg);
+            Log.Warning("DtrhHost: page boot-error: {Msg}", msg);
             DtrhBootFailedThisSession = true;
             bool wasTest = _testMode;
+            var title = Title ?? string.Empty;
             Close();
             if (wasTest) return;
             Dispatcher.UIThread.Post(() =>
             {
-                try { DtrhLegacyFallback(); }
-                catch (Exception ex) { Log.Error(ex, "DtrhHost: legacy fallback failed"); }
+                try { DtrhBootErrorNotice(title, msg); }
+                catch (Exception ex) { Log.Error(ex, "DtrhHost: boot-error notice failed"); }
             });
         }
 
-        /// <summary>WPF LaunchLegacyFallback (:959): the scripted first run when fresh, else the hub.
-        /// not ported: the native run itself (ChaosModeService's bubble field), so a fresh player gets
-        /// nothing here and the hub's FALL IN still closes without a run.</summary>
-        private static void LaunchDtrhLegacyFallback()
+        /// <summary>A black window the player has to guess about is the worse failure: the same card the
+        /// Arcademy shows when its page cannot start.</summary>
+        private static void ShowDtrhBootErrorNotice(string title, string? msg)
         {
-            if (ChaosRunHost.IsActive) return;
-            if (ChaosMeta.State.RunsCompleted == 0)
-            {
-                Log.Information("DtrhHost: boot-error on a first run; the scripted native run is not on this head");
-                return;
-            }
-            var lifetime = Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime;
-            var open = lifetime?.Windows.OfType<ChaosHubWindow>().FirstOrDefault();
-            if (open != null) { open.Activate(); return; }
-            new ChaosHubWindow().Show();
+            var owner = (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow;
+            if (owner == null || !owner.IsVisible) return;
+            _ = Dialogs.MessageDialog.ShowAsync(owner, title,
+                ConditioningControlPanel.Localization.Loc.GetF("arcademy_boot_error_body", title, msg ?? string.Empty));
         }
 
         /// <summary>WPF Launch (:181): the main window steps aside while the descent owns the screen.</summary>

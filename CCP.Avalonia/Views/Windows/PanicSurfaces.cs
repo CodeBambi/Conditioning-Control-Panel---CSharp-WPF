@@ -37,11 +37,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             new("blink-trainer", _ => Overlays.BlinkTrainerSession.Stop()),
             new("gaze-minigame", _ => Lab.GazeMinigame.GazeMinigameWindow.CloseAllForPanic(), Lab.GazeMinigame.GazeMinigameWindow.IsAnyRunning),   // ends before the camera stop below
             new("mantra", _ => MantraWindow.StopForPanic()),                // WPF KillAllAudio -> Mantra?.Dispose()
-            new("chaos", _ => Chaos.ChaosRunHost.ForceShutdown(), () => Chaos.ChaosRunHost.IsDescending),
+            // No "chaos" line: the native Chaos run is retired on this head (owner, 2026-10-10). Chaos is the
+            // web descent, a game window, closed by "games" above.
             // WPF PanicStopEverySurface (:1992): the toys go to zero, bypassing throttles and gates.
             new("haptics", _ => CoreHaptics.Service?.PanicStop()),
             new("remote-haptics", _ => RemoteCommands.StopHaptics()),   // decisions 2026-10-08
-            new("remote-overlays", _ => RemoteCommands.PanicDropOverlays()),   // a controller-held pink filter, spiral or haze never outlives a panic
+            new("remote-overlays", sh => { RemoteCommands.PanicDropOverlays(); sh?.StopBrowserVideoFromRemote(); }),   // a controller-held pink filter, spiral or haze never outlives a panic
             // Lockdown's haunt: every possessed control back at once, the edge pulse and its shake gone.
             // The lockdown itself is LockdownPauseRule's business, never this line's.
             new("possession", sh => MainShellWindow.StopPossessionForPanic(sh)),

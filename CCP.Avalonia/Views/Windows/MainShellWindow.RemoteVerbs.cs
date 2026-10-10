@@ -3,7 +3,7 @@
 // with EnsureOverlayRunning, Melt, trigger_lock_card, autonomy, the four session verbs) and
 // MainWindow/MainWindow.RemoteControl.cs StartSessionFromRemote / Pause / Resume / StopEngineAndSession.
 // Every member runs on the UI thread (RemoteRelay dispatches).
-// not ported: play_hypnotube (the controller supplies a url: owner call), Easy scaling of opacity (no
+// play_hypnotube is in MainShellWindow.RemoteVideoLink.cs. not ported: Easy scaling of opacity (no
 // RemoteHud), the online wallpaper pool (WallpaperService), start_session's strict_lock flag (dropped on purpose:
 // no new path by which a remote participant switches Strict Lock on).
 

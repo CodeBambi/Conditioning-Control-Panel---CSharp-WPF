@@ -102,12 +102,13 @@
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
     </Content>
-    <!-- Chaos art (WPF ConditioningControlPanel.csproj:216): hub banner + backdrop, boon chips, portraits, the recap
-         banner and the bubble sprites, resolved by Views/Chaos/ChaosArt from <exe>\assets\Chaos\{kind}\{id}.png.
-         The art still lives in the WPF head's folder; staging candidates stay out, as on WPF. -->
-    <Content Include="..\ConditioningControlPanel\assets\Chaos\**\*.png;..\ConditioningControlPanel\assets\Chaos\**\*.gif;..\ConditioningControlPanel\assets\Chaos\**\*.json"
-             Exclude="..\ConditioningControlPanel\assets\Chaos\**\_staging*\**"
-             Link="assets\Chaos\%(RecursiveDir)%(Filename)%(Extension)">
+    <!-- Chaos art. The native Chaos run is retired on this head (owner, 2026-10-10), and with it the hub, boon,
+         portrait, backdrop, announce, crafted, material, biome, guide, upgrade and menu art (about 360 MB): the web
+         descent draws its own. What still ships is the one sprite a live feature reads: the Melt bubble
+         (Views/Overlays/BubbleOverlay reads Views/Chaos/ChaosArt.Resolve("bubbles", BrainDrainBubble.VariantId)).
+         A new sprite is one more explicit line here, never the folder glob. -->
+    <Content Include="..\ConditioningControlPanel\assets\Chaos\bubbles\braindrain_melt.png"
+             Link="assets\Chaos\bubbles\%(Filename)%(Extension)">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>

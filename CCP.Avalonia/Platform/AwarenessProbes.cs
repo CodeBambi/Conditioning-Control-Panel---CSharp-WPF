@@ -357,7 +357,6 @@ internal sealed class HeadAppStateProbe : IAppStateProbe, IAttachableProbe, IDis
     {
         try { if (CoreEngine.Video?.IsPlaying == true) return true; } catch { }
         try { if (Views.Windows.LockCardWindow.IsAnyOpen()) return true; } catch { }
-        try { if (Views.Chaos.ChaosRunHost.IsActive) return true; } catch { }
         try { if (Views.Games.GameWindow.IsAnyOpen()) return true; } catch { }
         return false;
     }

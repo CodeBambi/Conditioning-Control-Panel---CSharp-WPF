@@ -79,7 +79,7 @@ public sealed class PanicSurfacesTests
     /// <summary>Surfaces a panic must never lose. Dropping one fails here; a new surface needs no edit.</summary>
     private static readonly string[] SafetyCritical =
     {
-        "intake", "voice-capture", "ai-followups", "blink-trainer", "gaze-minigame", "mantra", "chaos", "haptics",
+        "intake", "voice-capture", "ai-followups", "blink-trainer", "gaze-minigame", "mantra", "haptics",
         "remote-haptics", "remote-overlays", "takeover", "program-session", "engine", "pink-rush", "corner-gif", "lock-cards", "attention-test", "deeper-editor-audio", "deeper-player", "camera",
     };
 
@@ -97,7 +97,8 @@ public sealed class PanicSurfacesTests
         // WPF :1714-1721 game surfaces + Lab minigames close BEFORE RunPanicStopTail (:1722); the engine stop never reaches them.
         ("blink-trainer", "engine", "Lab minigames before the engine"),
         ("gaze-minigame", "engine", "Lab minigames before the engine"),
-        ("chaos", "engine", "WPF GameSurfaces.cs:50 'chaos' closes before the tail"),
+        // The native Chaos run is retired on this head (owner, 2026-10-10): Chaos is a web game window.
+        ("games", "engine", "WPF GameSurfaces.cs: every game surface closes before the tail"),
         // WPF :1808 KillAllAudio (App.xaml.cs:1780 Mantra.Dispose) runs before StopEngine (:1827).
         ("mantra", "engine", "audio killed before the engine stop"),
         // WPF :1786 remote haptics and :1992 haptics PanicStop come before StopEngine (:1827).
@@ -117,7 +118,7 @@ public sealed class PanicSurfacesTests
 
     [Fact]
     public void TheSurfaceListIsExactAndOrdered() =>
-        Assert.Equal(new[] { "intake", "games", "friends-landing", "voice-capture", "ai-followups", "blink-trainer", "gaze-minigame", "mantra", "chaos", "haptics", "remote-haptics", "remote-overlays",
+        Assert.Equal(new[] { "intake", "games", "friends-landing", "voice-capture", "ai-followups", "blink-trainer", "gaze-minigame", "mantra", "haptics", "remote-haptics", "remote-overlays",
             "possession", "takeover", "program-session", "engine", "pink-rush", "corner-gif", "tube", "lock-cards", "attention-test", "deeper-editor-audio", "deeper-player", "camera" }, PanicSurfaces.All.Select(x => x.Id));
 
     [Fact]

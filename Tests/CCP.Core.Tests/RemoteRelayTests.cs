@@ -191,7 +191,7 @@ public sealed class RemoteRelayTests
             Assert.Null(RemoteCommands.Execute("trigger_panic", null));
             Assert.False(s.StrictLockEnabled);
             Assert.True(s.PanicKeyEnabled);
-            Assert.Equal(RemoteCommands.NotOnThisBuild, RemoteCommands.Execute("play_hypnotube", null));
+            Assert.Equal(RemoteVideoLink.Refused, RemoteCommands.Execute("play_hypnotube", null));
         }
         finally { (s.StrictLockEnabled, s.PanicKeyEnabled) = (strict, panic); }
     }

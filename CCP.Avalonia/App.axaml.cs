@@ -479,6 +479,12 @@ namespace ConditioningControlPanel.Avalonia
                     Views.Overlays.FlashOverlay.TriggerOnce(host);
                     NoteFeatureUsed(ConditioningControlPanel.Services.Companion.Brain.MemorySignalWriter.FeatureFlash);
                 };
+                CoreFlash.TryShowProvider = () =>
+                {
+                    if (desktop.MainWindow == null || Views.Overlays.FlashOverlay.IsBusy) return false;
+                    CoreFlash.ShowProvider?.Invoke();
+                    return Views.Overlays.FlashOverlay.IsBusy;   // TriggerOnce claims the surface before its first await
+                };
 
                 // Subliminal and bouncing-text surfaces. Core owns the schedule / the motion;
                 // these draw on click-through overlays (Views/Overlays), hosted like the flash.
@@ -1216,7 +1222,6 @@ namespace ConditioningControlPanel.Avalonia
             // WPF App.OnExit:6013/6173: zero the toys first (a Lovense level has no timeout), then dispose.
             try { CoreHaptics.Service?.Dispose(); } catch { }
             try { Views.Overlays.BlinkTrainerSession.Stop(); } catch { /* WPF Application.Exit += Stop */ }
-            try { Views.Chaos.ChaosRunHost.ForceShutdown(); } catch { /* WPF App.OnExit:6241 Chaos.ForceShutdown */ }
             try { Platform.WebcamTracker.Instance.Stop(); } catch { /* WPF App.OnExit:6185 Webcam.Dispose */ }
 
             // Roadmap is lazy: do not construct it merely to dispose it on a profile that never
