@@ -15,13 +15,13 @@ using Xunit;
 
 namespace CCP.Avalonia.Tests;
 
-/// <summary>THE SPIRAL ROOM on this head, driven from the shell ctor (InitializeSpiralRoom) through
-/// the fuse arming, the rail row's click and the fuse's kill switch - WPF MainWindow.SpiralRoom.cs
-/// and SpiralTabView.Refresh, both reading Core SpiralRoom.StateFor.</summary>
+/// <summary>THE SPIRAL ROOM on this head, through the fuse arming, the fuse rail chip (the way in
+/// since the Spiral row left the rail, WPF MainWindow.SpiralRoom.cs:76) and the fuse's kill switch -
+/// SpiralTabView.Refresh reading Core SpiralRoom.StateFor.</summary>
 public sealed class SpiralRoomShellTests
 {
     [Fact]
-    public Task FuseArmsTheRailEllipsis_ClickOpensTheFog_KillSwitchEndsBoth() => AvaloniaTestDispatcher.RunAsync(() =>
+    public Task FuseArmsTheRailChip_ChipOpensTheFog_KillSwitchEndsBoth() => AvaloniaTestDispatcher.RunAsync(() =>
     {
         if (Application.Current is null)
             AppBuilder.Configure<global::ConditioningControlPanel.Avalonia.App>()
@@ -43,18 +43,17 @@ public sealed class SpiralRoomShellTests
         {
             shell.Show();
             Dispatcher.UIThread.RunJobs();
-            var row = shell.Named<Button>("BtnNavSpiral")!;
-            var label = shell.Named<TextBlock>("TxtNavSpiral")!;
+            var chip = shell.Named<global::ConditioningControlPanel.Avalonia.Controls.DescentFuseRailChip>("FuseRailChip")!;
             var tab = shell.Named<SpiralTabView>("SpiralTab")!;
-            Assert.False(row.IsVisible);   // fuse dark, no block: every install today
+            Assert.False(chip.IsVisible);   // fuse dark, no block: every install today
 
             fuse.ApplyCeremonyAt(DateTime.UtcNow.AddMinutes(30).ToString("yyyy-MM-ddTHH:mm:ssZ"));
             Dispatcher.UIThread.RunJobs();
             Assert.Equal(DescentFusePhase.Vigil, fuse.LastAnnouncedPhase);
-            Assert.True(row.IsVisible);
-            Assert.Equal("…", label.Text);   // the fog era does not name the room
+            Assert.True(chip.IsVisible);
 
-            row.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            chip.RaiseEvent(new global::Avalonia.Input.KeyEventArgs
+                { RoutedEvent = global::Avalonia.Input.InputElement.KeyDownEvent, Key = global::Avalonia.Input.Key.Enter });
             Dispatcher.UIThread.RunJobs();
             Assert.True(tab.IsVisible);
             Assert.True(tab.FindControl<Grid>("FogHost")!.IsVisible);
@@ -65,7 +64,7 @@ public sealed class SpiralRoomShellTests
 
             fuse.ApplyCeremonyAt(null);   // the kill switch, live
             Dispatcher.UIThread.RunJobs();
-            Assert.False(row.IsVisible);
+            Assert.False(chip.IsVisible);
             Assert.False(tab.FindControl<Grid>("FogHost")!.IsVisible);
             Assert.True(tab.FindControl<Border>("WaitingPanel")!.IsVisible);
         }

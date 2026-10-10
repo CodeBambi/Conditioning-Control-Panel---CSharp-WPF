@@ -61,13 +61,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     {
         /// <summary>
         /// The Deeper master switch's shell half (WPF MainWindow.Settings.cs:119 on load,
-        /// MainWindow.DeeperTab.cs:132 on toggle): the rail entry follows EnableDeeper, and turning
-        /// it off while Deeper is the open tab falls back to Settings.
+        /// MainWindow.DeeperTab.cs:132 on toggle): turning it off while Deeper is the open tab falls
+        /// back to Settings. The rail entry it used to hide left with the section rail (cd426fe36).
         /// </summary>
         internal void ApplyEnableDeeper()
         {
             var enabled = CoreSettings.Current.EnableDeeper;
-            if (Named<Button>("BtnDeeper") is { } door) door.IsVisible = enabled;
             if (!enabled && Named<Control>("DeeperTab") is { IsVisible: true }) ShowTab("settings");
         }
 

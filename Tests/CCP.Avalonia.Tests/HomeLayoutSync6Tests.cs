@@ -73,9 +73,13 @@ public sealed class HomeLayoutSync6Tests
                 Assert.Equal(0, body.Width);
                 Assert.False(s.FavoritesDrawerOpen);
 
-                // Pin from the rail row's menu while closed: the drawer slides out for a peek and
-                // writes nothing; the peek's end puts it away.
-                var row = w.Named<Button>("BtnNavHaptics")!;
+                // Pin from a RECENT chip's menu while closed (the rail rows that pinned left with
+                // cd426fe36): the drawer slides out for a peek and writes nothing; the peek's end
+                // puts it away.
+                w.ShowTab("haptics");
+                w.ShowTab("settings");
+                Dispatcher.UIThread.RunJobs();
+                var row = (Button)dash.FindControl<StackPanel>("RecentList")!.Children[0];
                 row.RaiseEvent(new ContextRequestedEventArgs());
                 Dispatcher.UIThread.RunJobs();
                 var item = Assert.IsType<MenuItem>(Assert.Single(row.ContextMenu!.Items));

@@ -218,7 +218,9 @@ public sealed class AchievementsTabFxTests
             shell = new MainShellWindow();
             shell.Show();
             Dispatcher.UIThread.RunJobs();
-            var nav = shell.Named<Button>("BtnLeaderboard")!;
+            shell.OpenNavSection("social");   // the Social door; Leaderboard is its pill
+            Dispatcher.UIThread.RunJobs();
+            var nav = shell.PageStrip!.PillFor("leaderboard")!;
             var review = shell.Named<LeaderboardTabView>("LeaderboardTab")!.FindControl<Button>("BtnViewSeasonRecap")!;
 
             nav.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));

@@ -34,22 +34,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         private static readonly (string Element, string Id)[] FavoritePinMap =
         {
             ("DoorHome", "door.home"), ("DoorStudio", "door.studio"), ("DoorCompanion", "door.companion"),
-            ("DoorPlay", "door.play"), ("DoorYou", "door.you"), ("DoorLibrary", "door.library"),
+            ("DoorPlay", "door.play"), ("DoorYou", "door.you"), ("DoorSocial", "door.social"), ("DoorLibrary", "door.library"),
             ("DoorSettings", "door.settings"),
-            ("BtnSettings", "tab.settings"), ("BtnNavStudio", "tab.studio"), ("BtnPresets", "tab.presets"),
-            ("BtnNavHaptics", "tab.haptics"), ("BtnCompanion", "tab.companion"),
-            ("BtnNavBambiTakeover", "tab.bambitakeover"), ("BtnNavSheListening", "tab.shelistening"),
-            ("BtnNavAwareness", "tab.awareness"), ("BtnLab", "tab.play"), ("BtnDeeper", "tab.deeper"),
-            ("BtnPatreonExclusives", "tab.exclusives"), ("BtnNavGradedIntake", "tab.gradedintake"),
-            ("BtnNavLockdown", "tab.lockdown"), ("BtnNavBlinkTrainer", "tab.blinktrainer"),
-            ("BtnNavRemoteControl", "tab.remotecontrol"), ("BtnAvailableSubjects", "tab.availablesubjects"),
-            ("BtnDiscordTab", "tab.discord"), ("BtnNavSpiral", "tab.spiral"), ("BtnQuests", "tab.quests"),
-            ("BtnAchievements", "tab.achievements"), ("BtnEnhancements", "tab.enhancements"),
-            ("BtnPrograms", "tab.programs"), ("BtnLeaderboard", "tab.leaderboard"),
-            ("BtnOpenAssetsTop", "tab.assets"), ("BtnNavMods", "launch.mods"),
-            ("BtnNavCatalogue", "launch.catalogue"), ("BtnNavPhrases", "launch.phrases"),
-            ("BtnNavMediaLog", "launch.medialog"),
-            ("BtnNavJustDrop", "door.justdrop"),
+            // Nav rework (2026-10-06): the door rows (BtnSettings ... BtnNavMediaLog, BtnNavJustDrop)
+            // left the rail for the pages' pill strips, so their pin rows went with them (WPF :68).
             ("BtnPlayRemoteControl", "tab.remotecontrol"), ("BtnPlayBlinkTrainer", "tab.blinktrainer"),
             ("BtnPlayGradedIntake", "tab.gradedintake"), ("BtnPlayFyp", "tab.fyp"),
             ("BtnPlayLockdown", "tab.lockdown"),
@@ -323,9 +311,6 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 item.Click += (_, _) => TogglePinned(id);
                 menu.Items.Add(item);
             };
-            if (!holdRail) return;
-            menu.Opened += (_, _) => HoldNavRailOpen(menu);
-            menu.Closed += (_, _) => ReleaseNavRailOpen(menu);
         }
     }
 }

@@ -64,15 +64,26 @@ public sealed class FeatureIntroWiringTests
         return Task.CompletedTask;
     });
 
-    private static void ClickLockdown(MainShellWindow shell) => ClickNav(shell, "BtnNavLockdown");
+    // Lockdown is a page inside Play's zones with no pill (NavSections hidden): the Play wall card's
+    // ShowTab is its way in since the rail entries left (cd426fe36).
+    private static void ClickLockdown(MainShellWindow shell) => ClickNav(shell, null, () => shell.ShowTab("lockdown"));
 
-    private static void ClickNav(MainShellWindow shell, string button)
+    /// <summary>A strip pill: open its section first, then click the pill the user sees.</summary>
+    private static void ClickPill(MainShellWindow shell, string section, string pill)
+    {
+        shell.OpenNavSection(section);
+        Dispatcher.UIThread.RunJobs();
+        ClickNav(shell, null, () => shell.PageStrip!.PillFor(pill)!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)));
+    }
+
+    private static void ClickNav(MainShellWindow shell, string? button, Action? go = null)
     {
         // Each click is a fresh offer: forget the ladder's one-passive-at-a-time settle and the
         // card's pacing, so only the gate under test can refuse it.
         StartupLadder.ResetForTests();
         FeatureIntroPopup.ResetForTests();
-        shell.Named<Button>(button)!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        if (go != null) go();
+        else shell.Named<Button>(button!)!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         Dispatcher.UIThread.RunJobs();
     }
 
@@ -123,12 +134,12 @@ public sealed class FeatureIntroWiringTests
     public Task StudioDoorOpensStudioRackAndRemoteControlOpensNothing() => Run((opened, shell) =>
     {
         // WPF MainWindow.TabNavigation.cs:505: the rack card rides case "studio"; case
-        // "remotecontrol" (a Play-door tab) calls nothing.
-        ClickNav(shell, "BtnNavRemoteControl");
+        // "remotecontrol" (a Social pill) calls nothing.
+        ClickPill(shell, "social", "remotecontrol");
         Assert.Empty(opened.OfType<FeatureIntroPopup>());
         Assert.DoesNotContain("studio-rack", CoreSettings.Current.SeenFeatureIntros);
 
-        ClickNav(shell, "BtnNavStudio");
+        ClickPill(shell, "studio", "studio");
         Assert.Equal(FeatureIntros.All["studio-rack"].Title, CardTitle(opened));
         Assert.Contains("studio-rack", CoreSettings.Current.SeenFeatureIntros);
     }, "studio-rack");

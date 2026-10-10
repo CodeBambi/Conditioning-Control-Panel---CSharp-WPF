@@ -93,13 +93,9 @@ public sealed class FirstRunGateDeadClickTests
         Card("CardVault").RaiseEvent(new RoutedEventArgs(FeatureCard.ClickEvent));
         Assert.Equal("exclusives", shell.CurrentTab);
 
-        shell.ShowTab("settings");
-        shell.FindControl<Button>("BtnPatreonExclusives")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-        Assert.Equal("exclusives", shell.CurrentTab);
-
-        shell.ShowTab("settings");
-        shell.FindControl<Button>("BtnNavMediaLog")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-        Assert.Equal("settings", shell.CurrentTab);   // a window, not the Assets tab
+        shell.OpenNavSection("library");   // the Media Log is a Library launcher pill now
+        shell.PageStrip!.PillFor("medialog")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Assert.Equal("assets", shell.CurrentTab);   // a window: the page under it stays
         Assert.Contains(shell.OwnedWindows, w => w is MediaHistoryWindow);
         return Task.CompletedTask;
     });

@@ -122,6 +122,37 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             }
         }
 
+        /// <summary>Gap kept above a zone header after a zone scroll (WPF PlayTabView.ZoneTopGap).</summary>
+        internal const double ZoneTopGap = 16;
+
+        internal Control? ZoneHeader(string? zone) => (zone ?? "").Trim().ToLowerInvariant() switch
+        {
+            "games" => ZoneGames,
+            "sessions" => ZoneSessions,
+            "eyes" => ZoneEyes,
+            _ => null,
+        };
+
+        /// <summary>WPF PlayTabView.ScrollToZone (:51), after layout: Games goes to the top so the
+        /// intro line shows too; any other zone's header lands ZoneTopGap under the strip.
+        /// ponytail: the landing glow (NavGlow.Once on the header) is sync6-nav-rail-c.</summary>
+        internal void ScrollToZone(string zone)
+        {
+            if (ZoneHeader(zone) is not { } header) { Log.Debug("Play ScrollToZone({Zone}): unknown zone", zone); return; }
+            Dispatcher.UIThread.Post(() =>
+            {
+                try
+                {
+                    double y = 0;
+                    // Measured against the viewport, so the content's own margin cannot shift the landing.
+                    if (zone != "games" && header.TranslatePoint(default, WallScroll) is { } p)
+                        y = Math.Max(0, WallScroll.Offset.Y + p.Y - ZoneTopGap);
+                    WallScroll.Offset = new Vector(WallScroll.Offset.X, y);
+                }
+                catch (Exception ex) { Log.Debug("Play ScrollToZone({Zone}): {E}", zone, ex.Message); }
+            }, DispatcherPriority.Background);
+        }
+
         /// <summary>WPF MainWindow.PlayTab.cs:83-120 RefreshPlayCards: the tier lockbands (same loc
         /// keys as the refusal), the FREE TODAY stamps and the Graded Intake's four pass states.
         /// Presentation only - TierGate refuses inside each door. Never throws.</summary>
