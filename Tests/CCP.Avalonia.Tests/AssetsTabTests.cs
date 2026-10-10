@@ -291,7 +291,9 @@ public sealed class AssetsTabTests
         shell.Show();
         try
         {
-            shell.Named<Button>("BtnOpenAssetsTop")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            shell.OpenNavSection("library");
+            Dispatcher.UIThread.RunJobs();
+            shell.PageStrip!.PillFor("assets")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Dispatcher.UIThread.RunJobs();
             var tab = shell.Named<AssetsTabView>("AssetsTab")!;
             Assert.True(tab.IsVisible);

@@ -5,7 +5,7 @@
 //
 // ponytail: not yet here (lane sync6-nav-rail-b): the section wash and ink (PaintSectionWash,
 // PaintSectionInk), the window-title crumb (UpdateNavTitle), the "Moved" redirects and their note,
-// GlowNavTarget, the right-click pin (PinIdForPill/AttachPinMenu) and the Play zone scroll.
+// GlowNavTarget and the landing glow.
 
 using System;
 using Avalonia.Controls;
@@ -13,6 +13,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Interactivity;
 using ConditioningControlPanel.Avalonia.Views.Controls;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Services;
 using ConditioningControlPanel.Services.UI;
 
 namespace ConditioningControlPanel.Avalonia.Views.Windows
@@ -62,6 +63,12 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             strip.CanOpen = CanOpenNavTab;
             strip.SettingsPageLabel = CurrentSettingsSectionLabel;
             strip.TabRequested += OnSectionPillChosen;
+            // WPF :221 (ea2d4cfca): right-click on a pill pins or unpins it to the Home Favourites
+            // column, as the rail rows did. Only pills with a Ctrl+K row are pinnable.
+            strip.PillCreated += (tab, pill) =>
+            {
+                if (PinIdForPill(tab) is { } id) AttachPinMenu(pill, id);
+            };
             strip.SectionRequested += section =>
                 ShowTab(section == NavSections.Settings ? "appsettings" : NavLastTabFor(section));
             // Settings keeps its own left pill column; the breadcrumb follows it (WPF :233).
@@ -83,8 +90,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
         /// zones through ShowTab.</summary>
         private void OnSectionPillChosen(NavTab tab)
         {
-            if (tab.Kind == NavTabKind.Launcher) OpenLibraryLauncher(tab.Key);
-            else ShowTab(tab.Key);
+            if (tab.Kind == NavTabKind.Launcher) { OpenLibraryLauncher(tab.Key); return; }
+            var before = CurrentTab;
+            ShowTab(tab.Key);
+            // WPF :263: the Games pill scrolls to the top from anywhere (the active pill while
+            // scrolled down included); from another zone ShowTab already did.
+            if (tab.Key == "play" && before is not ("playsessions" or "playeyes"))
+                Named<Views.Tabs.PlayTabView>("PlayTab")?.ScrollToZone("games");
         }
 
         /// <summary>WPF OpenLibraryLauncher (:274): the handlers the Library's rail rows call.</summary>
@@ -101,20 +113,36 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             }
         }
 
+        /// <summary>WPF PinIdForPill (:290): the Favourites destination a strip pill pins as, or null
+        /// when it has no Ctrl+K row.</summary>
+        internal static string? PinIdForPill(NavTab tab)
+        {
+            var id = tab.Kind == NavTabKind.Launcher ? "launch." + tab.Key
+                   : tab.Key == "justdrop" ? "door.justdrop"
+                   : "tab." + tab.Key;
+            return FavoritesRailRule.IsDestination(id) && SettingsPaletteIndex.ById(id) != null ? id : null;
+        }
+
         /// <summary>
         /// Ctrl+K from every page (WPF EnsurePaletteShortcut, d858d6108). WPF reads the raw
         /// keystroke before routing so no focused control can swallow it; the window's Tunnel pass
         /// is that point here, and handledEventsToo keeps it whatever a child marks. Ctrl alone
-        /// (Ctrl+Alt+K is the camera). ponytail: Avalonia reports no key-repeat flag, so a held chord
-        /// re-toggles where WPF took the first press only. The palette has its own Ctrl+K toggle.
+        /// (Ctrl+Alt+K is the camera). A held chord toggles once, as WPF's lParam bit-30 check
+        /// does (SettingsPaletteWindow.FirstChordPress).
         /// </summary>
-        private void InitializePaletteShortcut() =>
+        private void InitializePaletteShortcut()
+        {
             AddHandler(KeyDownEvent, (_, e) =>
             {
                 if (e.Key != global::Avalonia.Input.Key.K || e.KeyModifiers != global::Avalonia.Input.KeyModifiers.Control) return;
                 e.Handled = true;
-                SettingsPaletteWindow.Toggle(this);
+                if (SettingsPaletteWindow.FirstChordPress()) SettingsPaletteWindow.Toggle(this);
             }, RoutingStrategies.Tunnel, handledEventsToo: true);
+            AddHandler(KeyUpEvent, (_, e) =>
+            {
+                if (e.Key == global::Avalonia.Input.Key.K) SettingsPaletteWindow.ChordReleased();
+            }, RoutingStrategies.Tunnel, handledEventsToo: true);
+        }
 
         /// <summary>The label of the Settings section whose pill is checked (null if none). WPF :340.</summary>
         private string? CurrentSettingsSectionLabel()

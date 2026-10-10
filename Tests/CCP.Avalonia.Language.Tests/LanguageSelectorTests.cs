@@ -101,7 +101,11 @@ public sealed class LanguageSelectorTests
             Assert.Contains(rows, row => (row.Tag as Session)?.Id == "language_unavailable");
 
             // Navigate through the real shell door before exercising the row's keyboard path.
-            shell.FindControl<Button>("BtnPresets")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            // (the Studio row, then its Presets pill: the rail entries left with cd426fe36).
+            shell.FindControl<Button>("DoorStudio")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Dispatcher.UIThread.RunJobs();
+            global::Avalonia.LogicalTree.LogicalExtensions.GetLogicalDescendants(shell).OfType<Button>()
+                .First(b => b.Name == "NavPill_presets").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Dispatcher.UIThread.RunJobs();
             customRow.Focus();
             shell.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, "");
