@@ -11,6 +11,7 @@ using Avalonia.Interactivity;
 using Avalonia.Threading;
 using CCP.Avalonia.Testing;
 using ConditioningControlPanel.Avalonia.Views.Deeper;
+using ConditioningControlPanel.Avalonia.Views.Overlays;
 using ConditioningControlPanel.Avalonia.Views.Windows;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models.Deeper;
@@ -241,5 +242,55 @@ public sealed class DeeperPlayerEngineTests
             (DeeperImport.Notify, DeeperImport.RememberDirectory) = (notify, remember);
             Directory.Delete(root, true);
         }
+    }
+
+    [Fact]
+    public Task APinkBandHoldsTheTintWithoutTheUsersSwitchAndStopHandsItBack() => AvaloniaTestDispatcher.RunAsync(async () =>
+    {
+        Setup();
+        var (host, refresh) = (RealActionDispatcher.HostProvider, RealActionDispatcher.PinkRefresh);
+        var window = new Window();
+        RealActionDispatcher.HostProvider = () => window;
+        RealActionDispatcher.PinkRefresh = _ => { };
+        var ctx = new EnhancementDispatchContext(new Enhancement(), new NoSource(), 0, null);
+        TriggerEffectAction Band(EffectPhase phase, double opacity, string kind = OverlayKinds.PinkFilter) => new()
+        { EffectType = EffectTypes.Overlay, OverlayKind = kind, Opacity = opacity, Phase = phase, EffectId = "item:a", DurationMs = 4000 };
+        try
+        {
+            var d = new RealActionDispatcher();
+            Assert.Null(PinkFilterOverlay.BandHold);
+            await d.DispatchAsync(Band(EffectPhase.Start, 0.4), ctx);
+            Assert.Equal(0.4, PinkFilterOverlay.BandHold);
+            await d.DispatchAsync(Band(EffectPhase.Update, 0.6), ctx);      // the opacity ramp
+            Assert.Equal(0.6, PinkFilterOverlay.BandHold);
+            await d.DispatchAsync(Band(EffectPhase.Stop, 0.6), ctx);
+            Assert.Null(PinkFilterOverlay.BandHold);
+
+            await d.DispatchAsync(Band(EffectPhase.Start, 0.3), ctx);
+            d.ResetOverlayBands();                                          // engine Stop's safety belt
+            Assert.Null(PinkFilterOverlay.BandHold);
+
+            await d.DispatchAsync(Band(EffectPhase.Start, 0.3, OverlayKinds.Spiral), ctx);
+            await d.DispatchAsync(new ScreenShakeAction(), ctx);
+            Assert.Equal(new[] { "overlay spiral", "screen_shake" }, d.NoTwin.OrderBy(x => x));
+            Assert.Null(PinkFilterOverlay.BandHold);
+        }
+        finally
+        {
+            PinkFilterOverlay.BandHold = null;
+            (RealActionDispatcher.HostProvider, RealActionDispatcher.PinkRefresh) = (host, refresh);
+        }
+    });
+
+    private sealed class NoSource : IPlaybackTimeSource
+    {
+        public event Action<double>? PlaybackTimeChanged { add { } remove { } }
+        public double GetCurrentTimeSeconds() => 0;
+        public double GetDurationSeconds() => 0;
+        public bool IsPlaying => false;
+        public void Seek(double seconds) { }
+        public void Pause() { }
+        public void Play() { }
+        public PlaybackRect GetVideoRect() => PlaybackRect.Empty;
     }
 }

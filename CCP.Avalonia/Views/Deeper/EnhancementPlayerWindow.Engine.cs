@@ -46,9 +46,15 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
             _timeSource = new PlayerTimeSource(this);
             _host.ActionLogged += OnHostActionLogged;
             _host.Diagnostic += OnHostDiagnostic;
-            s_open.Add(this);
-            WebcamTracker.Instance.StateChanged += OnEyeStateChanged;
-            RefreshEyeTrackingLabel();
+            // Statics only once the window is really up: a window that is built and never shown
+            // (render proof) must not sit in the open list or under the tracker's event.
+            Opened += (_, _) =>
+            {
+                if (s_open.Contains(this)) return;
+                s_open.Add(this);
+                WebcamTracker.Instance.StateChanged += OnEyeStateChanged;
+                RefreshEyeTrackingLabel();
+            };
         }
 
         private void OnHostActionLogged(string line) => PostUi(() => IngestActionLine(line));
@@ -220,8 +226,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Deeper
 
         private void CloseEngine()
         {
-            s_open.Remove(this);
-            try { WebcamTracker.Instance.StateChanged -= OnEyeStateChanged; } catch { }
+            if (s_open.Remove(this))
+            {
+                try { WebcamTracker.Instance.StateChanged -= OnEyeStateChanged; } catch { }
+            }
             _host.ActionLogged -= OnHostActionLogged;
             _host.Diagnostic -= OnHostDiagnostic;
             try { _host.Dispose(); } catch (Exception ex) { Log.Debug(ex, "EnhancementPlayer: host dispose"); }
