@@ -1753,3 +1753,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/sync6-media-picker: +969
 - Assets tab: the remote media picker is ported (awaited consent, segmented source, flavour cards, Fine-tune list with niche rows, your own communities and a probed add). FlavourPresets and RemoteSubAddMessages moved to Core; 5 main-sync rows ticked.
 - Open gap: flash/video on this head do not use online media yet (only intake does).
+
+## avalonia-port/roadmap-atomic-save: +169
+- Core RoadmapService: flushed temp+rename save, and a roadmap.json.corrupt-<ts> backup before falling back to defaults; saving is turned off if that backup fails (both heads).
+- 4 fail-proven Core tests on temp dirs via an internal ctor.
