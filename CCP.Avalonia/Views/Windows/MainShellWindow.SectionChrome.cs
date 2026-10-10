@@ -67,7 +67,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             // column, as the rail rows did. Only pills with a Ctrl+K row are pinnable.
             strip.PillCreated += (tab, pill) =>
             {
-                if (PinIdForPill(tab) is { } id) AttachPinMenu(pill, id, holdRail: false);
+                if (PinIdForPill(tab) is { } id) AttachPinMenu(pill, id);
             };
             strip.SectionRequested += section =>
                 ShowTab(section == NavSections.Settings ? "appsettings" : NavLastTabFor(section));

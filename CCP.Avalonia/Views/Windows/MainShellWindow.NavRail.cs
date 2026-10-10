@@ -4,7 +4,9 @@
 // section's last tab; the lit row follows every navigation (RefreshSectionRail, from ShowTab).
 //
 // ponytail: not yet here (sync6-nav-rail-c): the coin depth (BuildNavCoin, press travel, tilt,
-// specular), the edge spur, the hue-bevel ring gradient (a flat hue ring stands in), NavBadges
+// specular), the edge spur, the hue-bevel ring gradient (a flat hue ring stands in), the art tint
+// over each tile (Tag "navtint", PaintNavTint :701), the static glow behind each label (DropShadow
+// in the mod glow colour), the 160 ms halo fade (the halo snaps here), NavBadges
 // counts, the rich row tooltip, the possession reroute seam, mod door art (ApplyDoorArt) and the
 // rail shadow (PaintDepthRail).
 

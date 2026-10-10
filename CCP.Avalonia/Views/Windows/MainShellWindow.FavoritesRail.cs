@@ -127,7 +127,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
             if (face != null) chip.Background = face;
             if (locked && this.TryFindResource("Tier1GoldBorderBrush", out var gold) && gold is IBrush g) chip.BorderBrush = g;
             chip.Click += (_, _) => OpenDestination(entry);
-            AttachPinMenu(chip, entry.Id, holdRail: false);
+            AttachPinMenu(chip, entry.Id);
             return chip;
         }
 
@@ -286,13 +286,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 bool onPlayWall = element.StartsWith("BtnPlay", StringComparison.Ordinal);
                 var target = onPlayWall ? play?.FindControl<Control>(element) : Named<Control>(element);
                 if (target == null) { Log.Debug("Favorites rail: no element named {Name} to pin", element); continue; }
-                AttachPinMenu(target, id, holdRail: !onPlayWall);
+                AttachPinMenu(target, id);
             }
         }
 
-        /// <summary>WPF AttachPinMenu (:436). The rail hold is taken on Opened and given back on
-        /// Closed - the two halves of one open (the v6.9.5 "rail stops minimizing" bug).</summary>
-        internal void AttachPinMenu(Control target, string id, bool holdRail)
+        /// <summary>WPF AttachPinMenu (:436): a Pin/Unpin menu rebuilt on each open. No rail hold:
+        /// the section rail never overlays the page, so there is nothing to keep open.</summary>
+        internal void AttachPinMenu(Control target, string id)
         {
             var menu = new ContextMenu();
             target.ContextMenu = menu;

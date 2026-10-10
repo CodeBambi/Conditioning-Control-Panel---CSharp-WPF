@@ -514,7 +514,7 @@
                      NavSections.Order (NavSectionRailTests). Each row: halo, tile, art, ring, label. -->
                 <StackPanel x:Name="NavSectionRows" Grid.Row="1" VerticalAlignment="Top">
                     <Button x:Name="DoorHome" Tag="home" Theme="{StaticResource NavSectionButton}"
-                            Click="NavDoor_Click" ToolTip.Tip="{loc:Str nav_door_home}">
+                            Click="NavDoor_Click" ToolTip.Tip="{loc:Str nav_door_home}" AutomationProperties.Name="{loc:Str nav_door_home}">
                         <Grid RowDefinitions="56,Auto">
                             <Ellipse Theme="{StaticResource NavSectionGlow}"/>
                             <Border Theme="{StaticResource NavSectionTile}"/>
@@ -524,7 +524,7 @@
                         </Grid>
                     </Button>
                     <Button x:Name="DoorStudio" Tag="studio" Theme="{StaticResource NavSectionButton}"
-                            Click="NavDoor_Click" ToolTip.Tip="{loc:Str nav_door_studio}">
+                            Click="NavDoor_Click" ToolTip.Tip="{loc:Str nav_door_studio}" AutomationProperties.Name="{loc:Str nav_door_studio}">
                         <Grid RowDefinitions="56,Auto">
                             <Ellipse Theme="{StaticResource NavSectionGlow}"/>
                             <Border Theme="{StaticResource NavSectionTile}"/>
@@ -534,7 +534,7 @@
                         </Grid>
                     </Button>
                     <Button x:Name="DoorCompanion" Tag="companion" Theme="{StaticResource NavSectionButton}"
-                            Click="NavDoor_Click" ToolTip.Tip="{loc:Str nav_door_companion}">
+                            Click="NavDoor_Click" ToolTip.Tip="{loc:Str nav_door_companion}" AutomationProperties.Name="{loc:Str nav_door_companion}">
                         <Grid RowDefinitions="56,Auto">
                             <Ellipse Theme="{StaticResource NavSectionGlow}"/>
                             <Border Theme="{StaticResource NavSectionTile}"/>
@@ -544,7 +544,7 @@
                         </Grid>
                     </Button>
                     <Button x:Name="DoorPlay" Tag="play" Theme="{StaticResource NavSectionButton}"
-                            Click="NavDoor_Click" ToolTip.Tip="{loc:Str nav_door_play}">
+                            Click="NavDoor_Click" ToolTip.Tip="{loc:Str nav_door_play}" AutomationProperties.Name="{loc:Str nav_door_play}">
                         <Grid RowDefinitions="56,Auto">
                             <Ellipse Theme="{StaticResource NavSectionGlow}"/>
                             <Border Theme="{StaticResource NavSectionTile}"/>
@@ -557,7 +557,7 @@
                          The placeholder art is a pale card, so it idles under a shade that drops
                          while Social is lit (NavRail.cs PaintNavRowActive). -->
                     <Button x:Name="DoorSocial" Tag="social" Theme="{StaticResource NavSectionButton}"
-                            Click="NavDoor_Click" ToolTip.Tip="{loc:Str nav_section_social}">
+                            Click="NavDoor_Click" ToolTip.Tip="{loc:Str nav_section_social}" AutomationProperties.Name="{loc:Str nav_section_social}">
                         <Grid RowDefinitions="56,Auto">
                             <Ellipse Theme="{StaticResource NavSectionGlow}"/>
                             <Border Theme="{StaticResource NavSectionTile}"/>
@@ -572,7 +572,7 @@
                         </Grid>
                     </Button>
                     <Button x:Name="DoorYou" Tag="you" Theme="{StaticResource NavSectionButton}"
-                            Click="NavDoor_Click" ToolTip.Tip="{loc:Str nav_door_you}">
+                            Click="NavDoor_Click" ToolTip.Tip="{loc:Str nav_door_you}" AutomationProperties.Name="{loc:Str nav_door_you}">
                         <Grid RowDefinitions="56,Auto">
                             <Ellipse Theme="{StaticResource NavSectionGlow}"/>
                             <Border Theme="{StaticResource NavSectionTile}"/>
@@ -582,7 +582,7 @@
                         </Grid>
                     </Button>
                     <Button x:Name="DoorLibrary" Tag="library" Theme="{StaticResource NavSectionButton}"
-                            Click="NavDoor_Click" ToolTip.Tip="{loc:Str nav_door_library}">
+                            Click="NavDoor_Click" ToolTip.Tip="{loc:Str nav_door_library}" AutomationProperties.Name="{loc:Str nav_door_library}">
                         <Grid RowDefinitions="56,Auto">
                             <Ellipse Theme="{StaticResource NavSectionGlow}"/>
                             <Border Theme="{StaticResource NavSectionTile}"/>
@@ -618,7 +618,7 @@
                     </Button>
                     <!-- THE GEAR. Tag "appsettings" (the tab key "settings" is the dashboard). -->
                     <Button x:Name="DoorSettings" Tag="appsettings" Theme="{StaticResource NavSectionButton}"
-                            Click="NavDoor_Click" ToolTip.Tip="{loc:Str nav_door_settings}">
+                            Click="NavDoor_Click" ToolTip.Tip="{loc:Str nav_door_settings}" AutomationProperties.Name="{loc:Str nav_door_settings}">
                         <Grid RowDefinitions="56,Auto">
                             <Ellipse Theme="{StaticResource NavSectionGlow}"/>
                             <Border Theme="{StaticResource NavSectionTile}"/>

@@ -74,6 +74,7 @@ public sealed class NavSectionRailTests
             var key = NavSections.Find(row.Section)!.LabelKey;
             Assert.Equal(Loc.Get(key).ToUpper(System.Globalization.CultureInfo.CurrentUICulture), row.Label!.Text);
             Assert.True(row.Button.Focusable);   // keyboard reach (P17)
+            Assert.Equal(Loc.Get(key), global::Avalonia.Automation.AutomationProperties.GetName(row.Button));   // WPF MainWindow.xaml:475
         }
         Assert.Equal(new[] { NavSections.Home }, Lit(w));   // the app lands on the dashboard
     });

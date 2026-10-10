@@ -138,6 +138,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// ponytail: the landing glow (NavGlow.Once on the header) is sync6-nav-rail-c.</summary>
         internal void ScrollToZone(string zone)
         {
+            zone = (zone ?? "").Trim().ToLowerInvariant();
             if (ZoneHeader(zone) is not { } header) { Log.Debug("Play ScrollToZone({Zone}): unknown zone", zone); return; }
             Dispatcher.UIThread.Post(() =>
             {
