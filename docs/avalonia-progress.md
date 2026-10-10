@@ -1765,3 +1765,7 @@ goldens from pre-move code, fail-proofed 5 ways; review ACCEPT; stale quiz ponyt
 ## avalonia-port/programs-run-3b: +619
 - Pause/Resume, Restart, Dismiss, mantra door and ritual photos live on the run panel; roadmap provider seeded lazily; presentation + the_takeover enrollable.
 - Lockdown refuses Pause/Resume/Restart/ritual/mantra door; Restart refused for unfinishable programs; strings x9; 22 fail-proofs, GATE-OK.
+
+## avalonia-port/sync6-715-fixes: +151
+- 7.1.5 fixes: the pop quiz "Turn these off" link, a 20-minute default for Lockdown, and a session no longer restores the pop quiz switch (ledger rows 144/146/147 ported).
+- Shatter grey-out and perk-row opacity were folded into missing parity rows because those surfaces are not on this head.
