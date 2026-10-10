@@ -31,6 +31,10 @@ namespace ConditioningControlPanel.Avalonia
             w.ShowTab("quests");
             Check(Vis("QuestsTab") && !Vis("SettingsTab"), "quests shows QuestsTab and hides Settings");
             Check(w.ExpandedDoor == "you", "quests unfolds the You door only");
+            // WPF SetExpandedDoor: a SHUT rail opens nothing; the chosen door waits for the hover.
+            Check(!Clickable("DoorPanelYou"), "a shut rail keeps every door panel shut");
+            var hold = new object();
+            w.HoldNavRailOpen(hold);
             // The assertion that was missing, and the reason a real defect survived every green run:
             // the old check asked only about Height. The markup parks each closed door at
             // IsHitTestVisible="False", and the port never set it back, so an open door drew its
@@ -43,6 +47,9 @@ namespace ConditioningControlPanel.Avalonia
             Check(w.ExpandedDoor == "studio", "haptics unfolds the Studio door only");
             Check(Clickable("DoorPanelStudio") && !Clickable("DoorPanelYou"),
                   "the door that closed stops taking clicks");
+
+            w.ReleaseNavRailOpen(hold);
+            Check(!Clickable("DoorPanelStudio"), "shutting the rail parks the open door");
 
             w.ShowTab("no-such-tab");
             Check(Vis("StudioTab"), "unknown key keeps the current tab, never a blank page");

@@ -114,10 +114,9 @@
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="18,0,0,0">
                             <TextBlock Text="👁" FontSize="22" VerticalAlignment="Center" Margin="0,0,10,0"/>
                             <StackPanel VerticalAlignment="Center">
-                                <TextBlock Text="Awareness Engine" FontSize="17" FontWeight="Bold"
-                                           Foreground="{StaticResource TextLightBrush}"/>
+                                <TextBlock Theme="{StaticResource Type.CardTitle}" Text="Awareness Engine"/>
                                 <TextBlock Text="She's watching your screen and your typing. React in real time."
-                                           FontSize="11.5" Foreground="{StaticResource TextMutedBrush}" Margin="0,1,0,0"/>
+                                           FontSize="11.5" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,1,0,0"/>
                             </StackPanel>
                         </StackPanel>
 

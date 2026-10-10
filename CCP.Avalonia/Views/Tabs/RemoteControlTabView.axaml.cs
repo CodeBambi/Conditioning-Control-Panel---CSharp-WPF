@@ -61,8 +61,9 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             RefreshTierCardHighlight();
         }
 
-        /// <summary>The one relay client (WPF App.RemoteControl). Commands run through Core's gate and table.</summary>
-        internal static readonly Lazy<RemoteRelay> Relay = new(() => new RemoteRelay(
+        /// <summary>The one relay client (WPF App.RemoteControl). Commands run through Core's gate and table.
+        /// Tests swap in a fake-relay client before opening the shell.</summary>
+        internal static Lazy<RemoteRelay> Relay = new(() => new RemoteRelay(
             () => CoreSettings.Current.AuthToken, () => CoreAccount.UnifiedUserId, CoreReleaseContent.AppVersion,
             RemoteCommands.Execute, RemoteCommands.StopEffects));
 
@@ -299,17 +300,82 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
             }
         }
 
-        // ponytail: emotes (Core RemoteRelay has no /v2/remote/emote yet) and the directory opt-in chain
-        // (/v2/directory/opt-in) are not ported; the opt-in form stays a local form that publishes nothing.
-        private void BtnEditEmoteCancel_Click(object? sender, RoutedEventArgs e) { }
-        private void BtnEditEmoteSave_Click(object? sender, RoutedEventArgs e) { }
-        private void BtnEmoteCustomSend_Click(object? sender, RoutedEventArgs e) { }
-        private void BtnEmoteEdit_Click(object? sender, RoutedEventArgs e) { }
-        private void BtnEmotePreset_Click(object? sender, RoutedEventArgs e) { }
+        // ---- Emotes: WPF MainWindow.RemoteControl.cs:325-480. The shell's big picker shares these. ----
+        private Models.EmotePreset? _editingPreset;
+        private static readonly IBrush Sent = Brushes.LightGreen, Failed = Brushes.Salmon;
+
+        private async void BtnEmotePreset_Click(object? sender, RoutedEventArgs e)
+        {
+            if (sender is Button { Tag: Models.EmotePreset p } && !string.IsNullOrWhiteSpace(p.Text))
+                await SendEmoteAndReportAsync(p.Text, p.Icon ?? "", "preset", TxtEmoteStatus);
+        }
+
+        private async void BtnEmoteCustomSend_Click(object? sender, RoutedEventArgs e) => await SendCustomEmoteAsync(TxtEmoteCustom, TxtEmoteStatus);
+
+        private async void TxtEmoteCustom_KeyDown(object? sender, KeyEventArgs e)
+        {
+            if (e.Key != Key.Enter) return;
+            e.Handled = true;
+            await SendCustomEmoteAsync(TxtEmoteCustom, TxtEmoteStatus);
+        }
+
+        /// <summary>WPF SendCustomEmoteAsync: empty is a silent no-op; a sent text clears the box and becomes its ghost.</summary>
+        internal static async Task SendCustomEmoteAsync(TextBox box, TextBlock status)
+        {
+            var trimmed = (box.Text ?? "").Trim();
+            if (trimmed.Length == 0) return;
+            if (!await SendEmoteAndReportAsync(trimmed, "", "custom", status)) return;
+            box.Text = "";
+            box.Watermark = trimmed;   // WPF EmoteHelper.SetLastSentEmoteHint
+        }
+
+        /// <summary>WPF SendEmoteAndReportAsync: "Sent" green, debounce silent, else the salmon reason.</summary>
+        internal static async Task<bool> SendEmoteAndReportAsync(string text, string icon, string kind, TextBlock? status)
+        {
+            var (ok, error, retry) = await Relay.Value.SendEmoteAsync(text, icon, kind);
+            if (error == "debounced" || status == null) return ok;
+            status.Foreground = ok ? Sent : Failed;
+            status.Text = ok ? Loc.Get("status_emote_sent")
+                : error == "rate_limited" && retry.HasValue ? Loc.GetF("status_emote_rate_limited", retry.Value)
+                : error == "session not active" ? Loc.Get("status_emote_no_session")
+                : Loc.Get("status_emote_failed");
+            return ok;
+        }
+
+        private void BtnEmoteEdit_Click(object? sender, RoutedEventArgs e)
+        {
+            if (sender is not Button { Tag: Models.EmotePreset p } btn) return;
+            _editingPreset = p;
+            TxtEditEmoteIcon.Text = p.Icon ?? "";
+            TxtEditEmoteText.Text = p.Text ?? "";
+            BtnEditEmoteSave.IsEnabled = !string.IsNullOrWhiteSpace(p.Text);
+            EmoteEditPopup.PlacementTarget = btn;
+            EmoteEditPopup.IsOpen = true;
+            TxtEditEmoteText.Focus();
+        }
+
+        private void TxtEditEmoteText_TextChanged(object? sender, TextChangedEventArgs e)
+        {
+            if (BtnEditEmoteSave != null) BtnEditEmoteSave.IsEnabled = !string.IsNullOrWhiteSpace(TxtEditEmoteText.Text);
+        }
+
+        private void BtnEditEmoteSave_Click(object? sender, RoutedEventArgs e)
+        {
+            var text = (TxtEditEmoteText.Text ?? "").Trim();
+            if (_editingPreset == null || text.Length == 0) return;
+            _editingPreset.Icon = TxtEditEmoteIcon.Text ?? "";
+            _editingPreset.Text = text;
+            CoreSettings.Save();
+            EmoteEditPopup.IsOpen = false;
+            _editingPreset = null;
+        }
+
+        private void BtnEditEmoteCancel_Click(object? sender, RoutedEventArgs e) { EmoteEditPopup.IsOpen = false; _editingPreset = null; }
+
+        // ponytail: the directory opt-in chain (/v2/directory/opt-in) and the listing pill are not ported;
+        // the opt-in form stays a local form that publishes nothing.
         private void BtnGateUnlock_Click(object? sender, RoutedEventArgs e) => (TopLevel.GetTopLevel(this) as Windows.MainShellWindow)?.BtnGateUnlock_Click(sender, e);
         private void ChkOptInTag_Click(object? sender, RoutedEventArgs e) { }
-        private void TxtEditEmoteText_TextChanged(object? sender, TextChangedEventArgs e) { }
-        private void TxtEmoteCustom_KeyDown(object? sender, KeyEventArgs e) { }
         private void TxtOptInStatus_TextChanged(object? sender, TextChangedEventArgs e) { }
     }
 }
