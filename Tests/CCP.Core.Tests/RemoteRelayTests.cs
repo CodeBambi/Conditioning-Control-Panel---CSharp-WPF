@@ -410,4 +410,30 @@ public sealed class RemoteRelayTests
         await r.PollOnceAsync();
         Assert.Equal(RemoteRelay.PollIntervalSeconds, r.PollInterval);
     }
+
+    [Fact]
+    public async Task Emotes_post_trimmed_debounce_double_clicks_and_report_the_rate_limit()
+    {
+        var f = new FakeRelay();
+        using var r = Relay(f);
+        var now = new DateTime(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc);
+        r.Now = () => now;
+        Assert.Equal((false, "session not active", (int?)null), await r.SendEmoteAsync("hi", "", "custom"));
+        await r.StartAsync("light");
+
+        Assert.True((await r.SendEmoteAsync("  " + new string('x', 70) + " ", "123456789", "preset")).ok);
+        var body = f.Seen.Last(s => s.Path == "/v2/remote/emote").Body;
+        Assert.Equal(60, body["text"]!.ToString().Length);
+        Assert.Equal("12345678", body["icon"]!.ToString());
+        Assert.Equal("uid-1", body["unified_id"]!.ToString());
+
+        now = now.AddMilliseconds(100);   // a double click: swallowed, nothing posted
+        var posts = f.Seen.Count;
+        Assert.Equal("debounced", (await r.SendEmoteAsync("again", "", "custom")).error);
+        Assert.Equal(posts, f.Seen.Count);
+
+        now = now.AddMilliseconds(RemoteRelay.EmoteDebounceMs);
+        f.Answer = _ => Json((HttpStatusCode)429, "{\"retry_after_seconds\":7}");
+        Assert.Equal((false, "rate_limited", (int?)7), await r.SendEmoteAsync("again", "", "custom"));
+    }
 }

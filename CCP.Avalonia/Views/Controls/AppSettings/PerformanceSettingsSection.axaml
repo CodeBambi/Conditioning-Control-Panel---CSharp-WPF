@@ -60,8 +60,7 @@
                 <StackPanel Orientation="Horizontal">
                     <TextBlock Text="⚡" FontSize="13" Margin="0,0,6,0" VerticalAlignment="Center"/>
                     <TextBlock Theme="{StaticResource SectionHeader}" Text="{loc:Str set2_section_performance}"
-                               Foreground="{StaticResource SectionHuePerformanceBrush}"
-                               FontSize="13" VerticalAlignment="Center"/>
+                               Foreground="{StaticResource SectionHuePerformanceBrush}" VerticalAlignment="Center"/>
                 </StackPanel>
                 <TextBlock Text="{loc:Str set2_section_performance_hint}" TextWrapping="Wrap"
                            Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,0,0,8"/>

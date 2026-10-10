@@ -256,8 +256,8 @@
     <ControlTheme x:Key="CmpPageTitleStyle" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="Fredoka, Segoe UI, Inter"/>
         <Setter Property="FontWeight" Value="SemiBold"/>
-        <Setter Property="FontSize" Value="27"/>
-        <Setter Property="Foreground" Value="{StaticResource CmpTextBrush}"/>
+        <Setter Property="FontSize" Value="26"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
         <Setter Property="Effect" Value="{StaticResource CmpTitleGlow}"/>
     </ControlTheme>
 
@@ -268,34 +268,35 @@
         <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
     </ControlTheme>
 
-    <!-- .card h2 - the zone header. Glow is on the title only, not the whole row. -->
+    <!-- .card h2, the zone header. Polish 8 (23c284a3c): an eyebrow (Type.SectionHeader's setters,
+         copied like WPF does), a group label over the card's chips; no glow. -->
     <ControlTheme x:Key="CmpSectionTitleStyle" TargetType="TextBlock">
-        <Setter Property="FontSize" Value="16.5"/>
-        <Setter Property="FontWeight" Value="SemiBold"/>
-        <Setter Property="Foreground" Value="{StaticResource CmpTextBrush}"/>
+        <Setter Property="FontFamily" Value="Consolas, Courier New"/>
+        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="FontWeight" Value="Bold"/>
+        <Setter Property="Foreground" Value="{DynamicResource SectionInkBrush}"/>
         <Setter Property="VerticalAlignment" Value="Center"/>
-        <Setter Property="Effect" Value="{StaticResource CmpSectionGlow}"/>
         <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
     </ControlTheme>
 
     <ControlTheme x:Key="CmpSectionHintStyle" TargetType="TextBlock">
-        <Setter Property="FontSize" Value="11.5"/>
-        <Setter Property="Foreground" Value="{StaticResource CmpMutedBrush}"/>
+        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
         <Setter Property="VerticalAlignment" Value="Center"/>
         <Setter Property="Margin" Value="9,1,0,0"/>
         <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
     </ControlTheme>
 
     <ControlTheme x:Key="CmpBodyTextStyle" TargetType="TextBlock">
-        <Setter Property="FontSize" Value="12.5"/>
-        <Setter Property="Foreground" Value="{StaticResource CmpBodyBrush}"/>
+        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
         <Setter Property="TextWrapping" Value="Wrap"/>
         <Setter Property="LineHeight" Value="18"/>
     </ControlTheme>
 
     <ControlTheme x:Key="CmpDimTextStyle" TargetType="TextBlock">
-        <Setter Property="FontSize" Value="11.5"/>
-        <Setter Property="Foreground" Value="{StaticResource CmpDimBrush}"/>
+        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
         <Setter Property="TextWrapping" Value="Wrap"/>
     </ControlTheme>
 

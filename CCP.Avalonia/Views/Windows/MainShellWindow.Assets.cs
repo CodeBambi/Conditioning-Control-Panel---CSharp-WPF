@@ -20,46 +20,22 @@
 //      pools built for the OLD source while the picker says the new one is live.
 // The picker comes back with the coordinator and an async consent gate, together, or not at all.
 //
-// A WAIT - the asset tree, and worth being exact because one dependency has already moved.
-// AssetTreeItem IS in Core (CCP.Core/Models/AssetTreeItem.cs), CorePaths.EffectiveAssets is the
-// asset root, and DisabledAssetPaths is a field of CoreSettings.Current. BuildFolderTree therefore
-// transcribes line for line, and is still left out because its only caller cannot be honest:
-// RefreshAssetTree's third branch is the Content Packs node, built from
-// App.ContentPacks.GetActivePackIds (ConditioningControlPanel/Services/Content/ContentPackService.cs), and
-// a tree that quietly omits every installed pack's media reads to the user as "those files are
-// gone" rather than "packs are not ported". It comes back with the pack service, in one piece.
-// The same holds for RefreshAssetTree, BuildPackTree, UpdateAssetCounts, CountAssetsRecursive,
-// RecalculateFolderCheckState, RecalculateAllFolderCheckStates, SetFolderAndChildrenChecked,
-// UpdateFolderFilesCheckState, UpdateFileCheckState, UpdateParentFolderCheckState,
-// FolderCheckBox_Changed, ThumbnailCheckBox_Changed, AssetTreeView_SelectedItemChanged,
-// BtnSelectAllAssets_Click, BtnDeselectAllAssets_Click, BtnSaveAssetSelection_Click and
-// InvalidateAssetPoolsAfterSelectionChange.
-//
-// Checked and NOT the blocker anywhere in this file: CoreModArt. It answers a mod's art override
-// as a path, and this partial reads no mod art at all - its thumbnails come from the user's own
-// library and from downloaded packs. CorePaths.EffectiveAssets IS the right root for the tree, and
-// is named above rather than wired, because nothing here is wired yet.
+// PORTED to the tab itself (CCP.Avalonia/Views/Tabs/AssetsTabView.axaml.cs, entered from
+// OnTabShown "assets"): RefreshAssetTree (local images/videos), BuildFolderTree, the folder and
+// thumbnail checks, Select/Deselect All, thumbnails (images; videos keep the placeholder), preview
+// and reveal, the asset counts and the preset combo + Save As/Update/Delete. AssetPresetService
+// .OnlineChannelsReset is seeded in App startup (main 03af6e8bb). Still missing from the tree: the
+// Content Packs node (BuildPackTree, App.ContentPacks) - no pack service on this head.
 //
 // The rest, by blocker:
 //   App.ContentPacks - RefreshPacksAsync, BtnRefreshPacks_Click, BtnPackDownload_Click,
 //     BtnPackActivate_Click, BtnPackUpgrade_Click, BtnDeleteDownloadedPacks_Click, and the four
 //     OnPack* progress/auth/rate-limit callbacks.
-//   Thumbnail decode + cache - LoadPackFolderThumbnails, LoadPackThumbnailAsync,
-//     LoadFolderThumbnails, LoadThumbnailAsync, RefreshThumbnailCheckboxes and the six static cache
-//     fields. WPF decodes to BitmapImage with DecodePixelWidth; the Avalonia twin is
-//     new Avalonia.Media.Imaging.Bitmap(path), so this is a rewrite rather than a move, and it
-//     belongs with the tree that would display it.
-//   The OS - BtnOpenAssetsFolder_Click (Process.Start("explorer.exe")), ThumbnailItem_OpenInExplorer_Click,
-//     BtnCreatorDiscord_Click, BtnGetPacks_Click, BtnPackPatreon_Click. The shell already ships the
-//     folder PICKER (MainShellWindow.Settings.cs, RequestPickAssetsFolder); what is missing is the
-//     "show it to me" half, which is a file-manager launch and belongs in a head helper, not here.
-//   Preview windows - OpenAssetPreview, ThumbnailItem_Click, ThumbnailItem_Preview_Click,
-//     StartPackPreviewRotation, StopPackPreviewRotation, LoadPreviewImagesFromUrlsAsync,
+//   Pack thumbnails - LoadPackFolderThumbnails, LoadPackThumbnailAsync (App.ContentPacks).
+//   The OS - BtnCreatorDiscord_Click, BtnPackPatreon_Click (pack cards only).
+//   Pack preview rotation - StartPackPreviewRotation, StopPackPreviewRotation, LoadPreviewImagesFromUrlsAsync,
 //     GetPackPreviewFileStem (pure, and held with the rotation that is its only caller).
-//   Preset dropdowns - InitializeAssetPresets, RefreshAssetPresetsComboBox,
-//     CmbAssetPresets_SelectionChanged, BtnSaveAssetPreset_Click, BtnUpdateAssetPreset_Click,
-//     BtnDeleteAssetPreset_Click, UpdatePresetCountsFromCurrentState, CountEnabledFilesRecursive,
-//     and the phrase-preset five. Blocked on the asset tree above, which is what they count.
+//   Phrase presets - InitializePhrasePresets and its four handlers (no control on this tab).
 //   WPF input - PacksScrollViewer_PreviewMouseWheel, HorizontalScrollViewer_PreviewMouseWheel,
 //     InnerScrollViewer_PreviewMouseWheel. Avalonia has no PreviewMouseWheel; these are the
 //     nested-scroller workaround and need re-deriving, not porting.
@@ -69,7 +45,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
     public partial class MainShellWindow
     {
         /// <summary>The rail's Library door. One ShowTab call, exactly as in WPF
-        /// (MainWindow.Assets.cs:39). The tab it opens is still an empty shell.</summary>
+        /// (MainWindow.Assets.cs:39); the tab refreshes itself from OnTabShown.</summary>
         private void BtnAssets_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
             => ShowTab("assets");
     }
