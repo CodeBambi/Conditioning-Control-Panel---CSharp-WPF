@@ -1153,7 +1153,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
 
         /// <summary>The CoreLockCard surface (seeded in App): draw the next phrase and resolve its repeat
         /// count through the three modes exactly as WPF LockCardService.ShowLockCard does.</summary>
-        internal static void ShowNext(bool isTest)
+        /// <remarks>SAFETY: <paramref name="origin"/> decides strict through
+        /// <see cref="LockCardStrictRule"/>. A leash or remote card is never strict, whatever the
+        /// player's own setting says (a participant can never raise restraint).</remarks>
+        internal static void ShowNext(bool isTest) => ShowNext(isTest, LockCardOrigin.Local);
+
+        /// <inheritdoc cref="ShowNext(bool)"/>
+        internal static void ShowNext(bool isTest, LockCardOrigin origin)
         {
             var phrase = LockCardScheduler.Instance.PickPhrase(LockCardScheduler.EnabledPhrases());
             if (phrase is null) return;   // no enabled phrases: nothing to lock behind
@@ -1162,11 +1168,13 @@ namespace ConditioningControlPanel.Avalonia.Views.Windows
                 s.LockCardRandomRepeats, s.LockCardRepeatsMin, s.LockCardRepeats,
                 s.LockCardTargetLengthEnabled, s.LockCardTargetLength,
                 s.LockCardTargetLengthVariance, Random.Shared.NextDouble());
-            ShowOnAllMonitors(phrase, repeats, s.LockCardStrict, isTest, s.LockCardVoiceMode);
+            ShowOnAllMonitors(phrase, repeats, LockCardStrictRule.Resolve(origin, s.LockCardStrict), isTest, s.LockCardVoiceMode);
         }
 
         /// <summary>The card that owns the keyboard, and what it has counted. Tests read these.</summary>
         internal int RequiredRepeats => _requiredRepeats;
+        /// <summary>Whether this card refuses to close unsolved. Tests pin it for leash / remote cards.</summary>
+        internal bool IsStrict => _strictMode;
         internal static LockCardWindow? Primary => _allWindows.FirstOrDefault(w => w._isPrimary);
         internal int TotalErrors => _totalErrors;
         internal int CompletedRepeats => _completedRepeats;
