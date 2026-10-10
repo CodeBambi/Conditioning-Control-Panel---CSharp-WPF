@@ -35,6 +35,9 @@ internal static class ProgressionHead
             _conditioningTimer.Tick += (_, _) => ConditioningTime.Tick(DateTime.Now);
             _conditioningTimer.Start();
         }
+        // hunt3 IC5 (WPF SyncConditioningTimeToServerAsync): every 15 minutes of a run and on its stop,
+        // through the ordinary profile push (signed-in, loaded, cooldown and backoff rules are its own).
+        ConditioningTime.SyncRequested = () => { _ = AccountSeed.Sync?.PushAsync("conditioning time"); };
 
         ProgressionBank.LevelUp += level => Dispatcher.UIThread.Post(() => OnLevelUp(level));
     }

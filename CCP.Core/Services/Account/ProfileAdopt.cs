@@ -167,6 +167,7 @@ namespace ConditioningControlPanel.Services
             // reset (not handled on this head): never raise over it.
             var skillsReset = response["force_skills_reset"]?.Type == JTokenType.Boolean && response.Value<bool>("force_skills_reset");
             if (!skillsReset) AdoptSkillPoints(settings, response["skill_points"], "V2 sync");
+            AdoptConditioningMinutes(settings, response["total_conditioning_minutes"], "V2 sync");   // WPF :2296
             if (response["user"] is not JObject node) return;
             var user = node.ToObject<V2User>()!;
             ApplyCurveEpoch(settings, user.CurveEpoch);
@@ -202,6 +203,24 @@ namespace ConditioningControlPanel.Services
                 }
             }
             RecordAgreedServerXp(settings, user.Xp, TotalXp(settings), "V2 sync");
+        }
+
+        /// <summary>
+        /// Total conditioning time, take-higher (WPF ProfileSyncService.cs:2296 and :3417): hours earned on
+        /// another install are adopted BEFORE this one pushes its own total, so a fresh install never
+        /// reports less than the account holds. Raises only. A running tracker's baseline moves with the
+        /// lift (WPF :2308), or the stop would credit the gap a second time. Only a JSON number counts.
+        /// </summary>
+        public static bool AdoptConditioningMinutes(AppSettings settings, JToken? serverMinutes, string site)
+        {
+            if (serverMinutes is null || (serverMinutes.Type != JTokenType.Integer && serverMinutes.Type != JTokenType.Float)) return false;
+            var server = serverMinutes.Value<double>();
+            var local = settings.TotalConditioningMinutes;
+            if (double.IsNaN(server) || double.IsInfinity(server) || !(server > local)) return false;
+            Log.Information("{Site}: conditioning minutes server={Server:F1} > local={Local:F1}, adopting", site, server, local);
+            settings.TotalConditioningMinutes = server;
+            ConditioningTime.OnTotalLifted(server - local);
+            return true;
         }
 
         /// <summary>

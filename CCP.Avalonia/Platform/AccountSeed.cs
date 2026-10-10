@@ -204,6 +204,8 @@ internal static class AccountSeed
         ProfileAdopt.AdoptConsent(s, node);
         // hunt3 IC4 (WPF ProfileSyncService.cs:3382): Sparkles earned elsewhere. Raises only, never lowers.
         ProfileAdopt.AdoptSkillPoints(s, node?["skill_points"], "Profile load");
+        // hunt3 IC5 (WPF :3417): the account's hours in before this install pushes its own total.
+        ProfileAdopt.AdoptConditioningMinutes(s, node?["total_conditioning_minutes"], "Profile load");
         CoreSettings.Save();
         Log.Information("Profile load: Level {Level} ({Xp} XP into level) after adopt", s.PlayerLevel, (int)s.PlayerXP);
         if (Sync is { } sync)
