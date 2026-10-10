@@ -19,9 +19,10 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
     /// BANK: the server's settled <c>sp</c> is the debited receipt, adopted into SkillPoints exactly
     /// as WPF does (BackRoomApi.Read -> AdoptSp -> SetSp); a balance change from elsewhere goes to
     /// the page as <c>balance</c>. The Breakout doors ride the same bridge (they are Back Room pages).
-    /// media deals are WPF BackRoomMedia (local folders + the warm Scrolller pool, urls on loopback); fx and the word voice run on WPF's null seams (BackRoomStubs:
-    /// effects acked as skipped, words silent); haptics, Circe's tab slot lines and
-    /// the race handoff are not wired yet.
+    /// media deals are WPF BackRoomMedia (local folders + the warm Scrolller pool, urls on loopback); fx run on
+    /// BackRoomFxHead (the port's overlays; a primitive with none is acked skipped), words on BackRoomVoice
+    /// (recorded clips only), haptics on BackRoomHapticDirector, slot lines on Circe's tab. The race handoff
+    /// still opens its own window, and there is no feature day log on this head.
     /// </summary>
     internal sealed partial class GameWindow
     {
@@ -53,6 +54,17 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
                 Post = Post,
                 Relay = api,
                 Media = RoomMedia,
+                // WPF CreateBridge :421-431. Recorded clips only (no synthetic speech): a word with no clip stays silent.
+                Fx = BackRoomFxHead.Shared,
+                Voice = RoomVoiceFactory(() => IsBreakoutPage(Spec.Id)),
+                Haptic = BackRoomHapticDirector.OnHaptic,
+                SlotLanded = SlotLanded,
+                SetOption = option => Dispatcher.UIThread.Post(() =>
+                {
+                    if (_backRoom != bridge) return;
+                    try { BackRoomWire.ApplyRoomOption(CoreSettings.Current, option, IsBreakoutPage(Spec.Id)); CoreSettings.Save(); }
+                    catch (Exception ex) { Log.Debug("[BackRoom] room-option: {E}", ex.Message); }
+                }),
                 BuildInit = BackRoomInit,
                 CloseWindow = () => Dispatcher.UIThread.Post(() => { if (!IsClosedOrClosing) Close(); }),
                 Schedule = ScheduleOnUi,
@@ -63,6 +75,27 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             });
             _backRoomSettings = CoreSettings.Current;
             _backRoomSettings.PropertyChanged += OnBackRoomSetting;
+            BackRoomFxHead.Host = this;
+        }
+
+        /// <summary>The spoken word (10.21). Tests swap it for the null object.</summary>
+        internal static Func<Func<bool>, IBackRoomVoice> RoomVoiceFactory = breakout => new BackRoomVoice(breakout);
+
+        /// <summary>WPF ChasterHooks.SlotLanded (10.24): the server's own line for an outcome that really
+        /// landed. The melt line books the melt row, the jackpot line wipes the tab; inert until the tab is
+        /// on, linked and the row is switched on (the Core service's own gates). No new price rule here.</summary>
+        internal static void SlotLanded(string? line)
+        {
+            if (Platform.ChasterHead.Service is not { } chaster) return;
+            try
+            {
+                switch (BackRoomWire.SlotLineRow(line))
+                {
+                    case "melt": chaster.Note("melt"); break;
+                    case ConditioningControlPanel.Services.Chaster.CircesTab.JackpotEventId: chaster.Wipe(); break;
+                }
+            }
+            catch (Exception ex) { Log.Debug("[BackRoom] slot landed: {E}", ex.Message); }
         }
 
         private void CloseBackRoom()
@@ -71,13 +104,18 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             _backRoomSettings = null;
             var b = _backRoom;
             _backRoom = null;
-            b?.CloseNow();
+            b?.CloseNow();   // Finish -> CancelFx: every effect, word and pulse the room started stops with the window
+            if (ReferenceEquals(BackRoomFxHead.Host, this)) BackRoomFxHead.Host = null;
         }
 
         private void OnBackRoomSetting(object? sender, PropertyChangedEventArgs e)
         {
             if (e.PropertyName == nameof(AppSettings.SkillPoints) && sender is AppSettings s)
                 _backRoom?.OnSpChanged(s.SkillPoints, "earn");
+            // WPF OnSettingChanged :694: a motion, intensity, invert look, media or audio change while the
+            // room is open repaints the page from one full settings frame.
+            if (e.PropertyName != null && BackRoomWire.SettingsFrameProperties.Contains(e.PropertyName))
+                _backRoom?.PushSettings(BackRoomSettingsMessage());
             // WPF OnSettingsChanged: a niche / source / consent change makes the warm pool stale.
             if (e.PropertyName is nameof(AppSettings.BackRoomMediaSubs) or nameof(AppSettings.BackRoomMediaSubsOff)
                 or nameof(AppSettings.BackRoomMediaSource) or nameof(AppSettings.MediaSource)
@@ -122,26 +160,33 @@ namespace ConditioningControlPanel.Avalonia.Views.Games
             }
         }
 
-        /// <summary>WPF BackRoomHostService.BuildInit, the fields this head has.</summary>
-        private object BackRoomInit()
+        /// <summary>WPF BackRoomHostService.SettingsMessage.</summary>
+        internal object BackRoomSettingsMessage()
+            => BackRoomWire.SettingsMessage(CoreSettings.Current, IsBreakoutPage(Spec.Id), BreakoutEntitlementFor(Spec.Id));
+
+        /// <summary>WPF BackRoomHostService.BuildInit.</summary>
+        internal object BackRoomInit()
         {
             var s = CoreSettings.Current;
             var motion = s.MotionLevel;
-            bool breakoutPage = Spec.Id is "breakout" or "breakoutdemo";
+            bool breakoutPage = IsBreakoutPage(Spec.Id);
             return new
             {
                 type = "init",
                 protocol = BackRoomBridge.Protocol,
-                racingTracks = Array.Empty<string>(),
+                racingTracks = RaceWindow.OwnedTracks(),
                 breakout = BreakoutEntitlementFor(Spec.Id),
                 breakoutStandalone = breakoutPage,
                 sp = s.SkillPoints,
                 reduced = motion != MotionLevel.Full,
                 invertLook = s.BackRoomInvertLook,
                 welcomeSeen = s.BackRoomWelcomeSeen,
-                motion = motion.ToString().ToLowerInvariant(),
-                intensity = motion != MotionLevel.Full ? "calm" : "normal",
+                motion = BackRoomWire.MotionWire(motion),
+                intensity = BackRoomWire.IntensityWire(s, motion),
                 lang = s.Language,
+                gates = BackRoomWire.GatesWire(s), media = BackRoomWire.MediaWire(s), audio = BackRoomWire.AudioWire(s, breakoutPage),
+                intensityChoice = BackRoomWire.IntensityChoiceWire(s),
+                lex = BackRoomWire.Lex(LocalizationManager.Instance.KeysWithPrefix(BackRoomWire.LexPrefix), Loc.Get),
                 stations = BackRoomApi.Ops.Keys.ToArray(),
                 open = (bool?)null,
                 identity = new
