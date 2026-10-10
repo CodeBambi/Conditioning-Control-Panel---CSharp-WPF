@@ -437,6 +437,8 @@ public sealed class LanguageSelectorTests
         // The Dashboard's launch cards spend their seen-flag (a real save) when they open, like WPF;
         // spent here so the no-startup-save assertion keeps measuring startup itself.
         settings.Current.SeenFeatureIntros.AddRange(new[] { "daily-free", "one-account" });
+        // Likewise the upgrade-only What moved card spends its flag when it opens (sync6-nav-search).
+        settings.Current.WhatMovedCardShown = 1;
         // Opening Presets notes it in the dashboard's RECENT rail (a real save, WPF NoteDestinationOpened);
         // already at the head here, so the visit below is not a write.
         settings.Current.RailRecent.Add("tab.presets");

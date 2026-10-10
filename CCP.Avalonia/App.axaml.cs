@@ -699,6 +699,8 @@ namespace ConditioningControlPanel.Avalonia
                 };
                 SeedLevelAchievements(Achievements);
                 StartQuests();
+                // WPF App.xaml.cs:290: a game.* palette row is listed only when this head can start it.
+                SettingsPaletteIndex.GameAvailableProvider = id => Views.Windows.LauncherWindow.Destinations.ContainsKey(id);
                 // programs-3a decision: refuse programs whose required tasks this head never raises
                 // (WPF leaves it unseeded = all available). Seeded before the service so it is never unset.
                 CoreProgram.TaskAvailableProvider = Platform.ProgramCapabilities.IsAvailable;
