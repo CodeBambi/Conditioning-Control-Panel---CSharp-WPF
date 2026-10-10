@@ -46,7 +46,7 @@ Kind of limit:
 | Goon video over 5 MB | Cannot be sent. **Same on Windows** in the port (the transcoder is WinRT in WPF, not ported). | not built, both OSes |
 | In-app updater | Opens the releases page. No download and install. | by design (packages update through their own channel) |
 | Ducking other apps' audio | `pactl` only. **Not built on Windows** in the port. | Linux works on paper; Windows not built |
-| Microphone-in-use (meeting guard) | No probe. Reads as "not in use". **Same on Windows** in the port. | not built, both OSes |
+| Microphone-in-use (meeting guard) | No probe. Reads as "unknown", which counts as "not in use". Windows reads the capture session list since 2026-10-10 (`Platform/MicrophoneInUseProbe.cs`). | not built on Linux |
 | Desktop wallpaper effect | Not on this branch. No Linux backend to review. | not built |
 
 ## Input and awareness
@@ -63,7 +63,7 @@ Kind of limit:
 | Awareness: fullscreen | `_NET_WM_STATE_FULLSCREEN` on the active window. | X11 and XWayland windows only. A borderless window that only covers the screen (no fullscreen state) is not seen as fullscreen; Windows compares rectangles instead. | needs a run | `Platform/X11ActiveWindow.cs` |
 | Awareness: idle seconds and typing guess | XScreenSaver extension (`libXss`). **Fixed today:** read wobble no longer counts as typing. | Without `libXss`: idle reads as "active", typing as "not typing". Under XWayland the counter resets only on input to X windows, so a user busy in a Wayland window can read as idle. | fundamental (Wayland), needs a run | `Platform/AwarenessProbes.cs` |
 | Awareness: now playing | MPRIS over the session D-Bus, 3 s poll. | A player that does not speak MPRIS is not seen (some Flatpak sandboxes hide the bus name; some browsers need a setting). If the session bus restarts, the watcher stays off until the app restarts. | needs a run | `Platform/MprisMediaWatcher.cs` |
-| Awareness: microphone in use | Nothing, on both OSes. | The meeting guard never trips from the microphone. Linux would read PulseAudio / PipeWire source-outputs (`pactl list source-outputs`); Windows would read the capture session list. | not built, both OSes | Core `AwarenessPlatform` (blind probe) |
+| Awareness: microphone in use | Nothing on Linux (the answer is "unknown"). Windows sweeps the capture endpoints for an active session, cached 5 s, as WPF. | On Linux the meeting guard never trips from the microphone; the fullscreen, typing and CCP-surface gates still apply. Linux would read PulseAudio / PipeWire source-outputs (`pactl list source-outputs`). | not built on Linux | `Platform/MicrophoneInUseProbe.cs` (`PlatformSweep` returns null off Windows) |
 | OS reduced motion | GNOME: `gsettings enable-animations`. | Other desktops: reads as "animations on". | not built (KDE has its own key) | `Controls/Fx/OsReducedMotion.cs` |
 
 ## Overlays and windows
