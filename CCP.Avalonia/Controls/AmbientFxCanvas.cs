@@ -163,7 +163,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
         /// the WPF original's one white sprite plus four <c>SKColorFilter</c>s: a gradient brush
         /// already carries its colour, so the tint IS the brush and no filter is needed.
         /// </summary>
-        private IBrush? _mistDot, _particleDot, _glowDot, _flashDot, _glowSoft;
+        private IBrush? _mistDot, _particleDot, _glowDot, _flashDot, _glowSoft, _emberDot;
         private IBrush? _burstDot, _tokDot;
 
         // ---- clocks ----
@@ -192,8 +192,6 @@ namespace ConditioningControlPanel.Avalonia.Controls
         private Ember[] _embers = Array.Empty<Ember>();
         private int _emberN;
         private float _emberT;
-        private IBrush? _emberDot;
-
         /// <summary>Live ember count. Tests read it.</summary>
         internal int EmberCount => _emberN;
 
@@ -879,7 +877,7 @@ namespace ConditioningControlPanel.Avalonia.Controls
         private int EmberTarget() =>
             _fogOnly ? 0 : Math.Min(_embers.Length, (int)Math.Round(_liveBudget * EmberBudgetShare));
 
-        private void StepEmbers(float dt)
+        internal void StepEmbers(float dt)
         {
             if (_embers.Length == 0) return;
             for (int i = _emberN - 1; i >= 0; i--)

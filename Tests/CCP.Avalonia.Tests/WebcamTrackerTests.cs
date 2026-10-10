@@ -18,16 +18,24 @@ public sealed class WebcamTrackerTests
 {
     private sealed class FakeSource : IFrameSource
     {
+        /// <summary>Every source made, so the isolation hook can let a wedged one go.</summary>
+        private static readonly System.Collections.Concurrent.ConcurrentBag<FakeSource> All = new();
+        public FakeSource() => All.Add(this);
+        internal static void ReleaseAll() { foreach (var f in All) f.Released.Set(); }
+
         public bool OpenResult = true;
         public int Opens, Reads;
         public volatile bool Disposed;
-        /// <summary>Unset = Read blocks, as a wedged driver does.</summary>
-        public readonly ManualResetEventSlim Gate = new(true);
+        /// <summary>Set = the next Read blocks until <see cref="Released"/>, as a wedged driver does, and
+        /// signals <see cref="Blocked"/> first. A flag, not a gate reset: a Read already past its counter
+        /// when the gate closed would block without ever being counted (the old 25 s wedge).</summary>
+        public volatile bool Wedge;
+        public readonly ManualResetEventSlim Blocked = new(false), Released = new(false);
         public bool Open() { Opens++; return OpenResult; }
         public bool Read(Mat bgr)
         {
             Interlocked.Increment(ref Reads);
-            Gate.Wait();
+            if (Wedge) { Blocked.Set(); Released.Wait(); }
             bgr.Create(480, 640, MatType.CV_8UC3);
             bgr.SetTo(Scalar.All(0)); // no face in it: the detector says so and nothing fires
             Thread.Sleep(5);
@@ -51,6 +59,10 @@ public sealed class WebcamTrackerTests
         finally
         {
             WebcamTracker.Instance.Stop();
+            // A failed wedge test must not poison the rest: let any wedged loop go and wait for it to
+            // close, or every later Start refuses with "still closing".
+            FakeSource.ReleaseAll();
+            SpinWait.SpinUntil(() => !WebcamTracker.Instance.IsClosing, TimeSpan.FromSeconds(20));
             (s.WebcamConsentGiven, s.WebcamConsentVersion, WebcamTracker.SourceFactory) = old;
         }
     });
@@ -149,9 +161,8 @@ public sealed class WebcamTrackerTests
             WebcamTracker.SourceFactory = () => wedged;
             Assert.True(WebcamTracker.Instance.Start(), WebcamTracker.Instance.LastError);
             WaitFor(() => Volatile.Read(ref wedged.Reads) >= 1);
-            wedged.Gate.Reset();
-            int r = Volatile.Read(ref wedged.Reads);
-            WaitFor(() => Volatile.Read(ref wedged.Reads) > r); // this Read is now blocked on the gate
+            wedged.Wedge = true;
+            Assert.True(wedged.Blocked.Wait(TimeSpan.FromSeconds(20))); // a Read is now blocked
             WebcamTracker.Instance.Stop();                          // 5 s join times out
             Assert.False(WebcamTracker.Instance.IsRunning);
             Assert.False(wedged.Disposed);
@@ -161,9 +172,9 @@ public sealed class WebcamTrackerTests
             Assert.StartsWith("The previous camera session is still closing", WebcamTracker.Instance.LastError);
             Assert.Equal(0, next.Opens);
 
-            wedged.Gate.Set();                  // driver lets go: the abandoned loop closes its camera
+            wedged.Released.Set();              // driver lets go: the abandoned loop closes its camera
             WaitFor(() => wedged.Disposed);
-            Thread.Sleep(100);
+            WaitFor(() => !WebcamTracker.Instance.IsClosing);
             Assert.True(WebcamTracker.Instance.Start(), WebcamTracker.Instance.LastError);
         });
     }

@@ -93,7 +93,7 @@ namespace ConditioningControlPanel.Avalonia.Views.Tabs
         /// <summary>Shows the "does not count for quests" line while the picked duration is too short.</summary>
         internal void UpdateQuestHint()
         {
-            // SelectionChanged fires inside InitializeComponent (SelectedIndex="1"), before the hint exists.
+            // SelectionChanged fires inside InitializeComponent (SelectedIndex="3"), before the hint exists.
             if (TxtLockdownQuestHint == null || CmbLockdownDuration == null) return;
             var minutes = (CmbLockdownDuration.SelectedItem as ComboBoxItem)?.Tag is string tag
                           && int.TryParse(tag, out var m) ? m : 0;

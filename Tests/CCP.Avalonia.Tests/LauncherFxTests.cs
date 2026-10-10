@@ -39,6 +39,7 @@ public sealed class LauncherFxTests
             var s = CoreSettings.Current;
             s.Welcomed = true;
             s.HasAcceptedAgeVerification = true;
+            s.WhatMovedCardShown = 1;   // P52: the upgrade-only What moved card would take the real clicks
             s.MotionLevel = motion;
             s.PerformanceMode = false;
             s.MasterVolume = 50;

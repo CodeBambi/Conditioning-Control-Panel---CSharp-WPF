@@ -36,6 +36,7 @@ public sealed class ExclusivesVaultMotionTests
         var (premium, lab, free) = (CoreEntitlement.HasPremiumProvider, CoreEntitlement.HasLabProvider, CoreEntitlement.IsFreeTodayProvider);
         FxAdorner.Time = Clock;
         MainShellWindow? shell = null;
+        var bark = CoreBark.TabNavigated;
         try
         {
             (s.MotionLevel, s.PerformanceMode) = (MotionLevel.Full, false);
@@ -44,8 +45,15 @@ public sealed class ExclusivesVaultMotionTests
             CoreEntitlement.IsFreeTodayProvider = null;
             shell = new MainShellWindow { Width = 1400, Height = 900 };
             shell.Show(); Settle();
+            // WPF polish 12: "exclusives" lands on Home > Premium silently; barks still hear the old key.
+            var heard = new System.Collections.Generic.List<string?>();
+            CoreBark.TabNavigated = heard.Add;
             shell.ShowTab("exclusives"); Settle();
+            CoreBark.TabNavigated = bark;
+            Assert.Equal("premium", shell.CurrentTab);
+            Assert.Equal(new[] { "exclusives" }, heard);
             var view = shell.Named<ExclusivesTabView>("ExclusivesTab")!;
+            Assert.True(view.IsVisible);
             Assert.True(view.MotionRunning);
 
             // Free account: both tier plates dim, none breathes.
@@ -54,11 +62,11 @@ public sealed class ExclusivesVaultMotionTests
             Assert.Equal(0.3, p1.Opacity);
             Step(view, 1.7);
 
-            // Two reserved teasers whose "?" breathes; tiered cards wear the 3px living livery.
+            // Basic, Prime, Free headers (the reserved seats are gone); a shown padlock glows; tiered cards wear the 3px living livery.
             var items = view.FindControl<ItemsControl>("ExclusivesShelf")!.Items;
-            Assert.Equal(2, items.OfType<ExclusiveTeaserRow>().Count());
-            var mark = Parts(view, "TeaserMark").First();
-            Assert.InRange(((DropShadowEffect)mark.Effect!).Opacity, 0.6, 0.65);
+            Assert.Equal(new[] { "basic", "prime", "free" }, items.OfType<ExclusiveGroupRow>().Select(g => g.Group.ToString().ToLowerInvariant()));
+            var mark = Parts(view, "VeilLock").First(l => l.IsEffectivelyVisible);
+            Assert.IsType<DropShadowEffect>(mark.Effect);
             var tiered = Parts(view, "ExCard").Cast<Border>().First(b => ((ExclusiveCardRow)b.DataContext!).Tier > 0);
             Assert.True(TierFxBorder.GetTier(tiered) > 0);
             Assert.Equal(new Thickness(3), tiered.BorderThickness);
@@ -88,7 +96,7 @@ public sealed class ExclusivesVaultMotionTests
 
             // Back with Basic access: plate I lights and breathes 0.75..1.0.
             CoreEntitlement.HasPremiumProvider = () => true;
-            shell.ShowTab("exclusives"); Settle();
+            shell.ShowTab("premium"); Settle();
             Assert.True(view.MotionRunning);
             Assert.Same(p1, view.LitPlate);
             Assert.Equal(0.3, view.FindControl<Border>("TierPlate2")!.Opacity);
@@ -109,6 +117,7 @@ public sealed class ExclusivesVaultMotionTests
         }
         finally
         {
+            CoreBark.TabNavigated = bark;
             shell?.Close();
             FxAdorner.Time = TimeProvider.System;
             (CoreEntitlement.HasPremiumProvider, CoreEntitlement.HasLabProvider, CoreEntitlement.IsFreeTodayProvider) = (premium, lab, free);

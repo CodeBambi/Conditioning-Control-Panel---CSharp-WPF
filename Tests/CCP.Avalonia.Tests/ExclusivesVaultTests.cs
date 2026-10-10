@@ -38,12 +38,42 @@ public sealed class ExclusivesVaultTests
                 Dispatcher.UIThread.RunJobs();
 
                 // Unseeded: every premium door is veiled, Just Drop and the Arcademy (no door seeded) are
-                // absent, the free doors stay open. Main 2e9080399: Prime first, then Basic, then untiered.
+                // absent, the free doors stay open. WPF ArrangeVaultShelf (polish 12): Basic, Prime, Free under
+                // headers, Graded Intake shelved with Prime, open doors first, roster order within each half.
                 var rows = Rows(view);
                 Assert.DoesNotContain(rows, r => r.Feature.Key is "justdrop" or "arcademy");
-                Assert.Equal(new[] { "dtrh", "breakout", "gazeminigame", "focusgaze", "fyp" }, rows.Take(5).Select(r => r.Feature.Key));
-                Assert.Equal(rows.Select(r => r.Feature.Tier switch { 2 => 0, 1 => 1, _ => 2 }).OrderBy(t => t),
-                             rows.Select(r => r.Feature.Tier switch { 2 => 0, 1 => 1, _ => 2 }));
+                var items = view.FindControl<ItemsControl>("ExclusivesShelf")!.Items.Cast<object>().ToList();
+                var expected = ConditioningControlPanel.Services.UI.PremiumShelfOrder.Arrange(
+                    ExclusiveFeature.All.Where(f => f.Shown()), f => f.Key, f => f.Tier, f => !new ExclusiveCardRow(f).IsLocked);
+                Assert.Equal(expected.SelectMany(g => new[] { g.Group.ToString() }.Concat(g.Items.Select(f => f.Key))),
+                             items.Select(i => i is ExclusiveGroupRow g ? g.Group.ToString() : ((ExclusiveCardRow)i).Feature.Key));
+                Assert.Equal(new[] { "Basic", "Prime", "Free" }, items.OfType<ExclusiveGroupRow>().Select(g => g.Group.ToString()));
+                int At(string key) => items.FindIndex(i => i is ExclusiveCardRow r && r.Feature.Key == key);
+                int Head(string g) => items.FindIndex(i => i is ExclusiveGroupRow h && h.Group.ToString() == g);
+                Assert.InRange(At("fyp"), Head("Basic"), Head("Prime"));
+                Assert.InRange(At("gradedintake"), Head("Prime"), Head("Free"));   // untagged, sold as Prime
+                Assert.InRange(At("dtrh"), Head("Prime"), Head("Free"));
+                Assert.True(At("backroom") > Head("Free"));
+                var basic = items.OfType<ExclusiveGroupRow>().First();
+                Assert.Equal(ConditioningControlPanel.Localization.Loc.GetF("premium_group_count", 0, rows.Count(r => r.Tier == 1)), basic.Count);
+                Assert.True(basic.HasSign);
+                Assert.False(items.OfType<ExclusiveGroupRow>().Last().HasSign);
+
+                // WPF binds the shelf words live (BindVaultLoc): a language switch rebuilds the rows (P09).
+                // The group lines are not translated yet on main; the rows are rebuilt (new ItemsSource) and re-read.
+                var en = rows.Single(r => r.Feature.Key == "haptics").Tagline;
+                var before = view.FindControl<ItemsControl>("ExclusivesShelf")!.ItemsSource;
+                var lang = ConditioningControlPanel.Localization.LocalizationManager.Instance.CurrentLanguage;
+                try
+                {
+                    ConditioningControlPanel.Localization.LocalizationManager.Instance.SetLanguage("de");
+                    Dispatcher.UIThread.RunJobs();
+                    var de = Rows(view).Single(r => r.Feature.Key == "haptics").Tagline;
+                    Assert.NotEqual(en, de);
+                    Assert.NotSame(before, view.FindControl<ItemsControl>("ExclusivesShelf")!.ItemsSource);   // rebuilt, so bindings re-read
+                    Assert.Equal(ConditioningControlPanel.Localization.Loc.Get("exclusives_tag_haptics"), de);
+                }
+                finally { ConditioningControlPanel.Localization.LocalizationManager.Instance.SetLanguage(lang); Dispatcher.UIThread.RunJobs(); }
                 ExclusiveFeature.ArcademyDoorProvider = () => true;
                 view.RefreshVault();
                 Assert.Contains(Rows(view), r => r.Feature.Key == "arcademy");
@@ -52,10 +82,18 @@ public sealed class ExclusivesVaultTests
                 rows = Rows(view);
 
                 // Main bf57cecdf: the cards stretch to fill the row at as many columns as fit.
-                var wrap = (WrapPanel)view.FindControl<ItemsControl>("ExclusivesShelf")!.ItemsPanelRoot!;
-                var fit = ConditioningControlPanel.Services.UI.ExclusiveShelfFit.For(view.FindControl<ItemsControl>("ExclusivesShelf")!.Bounds.Width);
+                // A group header takes the whole row, so the WrapPanel breaks the line after it.
+                Dispatcher.UIThread.RunJobs();
+                var shelfBox = view.FindControl<ItemsControl>("ExclusivesShelf")!;
+                var wrap = (WrapPanel)shelfBox.ItemsPanelRoot!;
+                var fit = ConditioningControlPanel.Services.UI.ExclusiveShelfFit.For(shelfBox.Bounds.Width);
                 Assert.True(fit.Columns >= 3);
-                Assert.Equal(fit.Width + 16, wrap.ItemWidth);
+                host.UpdateLayout();
+                Assert.All(wrap.Children.Where(c => c.DataContext is ExclusiveCardRow), c => Assert.Equal(fit.Width + 16, c.Bounds.Width));
+                var heads = wrap.Children.Where(c => c.DataContext is ExclusiveGroupRow).ToList();
+                Assert.Equal(3, heads.Count);
+                Assert.All(heads, h => Assert.Equal(shelfBox.Bounds.Width - 1, h.Bounds.Width));
+                Assert.All(heads.Skip(1), h => Assert.Equal(0, h.Bounds.X));
                 Assert.True(rows.Single(r => r.Feature.Key == "fyp").IsLocked);
                 Assert.False(rows.Single(r => r.Feature.Key == "backroom").IsLocked);
                 Assert.True(rows.Single(r => r.Feature.Key == "gradedintake").IsLocked);
@@ -80,6 +118,15 @@ public sealed class ExclusivesVaultTests
                 Assert.False(fyp.IsLocked);
                 Assert.True(fyp.BadgeFreeToday);   // tiered: the badge re-stamps, no pill
                 Assert.False(view.FindControl<Border>("SpotVeil")!.IsVisible);
+
+                // Open doors lead their shelf: today's free Haptics jumps ahead of the locked Basic doors.
+                CoreEntitlement.IsFreeTodayProvider = key => key == "haptics";
+                view.RefreshVault();
+                var shelf = view.FindControl<ItemsControl>("ExclusivesShelf")!.Items.Cast<object>().ToList();
+                Assert.Equal("haptics", ((ExclusiveCardRow)shelf[1]).Feature.Key);
+                Assert.Equal(ConditioningControlPanel.Localization.Loc.GetF("premium_group_count", 1, Rows(view).Count(r => r.Tier == 1)),
+                             ((ExclusiveGroupRow)shelf[0]).Count);
+                CoreEntitlement.IsFreeTodayProvider = key => key == "fyp";
 
                 // Premium owns the pool: no gift tag, no veil.
                 CoreEntitlement.HasPremiumProvider = () => true;
