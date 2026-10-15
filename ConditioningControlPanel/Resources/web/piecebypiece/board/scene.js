@@ -79,13 +79,14 @@ export function worldToSquare(x, z) {
   return FILES[f] + (r + 1);
 }
 
-export function createScene({ canvas }) {
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+export function createScene({ canvas, lite = false }) {
+  // lite (board/gpu.js): no MSAA, pixel ratio 1, no shadow map.
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: !lite, alpha: false });
+  renderer.setPixelRatio(lite ? 1 : Math.min(window.devicePixelRatio || 1, 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.06;
-  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.enabled = !lite;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
   const scene = new THREE.Scene();

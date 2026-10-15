@@ -29,6 +29,7 @@ import { pictureChoice } from './ui/pictures.js';
 import { createIqLive } from './game/iq.js';
 import { readSolo, setSoloIq, patchSoloIq } from './game/save.js';
 import { listGames, saveGame } from './door/store.js';
+import { gfxLite, watchContextLoss } from './board/gpu.js';
 
 const dom = {
   canvas: document.getElementById('board-canvas'),
@@ -56,14 +57,30 @@ function main() {
   // Harness pages that deal at once never get it; ?introAt=<s> pins it at one moment for a screenshot.
   const openIntro = startOpenIntro();
   const bus = createBus();
+  // A GPU that cannot draw the full board gets the lite one (board/gpu.js): once on the spot when the
+  // context cannot be made, once by reload when it is lost while playing, then the card below.
+  const cannotStart = 'The 3D board could not start. Check that hardware acceleration is available.';
+  let lite = gfxLite();
   let view;
   try {
-    view = createScene({ canvas: dom.canvas });
+    view = createScene({ canvas: dom.canvas, lite });
   } catch (err) {
-    console.error('[pbp] the 3D board could not start', err);
-    fail('The 3D board could not start. Check that hardware acceleration is available.');
-    return;
+    if (lite) {
+      console.error('[pbp] the 3D board could not start', err);
+      fail(cannotStart);
+      return;
+    }
+    console.warn('[pbp] the full board could not start; trying it plain', err);
+    lite = true;
+    try {
+      view = createScene({ canvas: dom.canvas, lite });
+    } catch (err2) {
+      console.error('[pbp] the 3D board could not start', err2);
+      fail(cannotStart);
+      return;
+    }
   }
+  watchContextLoss(dom.canvas, { lite, onGiveUp: () => fail(cannotStart) });
 
   // Soft-body flex. One system for the whole board; every piece gets its own
   // spring out of it when pieces.js builds it.
@@ -221,7 +238,8 @@ function main() {
   // --- K: a room to reflect, and where he just came from ---
   // The room is rendered once off the live renderer and hung on the scene; the
   // sweep re-dresses a man who was rebuilt (the art arriving, a promotion).
-  import('./board/env.js').then((m) => {
+  // Not on the lite board: its half-float cube targets are what a weak GPU drops.
+  if (!lite) import('./board/env.js').then((m) => {
     board.env = m.createEnv({ renderer: view.renderer, scene: view.scene });
     board.env.dressBoard(view.boardGroup);
     if (board.room) board.env.dressBoard(board.room.group);   // the floor, if it got here first
@@ -331,7 +349,8 @@ function main() {
     board.watch = m.createWatch({ group: view.pieceGroup, bus, jiggle, sfx: () => board.sfx });
     feelLate.push((dt) => board.watch.update(dt));
   }).catch((e) => console.warn('[pbp] watch missing', e));
-  import('./board/bloom.js').then((m) => {
+  // No glow on the lite board either (a float MSAA target, board/bloom.js).
+  if (!lite) import('./board/bloom.js').then((m) => {
     board.bloom = m.createBloom({ view });
     feelLate.push((dt) => board.bloom.update(dt));
   }).catch((e) => console.warn('[pbp] bloom missing', e));
